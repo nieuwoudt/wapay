@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { upsertProviderRequest, getCachedResponseByIdemKey } from '@wapay/domain/src/providerRequests';
 import { BluClient } from '@wapay/providers-blu';
-import { postBluDeposit, topupYoyoGift } from '@wapay/domain';
+import { postBluDeposit, topupYoyoGift, ensureYoyoInstrument } from '@wapay/domain';
 
 const redeemBody = z.object({ pin: z.string().min(4), accountId: z.string().optional() });
 
@@ -30,12 +30,13 @@ export async function registerDepositRoutes(app: FastifyInstance) {
       const result = await blu.redeem(pin, idemKey);
 
       // Post to ledger and update wallet
-      await postBluDeposit({ accountId, amountCents: result.amount_cents, providerRef: result.providerRef, idemKey });
+      const { journalEntryId } = await postBluDeposit({ accountId, amountCents: result.amount_cents, providerRef: result.providerRef, idemKey });
 
       // Optional wallet → Yoyo gift auto-top-up
       if (process.env.FEATURE_ENABLE_YOYO === 'true') {
         try {
-          await topupYoyoGift(accountId, result.amount_cents, idemKey);
+          const yoyoInstrument = await ensureYoyoInstrument(accountId);
+          await topupYoyoGift(accountId, yoyoInstrument.yoyoAccountId, result.amount_cents, journalEntryId);
         } catch (e) {
           app.log.warn({ err: e }, 'yoyo topup failed');
         }

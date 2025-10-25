@@ -9,6 +9,9 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "echo 'no lint yet'"
+  },
+  "dependencies": {
+    "undici": "^6.19.2"
   }
 }
 
