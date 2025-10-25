@@ -17,3 +17,4 @@
 - Betting top‑up (Phase 2): operator select → instructions or voucher submit → receipt.
 - Retailer eligibility (Yoyo): ask “Can I use WaPay at Checkers?” → yes/no.
 - Pay at retailer with wiCode: “pay R79.88 at Checkers” → issue wiCode token.
+# WaPay API
