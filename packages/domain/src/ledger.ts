@@ -14,7 +14,7 @@ export async function postBluDeposit(args: {
   ];
   validateBalanced(postings);
 
-  const entry = await prisma.$transaction(async (tx) => {
+  const entry = await prisma.$transaction(async (tx: any) => {
     const je = await tx.journalEntry.create({
       data: {
         externalRef: args.providerRef,
