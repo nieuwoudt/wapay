@@ -1,13 +1,15 @@
 {
-  "buildCommand": "pnpm build",
-  "outputDirectory": "apps/api/dist",
-  "installCommand": "pnpm install",
-  "framework": null,
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/(.*)",
-      "destination": "/apps/api/dist/index.js"
+      "src": "apps/api/src/index.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "apps/api/src/index.ts"
     }
   ]
 }
-
