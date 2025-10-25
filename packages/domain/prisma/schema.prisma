@@ -1,0 +1,107 @@
+// datasource & generator
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id           String   @id @default(cuid())
+  waId         String   @unique
+  msisdn       String
+  displayName  String?
+  createdAt    DateTime @default(now())
+  wallets      Wallet[]
+  sessions     AuthSession[]
+  limits       Limit[]
+  yoyo         YoyoInstrument?
+}
+
+model Wallet {
+  id            String   @id @default(cuid())
+  account       Account  @relation(fields: [accountId], references: [id])
+  accountId     String
+  currency      String   @default("ZAR")
+  availableCents Int     @default(0)
+  pendingCents   Int     @default(0)
+}
+
+model JournalEntry {
+  id          String   @id @default(cuid())
+  externalRef String?
+  source      String
+  createdAt   DateTime @default(now())
+  lines       JournalLine[]
+}
+
+model JournalLine {
+  id         String        @id @default(cuid())
+  entry      JournalEntry  @relation(fields: [entryId], references: [id])
+  entryId    String
+  accountCode String
+  debitCents  Int?
+  creditCents Int?
+}
+
+model ProviderRequest {
+  id             String   @id @default(cuid())
+  provider       String
+  route          String
+  idemKey        String   @unique
+  requestTs      DateTime @default(now())
+  status         String
+  providerRef    String?
+  redactedPayload String?
+  responseJson   String?
+}
+
+model AuthSession {
+  id           String   @id @default(cuid())
+  account      Account  @relation(fields: [accountId], references: [id])
+  accountId    String
+  lastPinAt    DateTime?
+  deviceBinding String?
+  expiresAt    DateTime?
+}
+
+model Limit {
+  id               String   @id @default(cuid())
+  account          Account  @relation(fields: [accountId], references: [id])
+  accountId        String
+  dailyCents       Int      @default(0)
+  monthlyCents     Int      @default(0)
+  usedTodayCents   Int      @default(0)
+  usedMonthCents   Int      @default(0)
+}
+
+model VasProduct {
+  id               String   @id @default(cuid())
+  category         String
+  networkCode      String
+  skuCode          String
+  label            String
+  unitType         String
+  unitQuantityMb   Int?
+  priceCents       Int
+  validityDays     Int?
+  allowCustomAmount Boolean @default(false)
+  minCents         Int?
+  maxCents         Int?
+  stepCents        Int?
+  targetType       String
+  metadata         Json?
+}
+
+model YoyoInstrument {
+  id            String  @id @default(cuid())
+  account       Account @relation(fields: [accountId], references: [id])
+  accountId     String  @unique
+  yoyoAccountId String
+  cardId        String
+  createdAt     DateTime @default(now())
+}
+
+

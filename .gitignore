@@ -1,0 +1,16 @@
+# Node
+node_modules
+.pnpm-store
+
+# Build
+dist
+.turbo
+
+# Env & secrets
+.env*
+.vercel
+
+# OS
+.DS_Store
+
+

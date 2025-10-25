@@ -1,0 +1,22 @@
+{
+  "name": "wapay",
+  "version": "0.0.1",
+  "private": true,
+  "packageManager": "pnpm@8.15.4",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "pnpm -r run lint",
+    "format": "prettier -w .",
+    "dev:api": "pnpm --filter @wapay/api dev",
+    "dev:ops": "pnpm --filter @wapay/ops dev"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.4.5",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.11.30"
+  }
+}
+
+

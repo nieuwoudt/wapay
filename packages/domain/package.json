@@ -1,0 +1,25 @@
+{
+  "name": "@wapay/domain",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "prisma": {
+    "schema": "./prisma/schema.prisma"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo 'no lint yet'",
+    "prisma:generate": "prisma generate",
+    "prisma:diff:init": "prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.18.0",
+    "@wapay/ledger": "workspace:*"
+  },
+  "devDependencies": {
+    "prisma": "^5.18.0"
+  }
+}
+
+
