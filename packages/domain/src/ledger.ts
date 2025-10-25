@@ -1,5 +1,5 @@
 import { getPrisma } from './db';
-import { validateBalanced, JournalPosting } from '@wapay/ledger/src/index';
+import { validateBalanced, JournalPosting } from '@wapay/ledger';
 
 export async function postBluDeposit(args: {
   accountId: string;
