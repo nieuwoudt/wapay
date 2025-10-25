@@ -1,9 +1,14 @@
 {
   "version": 2,
+  "buildCommand": null,
+  "installCommand": "pnpm install && pnpm --filter @wapay/domain prisma:generate",
   "builds": [
     {
       "src": "apps/api/src/index.ts",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["packages/**", "apps/api/**"]
+      }
     }
   ],
   "routes": [
