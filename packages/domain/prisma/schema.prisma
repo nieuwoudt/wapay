@@ -99,9 +99,10 @@ model YoyoInstrument {
   id            String  @id @default(cuid())
   account       Account @relation(fields: [accountId], references: [id])
   accountId     String  @unique
-  yoyoAccountId String
-  cardId        String
+  yoyoAccountId String  @unique
+  cardId        String?
   createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 

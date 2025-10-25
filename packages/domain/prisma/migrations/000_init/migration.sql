@@ -1,7 +1,3 @@
-
-> @wapay/domain@0.0.1 prisma:diff:init /Users/nieuwoudtgresse/Desktop/WaPay /WaPay V1.01/packages/domain
-> prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script
-
 -- CreateTable
 CREATE TABLE "Account" (
     "id" TEXT NOT NULL,
@@ -109,8 +105,9 @@ CREATE TABLE "YoyoInstrument" (
     "id" TEXT NOT NULL,
     "accountId" TEXT NOT NULL,
     "yoyoAccountId" TEXT NOT NULL,
-    "cardId" TEXT NOT NULL,
+    "cardId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "YoyoInstrument_pkey" PRIMARY KEY ("id")
 );
@@ -123,6 +120,9 @@ CREATE UNIQUE INDEX "ProviderRequest_idemKey_key" ON "ProviderRequest"("idemKey"
 
 -- CreateIndex
 CREATE UNIQUE INDEX "YoyoInstrument_accountId_key" ON "YoyoInstrument"("accountId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "YoyoInstrument_yoyoAccountId_key" ON "YoyoInstrument"("yoyoAccountId");
 
 -- AddForeignKey
 ALTER TABLE "Wallet" ADD CONSTRAINT "Wallet_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -138,4 +138,3 @@ ALTER TABLE "Limit" ADD CONSTRAINT "Limit_accountId_fkey" FOREIGN KEY ("accountI
 
 -- AddForeignKey
 ALTER TABLE "YoyoInstrument" ADD CONSTRAINT "YoyoInstrument_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
