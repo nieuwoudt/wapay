@@ -1,4 +1,15 @@
 {
-  "buildCommand": null,
-  "installCommand": "pnpm install && pnpm --filter @wapay/domain prisma:generate"
+  "buildCommand": "pnpm -r run build",
+  "installCommand": "pnpm install",
+  "functions": {
+    "api/index.ts": {
+      "runtime": "nodejs20.x"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ]
 }
