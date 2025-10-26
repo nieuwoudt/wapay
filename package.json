@@ -11,11 +11,17 @@
     "dev:api": "pnpm --filter @wapay/api dev",
     "dev:ops": "pnpm --filter @wapay/ops dev"
   },
+  "dependencies": {
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
   "devDependencies": {
     "prettier": "^3.3.3",
     "typescript": "^5.4.5",
     "ts-node": "^10.9.2",
-    "@types/node": "^20.11.30"
+    "@types/node": "^20.11.30",
+    "@types/react": "^18.3.0"
   }
 }
 
