@@ -1,1 +1,3 @@
-{}
+{
+  "buildCommand": "echo 'Using Next.js API routes - no build needed'"
+}
