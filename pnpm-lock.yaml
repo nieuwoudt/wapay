@@ -32,6 +32,12 @@ importers:
       '@wapay/providers-yoyo':
         specifier: workspace:*
         version: link:../../packages/providers/yoyo
+      '@wapay/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
+      '@wapay/whatsapp':
+        specifier: workspace:*
+        version: link:../../packages/whatsapp
       fastify:
         specifier: ^4.28.1
         version: 4.29.1

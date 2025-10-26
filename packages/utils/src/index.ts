@@ -39,6 +39,7 @@ export const env = {
   // WhatsApp (Meta)
   get META_WHATSAPP_TOKEN() { return requireEnv('META_WHATSAPP_TOKEN'); },
   get META_WHATSAPP_PHONE_NUMBER_ID() { return requireEnv('META_WHATSAPP_PHONE_NUMBER_ID'); },
+  get META_WHATSAPP_BUSINESS_ACCOUNT_ID() { return process.env.META_WHATSAPP_BUSINESS_ACCOUNT_ID || ''; },
   get META_WEBHOOK_VERIFY_TOKEN() { return requireEnv('META_WEBHOOK_VERIFY_TOKEN'); },
 }
 

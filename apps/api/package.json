@@ -15,7 +15,9 @@
     "zod": "^3.23.8",
     "@wapay/domain": "workspace:*",
     "@wapay/providers-blu": "workspace:*",
-    "@wapay/providers-yoyo": "workspace:*"
+    "@wapay/providers-yoyo": "workspace:*",
+    "@wapay/whatsapp": "workspace:*",
+    "@wapay/utils": "workspace:*"
   },
   "devDependencies": {
     "ts-node": "^10.9.2",
