@@ -160,10 +160,34 @@ export async function processMessage({ from, text, messageId, profile }) {
   // Get or create user
   const { account, isNewUser } = await getOrCreateUser(from, profile);
   
-  // Log if new user (but don't send welcome yet, just process their message)
+  // Send welcome template to new users
   if (isNewUser) {
-    console.log('👋 New user detected, account created');
-    await updateOnboardingStatus(account.id, 'ONBOARDING_STARTED');
+    console.log('👋 New user detected, sending welcome template');
+    
+    const welcomeResult = await sendTemplateMessage({
+      to: from,
+      templateName: 'welcome_new_user',
+      preferredLanguage: 'en_US',
+      components: [
+        {
+          type: 'body',
+          parameters: [
+            {
+              type: 'text',
+              text: account.displayName || 'Friend',
+            },
+          ],
+        },
+      ],
+    });
+    
+    if (welcomeResult.ok) {
+      await updateOnboardingStatus(account.id, 'ONBOARDING_STARTED');
+      return welcomeResult;
+    }
+    
+    // If template fails, continue to process their message
+    console.log('⚠️ Welcome template failed, processing message instead');
   }
 
   // Detect intent for all users
