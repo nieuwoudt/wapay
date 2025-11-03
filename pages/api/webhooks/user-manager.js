@@ -12,8 +12,8 @@ import prisma from '../../../lib/prisma';
 export async function getOrCreateUser(waId, profile = {}) {
   try {
     // Try to find existing user
-    let account = await prisma.accounts.findFirst({
-      where: { wa_id: waId },
+    let account = await prisma.account.findFirst({
+      where: { waId: waId },
       include: {
         wallets: true,
       },
@@ -27,25 +27,22 @@ export async function getOrCreateUser(waId, profile = {}) {
     // Create new user
     console.log('🆕 Creating new user for:', waId);
 
-    account = await prisma.accounts.create({
+    account = await prisma.account.create({
       data: {
-        wa_id: waId,
-        display_name: profile.name || 'Friend',
-        status: 'PENDING_ONBOARDING',
-        created_at: new Date(),
-        updated_at: new Date(),
+        waId: waId,
+        msisdn: waId, // Use WA ID as MSISDN for now
+        displayName: profile.name || 'Friend',
+        createdAt: new Date(),
       },
     });
 
     // Create wallet for new user
-    const wallet = await prisma.wallets.create({
+    const wallet = await prisma.wallet.create({
       data: {
-        account_id: account.id,
+        accountId: account.id,
         currency: 'ZAR',
-        available_balance: 0,
-        pending_balance: 0,
-        created_at: new Date(),
-        updated_at: new Date(),
+        availableCents: 0,
+        pendingCents: 0,
       },
     });
 
@@ -63,9 +60,8 @@ export async function getOrCreateUser(waId, profile = {}) {
     return {
       account: {
         id: waId,
-        wa_id: waId,
-        display_name: 'Friend',
-        status: 'PENDING_ONBOARDING',
+        waId: waId,
+        displayName: 'Friend',
         wallets: [],
       },
       isNewUser: true,
@@ -79,14 +75,8 @@ export async function getOrCreateUser(waId, profile = {}) {
  */
 export async function updateOnboardingStatus(accountId, status) {
   try {
-    await prisma.accounts.update({
-      where: { id: accountId },
-      data: {
-        status,
-        updated_at: new Date(),
-      },
-    });
-    console.log('✅ Updated onboarding status:', { accountId, status });
+    // For now, just log since we don't have a status field yet
+    console.log('✅ Onboarding status:', { accountId, status });
     return { ok: true };
   } catch (error) {
     console.error('❌ Error updating onboarding status:', error);
@@ -99,24 +89,24 @@ export async function updateOnboardingStatus(accountId, status) {
  */
 export async function getUserBalance(waId) {
   try {
-    const account = await prisma.accounts.findFirst({
-      where: { wa_id: waId },
+    const account = await prisma.account.findFirst({
+      where: { waId: waId },
       include: {
         wallets: true,
       },
     });
 
     if (!account || !account.wallets || account.wallets.length === 0) {
-      return { balance: 0, displayName: 'Friend' };
+      return { balance: '0.00', displayName: 'Friend' };
     }
 
     const wallet = account.wallets[0];
-    const balanceCents = wallet.available_balance || 0;
+    const balanceCents = wallet.availableCents || 0;
     const balanceRands = (balanceCents / 100).toFixed(2);
 
     return {
       balance: balanceRands,
-      displayName: account.display_name || 'Friend',
+      displayName: account.displayName || 'Friend',
     };
 
   } catch (error) {

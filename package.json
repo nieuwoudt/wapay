@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@8.15.4",
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate --schema=./packages/domain/prisma/schema.prisma",
     "build": "pnpm run build:packages && next build",
     "build:packages": "pnpm -r --filter='./packages/**' run build",
     "dev": "next dev",

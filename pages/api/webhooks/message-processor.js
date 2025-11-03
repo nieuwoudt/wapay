@@ -152,7 +152,7 @@ export async function processMessage({ from, text, messageId, profile }) {
   const { account, isNewUser } = await getOrCreateUser(from, profile);
   
   // Handle onboarding for new users
-  if (isNewUser || account.status === 'PENDING_ONBOARDING') {
+  if (isNewUser) {
     console.log('👋 New user detected, starting onboarding');
     
     // Send welcome template
