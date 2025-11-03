@@ -158,7 +158,7 @@ export async function processMessage({ from, text, messageId, profile }) {
     // Send welcome template
     const welcomeResult = await sendTemplateMessage({
       to: from,
-      templateName: 'welcome_new_user_account_activation',
+      templateName: 'welcome_new_user',
       components: [
         {
           type: 'body',
