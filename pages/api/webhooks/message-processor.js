@@ -155,21 +155,10 @@ export async function processMessage({ from, text, messageId, profile }) {
   if (isNewUser) {
     console.log('👋 New user detected, starting onboarding');
     
-    // Send welcome template
-    const welcomeResult = await sendTemplateMessage({
+    // Send welcome text message
+    const welcomeResult = await sendTextMessage({
       to: from,
-      templateName: 'welcome_new_user_acc',
-      components: [
-        {
-          type: 'body',
-          parameters: [
-            {
-              type: 'text',
-              text: account.display_name || 'Friend',
-            },
-          ],
-        },
-      ],
+      text: `🎉 *Welcome to WaPay!*\n\nHi ${account.displayName || 'Friend'}!\n\nYour WaPay account is now active. You can:\n\n• Check your balance\n• Buy airtime\n• Buy data bundles\n• Redeem vouchers\n\nType "help" to see all options or ask me anything!`,
     });
     
     // Update status
