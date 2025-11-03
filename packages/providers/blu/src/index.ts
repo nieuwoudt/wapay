@@ -10,5 +10,6 @@ export interface VoucherRail {
   redeem(pin: string, idemKey: string): Promise<VoucherRedeemResult>;
 }
 export * from './client';
+export * from './vas';
 
 

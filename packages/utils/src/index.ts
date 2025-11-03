@@ -10,6 +10,9 @@ export function requireEnv(name: string): string {
   return v;
 }
 
+// Network inference utilities
+export * from './network';
+
 /**
  * Environment variable helper with type-safe access
  */

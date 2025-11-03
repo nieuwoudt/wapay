@@ -88,6 +88,19 @@ importers:
 
   packages/ledger: {}
 
+  packages/nlp:
+    dependencies:
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^20.11.30
+        version: 20.19.21
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
+
   packages/providers/blu:
     dependencies:
       '@wapay/utils':

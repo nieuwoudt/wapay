@@ -1,0 +1,193 @@
+[
+  {
+    "category": "AIRTIME",
+    "networkCode": "VODACOM",
+    "skuCode": "VODA_AIRTIME",
+    "label": "Vodacom Airtime",
+    "unitType": "CURRENCY",
+    "unitQuantityMb": null,
+    "priceCents": 0,
+    "validityDays": null,
+    "allowCustomAmount": true,
+    "minCents": 500,
+    "maxCents": 100000,
+    "stepCents": 100,
+    "targetType": "MSISDN",
+    "metadata": {
+      "provider": "blu",
+      "providerSku": "VODACOM_AIRTIME"
+    }
+  },
+  {
+    "category": "AIRTIME",
+    "networkCode": "MTN",
+    "skuCode": "MTN_AIRTIME",
+    "label": "MTN Airtime",
+    "unitType": "CURRENCY",
+    "unitQuantityMb": null,
+    "priceCents": 0,
+    "validityDays": null,
+    "allowCustomAmount": true,
+    "minCents": 500,
+    "maxCents": 100000,
+    "stepCents": 100,
+    "targetType": "MSISDN",
+    "metadata": {
+      "provider": "blu",
+      "providerSku": "MTN_AIRTIME"
+    }
+  },
+  {
+    "category": "AIRTIME",
+    "networkCode": "CELL_C",
+    "skuCode": "CELLC_AIRTIME",
+    "label": "Cell C Airtime",
+    "unitType": "CURRENCY",
+    "unitQuantityMb": null,
+    "priceCents": 0,
+    "validityDays": null,
+    "allowCustomAmount": true,
+    "minCents": 500,
+    "maxCents": 100000,
+    "stepCents": 100,
+    "targetType": "MSISDN",
+    "metadata": {
+      "provider": "blu",
+      "providerSku": "CELLC_AIRTIME"
+    }
+  },
+  {
+    "category": "AIRTIME",
+    "networkCode": "TELKOM",
+    "skuCode": "TELKOM_AIRTIME",
+    "label": "Telkom Mobile Airtime",
+    "unitType": "CURRENCY",
+    "unitQuantityMb": null,
+    "priceCents": 0,
+    "validityDays": null,
+    "allowCustomAmount": true,
+    "minCents": 500,
+    "maxCents": 100000,
+    "stepCents": 100,
+    "targetType": "MSISDN",
+    "metadata": {
+      "provider": "blu",
+      "providerSku": "TELKOM_AIRTIME"
+    }
+  },
+  {
+    "category": "DATA",
+    "networkCode": "VODACOM",
+    "skuCode": "VODA_1GB_DAILY",
+    "label": "1GB Daily",
+    "unitType": "DATA",
+    "unitQuantityMb": 1024,
+    "priceCents": 3000,
+    "validityDays": 1,
+    "allowCustomAmount": false,
+    "minCents": null,
+    "maxCents": null,
+    "stepCents": null,
+    "targetType": "MSISDN",
+    "metadata": {
+      "provider": "blu",
+      "providerSku": "VODACOM_1GB_1DAY"
+    }
+  },
+  {
+    "category": "DATA",
+    "networkCode": "VODACOM",
+    "skuCode": "VODA_500MB_WEEKLY",
+    "label": "500MB Weekly",
+    "unitType": "DATA",
+    "unitQuantityMb": 512,
+    "priceCents": 4500,
+    "validityDays": 7,
+    "allowCustomAmount": false,
+    "minCents": null,
+    "maxCents": null,
+    "stepCents": null,
+    "targetType": "MSISDN",
+    "metadata": {
+      "provider": "blu",
+      "providerSku": "VODACOM_500MB_7DAY"
+    }
+  },
+  {
+    "category": "DATA",
+    "networkCode": "VODACOM",
+    "skuCode": "VODA_2GB_MONTHLY",
+    "label": "2GB Monthly",
+    "unitType": "DATA",
+    "unitQuantityMb": 2048,
+    "priceCents": 9900,
+    "validityDays": 30,
+    "allowCustomAmount": false,
+    "minCents": null,
+    "maxCents": null,
+    "stepCents": null,
+    "targetType": "MSISDN",
+    "metadata": {
+      "provider": "blu",
+      "providerSku": "VODACOM_2GB_30DAY"
+    }
+  },
+  {
+    "category": "DATA",
+    "networkCode": "MTN",
+    "skuCode": "MTN_1GB_DAILY",
+    "label": "1GB Daily",
+    "unitType": "DATA",
+    "unitQuantityMb": 1024,
+    "priceCents": 2900,
+    "validityDays": 1,
+    "allowCustomAmount": false,
+    "minCents": null,
+    "maxCents": null,
+    "stepCents": null,
+    "targetType": "MSISDN",
+    "metadata": {
+      "provider": "blu",
+      "providerSku": "MTN_1GB_1DAY"
+    }
+  },
+  {
+    "category": "DATA",
+    "networkCode": "MTN",
+    "skuCode": "MTN_500MB_WEEKLY",
+    "label": "500MB Weekly",
+    "unitType": "DATA",
+    "unitQuantityMb": 512,
+    "priceCents": 4200,
+    "validityDays": 7,
+    "allowCustomAmount": false,
+    "minCents": null,
+    "maxCents": null,
+    "stepCents": null,
+    "targetType": "MSISDN",
+    "metadata": {
+      "provider": "blu",
+      "providerSku": "MTN_500MB_7DAY"
+    }
+  },
+  {
+    "category": "DATA",
+    "networkCode": "MTN",
+    "skuCode": "MTN_2GB_MONTHLY",
+    "label": "2GB Monthly",
+    "unitType": "DATA",
+    "unitQuantityMb": 2048,
+    "priceCents": 9500,
+    "validityDays": 30,
+    "allowCustomAmount": false,
+    "minCents": null,
+    "maxCents": null,
+    "stepCents": null,
+    "targetType": "MSISDN",
+    "metadata": {
+      "provider": "blu",
+      "providerSku": "MTN_2GB_30DAY"
+    }
+  }
+]
+

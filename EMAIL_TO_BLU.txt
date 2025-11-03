@@ -1,0 +1,48 @@
+Subject: URGENT: Missing API Key for Variable Voucher API - Account: bld
+
+Hi Blu Team,
+
+We're ready to integrate the Variable Voucher API but are blocked due to a missing API key.
+
+PROBLEM:
+When testing the redemption endpoint, we receive 401 Unauthorized errors.
+
+WHAT WE HAVE:
+✅ Test credentials email received
+✅ Username: bld
+✅ Password: ornuk3i9vseei125s8qea71kub
+✅ Test voucher: Serial BL010O530EF57706, PIN 5608644555612212
+✅ Swagger UI access
+
+WHAT WE'RE MISSING:
+❌ API key value for the "apikey" header
+
+TECHNICAL DETAILS:
+- Endpoint: POST /v2/api/trade/voucher/variable/redemptions
+- Error: 401 Unauthorized
+- The Swagger spec shows "api-key" security is required
+- Basic Auth alone returns 401
+
+The Swagger UI authorization dialog has TWO fields:
+1. Basic authentication (username/password) - we have this ✅
+2. api-key (apiKey) header - VALUE MISSING ❌
+
+REQUEST:
+Please provide the API key value that should be sent in the "apikey" header.
+
+TEST DETAILS:
+We tested with:
+- Request ID: wapay-test-001
+- Token: 5608644555612212
+- Amount: 1000 cents
+
+We're ready to complete integration immediately once we have the API key!
+
+Thanks,
+WaPay Team
+
+---
+Technical Contact: [YOUR EMAIL]
+Phone: [YOUR PHONE]
+UUID from your email: 6b58e8ca-1564-462f-8481-c9f39b258a15
+
