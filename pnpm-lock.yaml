@@ -8,6 +8,30 @@ importers:
 
   .:
     dependencies:
+      '@prisma/client':
+        specifier: ^5.11.0
+        version: 5.22.0(prisma@5.22.0)
+      '@wapay/domain':
+        specifier: workspace:*
+        version: link:packages/domain
+      '@wapay/ledger':
+        specifier: workspace:*
+        version: link:packages/ledger
+      '@wapay/nlp':
+        specifier: workspace:*
+        version: link:packages/nlp
+      '@wapay/providers-blu':
+        specifier: workspace:*
+        version: link:packages/providers/blu
+      '@wapay/providers-yoyo':
+        specifier: workspace:*
+        version: link:packages/providers/yoyo
+      '@wapay/utils':
+        specifier: workspace:*
+        version: link:packages/utils
+      '@wapay/whatsapp':
+        specifier: workspace:*
+        version: link:packages/whatsapp
       next:
         specifier: ^14.2.0
         version: 14.2.33(react-dom@18.3.1)(react@18.3.1)

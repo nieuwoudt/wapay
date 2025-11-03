@@ -5,6 +5,8 @@ node_modules
 # Build
 dist
 .turbo
+.next
+out
 
 # Env & secrets
 .env*
