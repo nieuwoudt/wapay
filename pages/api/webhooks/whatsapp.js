@@ -5,6 +5,8 @@
  * 1. Webhook verification (GET)
  * 2. Incoming messages (POST)
  */
+import { processMessage } from './message-processor';
+
 export default async function handler(req, res) {
   
   // GET: Webhook verification
@@ -64,7 +66,12 @@ export default async function handler(req, res) {
                   const text = message.text?.body || '';
                   console.log('💬 Text message:', text);
 
-                  // TODO: Process the message (NLP parsing, intent detection, etc.)
+                  // Process the message and send response
+                  await processMessage({
+                    from,
+                    text,
+                    messageId,
+                  });
                 }
 
                 if (messageType === 'interactive') {
