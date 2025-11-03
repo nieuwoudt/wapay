@@ -4,6 +4,8 @@
  * Processes incoming WhatsApp messages and sends appropriate template responses
  */
 
+import { getOrCreateUser, updateOnboardingStatus, getUserBalance } from './user-manager';
+
 /**
  * Send WhatsApp text message (fallback)
  */
@@ -143,40 +145,64 @@ function detectIntent(text) {
 /**
  * Process incoming WhatsApp message
  */
-export async function processMessage({ from, text, messageId }) {
+export async function processMessage({ from, text, messageId, profile }) {
   console.log('🔄 Processing message:', { from, text });
 
-  // Detect intent
+  // Get or create user
+  const { account, isNewUser } = await getOrCreateUser(from, profile);
+  
+  // Handle onboarding for new users
+  if (isNewUser || account.status === 'PENDING_ONBOARDING') {
+    console.log('👋 New user detected, starting onboarding');
+    
+    // Send welcome template
+    const welcomeResult = await sendTemplateMessage({
+      to: from,
+      templateName: 'welcome_new_user',
+      components: [
+        {
+          type: 'body',
+          parameters: [
+            {
+              type: 'text',
+              text: account.display_name || 'Friend',
+            },
+          ],
+        },
+      ],
+    });
+    
+    // Update status
+    await updateOnboardingStatus(account.id, 'ONBOARDING_STARTED');
+    
+    return welcomeResult;
+  }
+
+  // Detect intent for existing users
   const { intent, confidence } = detectIntent(text);
   console.log('🎯 Detected intent:', { intent, confidence });
 
   try {
     switch (intent) {
       case 'CHECK_BALANCE':
-        // Try template first, fallback to text
+        // Get user's actual balance
+        const { balance, displayName } = await getUserBalance(from);
+        
+        // Try template first (Marketing category - may have buttons)
         const balanceResult = await sendTemplateMessage({
           to: from,
           templateName: 'balance_summary',
           components: [
             {
-              type: 'header',
-              parameters: [
-                {
-                  type: 'text',
-                  text: 'Balance Enquiry',
-                },
-              ],
-            },
-            {
               type: 'body',
               parameters: [
                 {
                   type: 'text',
-                  text: 'Nieuwoudt',
+                  text: displayName,
                 },
                 {
                   type: 'text',
-                  text: 'R 0.00',
+                  text: `R ${balance}`,
                 },
               ],
             },
@@ -188,7 +214,7 @@ export async function processMessage({ from, text, messageId }) {
           console.log('⚠️ Template failed, sending text message instead');
           return await sendTextMessage({
             to: from,
-            text: '💰 *Your WaPay Balance*\n\nHi Nieuwoudt!\nYour current balance is R 0.00\n\nWhat would you like to do?\n• Buy airtime\n• Buy data\n• Redeem voucher\n• Send money\n\nReply with your choice or type "help" for more options.',
+            text: `💰 *Your WaPay Balance*\n\nHi ${displayName}!\nYour current balance is R ${balance}\n\nWhat would you like to do?\n• Buy airtime\n• Buy data\n• Redeem voucher\n• Send money\n\nReply with your choice or type "help" for more options.`,
           });
         }
         

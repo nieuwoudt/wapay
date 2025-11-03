@@ -46,7 +46,11 @@ export default async function handler(req, res) {
 
           for (const change of changes) {
             if (change.field === 'messages') {
-              const messages = change.value?.messages || [];
+              const value = change.value || {};
+              const messages = value.messages || [];
+              const contacts = value.contacts || [];
+              const contact = contacts[0] || {};
+              const profile = contact.profile || {};
 
               for (const message of messages) {
                 const from = message.from; // User's WhatsApp ID
@@ -59,6 +63,7 @@ export default async function handler(req, res) {
                   messageId,
                   messageType,
                   timestamp,
+                  profile: profile.name || 'Unknown',
                 });
 
                 // Handle different message types
@@ -71,6 +76,7 @@ export default async function handler(req, res) {
                     from,
                     text,
                     messageId,
+                    profile,
                   });
                 }
 
