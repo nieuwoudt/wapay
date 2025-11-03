@@ -197,114 +197,45 @@ export async function processMessage({ from, text, messageId, profile }) {
         // Get user's actual balance
         const { balance, displayName } = await getUserBalance(from);
         
-        // Try template first (Marketing category - may have buttons)
-        const balanceResult = await sendTemplateMessage({
+        // Send text message with balance
+        return await sendTextMessage({
           to: from,
-          templateName: 'balance_summary',
-          components: [
-            {
-              type: 'body',
-              parameters: [
-                {
-                  type: 'text',
-                  text: displayName,
-                },
-                {
-                  type: 'text',
-                  text: `R ${balance}`,
-                },
-              ],
-            },
-          ],
+          text: `💰 *Your WaPay Balance*\n\nHi ${displayName}!\nYour current balance is R ${balance}\n\nWhat would you like to do?\n• Buy airtime\n• Buy data\n• Redeem voucher\n• Send money\n\nReply with your choice or type "help" for more options.`,
         });
-        
-        // If template fails, send text message
-        if (!balanceResult.ok) {
-          console.log('⚠️ Template failed, sending text message instead');
-          return await sendTextMessage({
-            to: from,
-            text: `💰 *Your WaPay Balance*\n\nHi ${displayName}!\nYour current balance is R ${balance}\n\nWhat would you like to do?\n• Buy airtime\n• Buy data\n• Redeem voucher\n• Send money\n\nReply with your choice or type "help" for more options.`,
-          });
-        }
-        
-        return balanceResult;
 
       case 'HELP':
-        // Send help_me_menu template
-        return await sendTemplateMessage({
+        // Send help text message
+        return await sendTextMessage({
           to: from,
-          templateName: 'help_me_menu',
-          components: [
-            {
-              type: 'header',
-              parameters: [
-                {
-                  type: 'text',
-                  text: 'Help Menu',
-                },
-              ],
-            },
-            {
-              type: 'body',
-              parameters: [
-                {
-                  type: 'text',
-                  text: 'Nieuwoudt', // TODO: Get from user profile
-                },
-              ],
-            },
-          ],
+          text: `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance*\n"What's my balance?"\n\n📱 *Airtime*\n"Buy R50 airtime"\n\n📶 *Data*\n"Buy 1GB data"\n\n🎟️ *Voucher*\n"Redeem voucher"\n\nJust ask me in your own words! I understand natural language.`,
         });
 
       case 'BUY_AIRTIME':
-        // Send airtime_select_amount template
-        return await sendTemplateMessage({
+        // Send airtime options
+        return await sendTextMessage({
           to: from,
-          templateName: 'airtime_select_amount',
-          components: [],
+          text: `📱 *Buy Airtime*\n\nHow much airtime would you like?\n\nJust tell me the amount, like:\n• "R10"\n• "R20"\n• "R50"\n• "R100"\n\nOr specify the number:\n"R50 airtime for 082 123 4567"`,
         });
 
       case 'BUY_DATA':
-        // Send data_select_bundle template
-        return await sendTemplateMessage({
+        // Send data options
+        return await sendTextMessage({
           to: from,
-          templateName: 'data_select_bundle',
-          components: [],
+          text: `📶 *Buy Data*\n\nTell me what you need:\n\n• "1GB daily"\n• "500MB weekly"\n• "2GB monthly"\n\nOr specify the number:\n"1GB for 082 123 4567"`,
         });
 
       case 'REDEEM_VOUCHER':
-        // Send bluvoucher_redeem_pro template
-        return await sendTemplateMessage({
+        // Send voucher instructions
+        return await sendTextMessage({
           to: from,
-          templateName: 'bluvoucher_redeem_pro',
-          components: [],
+          text: `🎟️ *Redeem Voucher*\n\nPlease enter your 16-digit Blu Voucher PIN:\n\nExample: 1234-5678-9012-3456\n\nYour voucher value will be added to your WaPay balance instantly!`,
         });
 
       default:
-        // Send help menu for unknown intents
-        return await sendTemplateMessage({
+        // Send help for unknown intents
+        return await sendTextMessage({
           to: from,
-          templateName: 'help_me_menu',
-          components: [
-            {
-              type: 'header',
-              parameters: [
-                {
-                  type: 'text',
-                  text: 'Help Menu',
-                },
-              ],
-            },
-            {
-              type: 'body',
-              parameters: [
-                {
-                  type: 'text',
-                  text: 'Friend', // TODO: Get from user profile
-                },
-              ],
-            },
-          ],
+          text: `👋 Hi there!\n\nI didn't quite understand that. Here's what I can help you with:\n\n💰 Check balance\n📱 Buy airtime\n📶 Buy data\n🎟️ Redeem voucher\n\nType "help" to see more options!`,
         });
     }
   } catch (error) {
