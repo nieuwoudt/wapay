@@ -151,43 +151,13 @@ export async function processMessage({ from, text, messageId, profile }) {
   // Get or create user
   const { account, isNewUser } = await getOrCreateUser(from, profile);
   
-  // Handle onboarding for new users
+  // Log if new user (but don't send welcome yet, just process their message)
   if (isNewUser) {
-    console.log('👋 New user detected, starting onboarding');
-    
-    // Send welcome template
-    const welcomeResult = await sendTemplateMessage({
-      to: from,
-      templateName: 'welcome_new_user',
-      components: [
-        {
-          type: 'body',
-          parameters: [
-            {
-              type: 'text',
-              text: account.displayName || 'Friend',
-            },
-          ],
-        },
-      ],
-    });
-    
-    // If template fails, send text message
-    if (!welcomeResult.ok) {
-      console.log('⚠️ Welcome template failed, sending text message instead');
-      return await sendTextMessage({
-        to: from,
-        text: `🎉 *Welcome to WaPay!*\n\nHi ${account.displayName || 'Friend'}!\n\nYour WaPay account is now active. You can:\n\n• Check your balance\n• Buy airtime\n• Buy data bundles\n• Redeem vouchers\n\nType "help" to see all options or ask me anything!`,
-      });
-    }
-    
-    // Update status
+    console.log('👋 New user detected, account created');
     await updateOnboardingStatus(account.id, 'ONBOARDING_STARTED');
-    
-    return welcomeResult;
   }
 
-  // Detect intent for existing users
+  // Detect intent for all users
   const { intent, confidence } = detectIntent(text);
   console.log('🎯 Detected intent:', { intent, confidence });
 
