@@ -105,4 +105,19 @@ model YoyoInstrument {
   updatedAt     DateTime @updatedAt
 }
 
+model WhatsappTemplate {
+  id             String   @id @default(cuid())
+  wabaId         String
+  name           String
+  language       String
+  status         String
+  category       String?
+  componentsHash String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([wabaId, name, language])
+  @@index([wabaId, name])
+}
+
 

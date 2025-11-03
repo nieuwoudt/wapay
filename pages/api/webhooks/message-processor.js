@@ -5,6 +5,7 @@
  */
 
 import { getOrCreateUser, updateOnboardingStatus, getUserBalance } from './user-manager';
+import { resolveLanguage } from '@wapay/whatsapp';
 
 /**
  * Send WhatsApp text message (fallback)
@@ -58,13 +59,21 @@ async function sendTextMessage({ to, text }) {
 /**
  * Send WhatsApp template message
  */
-async function sendTemplateMessage({ to, templateName, languageCode = 'en', components = [] }) {
+async function sendTemplateMessage({ to, templateName, preferredLanguage = 'en_US', components = [] }) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   if (!accessToken || !phoneNumberId) {
     console.error('❌ Missing WhatsApp credentials');
     return { ok: false, error: 'Missing credentials' };
+  }
+
+  // Resolve the actual language from the catalog
+  const languageCode = resolveLanguage(templateName, preferredLanguage);
+  
+  if (!languageCode) {
+    console.error(`❌ Template '${templateName}' not found in catalog. Seed templates first.`);
+    return { ok: false, error: `Template '${templateName}' not available` };
   }
 
   const url = `https://graph.facebook.com/v24.0/${phoneNumberId}/messages`;
@@ -75,13 +84,13 @@ async function sendTemplateMessage({ to, templateName, languageCode = 'en', comp
     type: 'template',
     template: {
       name: templateName,
-      language: { code: languageCode },
+      language: { code: languageCode, policy: 'deterministic' },
       components,
     },
   };
 
   try {
-    console.log('📤 Sending template:', { to, templateName, components });
+    console.log('📤 Sending template:', { to, templateName, languageCode, components });
 
     const response = await fetch(url, {
       method: 'POST',

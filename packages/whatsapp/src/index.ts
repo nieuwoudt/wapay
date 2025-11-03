@@ -1,5 +1,9 @@
 import { request, Dispatcher } from 'undici';
 
+// Export template seeding and catalog functions
+export { seedWhatsappTemplates } from './seedTemplates';
+export { buildCatalog, resolveLanguage, isApproved, getAvailableTemplates, getAvailableLanguages } from './templateCatalog';
+
 export type TemplateName =
   | 'redeem_in_progress'
   | 'deposit_receipt'
