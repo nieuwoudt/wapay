@@ -24,9 +24,11 @@ export async function seedWhatsappTemplates(opts: {
   const { wabaId, accessToken } = opts;
   
   console.log('🌱 Seeding WhatsApp templates from Meta API...');
+  console.log(`📋 Using WABA ID: ${wabaId}`);
   
   const url = new URL(`https://graph.facebook.com/v21.0/${wabaId}/message_templates`);
   url.searchParams.set('limit', '200');
+  // Don't filter by status - fetch ALL templates to see what we have
 
   try {
     const res = await fetch(url.toString(), {
@@ -42,6 +44,7 @@ export async function seedWhatsappTemplates(opts: {
     const templates: MetaTemplate[] = json.data ?? [];
 
     console.log(`📥 Fetched ${templates.length} templates from Meta`);
+    console.log(`📋 Template details:`, templates.map(t => `${t.name} (${t.status}, ${t.language})`).join(', '));
 
     let seededCount = 0;
     for (const t of templates) {
