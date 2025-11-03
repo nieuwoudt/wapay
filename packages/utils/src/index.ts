@@ -10,7 +10,7 @@ export function requireEnv(name: string): string {
   return v;
 }
 
-// Network inference utilities
+  // Network inference utilities
 export * from './network';
 
 /**

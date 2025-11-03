@@ -4,10 +4,10 @@
   "private": true,
   "packageManager": "pnpm@8.15.4",
   "scripts": {
-    "build": "next build",
+    "build": "pnpm run build:packages && next build",
+    "build:packages": "pnpm -r --filter='./packages/**' run build",
     "dev": "next dev",
     "start": "next start",
-    "build:packages": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
     "format": "prettier -w .",

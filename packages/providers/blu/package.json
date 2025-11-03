@@ -3,12 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/providers/blu/src/index.js",
+  "types": "dist/providers/blu/src/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./dist/providers/blu/src/index.d.ts",
+      "default": "./dist/providers/blu/src/index.js"
     }
   },
   "scripts": {
