@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     console.log('Webhook verification request:', { mode, token: token ? 'present' : 'missing', challenge });
 
     // Verify token matches our environment variable
-    const expectedToken = process.env.META_WEBHOOK_VERIFY_TOKEN || 'wapay_webhook_secret_2025';
+    const expectedToken = process.env.WHATSAPP_VERIFY_TOKEN || process.env.META_WEBHOOK_VERIFY_TOKEN || 'wapay_webhook_secret_2025';
     
     if (mode === 'subscribe' && token === expectedToken) {
       console.log('✅ Webhook verified successfully!');
