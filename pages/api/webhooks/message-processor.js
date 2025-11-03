@@ -58,7 +58,7 @@ async function sendTextMessage({ to, text }) {
 /**
  * Send WhatsApp template message
  */
-async function sendTemplateMessage({ to, templateName, languageCode = 'en_US', components = [] }) {
+async function sendTemplateMessage({ to, templateName, languageCode = 'en', components = [] }) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
