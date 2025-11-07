@@ -6,6 +6,7 @@
  * 2. Incoming messages (POST)
  */
 import { processMessage } from './message-processor';
+import { isReady, assertReady } from '../../../lib/initTemplates';
 
 export default async function handler(req, res) {
   
@@ -32,6 +33,15 @@ export default async function handler(req, res) {
   // POST: Handle incoming messages
   if (req.method === 'POST') {
     try {
+      // Check if templates are ready
+      if (!isReady()) {
+        console.warn('⚠️  WhatsApp catalog not ready yet, returning 503');
+        return res.status(503).json({ 
+          error: 'Service temporarily unavailable', 
+          message: 'Templates are still being initialized' 
+        });
+      }
+
       const body = req.body;
 
       // Log incoming webhook for debugging
