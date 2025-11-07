@@ -66,25 +66,41 @@ export async function seedWhatsappTemplates(opts: {
     throw new Error('WHATSAPP_PHONE_NUMBER_ID not set');
   }
 
-  console.log(`📱 Resolving WABA from phone number ID: ${phoneId}`);
-  
-  const pnRes = await fetch(
-    `https://graph.facebook.com/v20.0/${phoneId}?fields=whatsapp_business_account&access_token=${accessToken}`
-  );
-  
-  if (!pnRes.ok) {
-    const error = await pnRes.text();
-    throw new Error(`Cannot resolve WABA from phone number: ${pnRes.status} - ${error}`);
-  }
-
-  const pnJson = await pnRes.json();
-  const wabaId = pnJson?.whatsapp_business_account?.id;
+  // Try to resolve WABA from phone number, fallback to env var
+  let wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
   
   if (!wabaId) {
-    throw new Error('Cannot resolve WABA from PHONE_NUMBER_ID. Check token/permissions.');
+    console.log(`📱 Resolving WABA from phone number ID: ${phoneId}`);
+    
+    // Try different field names (API has changed over versions)
+    const pnRes = await fetch(
+      `https://graph.facebook.com/v20.0/${phoneId}?fields=id,verified_name,code_verification_status,display_phone_number,quality_rating,platform_type,throughput,last_onboarded_time&access_token=${accessToken}`
+    );
+    
+    if (!pnRes.ok) {
+      const error = await pnRes.text();
+      console.error(`⚠️  Cannot resolve WABA from phone number: ${pnRes.status} - ${error}`);
+      console.log('💡 Using WHATSAPP_BUSINESS_ACCOUNT_ID from env instead');
+    } else {
+      const pnJson = await pnRes.json();
+      console.log('📋 Phone number details:', JSON.stringify(pnJson, null, 2));
+      
+      // The phone number doesn't directly expose WABA ID in newer API versions
+      // We'll need to use the env var
+      console.log('💡 WABA ID not available from phone number endpoint, using env var');
+    }
+  }
+  
+  // Fallback: use env var (this is actually more reliable)
+  if (!wabaId) {
+    wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+  }
+  
+  if (!wabaId) {
+    throw new Error('WHATSAPP_BUSINESS_ACCOUNT_ID not set and could not resolve from phone number. Please set this environment variable.');
   }
 
-  console.log(`✅ Resolved WABA ID: ${wabaId}`);
+  console.log(`✅ Using WABA ID: ${wabaId}`);
   
   // Fetch ALL templates with pagination
   const templates = await fetchAllTemplates(wabaId, accessToken);
