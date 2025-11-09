@@ -75,12 +75,60 @@ export async function getOrCreateUser(waId, profile = {}) {
  */
 export async function updateOnboardingStatus(accountId, status) {
   try {
-    // For now, just log since we don't have a status field yet
-    console.log('✅ Onboarding status:', { accountId, status });
+    await prisma.account.update({
+      where: { id: accountId },
+      data: { onboardingStatus: status },
+    });
+    
+    console.log('✅ Onboarding status updated:', { accountId, status });
     return { ok: true };
   } catch (error) {
     console.error('❌ Error updating onboarding status:', error);
     return { ok: false, error: error.message };
+  }
+}
+
+/**
+ * Update user conversation state
+ */
+export async function updateConversationState(waId, state, data = null) {
+  try {
+    await prisma.account.update({
+      where: { waId },
+      data: {
+        conversationState: state,
+        conversationData: data,
+      },
+    });
+    
+    console.log('✅ Conversation state updated:', { waId, state });
+    return { ok: true };
+  } catch (error) {
+    console.error('❌ Error updating conversation state:', error);
+    return { ok: false, error: error.message };
+  }
+}
+
+/**
+ * Get user conversation state
+ */
+export async function getConversationState(waId) {
+  try {
+    const account = await prisma.account.findFirst({
+      where: { waId },
+      select: {
+        conversationState: true,
+        conversationData: true,
+      },
+    });
+    
+    return {
+      state: account?.conversationState || null,
+      data: account?.conversationData || null,
+    };
+  } catch (error) {
+    console.error('❌ Error getting conversation state:', error);
+    return { state: null, data: null };
   }
 }
 
