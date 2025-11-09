@@ -6,6 +6,7 @@ const nextConfig = {
   
   // Transpile workspace packages
   transpilePackages: [
+    '@wapay/ai',
     '@wapay/providers-blu',
     '@wapay/providers-yoyo',
     '@wapay/domain',
