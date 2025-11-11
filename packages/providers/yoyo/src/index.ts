@@ -1,4 +1,4 @@
-import { requireEnv } from '@wapay/utils/src/index';
+import { requireEnv } from '@wapay/utils';
 import { z } from 'zod';
 import { request } from 'undici';
 

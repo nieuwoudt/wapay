@@ -1,4 +1,4 @@
-import { maskVoucherPin, requireEnv } from '@wapay/utils/src/index';
+import { maskVoucherPin, requireEnv } from '@wapay/utils';
 import { request } from 'undici';
 
 export class BluClient {
