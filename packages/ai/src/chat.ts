@@ -150,3 +150,4 @@ export async function simpleChat(userMessage: string): Promise<string> {
   return response.text;
 }
 
+

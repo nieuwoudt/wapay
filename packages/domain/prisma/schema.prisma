@@ -9,18 +9,15 @@ datasource db {
 }
 
 model Account {
-  id                String   @id @default(cuid())
-  waId              String   @unique
-  msisdn            String
-  displayName       String?
-  onboardingStatus  String   @default("NEW")
-  conversationState String?
-  conversationData  Json?
-  createdAt         DateTime @default(now())
-  wallets           Wallet[]
-  sessions          AuthSession[]
-  limits            Limit[]
-  yoyo              YoyoInstrument?
+  id           String   @id @default(cuid())
+  waId         String   @unique
+  msisdn       String
+  displayName  String?
+  createdAt    DateTime @default(now())
+  wallets      Wallet[]
+  sessions     AuthSession[]
+  limits       Limit[]
+  yoyo         YoyoInstrument?
 }
 
 model Wallet {

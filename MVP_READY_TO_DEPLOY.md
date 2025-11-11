@@ -426,3 +426,4 @@ vercel logs --follow
 
 Your WaPay MVP is solid and ready for users.
 
+

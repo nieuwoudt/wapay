@@ -3,11 +3,19 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "prisma": {
     "schema": "./prisma/schema.prisma"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "rm -rf dist && tsc -p tsconfig.json && node scripts/fix-dist.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "echo 'no lint yet'",
     "prisma:generate": "prisma generate",
