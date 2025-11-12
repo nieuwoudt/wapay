@@ -4,7 +4,7 @@
  * Maps classified intents to API endpoint calls
  */
 
-import type { Intent } from './intents';
+import type { Intent } from './intents.js';
 
 /**
  * API route configuration

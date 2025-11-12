@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { extractAllEntities } from './entities';
+import { extractAllEntities } from './entities.js';
 
 /**
  * Supported intent types
