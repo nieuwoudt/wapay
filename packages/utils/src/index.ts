@@ -11,7 +11,7 @@ export function requireEnv(name: string): string {
 }
 
   // Network inference utilities
-export * from './network';
+export * from './network.js';
 
 /**
  * Environment variable helper with type-safe access

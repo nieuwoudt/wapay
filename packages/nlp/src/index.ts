@@ -10,7 +10,7 @@
  * - Disambiguation (handle missing/ambiguous entities)
  */
 
-export * from './entities';
-export * from './intents';
-export * from './router';
+export * from './entities.js';
+export * from './intents.js';
+export * from './router.js';
 

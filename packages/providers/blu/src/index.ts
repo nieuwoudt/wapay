@@ -9,7 +9,7 @@ export interface VoucherRail {
   checkStatus(pin: string): Promise<{ status: VoucherStatus; amount_cents?: number }>;
   redeem(pin: string, idemKey: string): Promise<VoucherRedeemResult>;
 }
-export * from './client';
-export * from './vas';
+export * from './client.js';
+export * from './vas.js';
 
 
