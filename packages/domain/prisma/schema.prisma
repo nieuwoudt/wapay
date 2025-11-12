@@ -13,6 +13,8 @@ model Account {
   waId               String   @unique
   msisdn             String
   displayName        String?
+  status             String?  @default("ACTIVE")
+  onboardingState    String?  @default("S0_INITIAL")
   onboardingStatus   String?  @default("NEW")
   conversationState  String?
   conversationData   Json?
@@ -21,6 +23,10 @@ model Account {
   sessions           AuthSession[]
   limits             Limit[]
   yoyo               YoyoInstrument?
+  otpCodes           OtpCode[]
+  authFactors        AuthFactor[]
+  consents           Consent[]
+  auditLogs          AuditLog[]
 }
 
 model Wallet {
@@ -121,6 +127,63 @@ model WhatsappTemplate {
 
   @@unique([wabaId, name, language])
   @@index([wabaId, name])
+}
+
+model OtpCode {
+  id         String    @id @default(cuid())
+  account    Account   @relation(fields: [accountId], references: [id])
+  accountId  String
+  code       String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@map("otp_codes")
+}
+
+model AuthFactor {
+  id          String    @id @default(cuid())
+  account     Account   @relation(fields: [accountId], references: [id])
+  accountId   String
+  type        String
+  secretHash  String
+  attempts    Int       @default(0)
+  lockedUntil DateTime?
+  setAt       DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([accountId, type])
+  @@map("auth_factors")
+}
+
+model Consent {
+  id          String   @id @default(cuid())
+  account     Account  @relation(fields: [accountId], references: [id])
+  accountId   String
+  consentType String
+  granted     Boolean
+  version     String
+  ipAddress   String?
+  userAgent   String?
+  grantedAt   DateTime @default(now())
+
+  @@map("consents")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  account     Account  @relation(fields: [accountId], references: [id])
+  accountId   String
+  event       String
+  metadata    Json?
+  waMessageId String?
+  ipAddress   String?
+  userAgent   String?
+  timestamp   DateTime @default(now())
+
+  @@index([accountId, event])
+  @@index([accountId, timestamp])
+  @@map("audit_log")
 }
 
 

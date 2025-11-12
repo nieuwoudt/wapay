@@ -7,6 +7,7 @@ const nextConfig = {
   // Transpile workspace packages
   transpilePackages: [
     '@wapay/ai',
+    '@wapay/auth',
     '@wapay/providers-blu',
     '@wapay/providers-yoyo',
     '@wapay/domain',
@@ -33,6 +34,7 @@ const nextConfig = {
       '@wapay/whatsapp': require.resolve('./packages/whatsapp/dist/index.js'),
       '@wapay/nlp': require.resolve('./packages/nlp/dist/index.js'),
       '@wapay/ai': require.resolve('./packages/ai/dist/index.js'),
+      '@wapay/auth': require.resolve('./packages/auth/dist/index.js'),
       '@wapay/providers-blu': require.resolve('./packages/providers/blu/dist/index.js'),
       '@wapay/providers-yoyo': require.resolve('./packages/providers/yoyo/dist/index.js'),
     };

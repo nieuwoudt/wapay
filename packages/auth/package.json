@@ -1,0 +1,29 @@
+{
+  "name": "@wapay/auth",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo 'no lint yet'"
+  },
+  "dependencies": {
+    "@wapay/domain": "workspace:*",
+    "@wapay/whatsapp": "workspace:*",
+    "argon2": "^0.31.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.5"
+  }
+}
+
