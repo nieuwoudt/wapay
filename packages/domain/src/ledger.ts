@@ -1,4 +1,4 @@
-import { getPrisma } from './db';
+import { getPrisma } from './db.js';
 import { validateBalanced, JournalPosting } from '@wapay/ledger';
 
 export async function postBluDeposit(args: {

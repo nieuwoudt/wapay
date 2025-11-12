@@ -2,26 +2,14 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "moduleResolution": "NodeNext",
     "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "outDir": "dist",
-    "baseUrl": ".",
-    "paths": {
-      "@wapay/domain": ["packages/domain/src/index"],
-      "@wapay/domain/*": ["packages/domain/src/*"],
-      "@wapay/utils": ["packages/utils/src/index"],
-      "@wapay/utils/*": ["packages/utils/src/*"],
-      "@wapay/ledger": ["packages/ledger/src/index"],
-      "@wapay/ledger/*": ["packages/ledger/src/*"],
-      "@wapay/providers-blu": ["packages/providers/blu/src/index"],
-      "@wapay/providers-blu/*": ["packages/providers/blu/src/*"],
-      "@wapay/providers-yoyo": ["packages/providers/yoyo/src/index"],
-      "@wapay/providers-yoyo/*": ["packages/providers/yoyo/src/*"]
-    }
+    "baseUrl": "."
   }
 }
 
