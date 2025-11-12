@@ -31,4 +31,3 @@ if (fs.existsSync(nestedSrcPath)) {
 } else {
   console.log('✅ Dist structure already correct');
 }
-

@@ -1,34 +1,33 @@
-#!/usr/bin/env node
-/**
- * Fix the dist folder structure after TypeScript compilation
- * 
- * TypeScript outputs to dist/providers/blu/src/* because it includes dependencies
- * We need to move files to dist/* for proper imports
- */
+const fs = require('fs');
+const path = require('path');
 
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { cpSync, rmSync, existsSync } from 'fs';
+const distPath = path.join(__dirname, '../dist');
+const nestedSrcPath = path.join(distPath, 'providers/blu/src');
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const packageRoot = join(__dirname, '..');
-const distDir = join(packageRoot, 'dist');
-const srcOutput = join(distDir, 'providers', 'blu', 'src');
-
-// Check if the nested structure exists
-if (existsSync(srcOutput)) {
+if (fs.existsSync(nestedSrcPath)) {
   console.log('Fixing dist structure...');
   
-  // Copy files from nested location to dist root
-  cpSync(srcOutput, distDir, { recursive: true });
+  // Move all files from nested src to root dist
+  fs.readdirSync(nestedSrcPath).forEach(file => {
+    const srcFile = path.join(nestedSrcPath, file);
+    const destFile = path.join(distPath, file);
+    
+    // Only move if not already exists (to avoid overwriting)
+    if (!fs.existsSync(destFile)) {
+      fs.renameSync(srcFile, destFile);
+    }
+  });
   
-  // Remove the nested directories
-  rmSync(join(distDir, 'providers'), { recursive: true, force: true });
-  rmSync(join(distDir, 'utils'), { recursive: true, force: true });
+  // Clean up nested directories
+  try {
+    fs.rmdirSync(path.join(distPath, 'providers/blu/src'), { recursive: true });
+    fs.rmdirSync(path.join(distPath, 'providers/blu'), { recursive: true });
+    fs.rmdirSync(path.join(distPath, 'providers'), { recursive: true });
+  } catch (e) {
+    // Ignore errors if directories don't exist
+  }
   
   console.log('✅ Dist structure fixed!');
 } else {
   console.log('✅ Dist structure already correct');
 }
-
