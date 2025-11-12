@@ -15,7 +15,7 @@
 import { getPrisma } from '@wapay/domain';
 import { sendWhatsAppTemplate, sendWhatsAppText } from '@wapay/whatsapp';
 import { sendOTP, verifyOTP } from './otp.js';
-import { setPIN, validatePINFormat } from './pin.js';
+import { setPIN, validatePINFormat, resetPIN, isPINLocked } from './pin.js';
 import { recordConsent, hasRequiredConsents } from './consent.js';
 import { logAuditEvent } from './audit.js';
 
@@ -535,6 +535,193 @@ export async function getOnboardingState(accountId: string): Promise<OnboardingS
   } catch (error) {
     console.error('❌ Error getting onboarding state:', error);
     return null;
+  }
+}
+
+/**
+ * Forgot PIN Flow - Step 1: Initiate reset (send OTP)
+ */
+export async function initiatePINReset(args: {
+  accountId: string;
+  waId: string;
+  displayName: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { accountId, waId, displayName } = args;
+  
+  try {
+    console.log(`🔐 Initiating PIN reset for ${displayName}`);
+    
+    // Check if account is locked
+    const isLocked = await isPINLocked(accountId);
+    
+    if (!isLocked) {
+      // Account not locked, user should try PIN again
+      await sendWhatsAppText({
+        to: waId,
+        text: `Hi ${displayName}! Your PIN is not locked yet.\n\nIf you've forgotten your PIN, I can help you reset it. Reply "reset PIN" to continue.`,
+      });
+      return { ok: true };
+    }
+    
+    // Send OTP for verification
+    const otpResult = await sendOTP({
+      accountId,
+      msisdn: waId,
+      displayName,
+    });
+    
+    if (!otpResult.ok) {
+      console.error('❌ Failed to send OTP for PIN reset:', otpResult.error);
+      
+      if (otpResult.error === 'TOO_MANY_REQUESTS') {
+        await sendWhatsAppText({
+          to: waId,
+          text: `⚠️ Too many OTP requests. Please wait 5 minutes and try again.`,
+        });
+      } else {
+        await sendWhatsAppText({
+          to: waId,
+          text: `❌ Sorry, we couldn't send your verification code. Please try again later.`,
+        });
+      }
+      
+      return { ok: false, error: otpResult.error };
+    }
+    
+    await sendWhatsAppText({
+      to: waId,
+      text: `🔐 *PIN Reset*\n\nYour account is locked. To reset your PIN, please enter the 6-digit code we just sent you.`,
+    });
+    
+    // Log audit event
+    await logAuditEvent({
+      accountId,
+      event: 'PIN_RESET_INITIATED',
+      metadata: {
+        otpId: otpResult.otpId,
+      },
+    });
+    
+    return { ok: true };
+    
+  } catch (error) {
+    console.error('❌ Error initiating PIN reset:', error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Forgot PIN Flow - Step 2: Verify OTP
+ */
+export async function verifyPINResetOTP(args: {
+  accountId: string;
+  waId: string;
+  displayName: string;
+  code: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { accountId, waId, displayName, code } = args;
+  
+  try {
+    console.log(`🔐 Verifying OTP for PIN reset: ${code.substring(0, 2)}****`);
+    
+    // Verify OTP
+    const verifyResult = await verifyOTP({
+      accountId,
+      code,
+    });
+    
+    if (!verifyResult.ok) {
+      console.error('❌ OTP verification failed for PIN reset:', verifyResult.error);
+      
+      await sendWhatsAppText({
+        to: waId,
+        text: `❌ Invalid or expired code. Please check and try again.\n\nNeed a new code? Reply "resend"`,
+      });
+      
+      return { ok: false, error: verifyResult.error };
+    }
+    
+    console.log(`✅ OTP verified for PIN reset`);
+    
+    // Prompt for new PIN
+    await sendWhatsAppText({
+      to: waId,
+      text: `✅ Code verified!\n\n🔐 Now, please create a new 4-6 digit PIN:\n\nExample: 5678\n\n⚠️ Don't use simple patterns like 0000 or 1234`,
+    });
+    
+    return { ok: true };
+    
+  } catch (error) {
+    console.error('❌ Error verifying PIN reset OTP:', error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Forgot PIN Flow - Step 3: Set new PIN
+ */
+export async function completePINReset(args: {
+  accountId: string;
+  waId: string;
+  displayName: string;
+  newPin: string;
+  otpVerified: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { accountId, waId, displayName, newPin, otpVerified } = args;
+  
+  try {
+    console.log(`🔐 Completing PIN reset for ${displayName}`);
+    
+    // Validate PIN format
+    const validation = validatePINFormat(newPin);
+    if (!validation.valid) {
+      await sendWhatsAppText({
+        to: waId,
+        text: `❌ ${validation.error}\n\nPlease try again with a different PIN.`,
+      });
+      return { ok: true }; // Don't fail, just wait for valid input
+    }
+    
+    // Reset PIN
+    const resetResult = await resetPIN({
+      accountId,
+      newPin,
+      otpVerified,
+    });
+    
+    if (!resetResult.ok) {
+      console.error('❌ Failed to reset PIN:', resetResult.error);
+      
+      await sendWhatsAppText({
+        to: waId,
+        text: `❌ Failed to reset PIN. Please try again or contact support.`,
+      });
+      
+      return { ok: false, error: resetResult.error };
+    }
+    
+    console.log(`✅ PIN reset successfully for ${displayName}`);
+    
+    // Send success message
+    await sendWhatsAppText({
+      to: waId,
+      text: `✅ *PIN Reset Successful!*\n\nYour new PIN has been set and your account is unlocked.\n\nYou can now use WaPay normally. What would you like to do?\n• Check balance\n• Redeem voucher\n• Buy airtime\n\nJust ask me!`,
+    });
+    
+    return { ok: true };
+    
+  } catch (error) {
+    console.error('❌ Error completing PIN reset:', error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
 }
 

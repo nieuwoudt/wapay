@@ -20,10 +20,6 @@
     "@wapay/domain": "workspace:*",
     "@wapay/whatsapp": "workspace:*",
     "argon2": "^0.31.2",
-    "jsonwebtoken": "^9.0.2"
-  },
-  "devDependencies": {
-    "@types/jsonwebtoken": "^9.0.5"
+    "jose": "^6.1.1"
   }
 }
-
