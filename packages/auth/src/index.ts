@@ -6,10 +6,12 @@
  * - PIN creation and verification (Argon2id)
  * - Consent management (POPIA compliance)
  * - Audit logging
+ * - Onboarding state machine (S0 → S5)
  */
 
 export * from './otp.js';
 export * from './pin.js';
 export * from './consent.js';
 export * from './audit.js';
+export * from './onboarding.js';
 

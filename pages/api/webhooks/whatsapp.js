@@ -5,9 +5,9 @@
  * 1. Webhook verification (GET)
  * 2. Incoming messages (POST)
  */
-import { processMessage } from './message-processor';
-import { isReady } from '../../../lib/initTemplates';
-import { ensureTemplatesReady } from './_middleware';
+import { processMessage } from './message-processor-v2.js';
+import { isReady } from '../../../lib/initTemplates.js';
+import { ensureTemplatesReady } from './_middleware.js';
 
 export default async function handler(req, res) {
   

@@ -17,6 +17,9 @@ const nextConfig = {
     '@wapay/nlp',
   ],
   
+  // Exclude server-only packages from client bundle
+  serverComponentsExternalPackages: ['argon2', '@prisma/client', 'prisma'],
+  
   // Webpack configuration for monorepo
   webpack: (config, { isServer }) => {
     // Handle ESM packages
@@ -38,6 +41,28 @@ const nextConfig = {
       '@wapay/providers-blu': require.resolve('./packages/providers/blu/dist/index.js'),
       '@wapay/providers-yoyo': require.resolve('./packages/providers/yoyo/dist/index.js'),
     };
+    
+    // Exclude native modules from client-side bundle
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        'argon2': false,
+        'fs': false,
+        'net': false,
+        'tls': false,
+        'crypto': false,
+      };
+      
+      // Mark native modules as external for client bundle
+      config.externals = config.externals || [];
+      config.externals.push({
+        'argon2': 'commonjs argon2',
+        '@mapbox/node-pre-gyp': 'commonjs @mapbox/node-pre-gyp',
+        'mock-aws-s3': 'commonjs mock-aws-s3',
+        'aws-sdk': 'commonjs aws-sdk',
+        'nock': 'commonjs nock',
+      });
+    }
     
     return config;
   },
