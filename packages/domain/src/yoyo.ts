@@ -1,4 +1,4 @@
-import { getPrisma } from './db';
+import { getPrisma } from './db.js';
 import { YoyoClient } from '@wapay/providers-yoyo';
 
 export async function ensureYoyoInstrument(accountId: string) {
