@@ -17,8 +17,10 @@ const nextConfig = {
     '@wapay/nlp',
   ],
   
-  // Exclude server-only packages from client bundle
-  serverComponentsExternalPackages: ['argon2', '@prisma/client', 'prisma'],
+  // Mark server-only packages as external
+  experimental: {
+    serverComponentsExternalPackages: ['argon2', '@prisma/client', 'prisma'],
+  },
   
   // Webpack configuration for monorepo
   webpack: (config, { isServer }) => {
@@ -52,16 +54,18 @@ const nextConfig = {
         'tls': false,
         'crypto': false,
       };
-      
-      // Mark native modules as external for client bundle
-      config.externals = config.externals || [];
-      config.externals.push({
-        'argon2': 'commonjs argon2',
-        '@mapbox/node-pre-gyp': 'commonjs @mapbox/node-pre-gyp',
-        'mock-aws-s3': 'commonjs mock-aws-s3',
-        'aws-sdk': 'commonjs aws-sdk',
-        'nock': 'commonjs nock',
-      });
+    }
+    
+    // Always externalize argon2 and its dependencies
+    config.externals = config.externals || [];
+    if (Array.isArray(config.externals)) {
+      config.externals.push(
+        'argon2',
+        '@mapbox/node-pre-gyp',
+        'mock-aws-s3',
+        'aws-sdk',
+        'nock'
+      );
     }
     
     return config;
