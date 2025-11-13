@@ -101,7 +101,38 @@ export default async function handler(req, res) {
                   const interactiveType = message.interactive?.type;
                   console.log('🔘 Interactive message:', interactiveType);
 
-                  // TODO: Handle button replies, list replies, etc.
+                  // Handle button replies
+                  if (interactiveType === 'button_reply') {
+                    const buttonId = message.interactive?.button_reply?.id;
+                    const buttonTitle = message.interactive?.button_reply?.title;
+                    
+                    console.log('🔘 Button clicked:', { buttonId, buttonTitle });
+                    
+                    // Treat button clicks as text messages
+                    // This allows buttons to trigger onboarding flow
+                    await processMessage({
+                      from,
+                      text: buttonTitle || buttonId || 'continue',
+                      messageId,
+                      profile,
+                    });
+                  }
+                  
+                  // Handle list replies
+                  if (interactiveType === 'list_reply') {
+                    const listId = message.interactive?.list_reply?.id;
+                    const listTitle = message.interactive?.list_reply?.title;
+                    
+                    console.log('📋 List item selected:', { listId, listTitle });
+                    
+                    // Treat list selections as text messages
+                    await processMessage({
+                      from,
+                      text: listTitle || listId || 'continue',
+                      messageId,
+                      profile,
+                    });
+                  }
                 }
               }
             }
