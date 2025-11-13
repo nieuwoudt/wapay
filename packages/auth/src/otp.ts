@@ -8,7 +8,7 @@
  */
 
 import { getPrisma } from '@wapay/domain';
-import { sendWhatsAppTemplate } from '@wapay/whatsapp';
+import { sendWhatsAppTemplate, sendWhatsAppText } from '@wapay/whatsapp';
 
 const OTP_LENGTH = 6;
 const OTP_TTL_MINUTES = 5;
@@ -81,8 +81,9 @@ export async function sendOTP(args: {
     
     console.log(`📧 Generated OTP for account ${accountId}: ${code.substring(0, 2)}****`);
     
-    // Send via WhatsApp template (otp_register)
-    const result = await sendWhatsAppTemplate({
+    // Try to send via WhatsApp template (otp_register)
+    // TODO: Copy otp_register template from test account to production
+    let sendResult = await sendWhatsAppTemplate({
       to: msisdn,
       templateName: 'otp_register',
       language: 'en',
@@ -99,12 +100,21 @@ export async function sendOTP(args: {
       ],
     });
     
-    if (!result.ok) {
-      console.error('❌ Failed to send OTP via WhatsApp:', result.error);
-      return {
-        ok: false,
-        error: 'SEND_FAILED',
-      };
+    // Fallback to text message if template not found
+    if (!sendResult.ok) {
+      console.log('⚠️ OTP template not found, sending text message fallback');
+      sendResult = await sendWhatsAppText({
+        to: msisdn,
+        text: `🔐 *WaPay Verification Code*\n\nYour OTP code is: *${code}*\n\n⏰ This code expires in ${OTP_TTL_MINUTES} minutes.\n\n🔒 Never share this code with anyone.`,
+      });
+      
+      if (!sendResult.ok) {
+        console.error('❌ Failed to send OTP via text fallback:', sendResult.error);
+        return {
+          ok: false,
+          error: 'SEND_FAILED',
+        };
+      }
     }
     
     // Log audit event
