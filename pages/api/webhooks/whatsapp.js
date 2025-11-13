@@ -97,6 +97,23 @@ export default async function handler(req, res) {
                   });
                 }
 
+                // Handle button clicks (template buttons)
+                if (messageType === 'button') {
+                  const buttonPayload = message.button?.payload || '';
+                  const buttonText = message.button?.text || '';
+                  
+                  console.log('🔘 Button clicked:', { payload: buttonPayload, text: buttonText });
+                  
+                  // Treat button clicks as text messages
+                  await processMessage({
+                    from,
+                    text: buttonText || buttonPayload || 'continue',
+                    messageId,
+                    profile,
+                  });
+                }
+
+                // Handle interactive messages (button_reply, list_reply)
                 if (messageType === 'interactive') {
                   const interactiveType = message.interactive?.type;
                   console.log('🔘 Interactive message:', interactiveType);
@@ -106,10 +123,9 @@ export default async function handler(req, res) {
                     const buttonId = message.interactive?.button_reply?.id;
                     const buttonTitle = message.interactive?.button_reply?.title;
                     
-                    console.log('🔘 Button clicked:', { buttonId, buttonTitle });
+                    console.log('🔘 Button reply clicked:', { buttonId, buttonTitle });
                     
                     // Treat button clicks as text messages
-                    // This allows buttons to trigger onboarding flow
                     await processMessage({
                       from,
                       text: buttonTitle || buttonId || 'continue',
