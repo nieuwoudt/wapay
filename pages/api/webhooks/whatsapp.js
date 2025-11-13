@@ -97,14 +97,20 @@ export default async function handler(req, res) {
                   });
                 }
 
-                // Handle button clicks (template buttons)
+                // Handle button clicks (quick reply buttons from templates)
+                // These come from Call-to-Action buttons in templates
                 if (messageType === 'button') {
                   const buttonPayload = message.button?.payload || '';
                   const buttonText = message.button?.text || '';
                   
-                  console.log('🔘 Button clicked:', { payload: buttonPayload, text: buttonText });
+                  console.log('🔘 Template button clicked:', { 
+                    payload: buttonPayload, 
+                    text: buttonText,
+                    template: 'Template button (quick_reply type)'
+                  });
                   
-                  // Treat button clicks as text messages
+                  // Process button click as if user typed the button text
+                  // This works for ALL templates with buttons
                   await processMessage({
                     from,
                     text: buttonText || buttonPayload || 'continue',
@@ -113,19 +119,23 @@ export default async function handler(req, res) {
                   });
                 }
 
-                // Handle interactive messages (button_reply, list_reply)
+                // Handle interactive messages (button_reply, list_reply, product selection)
+                // These come from interactive message APIs (not templates)
                 if (messageType === 'interactive') {
                   const interactiveType = message.interactive?.type;
-                  console.log('🔘 Interactive message:', interactiveType);
+                  console.log('🔘 Interactive message type:', interactiveType);
 
-                  // Handle button replies
+                  // Handle button replies (Call-to-Action buttons)
                   if (interactiveType === 'button_reply') {
                     const buttonId = message.interactive?.button_reply?.id;
                     const buttonTitle = message.interactive?.button_reply?.title;
                     
-                    console.log('🔘 Button reply clicked:', { buttonId, buttonTitle });
+                    console.log('🔘 Interactive button clicked:', { 
+                      id: buttonId, 
+                      title: buttonTitle 
+                    });
                     
-                    // Treat button clicks as text messages
+                    // Process as text message
                     await processMessage({
                       from,
                       text: buttonTitle || buttonId || 'continue',
@@ -134,17 +144,55 @@ export default async function handler(req, res) {
                     });
                   }
                   
-                  // Handle list replies
+                  // Handle list replies (List message selections)
                   if (interactiveType === 'list_reply') {
                     const listId = message.interactive?.list_reply?.id;
                     const listTitle = message.interactive?.list_reply?.title;
+                    const listDescription = message.interactive?.list_reply?.description;
                     
-                    console.log('📋 List item selected:', { listId, listTitle });
+                    console.log('📋 List item selected:', { 
+                      id: listId, 
+                      title: listTitle,
+                      description: listDescription 
+                    });
                     
-                    // Treat list selections as text messages
+                    // Process as text message
                     await processMessage({
                       from,
                       text: listTitle || listId || 'continue',
+                      messageId,
+                      profile,
+                    });
+                  }
+
+                  // Handle product selections (if using catalog/shopping features)
+                  if (interactiveType === 'product') {
+                    const productId = message.interactive?.product?.id;
+                    const productRetailerId = message.interactive?.product?.retailer_id;
+                    
+                    console.log('🛍️ Product selected:', { 
+                      id: productId, 
+                      retailerId: productRetailerId 
+                    });
+                    
+                    // Process product selection
+                    await processMessage({
+                      from,
+                      text: `Product: ${productRetailerId || productId}`,
+                      messageId,
+                      profile,
+                    });
+                  }
+
+                  // Handle nfm_reply (flows)
+                  if (interactiveType === 'nfm_reply') {
+                    const nfmReply = message.interactive?.nfm_reply;
+                    console.log('📱 Flow reply received:', nfmReply);
+                    
+                    // Process flow response
+                    await processMessage({
+                      from,
+                      text: 'Flow completed',
                       messageId,
                       profile,
                     });
