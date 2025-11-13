@@ -61,7 +61,7 @@ async function transitionState(args: {
 }
 
 /**
- * S0 → S1: Send welcome template
+ * S0 → S1: Send welcome template (ONLY send once)
  */
 export async function handleS0Initial(args: {
   accountId: string;
@@ -71,9 +71,9 @@ export async function handleS0Initial(args: {
   const { accountId, waId, displayName } = args;
   
   try {
-    console.log(`📝 S0 → S1: Sending welcome template to ${displayName}`);
+    console.log(`📝 S0 → S1: Sending welcome template (onboarding_step_1) to ${displayName}`);
     
-    // Send welcome template (onboarding_step_1)
+    // Send welcome template (onboarding_step_1) - STEP 1
     const result = await sendWhatsAppTemplate({
       to: waId,
       templateName: 'onboarding_step_1',
@@ -92,16 +92,18 @@ export async function handleS0Initial(args: {
     });
     
     if (!result.ok) {
-      console.error('❌ Failed to send welcome template:', result.error);
+      console.error(`❌ Failed to send welcome template: ${result.error}`);
       
-      // Fallback to text message
+      // Fallback to text message ONLY if template fails
       await sendWhatsAppText({
         to: waId,
-        text: `👋 Welcome to WaPay, ${displayName}!\n\nI'm your personal banking assistant. Let's get you set up!\n\nReply with "continue" to start.`,
+        text: `👋 Welcome to WaPay, ${displayName}!\n\nLet's get you set up!\n\nClick the button or reply "continue" to start.`,
       });
+    } else {
+      console.log(`✅ Welcome template sent successfully`);
     }
     
-    // Transition to S1
+    // Transition to S1 (welcome sent, waiting for user to click button/continue)
     await transitionState({
       accountId,
       from: 'S0_INITIAL',
@@ -134,19 +136,18 @@ export async function handleS1WelcomeSent(args: {
   try {
     console.log(`📝 S1 → S2: User responded: "${userMessage}"`);
     
-    // Check if user wants to continue
+    // Check if user wants to continue (accept any reasonable response)
     const normalized = userMessage.toLowerCase().trim();
-    if (!['continue', 'yes', 'start', 'ok', 'sure', 'proceed'].some(word => normalized.includes(word))) {
-      // User said something else - provide guidance
-      await sendWhatsAppText({
-        to: waId,
-        text: `Hi ${displayName}! 👋\n\nReady to get started? Just reply "continue" and I'll help you set up your WaPay account!`,
-      });
-      return { ok: true };
+    const continueWords = ['continue', 'yes', 'start', 'ok', 'sure', 'proceed', 'open', 'account', 'begin'];
+    const wantsToContinue = continueWords.some(word => normalized.includes(word));
+    
+    if (!wantsToContinue && normalized.length > 0) {
+      // User said something else - provide guidance (but don't block them)
+      console.log(`⚠️ User message doesn't match continue words, but proceeding anyway: "${userMessage}"`);
     }
     
-    // Send OTP
-    console.log(`📧 Sending OTP to ${msisdn}`);
+    // Send OTP via template
+    console.log(`📧 Sending OTP via template to ${waId}`);
     const otpResult = await sendOTP({
       accountId,
       msisdn: waId,
@@ -154,22 +155,27 @@ export async function handleS1WelcomeSent(args: {
     });
     
     if (!otpResult.ok) {
-      console.error('❌ Failed to send OTP:', otpResult.error);
+      console.error(`❌ Failed to send OTP: ${otpResult.error}`);
       
+      // Send error message based on error type
       if (otpResult.error === 'TOO_MANY_REQUESTS') {
         await sendWhatsAppText({
           to: waId,
           text: `⚠️ Too many OTP requests. Please wait 5 minutes and try again.`,
         });
-      } else {
-        await sendWhatsAppText({
-          to: waId,
-          text: `❌ Sorry, we couldn't send your verification code. Please try again later.`,
-        });
+        return { ok: false, error: otpResult.error };
       }
       
+      // For other errors, send generic message but DON'T return error
+      // This prevents duplicate error messages
+      await sendWhatsAppText({
+        to: waId,
+        text: `❌ Sorry, there was a problem sending your verification code. Please try again by typing "continue".`,
+      });
       return { ok: false, error: otpResult.error };
     }
+    
+    console.log(`✅ OTP sent successfully (OTP ID: ${otpResult.otpId})`);
     
     // Transition to S2
     await transitionState({
@@ -185,6 +191,13 @@ export async function handleS1WelcomeSent(args: {
     
   } catch (error) {
     console.error('❌ Error in S1 → S2:', error);
+    
+    // Send user-friendly error
+    await sendWhatsAppText({
+      to: waId,
+      text: `❌ An error occurred. Please try again by typing "continue".`,
+    });
+    
     return {
       ok: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -238,6 +251,7 @@ export async function handleS2OtpSent(args: {
     console.log(`✅ OTP verified successfully for ${displayName}`);
     
     // Send PIN creation template (onboarding_step_3_pin_creation)
+    console.log(`📤 Sending PIN creation template to ${displayName}`);
     const pinResult = await sendWhatsAppTemplate({
       to: waId,
       templateName: 'onboarding_step_3_pin_creation',
@@ -256,11 +270,14 @@ export async function handleS2OtpSent(args: {
     });
     
     if (!pinResult.ok) {
-      // Fallback to text
+      console.error(`❌ PIN template failed: ${pinResult.error}`);
+      // Fallback to text ONLY if template fails
       await sendWhatsAppText({
         to: waId,
-        text: `✅ Code verified, ${displayName}!\n\n🔐 Now, let's secure your account.\n\nPlease create a 4-6 digit PIN:\n\nExample: 1234\n\n⚠️ Don't use simple patterns like 0000 or 1234`,
+        text: `✅ Code verified, ${displayName}!\n\n🔐 Now create a 4-6 digit PIN:\n\nExample: 1234\n\n⚠️ Don't use 0000 or 1234`,
       });
+    } else {
+      console.log(`✅ PIN template sent successfully`);
     }
     
     // Transition to S3
@@ -327,10 +344,11 @@ export async function handleS3OtpVerified(args: {
     
     console.log(`✅ PIN set successfully for ${displayName}`);
     
-    // Send consent template (consent_terms)
+    // Send consent template (consent_terms_ - note the underscore at the end!)
+    console.log(`📤 Sending consent template to ${displayName}`);
     const consentResult = await sendWhatsAppTemplate({
       to: waId,
-      templateName: 'consent_terms',
+      templateName: 'consent_terms_',  // CORRECT NAME with underscore
       language: 'en',
       components: [
         {
@@ -346,11 +364,14 @@ export async function handleS3OtpVerified(args: {
     });
     
     if (!consentResult.ok) {
-      // Fallback to text
+      console.error(`❌ Consent template failed: ${consentResult.error}`);
+      // Fallback to text ONLY if template fails
       await sendWhatsAppText({
         to: waId,
-        text: `✅ PIN set successfully!\n\n📋 Almost done, ${displayName}!\n\nTo complete your registration, please accept our:\n• Terms & Conditions\n• Privacy Policy\n\nReply "I accept" to continue.`,
+        text: `✅ PIN set!\n\n📋 Almost done, ${displayName}!\n\nAccept our Terms & Privacy Policy.\n\nReply "I accept" to continue.`,
       });
+    } else {
+      console.log(`✅ Consent template sent successfully`);
     }
     
     // Transition to S4
