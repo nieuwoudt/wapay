@@ -81,11 +81,10 @@ export async function sendOTP(args: {
     
     console.log(`📧 Generated OTP for account ${accountId}: ${code.substring(0, 2)}****`);
     
-    // Try to send via WhatsApp template (otp_register)
-    // TODO: Copy otp_register template from test account to production
+    // Try to send via WhatsApp template (otp_register_step_2)
     let sendResult = await sendWhatsAppTemplate({
       to: msisdn,
-      templateName: 'otp_register',
+      templateName: 'otp_register_step_2',
       language: 'en',
       components: [
         {

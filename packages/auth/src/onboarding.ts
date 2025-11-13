@@ -423,10 +423,10 @@ export async function handleS4PinSet(args: {
     const balanceCents = wallet?.availableCents || 0;
     const balance = (balanceCents / 100).toFixed(2);
     
-    // Send account activation template (successful_account_creation)
+    // Send account activation template (welcome_new_user_account_activation)
     const activationResult = await sendWhatsAppTemplate({
       to: waId,
-      templateName: 'successful_account_creation',
+      templateName: 'welcome_new_user_account_activation',
       language: 'en',
       components: [
         {
