@@ -13,7 +13,8 @@
     "lint": "pnpm -r run lint",
     "format": "prettier -w .",
     "dev:api": "pnpm --filter @wapay/api dev",
-    "dev:ops": "pnpm --filter @wapay/ops dev"
+    "dev:ops": "pnpm --filter @wapay/ops dev",
+    "prisma:generate": "prisma generate --schema=./packages/domain/prisma/schema.prisma"
   },
   "dependencies": {
     "next": "^14.2.0",
