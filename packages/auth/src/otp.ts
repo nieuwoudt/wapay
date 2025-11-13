@@ -127,7 +127,7 @@ export async function sendOTP(args: {
           msisdn,
           expiresAt: expiresAt.toISOString(),
         },
-        waMessageId: result.data?.messages?.[0]?.id,
+        waMessageId: sendResult.data?.messages?.[0]?.id,
       },
     });
     
