@@ -28,7 +28,9 @@
     "@wapay/utils": "workspace:*",
     "@wapay/whatsapp": "workspace:*",
     "@wapay/nlp": "workspace:*",
-    "@prisma/client": "^5.11.0"
+    "@prisma/client": "^5.11.0",
+    "argon2": "^0.31.2",
+    "jose": "^6.1.1"
   },
   "devDependencies": {
     "prettier": "^3.3.3",
