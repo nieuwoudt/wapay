@@ -40,11 +40,11 @@ export async function sendWhatsAppTemplate(args: SendTemplateArgs): Promise<{
   const { to, templateName, language, components } = args;
   
   try {
-    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const accessToken = process.env.META_WHATSAPP_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+    const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER_ID;
     
     if (!accessToken || !phoneNumberId) {
-      throw new Error('WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set');
+      throw new Error('META_WHATSAPP_TOKEN or META_WHATSAPP_PHONE_NUMBER_ID not set');
     }
     
     // Resolve language from catalog
@@ -113,11 +113,11 @@ export async function sendWhatsAppText(args: SendTextArgs): Promise<{
   const { to, text } = args;
   
   try {
-    const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const accessToken = process.env.META_WHATSAPP_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+    const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER_ID;
     
     if (!accessToken || !phoneNumberId) {
-      throw new Error('WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set');
+      throw new Error('META_WHATSAPP_TOKEN or META_WHATSAPP_PHONE_NUMBER_ID not set');
     }
     
     const url = `${WHATSAPP_API_BASE}/${phoneNumberId}/messages`;

@@ -61,9 +61,9 @@ export async function seedWhatsappTemplates(opts: {
   console.log('🌱 Seeding WhatsApp templates from Meta API...');
   
   // 🔐 Always derive the WABA from the phone number, not env var
-  const phoneId = phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const phoneId = phoneNumberId || process.env.META_WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!phoneId) {
-    throw new Error('WHATSAPP_PHONE_NUMBER_ID not set');
+    throw new Error('META_WHATSAPP_PHONE_NUMBER_ID not set');
   }
 
   // Try to resolve WABA from phone number, fallback to env var
