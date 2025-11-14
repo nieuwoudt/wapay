@@ -116,22 +116,28 @@ export async function sendOTP(args: {
       }
     }
     
-    // Log audit event
-    await prisma.auditLog.create({
-      data: {
-        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        accountId,
-        event: 'OTP_SENT',
-        metadata: {
-          otpId: otpRecord.id,
-          msisdn,
-          expiresAt: expiresAt.toISOString(),
+    // Log audit event (non-blocking - don't fail if this fails)
+    try {
+      await prisma.auditLog.create({
+        data: {
+          id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          accountId,
+          event: 'OTP_SENT',
+          metadata: {
+            otpId: otpRecord.id,
+            msisdn,
+            expiresAt: expiresAt.toISOString(),
+          },
+          waMessageId: sendResult.data?.messages?.[0]?.id,
         },
-        waMessageId: sendResult.data?.messages?.[0]?.id,
-      },
-    });
+      });
+      console.log(`✅ Audit log created for OTP send`);
+    } catch (auditError) {
+      console.error('⚠️ Failed to create audit log (non-critical):', auditError);
+      // Don't fail the whole operation if audit log fails
+    }
     
-    console.log(`✅ OTP sent successfully to ${msisdn}`);
+    console.log(`✅ OTP sent successfully to ${msisdn} (OTP ID: ${otpRecord.id}, Code: ${code})`);
     
     return {
       ok: true,
@@ -158,6 +164,19 @@ export async function verifyOTP(args: {
   const prisma = getPrisma();
   
   try {
+    console.log(`🔍 Verifying OTP for account: ${accountId}, code: ${code.substring(0, 2)}****`);
+    
+    // Debug: Check all OTPs for this account
+    const allOtps = await prisma.otpCode.findMany({
+      where: { accountId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    console.log(`📊 Found ${allOtps.length} OTPs for account ${accountId}:`);
+    allOtps.forEach(otp => {
+      console.log(`   - Code: ${otp.code.substring(0, 2)}****, Expires: ${otp.expiresAt}, Consumed: ${otp.consumedAt ? 'YES' : 'NO'}, Match: ${otp.code === code ? 'YES' : 'NO'}`);
+    });
+    
     // Find valid OTP
     const otpRecord = await prisma.otpCode.findFirst({
       where: {
@@ -174,20 +193,24 @@ export async function verifyOTP(args: {
     });
     
     if (!otpRecord) {
-      console.log(`❌ Invalid or expired OTP for account ${accountId}`);
+      console.log(`❌ No valid OTP found for account ${accountId} with code ${code.substring(0, 2)}****`);
       
-      // Log failed attempt
-      await prisma.auditLog.create({
-        data: {
-          id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          accountId,
-          event: 'OTP_VERIFY_FAILED',
-          metadata: {
-            reason: 'INVALID_OR_EXPIRED',
-            code: code.substring(0, 2) + '****',
+      // Log failed attempt (non-blocking)
+      try {
+        await prisma.auditLog.create({
+          data: {
+            id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            accountId,
+            event: 'OTP_VERIFY_FAILED',
+            metadata: {
+              reason: 'INVALID_OR_EXPIRED',
+              code: code.substring(0, 2) + '****',
+            },
           },
-        },
-      });
+        });
+      } catch (auditError) {
+        console.error('⚠️ Failed to log verify failure (non-critical):', auditError);
+      }
       
       return {
         ok: false,
@@ -195,23 +218,29 @@ export async function verifyOTP(args: {
       };
     }
     
+    console.log(`✅ Found valid OTP: ${otpRecord.id}, marking as consumed`);
+    
     // Mark OTP as consumed
     await prisma.otpCode.update({
       where: { id: otpRecord.id },
       data: { consumedAt: new Date() },
     });
     
-    // Log successful verification
-    await prisma.auditLog.create({
-      data: {
-        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        accountId,
-        event: 'OTP_VERIFIED',
-        metadata: {
-          otpId: otpRecord.id,
+    // Log successful verification (non-blocking)
+    try {
+      await prisma.auditLog.create({
+        data: {
+          id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          accountId,
+          event: 'OTP_VERIFIED',
+          metadata: {
+            otpId: otpRecord.id,
+          },
         },
-      },
-    });
+      });
+    } catch (auditError) {
+      console.error('⚠️ Failed to log verify success (non-critical):', auditError);
+    }
     
     console.log(`✅ OTP verified successfully for account ${accountId}`);
     
