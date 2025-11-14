@@ -159,17 +159,24 @@ export async function setPIN(args: {
       },
     });
     
-    // Log audit event
-    await prisma.auditLog.create({
-      data: {
-        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        accountId,
-        event: 'PIN_SET',
-        metadata: {
-          pinLength: pin.length,
+    // Log audit event (non-blocking). Some deployments might not yet have the
+    // latest audit_log schema (e.g. missing timestamp column) so we treat
+    // failures here as non-critical.
+    try {
+      await prisma.auditLog.create({
+        data: {
+          id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          accountId,
+          event: 'PIN_SET',
+          metadata: {
+            pinLength: pin.length,
+          },
         },
-      },
-    });
+      });
+      console.log(`✅ Audit log recorded for PIN_SET (account ${accountId})`);
+    } catch (auditError) {
+      console.error('⚠️ Failed to log PIN_SET event (non-critical):', auditError);
+    }
     
     console.log(`✅ PIN set successfully for account ${accountId}`);
     
