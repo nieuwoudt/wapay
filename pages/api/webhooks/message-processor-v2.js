@@ -135,8 +135,9 @@ async function handlePostOnboarding({ account, from, text }) {
   }
 
   // Detect ONLY explicit intents, route everything else to AI
-  const { intent } = detectExplicitIntent(text);
-  console.log('🎯 Intent check:', { intent, text });
+  const detection = detectExplicitIntent(text);
+  const intent = detection.intent;
+  console.log('🎯 Intent check:', { intent, text, detection });
 
   try {
     switch (intent) {
@@ -162,6 +163,9 @@ async function handlePostOnboarding({ account, from, text }) {
           to: from,
           text: `🎟️ *Redeem Voucher*\n\nPlease enter your 16-digit Blu Voucher PIN:\n\nExample: 1234-5678-9012-3456\n\nYour balance will be updated instantly!`,
         });
+      case 'VOUCHER_PIN':
+        await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+        return await handleVoucherRedemption({ from, pin: detection.voucherPin || text, account });
 
       case 'AI_CHAT':
       default:
@@ -179,6 +183,7 @@ async function handlePostOnboarding({ account, from, text }) {
  */
 function detectExplicitIntent(text) {
   const normalized = text.toLowerCase().trim();
+  const digitsOnly = normalized.replace(/[\s-]/g, '');
 
   // Balance - only if very clear
   if (/^(balance|check balance|my balance|show balance)$/i.test(normalized)) {
@@ -193,6 +198,10 @@ function detectExplicitIntent(text) {
   // Voucher - only if saying "redeem voucher" explicitly
   if (/^(redeem voucher|redeem|voucher)$/i.test(normalized)) {
     return { intent: 'REDEEM_VOUCHER', confidence: 1.0 };
+  }
+
+  if (/^\d{16}$/.test(digitsOnly)) {
+    return { intent: 'VOUCHER_PIN', confidence: 1.0, voucherPin: digitsOnly };
   }
 
   // Everything else goes to AI (including natural language)
@@ -395,9 +404,10 @@ async function handleVoucherRedemption({ from, pin, account }) {
 
     // Determine error type and message
     let errorMessage = 'Sorry, we could not process your voucher. Please try again later.';
+    const reason = error.reason || error.message;
 
     if (error.message === 'USER_INPUT') {
-      errorMessage = error.reason || 'Invalid voucher PIN or voucher already used.';
+      errorMessage = reason || 'Blu rejected this voucher PIN. Please verify the number and try again.';
     } else if (error.message === 'AUTH') {
       errorMessage = 'System error. Please contact support.';
     } else if (error.message === 'RETRYABLE') {

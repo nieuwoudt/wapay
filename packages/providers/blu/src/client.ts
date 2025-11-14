@@ -1,6 +1,15 @@
 import { maskVoucherPin, requireEnv } from '@wapay/utils';
 import { request } from 'undici';
 
+type BluErrorPayload = {
+  message?: string;
+  error?: string | { message?: string };
+  errors?: Array<{ message?: string; detail?: string; description?: string }>;
+  reason?: string;
+  description?: string;
+  detail?: string;
+};
+
 export class BluClient {
   private base = requireEnv('BLU_BASE_URL');
   private user = requireEnv('BLU_BASIC_USER');
@@ -53,6 +62,19 @@ export class BluClient {
     }
   }
 
+  private extractErrorMessage(payload: BluErrorPayload | undefined, statusCode: number): string {
+    if (!payload) return `Blu returned HTTP ${statusCode}`;
+    const candidates = [
+      payload.reason,
+      typeof payload.error === 'string' ? payload.error : payload.error?.message,
+      payload.message,
+      payload.description,
+      payload.detail,
+      payload.errors?.map((err) => err?.message || err?.detail || err?.description).filter(Boolean).join(' · '),
+    ].filter(Boolean);
+    return candidates[0] || `Blu returned HTTP ${statusCode}`;
+  }
+
   async redeem(pin: string, idemKey: string): Promise<{ providerRef: string; amount_cents: number }> {
     const url = `${this.base}/voucher/variable/redemptions`;
     const body = {
@@ -64,6 +86,7 @@ export class BluClient {
     
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
+        console.log('[Blu] Redeem request', { requestId: idemKey, pin: masked, attempt });
         const res = await request(url, {
           method: 'POST',
           headers: this.headers(),
@@ -77,13 +100,20 @@ export class BluClient {
           const data = (await res.body.json()) as any;
           const ref = String(data.reference || `BLU-${Date.now()}`);
           const amount_cents = data.amount; // Blu returns amount in cents
+          console.log('[Blu] Redeem success', { requestId: idemKey, pin: masked, amount_cents, ref });
           return { providerRef: ref, amount_cents };
         }
         
         // Parse error response
         if (res.statusCode >= 400) {
-          const errorData = (await res.body.json()) as any;
-          const message = errorData.message || errorData.error || 'Unknown error';
+          const errorData = (await res.body.json()) as BluErrorPayload;
+          const message = this.extractErrorMessage(errorData, res.statusCode);
+          console.error('[Blu] Redeem error response', {
+            requestId: idemKey,
+            pin: masked,
+            status: res.statusCode,
+            message,
+          });
           
           // User input errors (400, 404, 409)
           if (res.statusCode === 400 || res.statusCode === 404 || res.statusCode === 409) {
@@ -106,6 +136,12 @@ export class BluClient {
         throw new Error('RETRYABLE');
       } catch (e: any) {
         if (e.message === 'USER_INPUT' || e.message === 'AUTH') throw e;
+        console.error('[Blu] Redeem attempt failed', {
+          requestId: idemKey,
+          pin: masked,
+          attempt,
+          error: e?.message || e,
+        });
         if (attempt === 3) throw new Error('RETRYABLE');
         await new Promise((r) => setTimeout(r, 500 * attempt)); // Exponential backoff
       }
