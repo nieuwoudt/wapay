@@ -77,11 +77,13 @@ export class BluClient {
 
   async redeem(pin: string, idemKey: string): Promise<{ providerRef: string; amount_cents: number }> {
     const url = `${this.base}/voucher/variable/redemptions`;
-    const body = {
+    const body: Record<string, string | number> = {
       requestId: idemKey,
       token: pin,
-      amount: 0, // 0 = redeem full voucher balance
     };
+    // Blu requires the amount field if redeeming a partial value.
+    // The QA environment rejects amount=0, so we simply omit the field entirely
+    // to signal "redeem full balance", which matches their swagger docs.
     const masked = maskVoucherPin(pin);
     
     for (let attempt = 1; attempt <= 3; attempt++) {
