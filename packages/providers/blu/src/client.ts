@@ -75,15 +75,17 @@ export class BluClient {
     return candidates[0] || `Blu returned HTTP ${statusCode}`;
   }
 
-  async redeem(pin: string, idemKey: string): Promise<{ providerRef: string; amount_cents: number }> {
+  async redeem(pin: string, idemKey: string, amountCents?: number): Promise<{ providerRef: string; amount_cents: number }> {
     const url = `${this.base}/voucher/variable/redemptions`;
     const body: Record<string, string | number> = {
       requestId: idemKey,
       token: pin,
     };
-    // Blu requires the amount field if redeeming a partial value.
-    // The QA environment rejects amount=0, so we simply omit the field entirely
-    // to signal "redeem full balance", which matches their swagger docs.
+    if (typeof amountCents === 'number' && amountCents > 0) {
+      body.amount = amountCents;
+    } else {
+      delete body.amount;
+    }
     const masked = maskVoucherPin(pin);
     
     for (let attempt = 1; attempt <= 3; attempt++) {

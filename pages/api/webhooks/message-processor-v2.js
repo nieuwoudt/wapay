@@ -387,10 +387,32 @@ async function handleVoucherRedemption({ from, pin, account }) {
   const bluClient = new BluClient();
   try {
     const idemKey = `wapay-redeem-${account.id}-${Date.now()}`;
+    let voucherStatusForRedeem = null;
+    try {
+      voucherStatusForRedeem = await bluClient.checkStatus(normalizedPin);
+      console.log('🔎 Voucher status before redeem', { from, status: voucherStatusForRedeem });
+      if (voucherStatusForRedeem?.status === 'USED') {
+        await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+        return await sendWhatsAppText({
+          to: from,
+          text: `❌ *Voucher Already Used*\n\nBlu reports that voucher is already redeemed. Please try another PIN or contact the seller.`,
+        });
+      }
+      if (voucherStatusForRedeem?.status === 'EXPIRED') {
+        await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+        return await sendWhatsAppText({
+          to: from,
+          text: `❌ *Voucher Expired*\n\nBlu reports that voucher expired. Please try another PIN.`,
+        });
+      }
+    } catch (preCheckError) {
+      console.warn('⚠️ Unable to fetch voucher status before redeem', preCheckError);
+    }
+    const amountForRedeem = voucherStatusForRedeem?.amount_cents;
 
     // Attempt redemption
     console.log('💰 Calling Blu API to redeem voucher');
-    const result = await bluClient.redeem(normalizedPin, idemKey);
+    const result = await bluClient.redeem(normalizedPin, idemKey, amountForRedeem);
 
     console.log('✅ Voucher redeemed successfully:', {
       providerRef: result.providerRef,
