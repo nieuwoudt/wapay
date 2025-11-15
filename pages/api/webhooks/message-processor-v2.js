@@ -384,8 +384,8 @@ async function handleVoucherRedemption({ from, pin, account }) {
     text: `⏳ *Processing Voucher*\n\nPlease wait while we redeem your voucher...`,
   });
 
+  const bluClient = new BluClient();
   try {
-    const bluClient = new BluClient();
     const idemKey = `wapay-redeem-${account.id}-${Date.now()}`;
 
     // Attempt redemption
@@ -428,7 +428,7 @@ async function handleVoucherRedemption({ from, pin, account }) {
   } catch (error) {
     console.error('❌ Voucher redemption error:', error);
     const reasonRaw = (error.reason || '').toString().trim();
-    const sanitizedReason =
+    let sanitizedReason =
       reasonRaw && !['USER_INPUT', 'AUTH', 'RETRYABLE', 'Error'].includes(reasonRaw) && reasonRaw.toLowerCase() !== 'no message available'
         ? reasonRaw
         : '';
@@ -438,7 +438,24 @@ async function handleVoucherRedemption({ from, pin, account }) {
     const errorType = error.message;
     const allowRetry = errorType === 'USER_INPUT' || errorType === 'RETRYABLE';
 
+    let voucherStatusDetails = '';
     if (errorType === 'USER_INPUT') {
+      try {
+        const statusInfo = await bluClient.checkStatus(normalizedPin);
+        console.warn('🎟️ Voucher status check after failure', { from, statusInfo });
+        if (statusInfo?.status) {
+          voucherStatusDetails = ` Blu reports this voucher as *${statusInfo.status}*${statusInfo.amount_cents ? ` (R ${(statusInfo.amount_cents / 100).toFixed(2)})` : ''}.`;
+        }
+        if (statusInfo?.status === 'USED') {
+          sanitizedReason ||= 'Blu says this voucher was already used.';
+        } else if (statusInfo?.status === 'EXPIRED') {
+          sanitizedReason ||= 'This voucher is expired.';
+        } else if (statusInfo?.status === 'ACTIVE' && !sanitizedReason) {
+          sanitizedReason = 'Blu still rejected this voucher even though it is listed as ACTIVE.';
+        }
+      } catch (statusError) {
+        console.error('⚠️ Failed to fetch voucher status after error', statusError);
+      }
       errorMessage = sanitizedReason || 'Blu could not redeem that voucher PIN. Please verify the digits and try another voucher if needed.';
     } else if (errorType === 'AUTH') {
       errorMessage = 'We could not connect to the voucher provider. Please contact support.';
@@ -457,7 +474,7 @@ async function handleVoucherRedemption({ from, pin, account }) {
 
     await sendWhatsAppText({
       to: from,
-      text: `❌ *Voucher Redemption Failed*\n\n${errorMessage}${retryHint}`,
+      text: `❌ *Voucher Redemption Failed*\n\n${errorMessage}${voucherStatusDetails}${retryHint}`,
     });
 
     return { ok: false, error: errorType || error.message };

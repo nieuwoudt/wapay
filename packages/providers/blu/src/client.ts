@@ -113,6 +113,7 @@ export class BluClient {
             pin: masked,
             status: res.statusCode,
             message,
+            raw: errorData,
           });
           
           // User input errors (400, 404, 409)
