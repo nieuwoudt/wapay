@@ -181,22 +181,30 @@ async function handlePostOnboarding({ account, from, text }) {
 /**
  * Detect ONLY very clear, explicit intents
  */
-function detectExplicitIntent(text) {
+function detectExplicitIntent(text = '') {
   const normalized = text.toLowerCase().trim();
-  const digitsOnly = normalized.replace(/[\s-]/g, '');
+  const squashed = normalized.replace(/\s+/g, ' ');
+  const digitsOnly = text.replace(/[^\d]/g, '');
 
   // Balance - only if very clear
-  if (/^(balance|check balance|my balance|show balance)$/i.test(normalized)) {
+  if (/^(balance|check balance|my balance|show balance)$/i.test(squashed)) {
     return { intent: 'CHECK_BALANCE', confidence: 1.0 };
   }
 
-  // Help - only if asking for help explicitly
-  if (/^(help|help me|menu)$/i.test(normalized)) {
+  // Help - explicit request
+  if (/^(help|help me|menu|options)$/i.test(squashed)) {
     return { intent: 'HELP', confidence: 1.0 };
   }
 
-  // Voucher - only if saying "redeem voucher" explicitly
-  if (/^(redeem voucher|redeem|voucher)$/i.test(normalized)) {
+  // Deposit / voucher keywords (catch template buttons like "Deposit Money")
+  const wantsDeposit =
+    /(redeem|use|get)\s+(my\s+)?(blu\s+)?voucher/.test(squashed) ||
+    /(voucher\s*(code|pin|number))/.test(squashed) ||
+    /(deposit|top\s*up|topup|add|load|put)\s+(money|funds|cash|to my wallet|to wallet|into wallet)/.test(squashed) ||
+    squashed.includes('deposit money') ||
+    squashed.includes('blu voucher');
+
+  if (wantsDeposit) {
     return { intent: 'REDEEM_VOUCHER', confidence: 1.0 };
   }
 
@@ -216,8 +224,29 @@ async function handleConversationState({ from, text, state, data, account }) {
 
   switch (state) {
     case 'AWAITING_VOUCHER_PIN':
-      // User entered voucher PIN, process redemption
-      return await handleVoucherRedemption({ from, pin: text, account });
+      // Allow user to confirm/cancel before entering PIN
+      {
+        const normalized = text.trim().toLowerCase();
+
+        if (/^(cancel|stop|no|not now|later)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `👍 No problem. When you're ready to add money again, just type "redeem voucher".`,
+          });
+        }
+
+        if (/^(yes|yep|yeah|y|sure|ok|okay|alright|please|confirm)$/i.test(normalized)) {
+          await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+          return await sendWhatsAppText({
+            to: from,
+            text: `Great! Please enter your 16-digit Blu Voucher PIN (numbers only).\nExample: 1234567890123456\n\nReply "cancel" to stop.`,
+          });
+        }
+
+        // Otherwise treat message as PIN entry
+        return await handleVoucherRedemption({ from, pin: text, account });
+      }
 
     case 'AI_AIRTIME_PURCHASE':
     case 'AI_DATA_PURCHASE':
@@ -342,10 +371,10 @@ async function handleVoucherRedemption({ from, pin, account }) {
 
   // Validate PIN format (should be 16 digits)
   if (!/^\d{16}$/.test(normalizedPin)) {
-    await updateConversationState(from, null);
+    await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
     return await sendWhatsAppText({
       to: from,
-      text: `❌ *Invalid Voucher PIN*\n\nPlease enter a valid 16-digit voucher PIN.\n\nExample: 1234-5678-9012-3456\n\nTry again by typing "redeem voucher"`,
+      text: `❌ *Invalid Voucher PIN*\n\nPlease enter a valid 16-digit Blu Voucher PIN (numbers only).\nExample: 1234567890123456\n\nYou can reply with the PIN now, or type "cancel" to stop.`,
     });
   }
 
@@ -398,28 +427,40 @@ async function handleVoucherRedemption({ from, pin, account }) {
 
   } catch (error) {
     console.error('❌ Voucher redemption error:', error);
-
-    // Clear conversation state
-    await updateConversationState(from, null);
+    const reasonRaw = (error.reason || '').toString().trim();
+    const sanitizedReason =
+      reasonRaw && !['USER_INPUT', 'AUTH', 'RETRYABLE', 'Error'].includes(reasonRaw) && reasonRaw.toLowerCase() !== 'no message available'
+        ? reasonRaw
+        : '';
 
     // Determine error type and message
     let errorMessage = 'Sorry, we could not process your voucher. Please try again later.';
-    const reason = error.reason || error.message;
+    const errorType = error.message;
+    const allowRetry = errorType === 'USER_INPUT' || errorType === 'RETRYABLE';
 
-    if (error.message === 'USER_INPUT') {
-      errorMessage = reason || 'Blu rejected this voucher PIN. Please verify the number and try again.';
-    } else if (error.message === 'AUTH') {
-      errorMessage = 'System error. Please contact support.';
-    } else if (error.message === 'RETRYABLE') {
-      errorMessage = 'Service temporarily unavailable. Please try again in a few minutes.';
+    if (errorType === 'USER_INPUT') {
+      errorMessage = sanitizedReason || 'Blu could not redeem that voucher PIN. Please verify the digits and try another voucher if needed.';
+    } else if (errorType === 'AUTH') {
+      errorMessage = 'We could not connect to the voucher provider. Please contact support.';
+    } else if (errorType === 'RETRYABLE') {
+      errorMessage = sanitizedReason || 'The voucher service is temporarily unavailable. Please try again in a few minutes.';
+    } else if (sanitizedReason) {
+      errorMessage = sanitizedReason;
     }
+
+    // Keep user in voucher flow if retry makes sense
+    await updateConversationState(from, allowRetry ? 'AWAITING_VOUCHER_PIN' : null);
+
+    const retryHint = allowRetry
+      ? `\n\nDouble-check the 16-digit PIN and enter it again when you're ready. Reply "cancel" to stop.`
+      : `\n\nNeed help? Type "help" for options or try again later.`;
 
     await sendWhatsAppText({
       to: from,
-      text: `❌ *Voucher Redemption Failed*\n\n${errorMessage}\n\nNeed help? Type "help" for options.`,
+      text: `❌ *Voucher Redemption Failed*\n\n${errorMessage}${retryHint}`,
     });
 
-    return { ok: false, error: error.message };
+    return { ok: false, error: errorType || error.message };
   }
 }
 
