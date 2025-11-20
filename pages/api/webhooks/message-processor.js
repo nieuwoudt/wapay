@@ -7,7 +7,7 @@
 import { getOrCreateUser, updateOnboardingStatus, getUserBalance, updateConversationState, getConversationState } from './user-manager';
 import { resolveLanguage } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma';
-import { BluClient } from '@wapay/providers-blu';
+import { BluClient, resolveBluVoucherAmountCents } from '@wapay/providers-blu';
 import { postBluDeposit } from '@wapay/domain';
 import { chatWithAI } from '@wapay/ai';
 
@@ -449,7 +449,7 @@ async function handleConversationState({ from, text, state, data, account }) {
   
   switch (state) {
     case 'AWAITING_VOUCHER_PIN':
-      // User entered voucher PIN
+      // User entered voucher PIN - single-step flow
       {
         const normalized = text.trim().toLowerCase();
         
@@ -471,50 +471,8 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
-        // Store PIN and ask for amount
-        await updateConversationState(from, 'AWAITING_VOUCHER_AMOUNT', { pin: normalizedPin });
-        return await sendTextMessage({
-          to: from,
-          text: `✅ PIN received. Now tell me the voucher value in Rand (e.g., 50 for R50). Reply "cancel" to stop.`,
-        });
-      }
-      
-    case 'AWAITING_VOUCHER_AMOUNT':
-      // User entered amount
-      {
-        const normalized = text.trim().toLowerCase();
-        
-        if (/^(cancel|stop|reset)$/i.test(normalized)) {
-          await updateConversationState(from, null);
-          return await sendTextMessage({
-            to: from,
-            text: `👍 Cancelled. Type "redeem voucher" when ready.`,
-          });
-        }
-        
-        const cleanedText = text.trim().replace(/^[Rr]\s*/, '');
-        const amountRands = parseFloat(cleanedText);
-        
-        if (isNaN(amountRands) || amountRands <= 0) {
-          await updateConversationState(from, 'AWAITING_VOUCHER_AMOUNT', data);
-          return await sendTextMessage({
-            to: from,
-            text: `❌ Invalid amount. Enter a number like 50 or 100. Reply "cancel" to stop.`,
-          });
-        }
-        
-        const amountCents = Math.round(amountRands * 100);
-        const pinFromState = data?.pin;
-        
-        if (!pinFromState) {
-          await updateConversationState(from, null);
-          return await sendTextMessage({
-            to: from,
-            text: `❌ Session error. Please start over by typing "redeem voucher".`,
-          });
-        }
-        
-        return await handleVoucherRedemption({ from, pin: pinFromState, amountCents, account });
+        // PIN is valid - redeem immediately
+        return await handleVoucherRedemption({ from, pin: normalizedPin, account });
       }
       
     case 'AI_AIRTIME_PURCHASE':
@@ -536,20 +494,21 @@ async function handleConversationState({ from, text, state, data, account }) {
 /**
  * Handle voucher redemption
  */
-async function handleVoucherRedemption({ from, pin, amountCents, account }) {
-  console.log('🎟️ Processing voucher redemption:', { from, pin: '***', amountCents });
+async function handleVoucherRedemption({ from, pin, account }) {
+  console.log('🎟️ Processing voucher redemption:', { from, pin: '***' });
   
   // Send "processing" message
   await sendTextMessage({
     to: from,
-    text: `⏳ *Processing Voucher*\n\nPlease wait while we redeem your R${(amountCents / 100).toFixed(2)} voucher...`,
+    text: `⏳ *Processing Voucher*\n\nPlease wait while we redeem your voucher...`,
   });
   
   try {
     const bluClient = new BluClient();
     const idemKey = `wapay-redeem-${account.id}-${Date.now()}`;
     
-    // Attempt redemption with user-provided amount
+    // Resolve amount internally (temporary until Blu clarifies correct pattern)
+    const amountCents = resolveBluVoucherAmountCents(pin);
     console.log('💰 Calling Blu API to redeem voucher', { amountCents });
     const result = await bluClient.redeem(pin, idemKey, amountCents);
     

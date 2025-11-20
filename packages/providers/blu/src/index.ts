@@ -10,5 +10,6 @@ export interface VoucherRail {
 }
 export * from './client.js';
 export * from './vas.js';
+export * from './amountResolver.js';
 
 
