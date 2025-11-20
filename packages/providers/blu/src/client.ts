@@ -71,11 +71,18 @@ export class BluClient {
       }
       
       // Log full error response for debugging
-      const errorBody = await res.body.text();
+      let errorBody;
+      try {
+        errorBody = await res.body.json();
+      } catch {
+        errorBody = await res.body.text();
+      }
       console.error('[Blu] Status check failed', {
+        url,
+        method: 'GET',
         pin: maskVoucherPin(pin),
-        status: res.statusCode,
-        body: errorBody,
+        statusCode: res.statusCode,
+        responseBody: errorBody,
       });
       
       if (res.statusCode === 401 || res.statusCode === 403) throw new Error('AUTH');
@@ -156,14 +163,21 @@ export class BluClient {
         
         // Parse error response
         if (res.statusCode >= 400) {
-          const errorData = (await res.body.json()) as BluErrorPayload;
+          let errorData: BluErrorPayload | undefined;
+          try {
+            errorData = (await res.body.json()) as BluErrorPayload;
+          } catch {
+            const textBody = await res.body.text();
+            errorData = { message: textBody };
+          }
           const message = this.extractErrorMessage(errorData, res.statusCode);
           console.error('[Blu] Redeem error response', {
-            requestId: idemKey,
-            pin: masked,
-            status: res.statusCode,
-            message,
-            raw: errorData,
+            url,
+            method: 'POST',
+            requestBody: { requestId: idemKey, token: masked, amount: amountCents },
+            statusCode: res.statusCode,
+            responseBody: errorData,
+            extractedMessage: message,
           });
           
           // User input errors (400, 404, 409)

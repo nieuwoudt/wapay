@@ -19,7 +19,7 @@ export const env = {
     // Database
     get DATABASE_URL() { return requireEnv('DATABASE_URL'); },
     // Blu Voucher
-    get BLU_BASE_URL() { return process.env.BLU_BASE_URL || 'https://api.bluvoucher.com/v1'; },
+    get BLU_BASE_URL() { return process.env.BLU_BASE_URL || 'https://api.qa.bltelecoms.net/v2/api/trade'; },
     get BLU_BASIC_USER() { return requireEnv('BLU_BASIC_USER'); },
     get BLU_BASIC_PASS() { return requireEnv('BLU_BASIC_PASS'); },
     get BLU_API_KEY() { return requireEnv('BLU_API_KEY'); },
