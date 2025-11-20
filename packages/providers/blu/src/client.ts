@@ -37,19 +37,35 @@ export class BluClient {
   }
 
   async checkStatus(pin: string): Promise<BluVoucherStatus> {
-    // Blu Swagger: GET /voucher/variable/vouchers?token={pin}
-    const url = `${this.base}/voucher/variable/vouchers?token=${encodeURIComponent(pin)}`;
+    // Blu Swagger: POST /voucher/status
+    // Based on 401 "Invalid transaction type" error, /voucher/variable/vouchers is incorrect
+    // Trying POST /voucher/status with token in body as per typical voucher API patterns
+    const url = `${this.base}/voucher/status`;
+    const body = { token: pin };
+    
     try {
+      console.log('[Blu] Status check request', { 
+        url, 
+        method: 'POST',
+        pin: maskVoucherPin(pin) 
+      });
+      
       const res = await request(url, {
-        method: 'GET',
+        method: 'POST',
         headers: this.headers(),
+        body: JSON.stringify(body),
         bodyTimeout: 8000,
         headersTimeout: 8000,
       });
       
       if (res.statusCode === 200) {
         const data = (await res.body.json()) as any;
-        console.log('[Blu] Status check success', { pin: maskVoucherPin(pin), status: data.status, amount: data.amount });
+        console.log('[Blu] Status check success', { 
+          pin: maskVoucherPin(pin), 
+          status: data.status, 
+          amount: data.amount,
+          fullResponse: data
+        });
         
         // Map provider status strings to normalized values
         const status = (data.status as string)?.toUpperCase();
@@ -79,8 +95,8 @@ export class BluClient {
       }
       console.error('[Blu] Status check failed', {
         url,
-        method: 'GET',
-        pin: maskVoucherPin(pin),
+        method: 'POST',
+        requestBody: { token: maskVoucherPin(pin) },
         statusCode: res.statusCode,
         responseBody: errorBody,
       });
@@ -90,7 +106,11 @@ export class BluClient {
       throw new Error('RETRYABLE');
     } catch (e: any) {
       if (e.message === 'AUTH') throw e;
-      console.error('[Blu] Status check error', { pin: maskVoucherPin(pin), error: e.message });
+      console.error('[Blu] Status check error', { 
+        url,
+        pin: maskVoucherPin(pin), 
+        error: e.message 
+      });
       throw new Error('RETRYABLE');
     }
   }
