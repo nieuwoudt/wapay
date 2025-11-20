@@ -61,18 +61,19 @@ export class BluClient {
     return candidates[0] || `Blu returned HTTP ${statusCode}`;
   }
 
-  async redeem(pin: string, idemKey: string, amountCents?: number): Promise<{ providerRef: string; amount_cents: number }> {
-    // amountCents is optional - if not provided or 0, redeem full voucher balance
-    const redeemAmount = amountCents && amountCents > 0 ? amountCents : 0;
+  async redeem(pin: string, idemKey: string, amountCents: number): Promise<{ providerRef: string; amount_cents: number }> {
+    // Validate required amountCents parameter
+    if (typeof amountCents !== 'number' || amountCents <= 0) {
+      throw new Error('amountCents required for Blu variable voucher redemption');
+    }
     
     // Blu Swagger: POST /voucher/variable/redemptions
     // Body: { requestId, token, amount (in cents) }
-    // amount: 0 = redeem full voucher balance
     const url = `${this.base}/voucher/variable/redemptions`;
     const body = {
       requestId: idemKey,
       token: pin,
-      amount: redeemAmount, // 0 = redeem full balance, or specific amount in cents
+      amount: amountCents, // Amount in cents, per Swagger
     };
     const masked = maskVoucherPin(pin);
     
@@ -82,7 +83,7 @@ export class BluClient {
           url,
           requestId: idemKey, 
           pin: masked, 
-          amount: redeemAmount, 
+          amount: amountCents, 
           attempt 
         });
         
@@ -102,7 +103,7 @@ export class BluClient {
           // - reference: unique transaction reference (our providerRef)
           // - amount: retail amount in cents including VAT
           const providerRef = String(data.reference || `BLU-${Date.now()}`);
-          const amount_cents = typeof data.amount === 'number' ? data.amount : redeemAmount;
+          const amount_cents = typeof data.amount === 'number' ? data.amount : amountCents;
           
           console.log('[Blu] Redeem success', { 
             requestId: idemKey, 
@@ -127,7 +128,7 @@ export class BluClient {
           console.error('[Blu] Redeem error response', {
             url,
             method: 'POST',
-            requestBody: { requestId: idemKey, token: masked, amount: redeemAmount },
+            requestBody: { requestId: idemKey, token: masked, amount: amountCents },
             statusCode: res.statusCode,
             responseBody: errorData,
             extractedMessage: message,

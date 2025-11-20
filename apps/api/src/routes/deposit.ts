@@ -8,6 +8,7 @@ import { env } from '@wapay/utils';
 
 const redeemBody = z.object({ 
   pin: z.string().min(4), 
+  amountCents: z.number().int().positive(), // Amount in cents (required)
   accountId: z.string().optional(),
   waId: z.string().optional() // WhatsApp ID for sending notifications
 });
@@ -24,10 +25,15 @@ export async function registerDepositRoutes(app: FastifyInstance) {
     if (!parse.success) {
       return reply.code(400).send({ ok: false, error: 'USER_INPUT', details: parse.error.errors });
     }
-    const { pin, waId } = parse.data;
+    const { pin, waId, amountCents } = parse.data;
     const accountId = parse.data.accountId ?? 'stub-account';
     const idemKey = (req.headers['x-idempotency-key'] as string | undefined) ?? '';
     if (!idemKey) return reply.code(400).send({ ok: false, error: 'MISSING_IDEMPOTENCY' });
+
+    // Validate amountCents
+    if (!amountCents || amountCents <= 0) {
+      return reply.code(400).send({ ok: false, error: 'USER_INPUT', message: 'Amount must be greater than zero' });
+    }
 
     // Return cached response if available
     const cached = await getCachedResponseByIdemKey<{ ok: boolean; reference: string; amount_cents: number }>(idemKey);
@@ -40,9 +46,8 @@ export async function registerDepositRoutes(app: FastifyInstance) {
     try {
       const blu = new BluClient();
       
-      // Redeem directly (no status check - Blu doesn't support it)
-      // Pass 0 to redeem full voucher balance
-      const result = await blu.redeem(pin, idemKey, 0);
+      // Redeem with user-provided amount
+      const result = await blu.redeem(pin, idemKey, amountCents);
 
       // Post to ledger and update wallet
       const { journalEntryId } = await postBluDeposit({ accountId, amountCents: result.amount_cents, providerRef: result.providerRef, idemKey });

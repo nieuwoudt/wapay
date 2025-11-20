@@ -228,7 +228,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       {
         const normalized = text.trim().toLowerCase();
 
-        if (/^(cancel|stop|no|not now|later)$/i.test(normalized)) {
+        if (/^(cancel|stop|no|not now|later|reset|restart)$/i.test(normalized)) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
@@ -245,7 +245,63 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
 
         // Otherwise treat message as PIN entry
-        return await handleVoucherRedemption({ from, pin: text, account });
+        // Validate and normalize PIN
+        const normalizedPin = text.replace(/[\s-]/g, '');
+        
+        if (!/^\d{16}$/.test(normalizedPin)) {
+          await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ *Invalid Voucher PIN*\n\nPlease enter a valid 16-digit Blu Voucher PIN (numbers only).\nExample: 1234567890123456\n\nYou can reply with the PIN now, or type "cancel" to stop.`,
+          });
+        }
+        
+        // PIN is valid - store it and ask for amount
+        await updateConversationState(from, 'AWAITING_VOUCHER_AMOUNT', { pin: normalizedPin });
+        return await sendWhatsAppText({
+          to: from,
+          text: `✅ *Voucher PIN received*\n\nNow tell me the value printed on your Blu Voucher (in Rand).\n\nFor example:\n• Type *50* for R50\n• Type *100* for R100\n• Type *30* for R30\n\nReply "cancel" to stop.`,
+        });
+      }
+
+    case 'AWAITING_VOUCHER_AMOUNT':
+      // User entered voucher amount
+      {
+        const normalized = text.trim().toLowerCase();
+
+        if (/^(cancel|stop|no|reset|restart)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `👍 Voucher redemption cancelled. Type "redeem voucher" when you're ready to try again.`,
+          });
+        }
+
+        // Parse amount from user input
+        const cleanedText = text.trim().replace(/^[Rr]\s*/, ''); // Remove leading R or r
+        const amountRands = parseFloat(cleanedText);
+        
+        if (isNaN(amountRands) || amountRands <= 0) {
+          await updateConversationState(from, 'AWAITING_VOUCHER_AMOUNT', data);
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ *Invalid Amount*\n\nPlease enter a valid amount in Rand (numbers only).\n\nExamples: 50, 100, 30\n\nReply "cancel" to stop.`,
+          });
+        }
+        
+        const amountCents = Math.round(amountRands * 100);
+        const pinFromState = data?.pin;
+        
+        if (!pinFromState) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ *Session Error*\n\nVoucher PIN was lost. Please start over by typing "redeem voucher".`,
+          });
+        }
+        
+        // Now redeem with PIN and amount
+        return await handleVoucherRedemption({ from, pin: pinFromState, amountCents, account });
       }
 
     case 'AI_AIRTIME_PURCHASE':
@@ -363,35 +419,22 @@ async function handleAIChat({ from, text, account }) {
 /**
  * Handle voucher redemption
  */
-async function handleVoucherRedemption({ from, pin, account }) {
-  console.log('🎟️ Processing voucher redemption:', { from, pin: '***' });
-
-  // Normalize PIN (remove spaces, dashes)
-  const normalizedPin = pin.replace(/[\s-]/g, '');
-
-  // Validate PIN format (should be 16 digits)
-  if (!/^\d{16}$/.test(normalizedPin)) {
-    await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
-    return await sendWhatsAppText({
-      to: from,
-      text: `❌ *Invalid Voucher PIN*\n\nPlease enter a valid 16-digit Blu Voucher PIN (numbers only).\nExample: 1234567890123456\n\nYou can reply with the PIN now, or type "cancel" to stop.`,
-    });
-  }
+async function handleVoucherRedemption({ from, pin, amountCents, account }) {
+  console.log('🎟️ Processing voucher redemption:', { from, pin: '***', amountCents });
 
   // Send "processing" message
   await sendWhatsAppText({
     to: from,
-    text: `⏳ *Processing Voucher*\n\nPlease wait while we redeem your voucher...`,
+    text: `⏳ *Processing Voucher*\n\nPlease wait while we redeem your R${(amountCents / 100).toFixed(2)} voucher...`,
   });
 
   const bluClient = new BluClient();
   try {
     const idemKey = `wapay-redeem-${account.id}-${Date.now()}`;
 
-    // Attempt redemption directly (no status check - Blu doesn't support it)
-    // Pass 0 for amount to redeem full voucher balance
-    console.log('💰 Calling Blu API to redeem voucher (full balance)');
-    const result = await bluClient.redeem(normalizedPin, idemKey, 0);
+    // Attempt redemption with user-provided amount
+    console.log('💰 Calling Blu API to redeem voucher', { amountCents });
+    const result = await bluClient.redeem(pin, idemKey, amountCents);
 
     console.log('✅ Voucher redeemed successfully:', {
       providerRef: result.providerRef,
