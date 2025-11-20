@@ -4,3 +4,7 @@ ALTER TABLE "Account" ADD COLUMN "onboardingStatus" TEXT NOT NULL DEFAULT 'NEW',
                        ADD COLUMN "conversationData" JSONB;
 
 
+
+
+
+

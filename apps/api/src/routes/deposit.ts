@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { upsertProviderRequest, getCachedResponseByIdemKey } from '@wapay/domain/src/providerRequests';
-import { BluClient, resolveBluVoucherAmountCents } from '@wapay/providers-blu';
+import { BluClient } from '@wapay/providers-blu';
 import { postBluDeposit, topupYoyoGift, ensureYoyoInstrument } from '@wapay/domain';
 import { WhatsAppClient, Templates } from '@wapay/whatsapp';
 import { env } from '@wapay/utils';
@@ -41,8 +41,19 @@ export async function registerDepositRoutes(app: FastifyInstance) {
     try {
       const blu = new BluClient();
       
-      // Resolve amount internally (temporary until Blu clarifies correct pattern)
-      const amountCents = parse.data.amountCents ?? resolveBluVoucherAmountCents(pin);
+      // Check voucher status first to get amount
+      const status = await blu.checkStatus(pin);
+      if (status.status === 'USED') {
+        return reply.code(400).send({ ok: false, error: 'USER_INPUT', message: 'Voucher already redeemed' });
+      }
+      if (status.status === 'EXPIRED') {
+        return reply.code(400).send({ ok: false, error: 'USER_INPUT', message: 'Voucher expired' });
+      }
+      if (!status.amount_cents) {
+        return reply.code(400).send({ ok: false, error: 'USER_INPUT', message: 'Could not determine voucher amount' });
+      }
+      
+      const amountCents = parse.data.amountCents ?? status.amount_cents;
       const result = await blu.redeem(pin, idemKey, amountCents);
 
       // Post to ledger and update wallet

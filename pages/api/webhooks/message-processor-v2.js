@@ -7,7 +7,7 @@
 import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState } from './user-manager.js';
 import { sendWhatsAppText } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
-import { BluClient, resolveBluVoucherAmountCents } from '@wapay/providers-blu';
+import { BluClient } from '@wapay/providers-blu';
 import { postBluDeposit } from '@wapay/domain';
 import { chatWithAI } from '@wapay/ai';
 import {
@@ -388,8 +388,45 @@ async function handleVoucherRedemption({ from, pin, account }) {
   try {
     const idemKey = `wapay-redeem-${account.id}-${Date.now()}`;
 
-    // Resolve amount internally (temporary until Blu clarifies correct pattern)
-    const amountCents = resolveBluVoucherAmountCents(pin);
+    // Check voucher status first to get amount and validate state
+    let statusInfo;
+    try {
+      statusInfo = await bluClient.checkStatus(pin);
+      console.log('🔎 Voucher status check', { from, status: statusInfo });
+      
+      if (statusInfo.status === 'USED') {
+        await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+        return await sendWhatsAppText({
+          to: from,
+          text: `❌ *Voucher Already Used*\n\nThis voucher has already been redeemed. Please try another PIN.`,
+        });
+      }
+      
+      if (statusInfo.status === 'EXPIRED') {
+        await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+        return await sendWhatsAppText({
+          to: from,
+          text: `❌ *Voucher Expired*\n\nThis voucher has expired. Please try another PIN.`,
+        });
+      }
+      
+      if (!statusInfo.amount_cents) {
+        await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+        return await sendWhatsAppText({
+          to: from,
+          text: `❌ *Voucher Amount Unknown*\n\nCould not determine voucher value. Please verify the PIN and try again.`,
+        });
+      }
+    } catch (statusError) {
+      console.error('⚠️ Status check failed', statusError);
+      await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+      return await sendWhatsAppText({
+        to: from,
+        text: `❌ *Status Check Failed*\n\nCould not verify voucher. Please try again in a moment.`,
+      });
+    }
+
+    const amountCents = statusInfo.amount_cents;
     console.log('💰 Calling Blu API to redeem voucher', { amountCents });
     const result = await bluClient.redeem(pin, idemKey, amountCents);
 

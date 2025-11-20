@@ -19,25 +19,22 @@ export class BluClient {
   private base = requireEnv('BLU_BASE_URL');
   private user = requireEnv('BLU_BASIC_USER');
   private pass = requireEnv('BLU_BASIC_PASS');
-  private apiKey = process.env.BLU_API_KEY; // Optional - may not be required
-  private static baseLogged = false;
+  private apiKey = process.env.BLU_API_KEY;
+  private vendChannel = process.env.BLU_VEND_CHANNEL || 'API';
 
   constructor() {
-    // Log base URL once per process startup for debugging
-    if (!BluClient.baseLogged) {
-      console.log('[Blu] Initialized with base URL:', this.base);
-      BluClient.baseLogged = true;
-    }
+    console.log('[Blu] Initialized with base URL:', this.base, 'vendChannel:', this.vendChannel);
   }
 
-  private headers() {
+  private headers(extra: Record<string, string> = {}) {
     const basic = Buffer.from(`${this.user}:${this.pass}`).toString('base64');
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Authorization: `Basic ${basic}`,
+      'Trade-Vend-Channel': this.vendChannel,
+      ...extra,
     };
     
-    // Only add apikey header if provided (may be optional)
     if (this.apiKey) {
       headers.apikey = this.apiKey;
     }
@@ -45,8 +42,84 @@ export class BluClient {
     return headers;
   }
 
-  // checkStatus() removed - Blu Variable Voucher API does not support status checks
-  // Only redemption endpoint is available: POST /voucher/variable/redemptions
+  async checkStatus(pin: string): Promise<BluVoucherStatus> {
+    // Blu Swagger: GET /voucher/variable/vouchers?token={PIN}
+    const url = `${this.base}/voucher/variable/vouchers?token=${encodeURIComponent(pin)}`;
+
+    try {
+      console.log('[Blu] Status check request', {
+        url,
+        method: 'GET',
+        pin: maskVoucherPin(pin),
+      });
+
+      const res = await request(url, {
+        method: 'GET',
+        headers: this.headers(),
+        bodyTimeout: 8000,
+        headersTimeout: 8000,
+      });
+
+      if (res.statusCode === 200) {
+        const data = (await res.body.json()) as any;
+
+        console.log('[Blu] Status check success', {
+          pin: maskVoucherPin(pin),
+          status: data.status,
+          amount: data.amount,
+        });
+
+        const statusRaw = (data.status as string | undefined)?.toUpperCase() || '';
+        const map: Record<string, BluVoucherStatus['status']> = {
+          ACTIVE: 'ACTIVE',
+          VALID: 'ACTIVE',
+          USED: 'USED',
+          REDEEMED: 'USED',
+          EXPIRED: 'EXPIRED',
+        };
+
+        const amount_cents = typeof data.amount === 'number' ? data.amount : undefined;
+
+        return {
+          status: map[statusRaw] ?? 'UNKNOWN',
+          amount_cents,
+        };
+      }
+
+      let errorBody: any;
+      try {
+        errorBody = await res.body.json();
+      } catch {
+        errorBody = await res.body.text();
+      }
+
+      console.error('[Blu] Status check failed', {
+        url,
+        method: 'GET',
+        pin: maskVoucherPin(pin),
+        statusCode: res.statusCode,
+        responseBody: errorBody,
+      });
+
+      if (res.statusCode === 401 || res.statusCode === 403) {
+        throw new Error('AUTH');
+      }
+      if (res.statusCode === 400 || res.statusCode === 404) {
+        return { status: 'UNKNOWN' };
+      }
+
+      throw new Error('RETRYABLE');
+    } catch (e: any) {
+      if (e.message === 'AUTH') {
+        throw e;
+      }
+      console.error('[Blu] Status check error', {
+        pin: maskVoucherPin(pin),
+        error: e?.message || e,
+      });
+      throw new Error('RETRYABLE');
+    }
+  }
 
   private extractErrorMessage(payload: BluErrorPayload | undefined, statusCode: number): string {
     if (!payload) return `Blu returned HTTP ${statusCode}`;
