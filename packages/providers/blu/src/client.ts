@@ -20,6 +20,15 @@ export class BluClient {
   private user = requireEnv('BLU_BASIC_USER');
   private pass = requireEnv('BLU_BASIC_PASS');
   private apiKey = process.env.BLU_API_KEY; // Optional - may not be required
+  private static baseLogged = false;
+
+  constructor() {
+    // Log base URL once per process startup for debugging
+    if (!BluClient.baseLogged) {
+      console.log('[Blu] Initialized with base URL:', this.base);
+      BluClient.baseLogged = true;
+    }
+  }
 
   private headers() {
     const basic = Buffer.from(`${this.user}:${this.pass}`).toString('base64');
@@ -70,6 +79,7 @@ export class BluClient {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         console.log('[Blu] Redeem request', { 
+          url,
           requestId: idemKey, 
           pin: masked, 
           amount: redeemAmount, 
