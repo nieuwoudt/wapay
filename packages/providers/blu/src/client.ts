@@ -36,84 +36,8 @@ export class BluClient {
     return headers;
   }
 
-  async checkStatus(pin: string): Promise<BluVoucherStatus> {
-    // Blu Swagger: POST /voucher/status
-    // Based on 401 "Invalid transaction type" error, /voucher/variable/vouchers is incorrect
-    // Trying POST /voucher/status with token in body as per typical voucher API patterns
-    const url = `${this.base}/voucher/status`;
-    const body = { token: pin };
-    
-    try {
-      console.log('[Blu] Status check request', { 
-        url, 
-        method: 'POST',
-        pin: maskVoucherPin(pin) 
-      });
-      
-      const res = await request(url, {
-        method: 'POST',
-        headers: this.headers(),
-        body: JSON.stringify(body),
-        bodyTimeout: 8000,
-        headersTimeout: 8000,
-      });
-      
-      if (res.statusCode === 200) {
-        const data = (await res.body.json()) as any;
-        console.log('[Blu] Status check success', { 
-          pin: maskVoucherPin(pin), 
-          status: data.status, 
-          amount: data.amount,
-          fullResponse: data
-        });
-        
-        // Map provider status strings to normalized values
-        const status = (data.status as string)?.toUpperCase();
-        const map: Record<string, 'ACTIVE' | 'USED' | 'EXPIRED' | 'UNKNOWN'> = {
-          ACTIVE: 'ACTIVE',
-          VALID: 'ACTIVE',
-          USED: 'USED',
-          REDEEMED: 'USED',
-          EXPIRED: 'EXPIRED',
-        };
-        
-        // Blu returns amount in cents according to docs
-        const amount_cents = typeof data.amount === 'number' ? data.amount : undefined;
-        
-        return { 
-          status: map[status] ?? 'UNKNOWN', 
-          amount_cents 
-        };
-      }
-      
-      // Log full error response for debugging
-      let errorBody;
-      try {
-        errorBody = await res.body.json();
-      } catch {
-        errorBody = await res.body.text();
-      }
-      console.error('[Blu] Status check failed', {
-        url,
-        method: 'POST',
-        requestBody: { token: maskVoucherPin(pin) },
-        statusCode: res.statusCode,
-        responseBody: errorBody,
-      });
-      
-      if (res.statusCode === 401 || res.statusCode === 403) throw new Error('AUTH');
-      if (res.statusCode === 400 || res.statusCode === 404) return { status: 'UNKNOWN' };
-      throw new Error('RETRYABLE');
-    } catch (e: any) {
-      if (e.message === 'AUTH') throw e;
-      console.error('[Blu] Status check error', { 
-        url,
-        pin: maskVoucherPin(pin), 
-        error: e.message 
-      });
-      throw new Error('RETRYABLE');
-    }
-  }
+  // checkStatus() removed - Blu Variable Voucher API does not support status checks
+  // Only redemption endpoint is available: POST /voucher/variable/redemptions
 
   private extractErrorMessage(payload: BluErrorPayload | undefined, statusCode: number): string {
     if (!payload) return `Blu returned HTTP ${statusCode}`;
@@ -128,19 +52,18 @@ export class BluClient {
     return candidates[0] || `Blu returned HTTP ${statusCode}`;
   }
 
-  async redeem(pin: string, idemKey: string, amountCents: number): Promise<{ providerRef: string; amount_cents: number }> {
-    // Validate required amountCents parameter
-    if (typeof amountCents !== 'number' || amountCents <= 0) {
-      throw new Error('amountCents required for Blu variable voucher redemption');
-    }
+  async redeem(pin: string, idemKey: string, amountCents?: number): Promise<{ providerRef: string; amount_cents: number }> {
+    // amountCents is optional - if not provided or 0, redeem full voucher balance
+    const redeemAmount = amountCents && amountCents > 0 ? amountCents : 0;
     
     // Blu Swagger: POST /voucher/variable/redemptions
     // Body: { requestId, token, amount (in cents) }
+    // amount: 0 = redeem full voucher balance
     const url = `${this.base}/voucher/variable/redemptions`;
     const body = {
       requestId: idemKey,
       token: pin,
-      amount: amountCents, // Blu expects amount in cents
+      amount: redeemAmount, // 0 = redeem full balance, or specific amount in cents
     };
     const masked = maskVoucherPin(pin);
     
@@ -149,7 +72,7 @@ export class BluClient {
         console.log('[Blu] Redeem request', { 
           requestId: idemKey, 
           pin: masked, 
-          amountCents, 
+          amount: redeemAmount, 
           attempt 
         });
         
@@ -169,7 +92,7 @@ export class BluClient {
           // - reference: unique transaction reference (our providerRef)
           // - amount: retail amount in cents including VAT
           const providerRef = String(data.reference || `BLU-${Date.now()}`);
-          const amount_cents = typeof data.amount === 'number' ? data.amount : amountCents;
+          const amount_cents = typeof data.amount === 'number' ? data.amount : redeemAmount;
           
           console.log('[Blu] Redeem success', { 
             requestId: idemKey, 
@@ -194,7 +117,7 @@ export class BluClient {
           console.error('[Blu] Redeem error response', {
             url,
             method: 'POST',
-            requestBody: { requestId: idemKey, token: masked, amount: amountCents },
+            requestBody: { requestId: idemKey, token: masked, amount: redeemAmount },
             statusCode: res.statusCode,
             responseBody: errorData,
             extractedMessage: message,

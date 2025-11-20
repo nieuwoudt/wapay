@@ -40,19 +40,9 @@ export async function registerDepositRoutes(app: FastifyInstance) {
     try {
       const blu = new BluClient();
       
-      // Check voucher status first to get amount
-      const status = await blu.checkStatus(pin);
-      if (status.status === 'USED') {
-        return reply.code(400).send({ ok: false, error: 'USER_INPUT', message: 'Voucher already redeemed' });
-      }
-      if (status.status === 'EXPIRED') {
-        return reply.code(400).send({ ok: false, error: 'USER_INPUT', message: 'Voucher expired' });
-      }
-      if (!status.amount_cents) {
-        return reply.code(400).send({ ok: false, error: 'USER_INPUT', message: 'Could not determine voucher amount' });
-      }
-      
-      const result = await blu.redeem(pin, idemKey, status.amount_cents);
+      // Redeem directly (no status check - Blu doesn't support it)
+      // Pass 0 to redeem full voucher balance
+      const result = await blu.redeem(pin, idemKey, 0);
 
       // Post to ledger and update wallet
       const { journalEntryId } = await postBluDeposit({ accountId, amountCents: result.amount_cents, providerRef: result.providerRef, idemKey });

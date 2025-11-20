@@ -496,47 +496,10 @@ async function handleVoucherRedemption({ from, pin, account }) {
     const bluClient = new BluClient();
     const idemKey = `wapay-redeem-${account.id}-${Date.now()}`;
     
-    // Check voucher status first to get amount
-    let voucherStatus = null;
-    try {
-      voucherStatus = await bluClient.checkStatus(normalizedPin);
-      console.log('🔎 Voucher status check', { from, status: voucherStatus });
-      
-      if (voucherStatus?.status === 'USED') {
-        await updateConversationState(from, null);
-        return await sendWhatsAppText({
-          to: from,
-          text: `❌ *Voucher Already Used*\n\nThis voucher has already been redeemed. Please try another PIN.`,
-        });
-      }
-      
-      if (voucherStatus?.status === 'EXPIRED') {
-        await updateConversationState(from, null);
-        return await sendWhatsAppText({
-          to: from,
-          text: `❌ *Voucher Expired*\n\nThis voucher has expired. Please try another PIN.`,
-        });
-      }
-      
-      if (!voucherStatus?.amount_cents) {
-        await updateConversationState(from, null);
-        return await sendWhatsAppText({
-          to: from,
-          text: `❌ *Status Unknown*\n\nCould not determine voucher amount. Please verify the PIN and try again.`,
-        });
-      }
-    } catch (statusError) {
-      console.error('⚠️ Status check failed', statusError);
-      await updateConversationState(from, null);
-      return await sendWhatsAppText({
-        to: from,
-        text: `❌ *Status Check Failed*\n\nCould not verify voucher. Please try again in a moment.`,
-      });
-    }
-    
-    // Attempt redemption
-    console.log('💰 Calling Blu API to redeem voucher', { amountCents: voucherStatus.amount_cents });
-    const result = await bluClient.redeem(normalizedPin, idemKey, voucherStatus.amount_cents);
+    // Attempt redemption directly (no status check - Blu doesn't support it)
+    // Pass 0 to redeem full voucher balance
+    console.log('💰 Calling Blu API to redeem voucher (full balance)');
+    const result = await bluClient.redeem(normalizedPin, idemKey, 0);
     
     console.log('✅ Voucher redeemed successfully:', { 
       providerRef: result.providerRef, 
