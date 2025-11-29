@@ -15,6 +15,7 @@
 
 import { z } from 'zod';
 import { extractAllEntities } from './entities.js';
+import { BaseIntentSchema } from './intents.js';
 
 // ============================================================================
 // Extended Intent Types
@@ -41,12 +42,6 @@ export type ExtendedIntentType =
 // ============================================================================
 // New VAS Intent Schemas
 // ============================================================================
-
-export const BaseIntentSchema = z.object({
-  intent: z.string(),
-  confidence: z.number().min(0).max(1),
-  raw: z.string(),
-});
 
 /**
  * Buy Electricity Intent
