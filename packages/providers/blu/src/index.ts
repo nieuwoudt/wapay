@@ -16,6 +16,6 @@ export * from './vas.js';
 // Extended VAS client and types (all VAS products)
 // Note: Don't re-export types from vas-types.js to avoid conflicts with vas.js
 // Import specific types from vas-types.js if needed
-export { BluVasClientExtended } from './vas-extended.js';
+export { BluVasExtendedClient } from './vas-extended.js';
 
 
