@@ -14,3 +14,6 @@ export * from './entities.js';
 export * from './intents.js';
 export * from './router.js';
 
+// Extended VAS intents (Electricity, DStv, OTT, Retail, Betting)
+export * from './vas-intents.js';
+

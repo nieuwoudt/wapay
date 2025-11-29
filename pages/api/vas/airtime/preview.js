@@ -3,6 +3,7 @@
  * 
  * Preview an airtime purchase before execution.
  * Shows customer what they're about to buy.
+ * Includes structured logging for debugging.
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -10,17 +11,41 @@ import { BluVasClient } from '@wapay/providers-blu';
 
 const prisma = new PrismaClient();
 
+/**
+ * Structured logging helper
+ */
+function logStructured(type, data) {
+  console.log(JSON.stringify({
+    type,
+    ...data,
+    timestamp: new Date().toISOString(),
+  }));
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
-  try {
-    const { accountId, msisdn, amountCents, vendorId } = req.body;
+  const { accountId, msisdn, amountCents, vendorId } = req.body;
 
+  // Log the preview call
+  logStructured('vas_airtime_preview_call', {
+    accountId,
+    msisdn,
+    amountCents,
+    vendorId,
+  });
+
+  try {
     // Validate required fields
     if (!accountId || !msisdn || !amountCents) {
+      logStructured('vas_airtime_preview_result', {
+        accountId,
+        success: false,
+        error: 'MISSING_FIELDS',
+      });
       return res.status(400).json({
         error: 'USER_INPUT',
         message: 'Missing required fields: accountId, msisdn, amountCents'
@@ -29,6 +54,12 @@ export default async function handler(req, res) {
 
     // Validate amount (min R5, max R1000)
     if (amountCents < 500 || amountCents > 100000) {
+      logStructured('vas_airtime_preview_result', {
+        accountId,
+        amountCents,
+        success: false,
+        error: 'INVALID_AMOUNT',
+      });
       return res.status(400).json({
         error: 'USER_INPUT',
         message: 'Amount must be between R5 and R1000'
@@ -42,6 +73,11 @@ export default async function handler(req, res) {
     });
 
     if (!account) {
+      logStructured('vas_airtime_preview_result', {
+        accountId,
+        success: false,
+        error: 'ACCOUNT_NOT_FOUND',
+      });
       return res.status(404).json({
         error: 'USER_INPUT',
         message: 'Account not found'
@@ -49,6 +85,11 @@ export default async function handler(req, res) {
     }
 
     if (!account.wallet) {
+      logStructured('vas_airtime_preview_result', {
+        accountId,
+        success: false,
+        error: 'WALLET_NOT_FOUND',
+      });
       return res.status(404).json({
         error: 'USER_INPUT',
         message: 'Wallet not found'
@@ -58,6 +99,13 @@ export default async function handler(req, res) {
     // Check balance
     const availableBalance = account.wallet.availableCents;
     if (availableBalance < amountCents) {
+      logStructured('vas_airtime_preview_result', {
+        accountId,
+        amountCents,
+        availableBalance,
+        success: false,
+        error: 'INSUFFICIENT_BALANCE',
+      });
       return res.status(400).json({
         error: 'USER_INPUT',
         message: `Insufficient balance. Available: R${(availableBalance / 100).toFixed(2)}`
@@ -74,9 +122,34 @@ export default async function handler(req, res) {
         const networkInfo = await bluClient.checkMobileNumber(msisdn);
         detectedVendorName = networkInfo.vendorName;
         detectedVendorId = bluClient.vendorNameToId(networkInfo.vendorName);
+        
+        logStructured('vas_airtime_network_detected', {
+          msisdn,
+          vendorId: detectedVendorId,
+          vendorName: detectedVendorName,
+        });
       } catch (error) {
         console.error('Network detection failed:', error);
-        // Continue without network detection
+        logStructured('vas_airtime_network_detection_failed', {
+          msisdn,
+          error: error.message,
+          reason: error.reason,
+        });
+        
+        // Handle INVALID_PHONE_NUMBER specifically
+        if (error.message === 'INVALID_PHONE_NUMBER') {
+          logStructured('vas_airtime_preview_result', {
+            accountId,
+            msisdn,
+            success: false,
+            error: 'INVALID_PHONE_NUMBER',
+          });
+          return res.status(400).json({
+            error: 'INVALID_PHONE_NUMBER',
+            message: error.userMessage || "Sorry, I couldn't process that phone number. Please check the number and try again."
+          });
+        }
+        // Continue without network detection for other errors
       }
     }
 
@@ -105,6 +178,17 @@ export default async function handler(req, res) {
       }
     });
 
+    // Log success
+    logStructured('vas_airtime_preview_result', {
+      accountId,
+      previewId,
+      msisdn,
+      amountCents,
+      vendorId: detectedVendorId,
+      totalCents,
+      success: true,
+    });
+
     // Return preview
     return res.status(200).json({
       ok: true,
@@ -125,10 +209,16 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Airtime preview error:', error);
+    logStructured('vas_airtime_preview_result', {
+      accountId,
+      msisdn,
+      success: false,
+      error: 'UNHANDLED_ERROR',
+      errorMessage: error.message,
+    });
     return res.status(500).json({
       error: 'RETRYABLE',
       message: 'An error occurred while creating preview'
     });
   }
 }
-

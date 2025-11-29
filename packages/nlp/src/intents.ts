@@ -18,6 +18,9 @@ export type IntentType =
   | 'P2P_SEND'
   | 'REDEEM_VOUCHER'
   | 'PAY_AT_STORE'
+  | 'LIST_DATA_BUNDLES'
+  | 'LIST_AIRTIME_BUNDLES'
+  | 'LIST_VAS_PRODUCTS'
   | 'UNKNOWN';
 
 /**
@@ -113,6 +116,37 @@ export const PayAtStoreIntentSchema = BaseIntentSchema.extend({
 export type PayAtStoreIntent = z.infer<typeof PayAtStoreIntentSchema>;
 
 /**
+ * List Data Bundles Intent
+ */
+export const ListDataBundlesIntentSchema = BaseIntentSchema.extend({
+  intent: z.literal('LIST_DATA_BUNDLES'),
+  networkCode: z.string().optional(), // vodacom, mtn, cellc, telkom
+  periodType: z.string().optional(), // daily, weekly, monthly
+});
+
+export type ListDataBundlesIntent = z.infer<typeof ListDataBundlesIntentSchema>;
+
+/**
+ * List Airtime Bundles Intent
+ */
+export const ListAirtimeBundlesIntentSchema = BaseIntentSchema.extend({
+  intent: z.literal('LIST_AIRTIME_BUNDLES'),
+  networkCode: z.string().optional(), // vodacom, mtn, cellc, telkom
+});
+
+export type ListAirtimeBundlesIntent = z.infer<typeof ListAirtimeBundlesIntentSchema>;
+
+/**
+ * List VAS Products Intent
+ */
+export const ListVasProductsIntentSchema = BaseIntentSchema.extend({
+  intent: z.literal('LIST_VAS_PRODUCTS'),
+  category: z.string().optional(), // airtime, data, electricity, lifestyle, etc.
+});
+
+export type ListVasProductsIntent = z.infer<typeof ListVasProductsIntentSchema>;
+
+/**
  * Unknown Intent
  */
 export const UnknownIntentSchema = BaseIntentSchema.extend({
@@ -133,16 +167,65 @@ export type Intent =
   | P2PSendIntent
   | RedeemVoucherIntent
   | PayAtStoreIntent
+  | ListDataBundlesIntent
+  | ListAirtimeBundlesIntent
+  | ListVasProductsIntent
   | UnknownIntent;
 
 /**
  * Intent classification keywords
+ * 
+ * NOTE: LIST_* intents are checked BEFORE BUY_* intents to properly handle
+ * "show me bundles" vs "buy data" requests.
  */
 const INTENT_PATTERNS: Array<{
   intent: IntentType;
   keywords: string[];
   patterns: RegExp[];
 }> = [
+  // ============================================================================
+  // LIST INTENTS - Check these first before BUY intents
+  // ============================================================================
+  {
+    intent: 'LIST_VAS_PRODUCTS',
+    keywords: ['vas products', 'what can i buy', 'what services', 'top 10', 'products available'],
+    patterns: [
+      /what\s+(vas\s+)?products?\s+(can|do)\s+(i|you)/i,
+      /what\s+(can|do)\s+(i|you)\s+buy/i,
+      /what\s+services?\s+(do\s+you|are|is)\s+(have|offer|available)/i,
+      /show\s+me\s+(your\s+)?(products?|services?|catalogue|catalog)/i,
+      /list\s+(all\s+)?(your\s+)?(products?|services?)/i,
+      /top\s*\d*\s*(vas\s+)?products?/i,
+      /what's\s+available/i,
+      /what\s+do\s+you\s+sell/i,
+    ],
+  },
+  {
+    intent: 'LIST_DATA_BUNDLES',
+    keywords: ['show bundles', 'list bundles', 'data bundles', 'what bundles', 'available bundles'],
+    patterns: [
+      /\b(show|list|what|display)\s+(me\s+)?(the\s+)?(best|all|available)?\s*(vodacom|mtn|cell\s?c|telkom)?\s*(data\s+)?bundles?\b/i,
+      /\b(vodacom|mtn|cell\s?c|telkom)('s|s)?\s+(data\s+)?bundles?\b/i,
+      /how\s+much\s+(are|is)\s+(the\s+)?(weekly|daily|monthly)?\s*bundles?/i,
+      /what\s+(are\s+)?(the\s+)?(vodacom|mtn|cell\s?c|telkom)?\s*(weekly|daily|monthly)?\s*bundles?/i,
+      /(weekly|daily|monthly)\s+bundles?\s+(for\s+)?(vodacom|mtn|cell\s?c|telkom)?/i,
+      /bundles?\s+(you\s+have|available|for sale)/i,
+      /prices?\s+(for|of)\s+(vodacom|mtn|cell\s?c|telkom)?\s*bundles?/i,
+    ],
+  },
+  {
+    intent: 'LIST_AIRTIME_BUNDLES',
+    keywords: ['airtime options', 'airtime prices', 'show airtime'],
+    patterns: [
+      /\b(show|list|what)\s+(me\s+)?(the\s+)?(vodacom|mtn|cell\s?c|telkom)?\s*airtime\s*(options?|prices?|available)?\b/i,
+      /\bairtime\s+(options?|prices?|available)\b/i,
+      /how\s+much\s+is\s+(vodacom|mtn|cell\s?c|telkom)?\s*airtime/i,
+    ],
+  },
+  
+  // ============================================================================
+  // ACTION INTENTS - These are for actually purchasing
+  // ============================================================================
   {
     intent: 'CHECK_BALANCE',
     keywords: ['balance', 'wallet', 'money', 'how much'],
@@ -154,21 +237,19 @@ const INTENT_PATTERNS: Array<{
   },
   {
     intent: 'BUY_AIRTIME',
-    keywords: ['airtime', 'recharge', 'top up', 'topup'],
+    keywords: ['buy airtime', 'purchase airtime', 'get airtime', 'need airtime', 'recharge', 'topup airtime'],
     patterns: [
-      /\b(buy|purchase|get|need)\s+(airtime|recharge)/i,
-      /\b(recharge|top\s*up|topup)\b/i,
-      /\bairtime\b/i,
+      /\b(buy|purchase|get|need|i\s+want)\s+(r?\d+\s*)?(airtime|recharge)/i,
+      /\b(recharge|top\s*up|topup)\s+(my|the)?\s*(phone|number|cell)/i,
+      /\br?\d+\s*airtime\b/i,
     ],
   },
   {
     intent: 'BUY_DATA',
-    keywords: ['data', 'bundle', 'gb', 'mb', 'gig'],
+    keywords: ['buy data', 'purchase data', 'get data', 'need data'],
     patterns: [
-      /\b(buy|purchase|get|need)\s+(data|bundle)/i,
-      /\b\d+\s*(gb|mb|gig)/i,
-      /\bdata\b/i,
-      /\bbundle\b/i,
+      /\b(buy|purchase|get|need|i\s+want)\s+(a\s+)?(\d+\s*)?(gb|mb|gig)?\s*(data|bundle)/i,
+      /\b(buy|purchase|get)\s+\d+\s*(gb|mb|gig)/i,
     ],
   },
   {
@@ -298,6 +379,34 @@ export function classifyIntent(text: string): Intent {
             amountCents: entities.amount?.cents,
             merchantName: extractMerchantName(text),
           };
+        
+        // ====================================================================
+        // LIST INTENTS - These don't require purchase, just show catalogue
+        // ====================================================================
+        case 'LIST_DATA_BUNDLES':
+          return {
+            intent: 'LIST_DATA_BUNDLES',
+            confidence: hasPattern ? 0.95 : 0.8,
+            raw: text,
+            networkCode: entities.network?.code,
+            periodType: extractBundlePreference(text),
+          };
+          
+        case 'LIST_AIRTIME_BUNDLES':
+          return {
+            intent: 'LIST_AIRTIME_BUNDLES',
+            confidence: hasPattern ? 0.95 : 0.8,
+            raw: text,
+            networkCode: entities.network?.code,
+          };
+          
+        case 'LIST_VAS_PRODUCTS':
+          return {
+            intent: 'LIST_VAS_PRODUCTS',
+            confidence: hasPattern ? 0.95 : 0.8,
+            raw: text,
+            category: extractVasCategory(text),
+          };
       }
     }
   }
@@ -355,6 +464,29 @@ function extractMerchantName(text: string): string | undefined {
   for (const merchant of merchants) {
     if (new RegExp(`\\b${merchant}\\b`, 'i').test(text)) {
       return merchant;
+    }
+  }
+  
+  return undefined;
+}
+
+/**
+ * Helper: Extract VAS category from text
+ */
+function extractVasCategory(text: string): string | undefined {
+  const categories: Array<{ pattern: RegExp; category: string }> = [
+    { pattern: /\b(airtime|recharge)\b/i, category: 'AIRTIME' },
+    { pattern: /\b(data|bundle|gb|mb)\b/i, category: 'DATA' },
+    { pattern: /\b(electricity|prepaid\s+elec|meter|eskom)\b/i, category: 'ELECTRICITY' },
+    { pattern: /\b(lifestyle|netflix|uber|google\s+play|showmax|steam|playstation)\b/i, category: 'LIFESTYLE' },
+    { pattern: /\b(bill\s*pay|dstv|gotv|easypay)\b/i, category: 'BILLPAY' },
+    { pattern: /\b(remittance|send\s+money|mukuru|hello\s+paisa|mama\s+money)\b/i, category: 'REMITTANCE' },
+    { pattern: /\b(gaming|betting|bet|hollywoodbets|lottostar|betway)\b/i, category: 'GAMING' },
+  ];
+  
+  for (const { pattern, category } of categories) {
+    if (pattern.test(text)) {
+      return category;
     }
   }
   

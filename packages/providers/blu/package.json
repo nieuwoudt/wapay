@@ -14,12 +14,19 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json && node scripts/fix-dist.cjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "echo 'no lint yet'"
+    "lint": "echo 'no lint yet'",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typegen": "cd openapi && ./generate-types.sh",
+    "fetch-spec": "cd openapi && ./fetch-spec.sh"
   },
   "dependencies": {
     "@wapay/utils": "workspace:*",
     "undici": "^6.19.8"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.45.0",
+    "vitest": "^1.6.0"
   }
 }
-
-

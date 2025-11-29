@@ -15,11 +15,25 @@ export type BluVoucherStatus = {
   amount_cents?: number;
 };
 
+/**
+ * Blu Voucher Client (Redemption)
+ * 
+ * Note: Blu Voucher + Blu VAS share the same BLT Trade API key (apikey header).
+ * Use BLU_TRADE_API_KEY for all trade/v2 endpoints.
+ * 
+ * Environment Variables:
+ * - BLU_BASE_URL: API base URL (e.g., https://api.bluvoucher.co.za)
+ * - BLU_BASIC_USER: Basic auth username
+ * - BLU_BASIC_PASS: Basic auth password
+ * - BLU_TRADE_API_KEY: Shared API key for all Blu Trade API endpoints
+ * - BLU_VEND_CHANNEL: Optional vend channel (default: 'API')
+ */
 export class BluClient {
   private base = requireEnv('BLU_BASE_URL');
   private user = requireEnv('BLU_BASIC_USER');
   private pass = requireEnv('BLU_BASIC_PASS');
-  private apiKey = process.env.BLU_API_KEY;
+  // Shared API key for Blu Voucher + VAS (same BLT Trade API)
+  private apiKey = process.env.BLU_TRADE_API_KEY || process.env.BLU_API_KEY;
   private vendChannel = process.env.BLU_VEND_CHANNEL || 'API';
 
   constructor() {

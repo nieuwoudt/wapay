@@ -86,22 +86,81 @@ model Limit {
   usedMonthCents   Int      @default(0)
 }
 
+// VAS Product Categories
+// AIRTIME | DATA | ELECTRICITY | LIFESTYLE | BILLPAY | REMITTANCE | GAMING
 model VasProduct {
   id               String   @id @default(cuid())
+  provider         String   @default("BLU")   // BLU, YOYO, etc.
+  // Categories: AIRTIME | DATA | ELECTRICITY | LIFESTYLE | BILLPAY | REMITTANCE | GAMING
   category         String
-  networkCode      String
-  skuCode          String
+  // Subcategory: PINNED | PINLESS | MUNICIPAL_ELEC | OTT | etc.
+  subcategory      String?
+  // Network for mobile: VODACOM | MTN | CELLC | TELKOM
+  networkCode      String?
+  // Operator: HOLLYWOODBETS, DSTV, ESKOM, etc.
+  operatorCode     String?
+  // Blu product / vendor code or identifier
+  externalCode     String
+  // Display label: "Vodacom 1GB Weekly", "R50 Electricity (Eskom)"
   label            String
-  unitType         String
-  unitQuantityMb   Int?
-  priceCents       Int
-  validityDays     Int?
-  allowCustomAmount Boolean @default(false)
+  // For variable-amount products
   minCents         Int?
   maxCents         Int?
   stepCents        Int?
-  targetType       String
+  // For fixed-price bundles/vouchers
+  fixedPriceCents  Int?
+  // Legacy priceCents kept for compatibility
+  priceCents       Int      @default(0)
+  // Bundle validity
+  validityDays     Int?
+  // Period type: DAILY | WEEKLY | MONTHLY | ONCE_OFF
+  periodType       String?
+  // Data size in MB (for data bundles)
+  dataMb           Int?
+  // Purchase types: INSTANT_VEND | PIN_BASED | TOKEN_BASED | REFERENCE_BASED
+  purchaseType     String   @default("INSTANT_VEND")
+  // Target types: MSISDN | METER_NUMBER | SMARTCARD | ACCOUNT_ID
+  targetType       String   @default("MSISDN")
+  // Priority for display ordering (lower = higher priority)
+  priority         Int      @default(100)
+  // Popularity score for "top products" queries
+  popularity       Int      @default(0)
+  // Extra metadata
   metadata         Json?
+  isActive         Boolean  @default(true)
+  // Legacy active field kept for compatibility
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([provider, category, externalCode])
+  @@index([category, networkCode])
+  @@index([isActive, category])
+  @@index([priority])
+  @@index([popularity])
+}
+
+// User's saved accounts for quick reuse (meters, smartcards, betting accounts)
+model UserSavedAccount {
+  id              String   @id @default(cuid())
+  accountId       String   // WaPay account ID
+  // Categories: ELECTRICITY | PAYTV | BETTING
+  category        String
+  // Provider: dstv, hollywoodbets, etc.
+  providerId      String?
+  // Identifier: meter number, smartcard, betting account
+  identifier      String
+  // User-friendly name: "Home", "Mom's place"
+  nickname        String?
+  // Name from validation lookup
+  customerName    String?
+  metadata        Json?
+  lastUsed        DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@unique([accountId, category, identifier])
+  @@index([accountId, category])
+  @@map("user_saved_accounts")
 }
 
 model YoyoInstrument {

@@ -8,7 +8,13 @@ export interface VoucherRedeemResult {
 export interface VoucherRail {
   redeem(pin: string, idemKey: string, amountCents: number): Promise<VoucherRedeemResult>;
 }
+
+// Core Blu clients
 export * from './client.js';
 export * from './vas.js';
+
+// Extended VAS types and client (all VAS products)
+export * from './vas-types.js';
+export * from './vas-extended.js';
 
 

@@ -3,11 +3,40 @@
  * 
  * Provides Mobile Airtime and Mobile Data Bundle purchasing services.
  * 
+ * Note: Blu Voucher + Blu VAS share the same BLT Trade API key (apikey header).
+ * Use BLU_TRADE_API_KEY for all trade/v2 endpoints.
+ * 
+ * Environment Variables:
+ * - BLU_BASE_URL: API base URL - MUST be set to https://api.qa.bltelecoms.net/v2/trade for QA
+ * - BLU_BASIC_USER: Basic auth username (not used for VAS, but kept for voucher compatibility)
+ * - BLU_BASIC_PASS: Basic auth password (not used for VAS, but kept for voucher compatibility)
+ * - BLU_TRADE_API_KEY: API key for Blu Trade API (e.g., 5135ae7a-3d92-44ff-86bb-89c401722221 for QA)
+ * - BLU_VAS_STUB_MODE: When 'true', returns simulated success without calling Blu (QA only!)
+ * 
+ * ⚠️ WARNING: BLU_VAS_STUB_MODE must NEVER be enabled in production with real money.
+ * It is only for testing the WaPay UX flow when Blu QA rejects test phone numbers.
+ * 
+ * Blu QA Test MSISDNs (for testing with real Blu QA):
+ * - 0840012300 (Cell C)
+ * - 0720012345 (Vodacom)
+ * - 0830012300 (MTN)
+ * - 0850012345 (Telkom)
+ * 
  * @see docs/providers/blu-vas-integration.md
  */
 
 import { request } from 'undici';
 import { requireEnv } from '@wapay/utils';
+
+// ============================================================================
+// Blu QA Test MSISDNs - Only work with Blu QA environment
+// ============================================================================
+export const BLU_QA_TEST_MSISDNS = {
+  CELLC: '0840012300',
+  VODACOM: '0720012345',
+  MTN: '0830012300',
+  TELKOM: '0850012345',
+} as const;
 
 // ============================================================================
 // Types
@@ -78,16 +107,20 @@ export class BluVasClient {
   private base = requireEnv('BLU_BASE_URL');
   private user = requireEnv('BLU_BASIC_USER');
   private pass = requireEnv('BLU_BASIC_PASS');
-  private apiKey = requireEnv('BLU_API_KEY');
+  // Shared API key for Blu Voucher + VAS (same BLT Trade API)
+  // Falls back to BLU_API_KEY for backward compatibility
+  private apiKey = process.env.BLU_TRADE_API_KEY || requireEnv('BLU_API_KEY');
 
   /**
    * Build HTTP headers for Blu API requests
+   * 
+   * Note: For VAS endpoints, only 'apikey' header is required (no Basic auth).
+   * Basic auth is included for backward compatibility with voucher endpoints.
    */
   private headers(): Record<string, string> {
-    const basic = Buffer.from(`${this.user}:${this.pass}`).toString('base64');
     return {
+      'accept': 'application/json',
       'Content-Type': 'application/json',
-      'Authorization': `Basic ${basic}`,
       'apikey': this.apiKey,
     };
   }
@@ -128,8 +161,31 @@ export class BluVasClient {
   /**
    * Handle Blu API errors and map to WaPay error types
    */
-  private handleError(statusCode: number, errorData: any): never {
+  private handleError(statusCode: number, errorData: any, msisdn?: string): never {
     const message = errorData?.message || errorData?.error || 'Unknown error';
+    
+    // Check for "Invalid phone number" specifically
+    const isInvalidPhoneNumber = message.toLowerCase().includes('invalid phone number') ||
+                                  message.toLowerCase().includes('invalid mobile number') ||
+                                  message.toLowerCase().includes('invalid msisdn');
+    
+    if (isInvalidPhoneNumber) {
+      // Structured logging for invalid MSISDN
+      console.log(JSON.stringify({
+        type: 'blu_vas_invalid_msisdn',
+        msisdn: msisdn || 'unknown',
+        provider_error: statusCode,
+        provider_message: message,
+        timestamp: new Date().toISOString(),
+      }));
+      
+      const err = new Error('INVALID_PHONE_NUMBER');
+      (err as any).reason = 'The phone number is not valid or not supported in this environment.';
+      (err as any).userMessage = "Sorry, I couldn't process that purchase. The network is rejecting this phone number. Please try with a different number or contact support.";
+      (err as any).statusCode = statusCode;
+      (err as any).providerMessage = message;
+      throw err;
+    }
     
     // User input errors (400, 404, 409)
     if (statusCode === 400 || statusCode === 404 || statusCode === 409) {
@@ -199,15 +255,39 @@ export class BluVasClient {
    * 
    * @param params Purchase parameters
    * @returns Transaction result with Blu reference
-   * @throws Error with message 'USER_INPUT', 'AUTH', or 'RETRYABLE'
+   * @throws Error with message 'USER_INPUT', 'AUTH', 'RETRYABLE', or 'INVALID_PHONE_NUMBER'
    */
   async purchaseAirtime(params: AirtimePurchaseParams): Promise<AirtimePurchaseResult> {
+    // =========================================================================
+    // STUB MODE - For QA testing when Blu rejects phone numbers
+    // ⚠️ WARNING: Must NEVER be enabled in production with real money!
+    // =========================================================================
+    if (process.env.BLU_VAS_STUB_MODE === 'true') {
+      console.warn('⚠️ BLU_VAS_STUB_MODE enabled - returning stub response for airtime purchase');
+      console.log(JSON.stringify({
+        type: 'blu_vas_stub_airtime',
+        msisdn: params.msisdn,
+        amountCents: params.amountCents,
+        vendorId: params.vendorId,
+        idemKey: params.idemKey,
+        timestamp: new Date().toISOString(),
+      }));
+      
+      return {
+        providerRef: `STUB-AIR-${Date.now()}`,
+        amountCents: params.amountCents,
+        vendorName: this.vendorIdToName(params.vendorId),
+        dateTime: new Date().toISOString(),
+      };
+    }
+    
     const url = `${this.base}/mobile/airtime/sales`;
+    const bluMsisdn = this.toBluFormat(params.msisdn);
     
     const body = {
       requestId: params.idemKey,
       vendorId: params.vendorId,
-      mobileNumber: this.toBluFormat(params.msisdn),
+      mobileNumber: bluMsisdn,
       amount: params.amountCents,
       vendMetaData: this.buildVendMetaData({
         accountId: params.accountId,
@@ -215,6 +295,17 @@ export class BluVasClient {
         msisdn: params.msisdn,
       }),
     };
+
+    // Log the request for debugging
+    console.log(JSON.stringify({
+      type: 'blu_vas_airtime_request',
+      url,
+      vendorId: params.vendorId,
+      mobileNumber: bluMsisdn,
+      amount: params.amountCents,
+      requestId: params.idemKey,
+      timestamp: new Date().toISOString(),
+    }));
 
     return this.callWithRetry(async () => {
       const res = await request(url, {
@@ -225,8 +316,18 @@ export class BluVasClient {
         headersTimeout: 60000,
       });
 
+      const responseText = await res.body.text();
+      
+      // Log the response for debugging
+      console.log(JSON.stringify({
+        type: 'blu_vas_airtime_response',
+        statusCode: res.statusCode,
+        response: responseText.substring(0, 500), // Truncate long responses
+        timestamp: new Date().toISOString(),
+      }));
+
       if (res.statusCode === 200 || res.statusCode === 201) {
-        const data = (await res.body.json()) as any;
+        const data = JSON.parse(responseText);
         return {
           providerRef: String(data.reference),
           amountCents: data.amount,
@@ -235,9 +336,14 @@ export class BluVasClient {
         };
       }
 
-      // Handle error
-      const errorData = (await res.body.json()) as any;
-      this.handleError(res.statusCode, errorData);
+      // Handle error - pass msisdn for better logging
+      let errorData;
+      try {
+        errorData = JSON.parse(responseText);
+      } catch {
+        errorData = { message: responseText };
+      }
+      this.handleError(res.statusCode, errorData, params.msisdn);
     });
   }
 
@@ -246,9 +352,45 @@ export class BluVasClient {
    * 
    * @param msisdn Phone number (WaPay format: +27821234567)
    * @returns Network detection result
-   * @throws Error with message 'USER_INPUT', 'AUTH', or 'RETRYABLE'
+   * @throws Error with message 'USER_INPUT', 'AUTH', 'RETRYABLE', or 'INVALID_PHONE_NUMBER'
    */
   async checkMobileNumber(msisdn: string): Promise<NetworkDetectionResult> {
+    // =========================================================================
+    // STUB MODE - For QA testing when Blu rejects phone numbers
+    // ⚠️ WARNING: Must NEVER be enabled in production!
+    // =========================================================================
+    if (process.env.BLU_VAS_STUB_MODE === 'true') {
+      console.warn('⚠️ BLU_VAS_STUB_MODE enabled - returning stub network detection');
+      
+      // Simulate network detection based on prefix
+      const normalized = this.toBluFormat(msisdn);
+      let vendorName = 'Vodacom'; // Default
+      
+      if (normalized.startsWith('083') || normalized.startsWith('073')) {
+        vendorName = 'MTN';
+      } else if (normalized.startsWith('084') || normalized.startsWith('074')) {
+        vendorName = 'Cell C';
+      } else if (normalized.startsWith('081') || normalized.startsWith('071')) {
+        vendorName = 'Vodacom';
+      } else if (normalized.startsWith('082') || normalized.startsWith('072')) {
+        vendorName = 'Vodacom';
+      } else if (normalized.startsWith('060') || normalized.startsWith('061')) {
+        vendorName = 'Telkom';
+      }
+      
+      console.log(JSON.stringify({
+        type: 'blu_vas_stub_network_detection',
+        msisdn,
+        detectedVendor: vendorName,
+        timestamp: new Date().toISOString(),
+      }));
+      
+      return {
+        vendorName,
+        mobileNumber: normalized,
+      };
+    }
+    
     const bluNumber = this.toBluFormat(msisdn);
     const url = `${this.base}/mobile/airtime/mobile-number/check?mobileNumber=${encodeURIComponent(bluNumber)}`;
 
@@ -268,9 +410,9 @@ export class BluVasClient {
         };
       }
 
-      // Handle error
+      // Handle error - pass msisdn for better logging
       const errorData = (await res.body.json()) as any;
-      this.handleError(res.statusCode, errorData);
+      this.handleError(res.statusCode, errorData, msisdn);
     });
   }
 
@@ -319,9 +461,33 @@ export class BluVasClient {
    * 
    * @param params Purchase parameters
    * @returns Transaction result with Blu reference
-   * @throws Error with message 'USER_INPUT', 'AUTH', or 'RETRYABLE'
+   * @throws Error with message 'USER_INPUT', 'AUTH', 'RETRYABLE', or 'INVALID_PHONE_NUMBER'
    */
   async purchaseDataBundle(params: DataPurchaseParams): Promise<DataPurchaseResult> {
+    // =========================================================================
+    // STUB MODE - For QA testing when Blu rejects phone numbers
+    // ⚠️ WARNING: Must NEVER be enabled in production with real money!
+    // =========================================================================
+    if (process.env.BLU_VAS_STUB_MODE === 'true') {
+      console.warn('⚠️ BLU_VAS_STUB_MODE enabled - returning stub response for data purchase');
+      console.log(JSON.stringify({
+        type: 'blu_vas_stub_data',
+        msisdn: params.msisdn,
+        productId: params.productId,
+        vendorId: params.vendorId,
+        idemKey: params.idemKey,
+        timestamp: new Date().toISOString(),
+      }));
+      
+      return {
+        providerRef: `STUB-DATA-${Date.now()}`,
+        amountCents: 2900, // Simulated bundle price
+        productName: `Simulated ${params.vendorId} Bundle`,
+        vendorName: this.vendorIdToName(params.vendorId),
+        dateTime: new Date().toISOString(),
+      };
+    }
+    
     const url = `${this.base}/mobile/data/sales`;
     
     const body = {
@@ -356,9 +522,9 @@ export class BluVasClient {
         };
       }
 
-      // Handle error
+      // Handle error - pass msisdn for better logging
       const errorData = (await res.body.json()) as any;
-      this.handleError(res.statusCode, errorData);
+      this.handleError(res.statusCode, errorData, params.msisdn);
     });
   }
 
