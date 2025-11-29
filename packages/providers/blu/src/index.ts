@@ -13,8 +13,9 @@ export interface VoucherRail {
 export * from './client.js';
 export * from './vas.js';
 
-// Extended VAS types and client (all VAS products)
-export * from './vas-types.js';
-export * from './vas-extended.js';
+// Extended VAS client and types (all VAS products)
+// Note: Don't re-export types from vas-types.js to avoid conflicts with vas.js
+// Import specific types from vas-types.js if needed
+export { BluVasClientExtended } from './vas-extended.js';
 
 
