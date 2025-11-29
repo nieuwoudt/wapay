@@ -465,7 +465,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       {
         const normalized = text.trim().toLowerCase();
         
-        if (/^(cancel|stop|no|not now|later)$/i.test(normalized)) {
+        // Cancel keywords - be more permissive
+        if (/^(cancel|stop|no|not now|later|reset|restart|start over|quit|exit|back)$/i.test(normalized)) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
@@ -505,11 +506,23 @@ async function handleConversationState({ from, text, state, data, account }) {
       {
         const normalized = text.trim().toLowerCase();
         
-        if (/^(cancel|stop|no|not now|later)$/i.test(normalized)) {
+        // Cancel keywords - be more permissive
+        if (/^(cancel|stop|no|not now|later|reset|restart|start over|quit|exit|back)$/i.test(normalized)) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
             text: `👍 No problem. Let me know when you want to buy airtime.`,
+          });
+        }
+        
+        // If message doesn't look like a phone number at all, assume user wants to cancel
+        const digitsOnly = text.replace(/[^\d]/g, '');
+        if (digitsOnly.length < 8) {
+          // Not enough digits to be a phone number - user probably wants to do something else
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `I've cancelled the airtime purchase. What else can I help you with?`,
           });
         }
         
@@ -539,7 +552,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           
           return await sendWhatsAppText({
             to: from,
-            text: `❌ Invalid phone number format.\n\nPlease enter a valid SA mobile number (e.g., 0781234567)`,
+            text: `❌ Invalid phone number format.\n\nPlease enter a valid SA mobile number (e.g., 0781234567)\n\nOr reply "cancel" to stop.`,
           });
         }
         
@@ -570,11 +583,21 @@ async function handleConversationState({ from, text, state, data, account }) {
       {
         const normalized = text.trim().toLowerCase();
         
-        if (/^(no|cancel|stop|not now|later)$/i.test(normalized)) {
+        // Cancel keywords - be more permissive
+        if (/^(no|cancel|stop|not now|later|reset|restart|start over)$/i.test(normalized)) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
             text: `👍 Airtime purchase cancelled. Let me know if you need anything else.`,
+          });
+        }
+        
+        // If user says something that's not yes/no, clear state and let them try again
+        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `I've cancelled that request. Feel free to ask me anything else!`,
           });
         }
         
@@ -670,7 +693,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       {
         const normalized = text.trim();
         
-        if (/^(cancel|stop|no)$/i.test(normalized.toLowerCase())) {
+        // Cancel keywords - be more permissive
+        if (/^(cancel|stop|no|reset|restart)$/i.test(normalized.toLowerCase())) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
@@ -678,13 +702,26 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
-        // Validate PIN format (5 digits)
-        if (!/^\d{5}$/.test(normalized)) {
+        // If not exactly 5 digits, provide helpful message
+        const digitsOnly = text.replace(/[^\d]/g, '');
+        if (digitsOnly.length !== 5) {
+          // If no digits at all, user probably wants out
+          if (digitsOnly.length === 0) {
+            await updateConversationState(from, null);
+            return await sendWhatsAppText({
+              to: from,
+              text: `I've cancelled the airtime purchase. What else can I help you with?`,
+            });
+          }
+          
           return await sendWhatsAppText({
             to: from,
             text: `❌ Invalid PIN. Please enter your 5-digit WaPay PIN.\n\nReply "cancel" to stop.`,
           });
         }
+        
+        // Use digitsOnly for PIN validation
+        const pin = digitsOnly;
         
         const { previewId, amountCents, msisdn, vendorName } = data || {};
         
@@ -710,7 +747,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             body: JSON.stringify({
               previewId,
               accountId: account.id,
-              pin: normalized,
+              pin: pin,
             }),
           });
           
