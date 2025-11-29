@@ -972,7 +972,7 @@ async function handleListDataBundles({ from, account, entities }) {
     // Build query
     const where = {
       category: 'DATA',
-      isActive: true,
+      active: true,
     };
     
     if (networkCode) {
@@ -1077,7 +1077,7 @@ async function handleListVasProducts({ from, account }) {
     // Get category counts
     const categoryCounts = await prisma.vasProduct.groupBy({
       by: ['category'],
-      where: { isActive: true },
+      where: { active: true },
       _count: { id: true },
     });
 

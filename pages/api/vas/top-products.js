@@ -52,7 +52,7 @@ export default async function handler(req, res) {
   try {
     // Get top products by popularity
     const products = await prisma.vasProduct.findMany({
-      where: { isActive: true },
+      where: { active: true },
       orderBy: [
         { popularity: 'desc' },
         { priority: 'asc' },
@@ -64,7 +64,7 @@ export default async function handler(req, res) {
     // Also get category summaries
     const categoryCounts = await prisma.vasProduct.groupBy({
       by: ['category'],
-      where: { isActive: true },
+      where: { active: true },
       _count: { id: true },
     });
 

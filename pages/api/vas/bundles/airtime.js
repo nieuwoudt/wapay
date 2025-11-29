@@ -79,7 +79,7 @@ export default async function handler(req, res) {
     // Build query
     const where = {
       category: 'AIRTIME',
-      isActive: true,
+      active: true,
     };
     
     if (networkCode) {

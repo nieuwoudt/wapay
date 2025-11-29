@@ -95,7 +95,7 @@ export default async function handler(req, res) {
     // Build query
     const where = {
       category: 'DATA',
-      isActive: true,
+      active: true,
     };
     
     if (networkCode) {

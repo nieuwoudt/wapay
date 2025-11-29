@@ -183,7 +183,6 @@ async function seedVasProducts() {
           label: product.label,
           fixedPriceCents: product.fixedPriceCents,
           priceCents: product.fixedPriceCents || 0,
-          isActive: true,
           active: true,
         },
         create: {
@@ -199,7 +198,6 @@ async function seedVasProducts() {
           targetType: 'MSISDN',
           priority: 10,
           popularity: 50,
-          isActive: true,
           active: true,
         },
       });
@@ -228,7 +226,6 @@ async function seedVasProducts() {
           dataMb: bundle.dataMb,
           periodType: bundle.periodType,
           validityDays: bundle.validityDays,
-          isActive: true,
           active: true,
         },
         create: {
@@ -247,7 +244,6 @@ async function seedVasProducts() {
           targetType: 'MSISDN',
           priority: 20,
           popularity: 50,
-          isActive: true,
           active: true,
         },
       });
@@ -274,7 +270,6 @@ async function seedVasProducts() {
           minCents: product.minCents,
           maxCents: product.maxCents,
           stepCents: product.stepCents,
-          isActive: true,
           active: true,
         },
         create: {
@@ -291,7 +286,6 @@ async function seedVasProducts() {
           targetType: 'METER_NUMBER',
           priority: 30,
           popularity: 40,
-          isActive: true,
           active: true,
         },
       });
@@ -317,7 +311,6 @@ async function seedVasProducts() {
           label: product.label,
           fixedPriceCents: product.fixedPriceCents,
           priceCents: product.fixedPriceCents || 0,
-          isActive: true,
           active: true,
         },
         create: {
@@ -333,7 +326,6 @@ async function seedVasProducts() {
           targetType: 'ACCOUNT_ID',
           priority: 40,
           popularity: 30,
-          isActive: true,
           active: true,
         },
       });
@@ -362,7 +354,6 @@ async function seedVasProducts() {
           minCents: product.minCents,
           maxCents: product.maxCents,
           stepCents: product.stepCents,
-          isActive: true,
           active: true,
         },
         create: {
@@ -381,7 +372,6 @@ async function seedVasProducts() {
           targetType: 'SMARTCARD',
           priority: 35,
           popularity: 40,
-          isActive: true,
           active: true,
         },
       });
@@ -407,7 +397,6 @@ async function seedVasProducts() {
           label: product.label,
           fixedPriceCents: product.fixedPriceCents,
           priceCents: product.fixedPriceCents || 0,
-          isActive: true,
           active: true,
         },
         create: {
@@ -422,7 +411,6 @@ async function seedVasProducts() {
           targetType: 'ACCOUNT_ID',
           priority: 45,
           popularity: 35,
-          isActive: true,
           active: true,
         },
       });
@@ -449,7 +437,6 @@ async function seedVasProducts() {
           minCents: product.minCents,
           maxCents: product.maxCents,
           stepCents: product.stepCents,
-          isActive: true,
           active: true,
         },
         create: {
@@ -465,7 +452,6 @@ async function seedVasProducts() {
           targetType: 'ACCOUNT_ID',
           priority: 50,
           popularity: 30,
-          isActive: true,
           active: true,
         },
       });

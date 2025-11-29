@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   try {
     // Get all active products
     const products = await prisma.vasProduct.findMany({
-      where: { isActive: true },
+      where: { active: true },
       orderBy: [
         { priority: 'asc' },
         { popularity: 'desc' },
