@@ -33,6 +33,31 @@ function logStructured(type, data) {
 }
 
 /**
+ * Blu QA Test Numbers - Whitelisted by Blu for testing
+ */
+const BLU_QA_TEST_NUMBERS = new Set([
+  '0840012300', // Cell C
+  '0720012345', // Vodacom
+  '0830012300', // MTN
+  '0850012345', // Telkom
+]);
+
+/**
+ * Validate SA mobile number format
+ * Accepts standard SA mobile format + Blu QA test numbers
+ */
+function isValidMsisdn(msisdn) {
+  // Whitelist Blu QA test numbers
+  if (BLU_QA_TEST_NUMBERS.has(msisdn)) {
+    return true;
+  }
+  
+  // Standard SA mobile: 10 digits starting with 0
+  // Prefixes: 06x, 07x, 08x
+  return /^0\d{9}$/.test(msisdn);
+}
+
+/**
  * Process incoming WhatsApp message
  */
 export async function processMessage({ from, text, messageId, profile }) {
@@ -259,9 +284,23 @@ function detectExplicitIntent(text = '') {
   const squashed = normalized.replace(/\s+/g, ' ');
   const digitsOnly = text.replace(/[^\d]/g, '');
 
-  // Balance - only if very clear
-  if (/^(balance|check balance|my balance|show balance)$/i.test(squashed)) {
-    return { intent: 'CHECK_BALANCE', confidence: 1.0 };
+  // =====================================================================
+  // CHECK BALANCE - Accept natural language variations
+  // =====================================================================
+  const balancePatterns = [
+    /^(balance|check balance|my balance|show balance)$/i,
+    /what('s| is) (my|the|your) (account )?balance/i,
+    /how much (money|do i have|is in my (account|wallet))/i,
+    /show (me )?(my )?balance/i,
+    /check (my )?balance/i,
+    /what'?s (my|the) balance/i,
+    /balance check/i,
+  ];
+
+  for (const pattern of balancePatterns) {
+    if (pattern.test(squashed)) {
+      return { intent: 'CHECK_BALANCE', confidence: 0.95, triggerAction: true };
+    }
   }
 
   // Help - explicit request
@@ -294,11 +333,14 @@ function detectExplicitIntent(text = '') {
     /what\s+(can|do)\s+(i|you)\s+buy/i,
     /what\s+services?\s+(do\s+you|are|is)\s+(have|offer|available)/i,
     /show\s+me\s+(your\s+)?(products?|services?|catalogue|catalog)/i,
-    /list\s+(all\s+)?(your\s+)?(products?|services?)/i,
+    /list\s+(all\s+)?(your\s+|of )?(the\s+)?(products?|services?)/i,
     /top\s*\d*\s*(vas\s+)?products?/i,
     /what's\s+available/i,
     /what\s+do\s+you\s+sell/i,
-    /what\s+can\s+i\s+buy\s+on\s+wapay/i,
+    /what\s+can\s+i\s+buy(\s+on\s+wapay)?/i,
+    /can\s+(i|you)\s+list\s+(all|the)?\s*(products?|services?)/i,
+    /products?\s+(i\s+can|that\s+i\s+can|available)/i,
+    /all\s+(of\s+)?(the\s+)?products?/i,
   ];
 
   for (const pattern of vasProductPatterns) {
@@ -487,7 +529,14 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         
         // Validate phone number format
-        if (!/^0\d{9}$/.test(msisdn)) {
+        if (!isValidMsisdn(msisdn)) {
+          logStructured('msisdn_validation_failed', {
+            from,
+            accountId: account.id,
+            msisdn,
+            reason: 'format_validation_failed',
+          });
+          
           return await sendWhatsAppText({
             to: from,
             text: `❌ Invalid phone number format.\n\nPlease enter a valid SA mobile number (e.g., 0781234567)`,
@@ -774,13 +823,11 @@ async function handleAIChat({ from, text, account }) {
     if (aiResponse.triggerAction && aiResponse.intent) {
       console.log('🎯 AI detected intent:', aiResponse.intent, aiResponse.entities);
 
-      // Send AI's text response first
-      await sendWhatsAppText({
-        to: from,
-        text: aiResponse.text,
-      });
+      // IMPORTANT: Do NOT send raw JSON to users
+      // Extract only the text field if it's a structured response
+      const responseText = typeof aiResponse.text === 'string' ? aiResponse.text : 'Let me help you with that.';
 
-      // Then handle the intent
+      // Then handle the intent (send acknowledgment only for actions that need follow-up)
       switch (aiResponse.intent) {
         case 'BUY_AIRTIME':
           // Start airtime flow
@@ -790,21 +837,21 @@ async function handleAIChat({ from, text, account }) {
             });
             return await sendWhatsAppText({
               to: from,
-              text: `Which phone number should I send the R${aiResponse.entities.amount} airtime to?\n\nReply with the number or "me" for your own number.`,
+              text: `📱 *Buy R${aiResponse.entities.amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`,
             });
           }
           
           await updateConversationState(from, 'AIRTIME_AMOUNT', aiResponse.entities || {});
           return await sendWhatsAppText({
             to: from,
-            text: `How much airtime would you like to buy? (e.g., R10, R50, R100)`,
+            text: `📱 *Buy Airtime*\n\nHow much airtime would you like to buy?\n\nReply with an amount (e.g., R10, R50, R100)`,
           });
 
         case 'BUY_DATA':
           await updateConversationState(from, 'AI_DATA_PURCHASE', aiResponse.entities);
           return await sendWhatsAppText({
             to: from,
-            text: `I'll help you buy data! This feature will be available soon. For now, type "balance" to check your balance.`,
+            text: `📶 Data bundles are coming soon! For now, you can:\n• Check your balance\n• Buy airtime\n• Redeem a voucher`,
           });
 
         case 'REDEEM_VOUCHER':
@@ -828,17 +875,24 @@ async function handleAIChat({ from, text, account }) {
           });
 
         default:
+          // For unhandled intents, send only the text (never JSON)
           return await sendWhatsAppText({
             to: from,
-            text: aiResponse.text,
+            text: responseText,
           });
       }
     }
 
-    // Otherwise, just send AI's informational response
+    // Otherwise, just send AI's informational response (text only, never JSON)
+    const finalText = typeof aiResponse === 'object' && aiResponse.text 
+      ? aiResponse.text 
+      : typeof aiResponse === 'string' 
+        ? aiResponse 
+        : 'I can help you with balance checks, airtime, data, and vouchers. What would you like to do?';
+    
     return await sendWhatsAppText({
       to: from,
-      text: aiResponse.text,
+      text: finalText,
     });
 
   } catch (error) {
