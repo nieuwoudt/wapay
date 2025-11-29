@@ -127,15 +127,13 @@ model VasProduct {
   popularity       Int      @default(0)
   // Extra metadata
   metadata         Json?
-  isActive         Boolean  @default(true)
-  // Legacy active field kept for compatibility
   active           Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   @@unique([provider, category, externalCode])
   @@index([category, networkCode])
-  @@index([isActive, category])
+  @@index([active, category])
   @@index([priority])
   @@index([popularity])
 }
