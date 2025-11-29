@@ -256,6 +256,21 @@ async function handlePostOnboarding({ account, from, text }) {
       case 'LIST_DATA_BUNDLES':
         return await handleListDataBundles({ from, account, entities: detection.entities });
         
+      case 'LIST_ELECTRICITY':
+        return await handleListElectricityProducts({ from, account });
+        
+      case 'LIST_LIFESTYLE':
+        return await handleListLifestyleProducts({ from, account });
+        
+      case 'LIST_BILLPAY':
+        return await handleListBillpayProducts({ from, account });
+        
+      case 'LIST_GAMING':
+        return await handleListGamingProducts({ from, account });
+        
+      case 'LIST_REMITTANCE':
+        return await handleListRemittanceProducts({ from, account });
+        
       case 'LIST_VAS_PRODUCTS':
         return await handleListVasProducts({ from, account });
 
@@ -346,6 +361,98 @@ function detectExplicitIntent(text = '') {
   for (const pattern of vasProductPatterns) {
     if (pattern.test(squashed)) {
       return { intent: 'LIST_VAS_PRODUCTS', confidence: 0.95, triggerAction: true };
+    }
+  }
+
+  // =====================================================================
+  // LIST ELECTRICITY - "What prepaid electricity meters do you support?"
+  // =====================================================================
+  const electricityPatterns = [
+    /\b(what|which|show|list)\s+(prepaid\s+)?electricity\s+(meters?|providers?|municipalities?|suppliers?)/i,
+    /\b(prepaid\s+)?electricity\s+(meters?|providers?|municipalities?|suppliers?|available|support)/i,
+    /\b(eskom|city\s+power|cape\s+town|ekurhuleni|tshwane)\s+(electricity|prepaid)/i,
+    /\b(electricity|prepaid)\s+(you\s+support|available|can\s+i\s+buy)/i,
+  ];
+
+  for (const pattern of electricityPatterns) {
+    if (pattern.test(squashed)) {
+      return { 
+        intent: 'LIST_ELECTRICITY', 
+        confidence: 0.95, 
+        triggerAction: true,
+      };
+    }
+  }
+
+  // =====================================================================
+  // LIST LIFESTYLE - "What lifestyle vouchers do you have?"
+  // =====================================================================
+  const lifestylePatterns = [
+    /\b(what|which|show|list)\s+(lifestyle|ott|vouchers?|netflix|uber|google\s+play|steam)\s+(do\s+you\s+have|available)/i,
+    /\b(netflix|uber|google\s+play|steam|playstation)\s+(vouchers?|gift\s+cards?|available)/i,
+  ];
+
+  for (const pattern of lifestylePatterns) {
+    if (pattern.test(squashed)) {
+      return { 
+        intent: 'LIST_LIFESTYLE', 
+        confidence: 0.95, 
+        triggerAction: true,
+      };
+    }
+  }
+
+  // =====================================================================
+  // LIST BILLPAY - "What TV subscriptions do you support?"
+  // =====================================================================
+  const billpayPatterns = [
+    /\b(what|which|show|list)\s+(tv\s+subscriptions?|dstv|gotv|bill\s+payments?)\s+(do\s+you\s+support|available)/i,
+    /\b(dstv|gotv|multichoice)\s+(subscriptions?|packages?|available)/i,
+  ];
+
+  for (const pattern of billpayPatterns) {
+    if (pattern.test(squashed)) {
+      return { 
+        intent: 'LIST_BILLPAY', 
+        confidence: 0.95, 
+        triggerAction: true,
+      };
+    }
+  }
+
+  // =====================================================================
+  // LIST GAMING - "What betting operators do you support?"
+  // =====================================================================
+  const gamingPatterns = [
+    /\b(what|which|show|list)\s+(betting|gaming|operators?|hollywoodbets|lottostar|betway)\s+(do\s+you\s+support|available)/i,
+    /\b(hollywoodbets|lottostar|betway)\s+(top\s*ups?|available)/i,
+  ];
+
+  for (const pattern of gamingPatterns) {
+    if (pattern.test(squashed)) {
+      return { 
+        intent: 'LIST_GAMING', 
+        confidence: 0.95, 
+        triggerAction: true,
+      };
+    }
+  }
+
+  // =====================================================================
+  // LIST REMITTANCE - "What money transfer services do you have?"
+  // =====================================================================
+  const remittancePatterns = [
+    /\b(what|which|show|list)\s+(money\s+transfer|remittance|mukuru|hello\s+paisa|mama\s+money)\s+(services?|do\s+you\s+support|available)/i,
+    /\b(mukuru|hello\s+paisa|mama\s+money)\s+(transfer|available)/i,
+  ];
+
+  for (const pattern of remittancePatterns) {
+    if (pattern.test(squashed)) {
+      return { 
+        intent: 'LIST_REMITTANCE', 
+        confidence: 0.95, 
+        triggerAction: true,
+      };
     }
   }
 
@@ -872,8 +979,8 @@ async function handleAIChat({ from, text, account }) {
             await updateConversationState(from, 'AIRTIME_MSISDN', { 
               amountCents: aiResponse.entities.amount * 100 
             });
-            return await sendWhatsAppText({
-              to: from,
+          return await sendWhatsAppText({
+            to: from,
               text: `📱 *Buy R${aiResponse.entities.amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`,
             });
           }
@@ -1059,6 +1166,328 @@ async function handleListDataBundles({ from, account, entities }) {
     return await sendWhatsAppText({
       to: from,
       text: `❌ Sorry, I couldn't fetch the bundle list right now. Please try again later.`,
+    });
+  }
+}
+
+/**
+ * Handle listing electricity products
+ */
+async function handleListElectricityProducts({ from, account }) {
+  logStructured('vas_electricity_fetch_call', {
+    from,
+    accountId: account.id,
+    intent: 'LIST_ELECTRICITY',
+  });
+
+  try {
+    const products = await prisma.vasProduct.findMany({
+      where: {
+        category: 'ELECTRICITY',
+        active: true,
+      },
+      orderBy: [
+        { popularity: 'desc' },
+        { label: 'asc' },
+      ],
+      take: 20,
+    });
+
+    logStructured('vas_electricity_fetch_result', {
+      from,
+      intent: 'LIST_ELECTRICITY',
+      count: products.length,
+      success: true,
+    });
+
+    if (products.length === 0) {
+      return await sendWhatsAppText({
+        to: from,
+        text: `💡 I couldn't find any electricity providers in our catalogue right now.\n\nPlease try again later or contact support.`,
+      });
+    }
+
+    // Group by operator
+    const byOperator = {};
+    for (const p of products) {
+      const op = p.operatorCode || p.networkCode || 'OTHER';
+      if (!byOperator[op]) byOperator[op] = [];
+      byOperator[op].push(p);
+    }
+
+    let message = `💡 *Prepaid Electricity Providers*\n\nWe support the following electricity meters:\n\n`;
+    
+    for (const [operator, operatorProducts] of Object.entries(byOperator)) {
+      const first = operatorProducts[0];
+      const operatorName = first.label.split(' ')[0] || operator; // "Eskom Prepaid Electricity" -> "Eskom"
+      message += `*${operatorName}*\n`;
+      message += `   Variable amount (R${(first.minCents || 1000) / 100} - R${(first.maxCents || 500000) / 100})\n\n`;
+    }
+    
+    message += `━━━━━━━━━━━━━━━━━━\n\n`;
+    message += `*How to buy:*\n`;
+    message += `Reply: *"Buy R50 electricity for [meter number]"*\n\n`;
+    message += `I'll help you purchase electricity tokens! ⚡`;
+
+    return await sendWhatsAppText({
+      to: from,
+      text: message,
+    });
+
+  } catch (error) {
+    console.error('List electricity error:', error);
+    logStructured('vas_electricity_fetch_result', {
+      from,
+      intent: 'LIST_ELECTRICITY',
+      success: false,
+      error: error.message,
+    });
+    
+    return await sendWhatsAppText({
+      to: from,
+      text: `❌ Sorry, I couldn't fetch the electricity providers right now. Please try again later.`,
+    });
+  }
+}
+
+/**
+ * Handle listing lifestyle/OTT products
+ */
+async function handleListLifestyleProducts({ from, account }) {
+  logStructured('vas_lifestyle_fetch_call', {
+    from,
+    accountId: account.id,
+    intent: 'LIST_LIFESTYLE',
+  });
+
+  try {
+    const products = await prisma.vasProduct.findMany({
+      where: {
+        category: 'LIFESTYLE',
+        active: true,
+      },
+      orderBy: [
+        { popularity: 'desc' },
+        { fixedPriceCents: 'asc' },
+      ],
+      take: 20,
+    });
+
+    if (products.length === 0) {
+      return await sendWhatsAppText({
+        to: from,
+        text: `🎮 I couldn't find any lifestyle vouchers in our catalogue right now.\n\nPlease try again later.`,
+      });
+    }
+
+    // Group by operator
+    const byOperator = {};
+    for (const p of products) {
+      const op = p.operatorCode || p.networkCode || 'OTHER';
+      if (!byOperator[op]) byOperator[op] = [];
+      byOperator[op].push(p);
+    }
+
+    let message = `🎮 *Lifestyle & OTT Vouchers*\n\nAvailable vouchers:\n\n`;
+    
+    for (const [operator, operatorProducts] of Object.entries(byOperator)) {
+      const first = operatorProducts[0];
+      const operatorName = first.label.split(' ')[0] || operator;
+      message += `*${operatorName}*\n`;
+      for (const p of operatorProducts.slice(0, 3)) {
+        const price = ((p.fixedPriceCents || p.priceCents) / 100).toFixed(0);
+        message += `   R${price} voucher\n`;
+      }
+      message += '\n';
+    }
+    
+    message += `Reply: *"Buy R50 Netflix voucher"* and I'll help you purchase.`;
+
+    return await sendWhatsAppText({
+      to: from,
+      text: message,
+    });
+
+  } catch (error) {
+    console.error('List lifestyle error:', error);
+    return await sendWhatsAppText({
+      to: from,
+      text: `❌ Sorry, I couldn't fetch the lifestyle vouchers right now. Please try again later.`,
+    });
+  }
+}
+
+/**
+ * Handle listing billpay products
+ */
+async function handleListBillpayProducts({ from, account }) {
+  logStructured('vas_billpay_fetch_call', {
+    from,
+    accountId: account.id,
+    intent: 'LIST_BILLPAY',
+  });
+
+  try {
+    const products = await prisma.vasProduct.findMany({
+      where: {
+        category: 'BILLPAY',
+        active: true,
+      },
+      orderBy: [
+        { popularity: 'desc' },
+        { fixedPriceCents: 'asc' },
+      ],
+      take: 20,
+    });
+
+    if (products.length === 0) {
+      return await sendWhatsAppText({
+        to: from,
+        text: `📺 I couldn't find any bill payment services in our catalogue right now.\n\nPlease try again later.`,
+      });
+    }
+
+    let message = `📺 *Bill Payment Services*\n\nAvailable services:\n\n`;
+    
+    for (const p of products) {
+      const price = p.fixedPriceCents ? `R${(p.fixedPriceCents / 100).toFixed(0)}` : 'Variable amount';
+      message += `• ${p.label} – ${price}\n`;
+    }
+    
+    message += `\nReply: *"Pay my DStv"* or *"Buy DStv Compact"* and I'll help you.`;
+
+    return await sendWhatsAppText({
+      to: from,
+      text: message,
+    });
+
+  } catch (error) {
+    console.error('List billpay error:', error);
+    return await sendWhatsAppText({
+      to: from,
+      text: `❌ Sorry, I couldn't fetch the bill payment services right now. Please try again later.`,
+    });
+  }
+}
+
+/**
+ * Handle listing gaming/betting products
+ */
+async function handleListGamingProducts({ from, account }) {
+  logStructured('vas_gaming_fetch_call', {
+    from,
+    accountId: account.id,
+    intent: 'LIST_GAMING',
+  });
+
+  try {
+    const products = await prisma.vasProduct.findMany({
+      where: {
+        category: 'GAMING',
+        active: true,
+      },
+      orderBy: [
+        { popularity: 'desc' },
+        { fixedPriceCents: 'asc' },
+      ],
+      take: 20,
+    });
+
+    if (products.length === 0) {
+      return await sendWhatsAppText({
+        to: from,
+        text: `🎰 I couldn't find any betting operators in our catalogue right now.\n\nPlease try again later.`,
+      });
+    }
+
+    // Group by operator
+    const byOperator = {};
+    for (const p of products) {
+      const op = p.operatorCode || p.networkCode || 'OTHER';
+      if (!byOperator[op]) byOperator[op] = [];
+      byOperator[op].push(p);
+    }
+
+    let message = `🎰 *Betting & Gaming Top-ups*\n\nAvailable operators:\n\n`;
+    
+    for (const [operator, operatorProducts] of Object.entries(byOperator)) {
+      const first = operatorProducts[0];
+      const operatorName = first.label.split(' ')[0] || operator;
+      message += `*${operatorName}*\n`;
+      for (const p of operatorProducts.slice(0, 3)) {
+        const price = ((p.fixedPriceCents || p.priceCents) / 100).toFixed(0);
+        message += `   R${price} top-up\n`;
+      }
+      message += '\n';
+    }
+    
+    message += `Reply: *"Top up Hollywoodbets R50"* and I'll help you.`;
+
+    return await sendWhatsAppText({
+      to: from,
+      text: message,
+    });
+
+  } catch (error) {
+    console.error('List gaming error:', error);
+    return await sendWhatsAppText({
+      to: from,
+      text: `❌ Sorry, I couldn't fetch the betting operators right now. Please try again later.`,
+    });
+  }
+}
+
+/**
+ * Handle listing remittance products
+ */
+async function handleListRemittanceProducts({ from, account }) {
+  logStructured('vas_remittance_fetch_call', {
+    from,
+    accountId: account.id,
+    intent: 'LIST_REMITTANCE',
+  });
+
+  try {
+    const products = await prisma.vasProduct.findMany({
+      where: {
+        category: 'REMITTANCE',
+        active: true,
+      },
+      orderBy: [
+        { popularity: 'desc' },
+        { label: 'asc' },
+      ],
+      take: 20,
+    });
+
+    if (products.length === 0) {
+      return await sendWhatsAppText({
+        to: from,
+        text: `💸 I couldn't find any money transfer services in our catalogue right now.\n\nPlease try again later.`,
+      });
+    }
+
+    let message = `💸 *Money Transfer Services*\n\nAvailable services:\n\n`;
+    
+    for (const p of products) {
+      const range = p.minCents && p.maxCents 
+        ? `R${(p.minCents / 100).toFixed(0)} - R${(p.maxCents / 100).toFixed(0)}`
+        : 'Variable amount';
+      message += `• ${p.label} – ${range}\n`;
+    }
+    
+    message += `\nReply: *"Send R500 via Mukuru"* and I'll help you transfer money.`;
+
+    return await sendWhatsAppText({
+      to: from,
+      text: message,
+    });
+
+  } catch (error) {
+    console.error('List remittance error:', error);
+    return await sendWhatsAppText({
+      to: from,
+      text: `❌ Sorry, I couldn't fetch the money transfer services right now. Please try again later.`,
     });
   }
 }
