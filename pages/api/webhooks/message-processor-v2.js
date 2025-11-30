@@ -365,13 +365,15 @@ function detectExplicitIntent(text = '') {
   }
 
   // =====================================================================
-  // LIST ELECTRICITY - "What prepaid electricity meters do you support?"
+  // LIST ELECTRICITY - "Can I buy electricity?", "What electricity do you have?"
   // =====================================================================
   const electricityPatterns = [
-    /\b(what|which|show|list)\s+(prepaid\s+)?electricity\s+(meters?|providers?|municipalities?|suppliers?)/i,
-    /\b(prepaid\s+)?electricity\s+(meters?|providers?|municipalities?|suppliers?|available|support)/i,
-    /\b(eskom|city\s+power|cape\s+town|ekurhuleni|tshwane)\s+(electricity|prepaid)/i,
-    /\b(electricity|prepaid)\s+(you\s+support|available|can\s+i\s+buy)/i,
+    /\b(can\s+i|do\s+you|where\s+can\s+i)\s+(buy|sell|get|have)\s+(prepaid\s+)?electricity/i,
+    /\b(buy|purchase|get)\s+(prepaid\s+)?electricity/i,
+    /\b(what|which|show|list)\s+(prepaid\s+)?electricity\s*(meters?|providers?|municipalities?|suppliers?|do\s+you)?/i,
+    /\b(prepaid\s+)?electricity\s+(meters?|providers?|available|support|options?)/i,
+    /\b(eskom|city\s+power|cape\s+town|ekurhuleni|tshwane)\s+(electricity|prepaid)?/i,
+    /\belectricity\b/i,  // Simple catch-all for electricity queries
   ];
 
   for (const pattern of electricityPatterns) {
@@ -385,11 +387,13 @@ function detectExplicitIntent(text = '') {
   }
 
   // =====================================================================
-  // LIST LIFESTYLE - "What lifestyle vouchers do you have?"
+  // LIST LIFESTYLE - "What lifestyle vouchers do you have?", "Can I buy Netflix?"
   // =====================================================================
   const lifestylePatterns = [
-    /\b(what|which|show|list)\s+(lifestyle|ott|vouchers?|netflix|uber|google\s+play|steam)\s+(do\s+you\s+have|available)/i,
-    /\b(netflix|uber|google\s+play|steam|playstation)\s+(vouchers?|gift\s+cards?|available)/i,
+    /\b(can\s+i|do\s+you)\s+(buy|get|sell|have)\s+(netflix|uber|google\s+play|steam|playstation)/i,
+    /\b(buy|get)\s+(netflix|uber|google\s+play|steam|playstation)/i,
+    /\b(what|which|show|list)\s+(lifestyle|ott|vouchers?|netflix|uber|google\s+play|steam)/i,
+    /\b(netflix|uber|google\s+play|steam|playstation)\s+(vouchers?|gift\s+cards?|available)?/i,
   ];
 
   for (const pattern of lifestylePatterns) {
@@ -403,11 +407,13 @@ function detectExplicitIntent(text = '') {
   }
 
   // =====================================================================
-  // LIST BILLPAY - "What TV subscriptions do you support?"
+  // LIST BILLPAY - "What TV subscriptions do you support?", "Can I pay DStv?"
   // =====================================================================
   const billpayPatterns = [
-    /\b(what|which|show|list)\s+(tv\s+subscriptions?|dstv|gotv|bill\s+payments?)\s+(do\s+you\s+support|available)/i,
-    /\b(dstv|gotv|multichoice)\s+(subscriptions?|packages?|available)/i,
+    /\b(can\s+i|do\s+you)\s+(pay|buy|get|have)\s+(dstv|gotv|tv)/i,
+    /\b(pay|buy)\s+(my\s+)?(dstv|gotv|tv\s+subscription)/i,
+    /\b(what|which|show|list)\s+(tv\s+subscriptions?|dstv|gotv|bill\s+payments?)/i,
+    /\b(dstv|gotv|multichoice)\s+(subscriptions?|packages?|available|payment)?/i,
   ];
 
   for (const pattern of billpayPatterns) {
@@ -421,11 +427,13 @@ function detectExplicitIntent(text = '') {
   }
 
   // =====================================================================
-  // LIST GAMING - "What betting operators do you support?"
+  // LIST GAMING - "What betting operators do you support?", "Can I top up Hollywoodbets?"
   // =====================================================================
   const gamingPatterns = [
-    /\b(what|which|show|list)\s+(betting|gaming|operators?|hollywoodbets|lottostar|betway)\s+(do\s+you\s+support|available)/i,
-    /\b(hollywoodbets|lottostar|betway)\s+(top\s*ups?|available)/i,
+    /\b(can\s+i|do\s+you)\s+(top\s*up|buy|bet|have)\s+(hollywoodbets|lottostar|betway|betting)/i,
+    /\b(top\s*up|deposit)\s+(hollywoodbets|lottostar|betway)/i,
+    /\b(what|which|show|list)\s+(betting|gaming|operators?|hollywoodbets|lottostar|betway)/i,
+    /\b(hollywoodbets|lottostar|betway)\b/i,  // Simple catch-all for betting brands
   ];
 
   for (const pattern of gamingPatterns) {
