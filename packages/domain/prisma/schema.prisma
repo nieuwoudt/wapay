@@ -65,6 +65,11 @@ model ProviderRequest {
   providerRef    String?
   redactedPayload String?
   responseJson   String?
+  accountId      String?
+  metadata       Json?
+
+  @@index([accountId])
+  @@index([status])
 }
 
 model AuthSession {
