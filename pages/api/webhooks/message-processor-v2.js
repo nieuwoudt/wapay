@@ -2372,14 +2372,15 @@ async function handleVoucherRedemption({ from, pin, account }) {
         errorMessage = 'Blu could not redeem that voucher PIN. The voucher may be invalid, already used, or expired. Please verify the digits and try another voucher if needed.';
       }
     } else if (errorType === 'AUTH') {
-      errorMessage = 'We could not connect to the voucher provider. Please contact support.';
+      // Provider configuration/permission error - not user's fault
+      errorMessage = 'We couldn\'t complete your voucher redemption due to a provider configuration error. Please try again later or contact support.';
     } else if (errorType === 'RETRYABLE') {
       errorMessage = sanitizedReason || 'The voucher service is temporarily unavailable. Please try again in a few minutes.';
     } else if (sanitizedReason) {
       errorMessage = sanitizedReason;
     }
 
-    // Keep user in voucher flow if retry makes sense
+    // Keep user in voucher flow if retry makes sense (but NOT for AUTH errors)
     await updateConversationState(from, allowRetry ? 'AWAITING_VOUCHER_PIN' : null);
 
     const retryHint = allowRetry

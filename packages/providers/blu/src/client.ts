@@ -221,16 +221,23 @@ export class BluClient {
             extractedMessage: message,
           });
           
-          // User input errors (400, 404, 409)
-          if (res.statusCode === 400 || res.statusCode === 404 || res.statusCode === 409) {
-            const err = new Error('USER_INPUT');
+          // Check for authorization/permission errors (even with 400 status)
+          const isAuthError = 
+            res.statusCode === 401 || 
+            res.statusCode === 403 ||
+            message.toLowerCase().includes('not authorized') ||
+            message.toLowerCase().includes('permission') ||
+            message.toLowerCase().includes('invalid transaction type');
+          
+          if (isAuthError) {
+            const err = new Error('AUTH');
             (err as any).reason = message;
             throw err;
           }
           
-          // Auth errors
-          if (res.statusCode === 401 || res.statusCode === 403) {
-            const err = new Error('AUTH');
+          // User input errors (400, 404, 409) - but only if not auth-related
+          if (res.statusCode === 400 || res.statusCode === 404 || res.statusCode === 409) {
+            const err = new Error('USER_INPUT');
             (err as any).reason = message;
             throw err;
           }
