@@ -251,25 +251,16 @@ async function handlePostOnboarding({ account, from, text }) {
         });
 
       // ====================================================================
+      // SMART PRODUCT QUERY - Uses database to match categories
+      // ====================================================================
+      case 'SMART_PRODUCT_QUERY':
+        return await handleSmartProductQuery({ from, account, text });
+
+      // ====================================================================
       // LIST INTENTS - Show real catalogue data, not generic responses
       // ====================================================================
       case 'LIST_DATA_BUNDLES':
         return await handleListDataBundles({ from, account, entities: detection.entities });
-        
-      case 'LIST_ELECTRICITY':
-        return await handleListElectricityProducts({ from, account });
-        
-      case 'LIST_LIFESTYLE':
-        return await handleListLifestyleProducts({ from, account });
-        
-      case 'LIST_BILLPAY':
-        return await handleListBillpayProducts({ from, account });
-        
-      case 'LIST_GAMING':
-        return await handleListGamingProducts({ from, account });
-        
-      case 'LIST_REMITTANCE':
-        return await handleListRemittanceProducts({ from, account });
         
       case 'LIST_VAS_PRODUCTS':
         return await handleListVasProducts({ from, account });
@@ -365,117 +356,36 @@ function detectExplicitIntent(text = '') {
   }
 
   // =====================================================================
-  // LIST ELECTRICITY - "Can I buy electricity?", "What electricity do you have?"
+  // SMART CATEGORY DETECTION
+  // Instead of hardcoding every product, we detect product-related queries
+  // and route them to the smart category matcher
   // =====================================================================
-  const electricityPatterns = [
-    /\b(can\s+i|do\s+you|where\s+can\s+i)\s+(buy|sell|get|have)\s+(prepaid\s+)?electricity/i,
-    /\b(buy|purchase|get)\s+(prepaid\s+)?electricity/i,
-    /\b(what|which|show|list)\s+(prepaid\s+)?electricity\s*(meters?|providers?|municipalities?|suppliers?|do\s+you)?/i,
-    /\b(prepaid\s+)?electricity\s+(meters?|providers?|available|support|options?)/i,
-    /\b(eskom|city\s+power|cape\s+town|ekurhuleni|tshwane)\s+(electricity|prepaid)?/i,
-    /\belectricity\b/i,  // Simple catch-all for electricity queries
+  
+  // Check if this looks like a product query (buy/get/show/list + anything)
+  const productQueryIndicators = [
+    /\b(can\s+i|do\s+you|where\s+can\s+i|how\s+do\s+i)\s+(buy|get|purchase|pay|top\s*up)/i,
+    /\b(buy|get|purchase|pay|top\s*up)\s+/i,
+    /\b(show|list|what|which)\s+(me\s+)?(your\s+)?(the\s+)?/i,
   ];
-
-  for (const pattern of electricityPatterns) {
-    if (pattern.test(squashed)) {
-      return { 
-        intent: 'LIST_ELECTRICITY', 
-        confidence: 0.95, 
-        triggerAction: true,
-      };
-    }
+  
+  const looksLikeProductQuery = productQueryIndicators.some(p => p.test(squashed));
+  
+  if (looksLikeProductQuery) {
+    // Route to smart category matcher (will query database)
+    return { 
+      intent: 'SMART_PRODUCT_QUERY', 
+      confidence: 0.8,
+      rawText: text,
+      triggerAction: true,
+    };
   }
 
   // =====================================================================
-  // LIST LIFESTYLE - "What lifestyle vouchers do you have?", "Can I buy Netflix?"
-  // =====================================================================
-  const lifestylePatterns = [
-    /\b(can\s+i|do\s+you)\s+(buy|get|sell|have)\s+(netflix|uber|google\s+play|steam|playstation)/i,
-    /\b(buy|get)\s+(netflix|uber|google\s+play|steam|playstation)/i,
-    /\b(what|which|show|list)\s+(lifestyle|ott|vouchers?|netflix|uber|google\s+play|steam)/i,
-    /\b(netflix|uber|google\s+play|steam|playstation)\s+(vouchers?|gift\s+cards?|available)?/i,
-  ];
-
-  for (const pattern of lifestylePatterns) {
-    if (pattern.test(squashed)) {
-      return { 
-        intent: 'LIST_LIFESTYLE', 
-        confidence: 0.95, 
-        triggerAction: true,
-      };
-    }
-  }
-
-  // =====================================================================
-  // LIST BILLPAY - "What TV subscriptions do you support?", "Can I pay DStv?"
-  // =====================================================================
-  const billpayPatterns = [
-    /\b(can\s+i|do\s+you)\s+(pay|buy|get|have)\s+(dstv|gotv|tv)/i,
-    /\b(pay|buy)\s+(my\s+)?(dstv|gotv|tv\s+subscription)/i,
-    /\b(what|which|show|list)\s+(tv\s+subscriptions?|dstv|gotv|bill\s+payments?)/i,
-    /\b(dstv|gotv|multichoice)\s+(subscriptions?|packages?|available|payment)?/i,
-  ];
-
-  for (const pattern of billpayPatterns) {
-    if (pattern.test(squashed)) {
-      return { 
-        intent: 'LIST_BILLPAY', 
-        confidence: 0.95, 
-        triggerAction: true,
-      };
-    }
-  }
-
-  // =====================================================================
-  // LIST GAMING - "What betting operators do you support?", "Can I top up Hollywoodbets?"
-  // =====================================================================
-  const gamingPatterns = [
-    /\b(can\s+i|do\s+you)\s+(top\s*up|buy|bet|have)\s+(hollywoodbets|lottostar|betway|betting)/i,
-    /\b(top\s*up|deposit)\s+(hollywoodbets|lottostar|betway)/i,
-    /\b(what|which|show|list)\s+(betting|gaming|operators?|hollywoodbets|lottostar|betway)/i,
-    /\b(hollywoodbets|lottostar|betway)\b/i,  // Simple catch-all for betting brands
-  ];
-
-  for (const pattern of gamingPatterns) {
-    if (pattern.test(squashed)) {
-      return { 
-        intent: 'LIST_GAMING', 
-        confidence: 0.95, 
-        triggerAction: true,
-      };
-    }
-  }
-
-  // =====================================================================
-  // LIST REMITTANCE - "What money transfer services do you have?"
-  // =====================================================================
-  const remittancePatterns = [
-    /\b(what|which|show|list)\s+(money\s+transfer|remittance|mukuru|hello\s+paisa|mama\s+money)\s+(services?|do\s+you\s+support|available)/i,
-    /\b(mukuru|hello\s+paisa|mama\s+money)\s+(transfer|available)/i,
-  ];
-
-  for (const pattern of remittancePatterns) {
-    if (pattern.test(squashed)) {
-      return { 
-        intent: 'LIST_REMITTANCE', 
-        confidence: 0.95, 
-        triggerAction: true,
-      };
-    }
-  }
-
-  // =====================================================================
-  // LIST DATA BUNDLES - "Show me Vodacom bundles", "What bundles do you have?"
-  // Must check BEFORE BUY_DATA patterns
+  // DATA BUNDLES - specific because of network/period extraction
   // =====================================================================
   const listBundlePatterns = [
-    /\b(show|list|what|display)\s+(me\s+)?(the\s+)?(best|all|available)?\s*(vodacom|mtn|cell\s?c|telkom)?\s*(data\s+)?bundles?\b/i,
-    /\b(vodacom|mtn|cell\s?c|telkom)('s|s)?\s+(data\s+)?bundles?\b/i,
-    /how\s+much\s+(are|is)\s+(the\s+)?(weekly|daily|monthly)?\s*bundles?/i,
-    /what\s+(are\s+)?(the\s+)?(vodacom|mtn|cell\s?c|telkom)?\s*(weekly|daily|monthly)?\s*bundles?/i,
-    /(weekly|daily|monthly)\s+bundles?\s+(for\s+)?(vodacom|mtn|cell\s?c|telkom)?/i,
-    /bundles?\s+(you\s+have|available|for sale)/i,
-    /prices?\s+(for|of)\s+(vodacom|mtn|cell\s?c|telkom)?\s*bundles?/i,
+    /\b(vodacom|mtn|cell\s?c|telkom)('s|s)?\s*(data\s+)?bundles?\b/i,
+    /bundles?\b/i,
   ];
 
   for (const pattern of listBundlePatterns) {
@@ -1061,6 +971,346 @@ async function handleAIChat({ from, text, account }) {
     return await sendWhatsAppText({
       to: from,
       text: fallbackMessage,
+    });
+  }
+}
+
+// ==============================================================================
+// SMART PRODUCT QUERY HANDLER - Database-driven category matching
+// ==============================================================================
+
+/**
+ * Smart product query handler
+ * 
+ * Instead of hardcoding regex patterns for every product,
+ * this function queries the database and matches user text
+ * against actual categories, operators, and networks.
+ */
+async function handleSmartProductQuery({ from, account, text }) {
+  const lowerText = text.toLowerCase();
+  
+  logStructured('smart_product_query', {
+    from,
+    accountId: account.id,
+    text,
+  });
+
+  try {
+    // Get all active products grouped by category
+    const categories = await prisma.vasProduct.groupBy({
+      by: ['category'],
+      where: { active: true },
+      _count: { id: true },
+    });
+    
+    // Get all operators/brands from database
+    const operators = await prisma.vasProduct.findMany({
+      where: { 
+        active: true,
+        operatorCode: { not: null },
+      },
+      select: { 
+        operatorCode: true, 
+        category: true,
+        label: true,
+      },
+      distinct: ['operatorCode'],
+    });
+    
+    // Get all networks
+    const networks = await prisma.vasProduct.findMany({
+      where: { 
+        active: true,
+        networkCode: { not: null },
+      },
+      select: { 
+        networkCode: true, 
+        category: true,
+      },
+      distinct: ['networkCode'],
+    });
+
+    // Build keyword map from database + common synonyms
+    const categoryKeywords = {
+      AIRTIME: ['airtime', 'recharge', 'top up', 'topup', 'top-up', 'phone credit'],
+      DATA: ['data', 'bundle', 'bundles', 'mb', 'gb', 'gig', 'internet'],
+      ELECTRICITY: ['electricity', 'prepaid', 'meter', 'token', 'units', 'power', 'elec', 'light', 'eskom'],
+      LIFESTYLE: ['voucher', 'gift card', 'ott', 'streaming'],
+      BILLPAY: ['tv', 'subscription', 'bill', 'pay'],
+      GAMING: ['bet', 'betting', 'gamble', 'gambling', 'casino', 'lotto'],
+      REMITTANCE: ['send money', 'transfer', 'remit', 'remittance'],
+    };
+    
+    // Add operators to their category keywords
+    for (const op of operators) {
+      const cat = op.category;
+      if (!categoryKeywords[cat]) categoryKeywords[cat] = [];
+      // Add operator code and extract brand name from label
+      categoryKeywords[cat].push(op.operatorCode.toLowerCase());
+      // Extract first word of label as potential brand (e.g., "Netflix R100" -> "netflix")
+      const brandName = op.label.split(' ')[0].toLowerCase();
+      if (!categoryKeywords[cat].includes(brandName)) {
+        categoryKeywords[cat].push(brandName);
+      }
+    }
+    
+    // Add networks to their category keywords
+    for (const net of networks) {
+      const cat = net.category;
+      if (!categoryKeywords[cat]) categoryKeywords[cat] = [];
+      categoryKeywords[cat].push(net.networkCode.toLowerCase());
+    }
+    
+    // Find matching categories
+    const matches = [];
+    for (const [category, keywords] of Object.entries(categoryKeywords)) {
+      // Check if this category exists in our database
+      if (!categories.some(c => c.category === category)) continue;
+      
+      for (const keyword of keywords) {
+        if (lowerText.includes(keyword)) {
+          const existing = matches.find(m => m.category === category);
+          if (!existing) {
+            matches.push({ 
+              category, 
+              keyword, 
+              confidence: keyword.length > 5 ? 0.9 : 0.7,
+            });
+          }
+          break;
+        }
+      }
+    }
+    
+    logStructured('smart_product_query_matches', {
+      from,
+      matches: matches.map(m => m.category),
+      matchCount: matches.length,
+    });
+
+    // No matches - ask what they want
+    if (matches.length === 0) {
+      const availableCategories = categories.map(c => c.category);
+      const categoryNames = {
+        AIRTIME: 'Mobile Airtime',
+        DATA: 'Data Bundles',
+        ELECTRICITY: 'Prepaid Electricity',
+        LIFESTYLE: 'Lifestyle & OTT (Netflix, Uber)',
+        BILLPAY: 'Bill Payments (DStv)',
+        GAMING: 'Betting & Gaming',
+        REMITTANCE: 'Money Transfers',
+      };
+      
+      let message = `🤔 I'm not sure what product you're looking for.\n\nWe offer:\n`;
+      for (const cat of availableCategories) {
+        message += `• ${categoryNames[cat] || cat}\n`;
+      }
+      message += `\nWhich one would you like to see?`;
+      
+      return await sendWhatsAppText({
+        to: from,
+        text: message,
+      });
+    }
+    
+    // Single match - show products for that category
+    if (matches.length === 1) {
+      const category = matches[0].category;
+      return await showCategoryProducts({ from, account, category, text });
+    }
+    
+    // Multiple matches - ask for clarification
+    const categoryNames = {
+      AIRTIME: 'Mobile Airtime',
+      DATA: 'Data Bundles',
+      ELECTRICITY: 'Prepaid Electricity',
+      LIFESTYLE: 'Lifestyle & OTT',
+      BILLPAY: 'Bill Payments',
+      GAMING: 'Betting & Gaming',
+      REMITTANCE: 'Money Transfers',
+    };
+    
+    let message = `🤔 I found a few options. Did you mean:\n\n`;
+    for (const match of matches) {
+      message += `• ${categoryNames[match.category] || match.category}\n`;
+    }
+    message += `\nJust tell me which one!`;
+    
+    return await sendWhatsAppText({
+      to: from,
+      text: message,
+    });
+
+  } catch (error) {
+    console.error('Smart product query error:', error);
+    logStructured('smart_product_query_error', {
+      from,
+      error: error.message,
+    });
+    
+    // Fall back to listing all products
+    return await handleListVasProducts({ from, account });
+  }
+}
+
+/**
+ * Show products for a specific category
+ */
+async function showCategoryProducts({ from, account, category, text }) {
+  const lowerText = text?.toLowerCase() || '';
+  
+  logStructured('show_category_products', {
+    from,
+    accountId: account.id,
+    category,
+  });
+
+  try {
+    // Build query
+    const where = {
+      category,
+      active: true,
+    };
+    
+    // Extract network if mentioned (for AIRTIME/DATA)
+    let networkCode = null;
+    if (category === 'AIRTIME' || category === 'DATA') {
+      if (/vodacom/i.test(lowerText)) networkCode = 'VODACOM';
+      else if (/mtn/i.test(lowerText)) networkCode = 'MTN';
+      else if (/cell\s?c|cellc/i.test(lowerText)) networkCode = 'CELLC';
+      else if (/telkom/i.test(lowerText)) networkCode = 'TELKOM';
+      
+      if (networkCode) where.networkCode = networkCode;
+    }
+
+    // Get products
+    const products = await prisma.vasProduct.findMany({
+      where,
+      orderBy: [
+        { popularity: 'desc' },
+        { fixedPriceCents: 'asc' },
+      ],
+      take: 15,
+    });
+    
+    if (products.length === 0) {
+      return await sendWhatsAppText({
+        to: from,
+        text: `😕 I couldn't find any ${category.toLowerCase()} products right now.\n\nPlease try again later or ask "what can I buy?" to see all options.`,
+      });
+    }
+
+    // Format based on category
+    const categoryConfig = {
+      AIRTIME: {
+        emoji: '📱',
+        title: 'Mobile Airtime',
+        formatProduct: (p) => `R${(p.fixedPriceCents || p.priceCents) / 100} ${p.networkCode || ''} Airtime`,
+        helpText: 'Reply: *"Buy R50 airtime for 0821234567"*',
+      },
+      DATA: {
+        emoji: '📶',
+        title: networkCode ? `${networkCode} Data Bundles` : 'Data Bundles',
+        formatProduct: (p) => {
+          const sizeMb = p.dataMb;
+          const size = sizeMb >= 1024 ? `${(sizeMb / 1024).toFixed(sizeMb % 1024 === 0 ? 0 : 1)}GB` : `${sizeMb}MB`;
+          const price = ((p.fixedPriceCents || p.priceCents) / 100).toFixed(0);
+          const period = p.periodType ? ` (${p.periodType.toLowerCase()})` : '';
+          return `${size}${period} – R${price}`;
+        },
+        helpText: 'Reply: *"Buy 1GB data for 0821234567"*',
+      },
+      ELECTRICITY: {
+        emoji: '💡',
+        title: 'Prepaid Electricity',
+        formatProduct: (p) => {
+          const range = p.minCents && p.maxCents ? `R${p.minCents/100} - R${p.maxCents/100}` : 'Variable';
+          return `${p.label.split(' ')[0]} – ${range}`;
+        },
+        helpText: 'Reply: *"Buy R100 electricity for [meter number]"*',
+      },
+      LIFESTYLE: {
+        emoji: '🎮',
+        title: 'Lifestyle & OTT Vouchers',
+        formatProduct: (p) => {
+          const price = ((p.fixedPriceCents || p.priceCents) / 100).toFixed(0);
+          return `${p.label.split(' ')[0]} R${price}`;
+        },
+        helpText: 'Reply: *"Buy R100 Netflix voucher"*',
+      },
+      BILLPAY: {
+        emoji: '📺',
+        title: 'Bill Payments',
+        formatProduct: (p) => {
+          const price = p.fixedPriceCents ? `R${p.fixedPriceCents/100}` : 'Variable';
+          return `${p.label} – ${price}`;
+        },
+        helpText: 'Reply: *"Pay my DStv"*',
+      },
+      GAMING: {
+        emoji: '🎰',
+        title: 'Betting & Gaming',
+        formatProduct: (p) => {
+          const price = ((p.fixedPriceCents || p.priceCents) / 100).toFixed(0);
+          return `${p.label.split(' ')[0]} R${price}`;
+        },
+        helpText: 'Reply: *"Top up Hollywoodbets R50"*',
+      },
+      REMITTANCE: {
+        emoji: '💸',
+        title: 'Money Transfers',
+        formatProduct: (p) => {
+          const range = p.minCents && p.maxCents ? `R${p.minCents/100} - R${p.maxCents/100}` : 'Variable';
+          return `${p.label.split(' ')[0]} – ${range}`;
+        },
+        helpText: 'Reply: *"Send R500 via Mukuru"*',
+      },
+    };
+
+    const config = categoryConfig[category] || {
+      emoji: '🛒',
+      title: category,
+      formatProduct: (p) => p.label,
+      helpText: 'Tell me what you need!',
+    };
+
+    let message = `${config.emoji} *${config.title}*\n\n`;
+    
+    // Group by operator/network if applicable
+    const grouped = {};
+    for (const p of products) {
+      const key = p.operatorCode || p.networkCode || 'default';
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(p);
+    }
+    
+    if (Object.keys(grouped).length > 1) {
+      for (const [key, items] of Object.entries(grouped)) {
+        if (key !== 'default') message += `*${key}*\n`;
+        for (const p of items.slice(0, 5)) {
+          message += `• ${config.formatProduct(p)}\n`;
+        }
+        message += '\n';
+      }
+    } else {
+      for (const p of products.slice(0, 10)) {
+        message += `• ${config.formatProduct(p)}\n`;
+      }
+      message += '\n';
+    }
+    
+    message += `━━━━━━━━━━━━━━━━━━\n${config.helpText}`;
+
+    return await sendWhatsAppText({
+      to: from,
+      text: message,
+    });
+
+  } catch (error) {
+    console.error('Show category products error:', error);
+    return await sendWhatsAppText({
+      to: from,
+      text: `❌ Sorry, I couldn't load the products. Please try again.`,
     });
   }
 }
