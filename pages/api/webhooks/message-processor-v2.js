@@ -332,21 +332,39 @@ function detectExplicitIntent(text = '') {
 
   // =====================================================================
   // LIST VAS PRODUCTS - "What can I buy?", "Top 10 products", etc.
-  // Must check BEFORE specific bundle/airtime patterns
+  // Must check BEFORE specific bundle/airtime patterns and SMART_PRODUCT_QUERY
   // =====================================================================
   const vasProductPatterns = [
-    /what\s+(vas\s+)?products?\s+(can|do)\s+(i|you)/i,
+    // "what can I buy" variations (with optional words before/after)
     /what\s+(can|do)\s+(i|you)\s+buy/i,
-    /what\s+services?\s+(do\s+you|are|is)\s+(have|offer|available)/i,
-    /show\s+me\s+(your\s+)?(products?|services?|catalogue|catalog)/i,
-    /list\s+(all\s+)?(your\s+|of )?(the\s+)?(products?|services?)/i,
+    /show\s+(me\s+)?what\s+(i\s+can|can\s+i)\s+buy/i,
+    /what\s+can\s+i\s+(buy|get|purchase)/i,
+    
+    // "what products/services" variations
+    /what\s+(vas\s+)?products?\s+(can|do|are)/i,
+    /what\s+services?\s+(do\s+you|are|is|can\s+i)/i,
+    
+    // "show me products/services/catalogue"
+    /show\s+(me\s+)?(your\s+)?(all\s+)?(the\s+)?(products?|services?|catalogue|catalog|options?)/i,
+    
+    // "list products" variations
+    /list\s+(all\s+)?(your\s+|of )?(the\s+)?(products?|services?|options?)/i,
+    
+    // Direct questions
+    /what\s+do\s+you\s+(sell|offer|have)/i,
+    /what('s|s|\s+is)\s+available/i,
+    /what\s+do\s+you\s+have/i,
+    
+    // "top products"
     /top\s*\d*\s*(vas\s+)?products?/i,
-    /what's\s+available/i,
-    /what\s+do\s+you\s+sell/i,
-    /what\s+can\s+i\s+buy(\s+on\s+wapay)?/i,
-    /can\s+(i|you)\s+list\s+(all|the)?\s*(products?|services?)/i,
-    /products?\s+(i\s+can|that\s+i\s+can|available)/i,
-    /all\s+(of\s+)?(the\s+)?products?/i,
+    
+    // Other common variations
+    /products?\s+(i\s+can|that\s+i\s+can|available|you\s+(have|sell|offer))/i,
+    /all\s+(of\s+)?(the\s+)?(products?|services?|options?)/i,
+    /your\s+(full\s+)?(product|service)\s*(list|catalogue|catalog|menu)/i,
+    
+    // "can I see" variations
+    /can\s+(i|you)\s+(see|show|list)\s+(all\s+)?(the\s+)?(products?|services?|options?)/i,
   ];
 
   for (const pattern of vasProductPatterns) {
