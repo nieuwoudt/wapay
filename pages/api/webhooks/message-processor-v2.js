@@ -5,7 +5,7 @@
  * Includes structured logging for debugging VAS flows.
  */
 
-import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory } from './user-manager.js';
+import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory, setActiveCategory, getActiveCategory, clearActiveCategory } from './user-manager.js';
 import { sendWhatsAppText } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
 import { BluClient } from '@wapay/providers-blu';
@@ -34,6 +34,7 @@ function logStructured(type, data) {
 
 /**
  * Blu QA Test Numbers - Whitelisted by Blu for testing
+ * These are valid test MSISDNs confirmed by Blu support
  */
 const BLU_QA_TEST_NUMBERS = new Set([
   '0840012300', // Cell C
@@ -43,18 +44,40 @@ const BLU_QA_TEST_NUMBERS = new Set([
 ]);
 
 /**
+ * SA Mobile Number Regex
+ * Valid prefixes: 06x, 07x, 08x (covers all SA mobile networks)
+ * - 060-069: MTN, Vodacom
+ * - 070-079: Vodacom, Cell C, Telkom
+ * - 080-089: MTN, Vodacom, Cell C, Telkom (includes 085 Telkom)
+ */
+const SA_MSISDN_REGEX = /^0[6-8]\d{8}$/;
+
+/**
  * Validate SA mobile number format
  * Accepts standard SA mobile format + Blu QA test numbers
  */
 function isValidMsisdn(msisdn) {
-  // Whitelist Blu QA test numbers
-  if (BLU_QA_TEST_NUMBERS.has(msisdn)) {
+  if (!msisdn || typeof msisdn !== 'string') {
+    return false;
+  }
+  
+  // Clean the number first (remove any non-digit characters)
+  const cleaned = msisdn.replace(/\D/g, '');
+  
+  // Whitelist Blu QA test numbers (check both original and cleaned)
+  if (BLU_QA_TEST_NUMBERS.has(msisdn) || BLU_QA_TEST_NUMBERS.has(cleaned)) {
+    console.log(`✅ MSISDN ${msisdn} matched Blu QA whitelist`);
     return true;
   }
   
-  // Standard SA mobile: 10 digits starting with 0
-  // Prefixes: 06x, 07x, 08x
-  return /^0\d{9}$/.test(msisdn);
+  // Standard SA mobile: 10 digits, prefix 06x/07x/08x
+  const isValid = SA_MSISDN_REGEX.test(cleaned);
+  
+  if (!isValid) {
+    console.log(`❌ MSISDN validation failed: ${msisdn} (cleaned: ${cleaned})`);
+  }
+  
+  return isValid;
 }
 
 /**
@@ -177,6 +200,94 @@ async function handlePostOnboarding({ account, from, text }) {
   if (state) {
     console.log('💬 User in conversation state:', state);
     return await handleConversationState({ from, text, state, data, account });
+  }
+
+  // =====================================================================
+  // CONTEXT-AWARE INTENT DETECTION
+  // Check if user was recently browsing a category - interpret follow-ups
+  // in that context instead of defaulting to airtime
+  // =====================================================================
+  const categoryContext = await getActiveCategory(from);
+  const normalized = text.toLowerCase().trim();
+  
+  if (categoryContext.isValid && categoryContext.category) {
+    const category = categoryContext.category;
+    const amountMatch = text.match(/r?\s?(\d+)/i);
+    
+    // Check if this looks like a follow-up to the category they were browsing
+    const isFollowUp = amountMatch || 
+                       /^(yes|ok|buy|get|top\s*up|1|2|3|first|second|that\s*one)$/i.test(normalized) ||
+                       /^r?\d+/i.test(normalized);
+    
+    if (isFollowUp) {
+      console.log(`🎯 Context-aware: User was browsing ${category}, interpreting "${text}" in that context`);
+      
+      logStructured('context_aware_intent', {
+        from,
+        text,
+        category,
+        amountMatch: amountMatch?.[1],
+        categoryTimestamp: categoryContext.timestamp,
+      });
+      
+      // Clear the category context since we're acting on it
+      await clearActiveCategory(from);
+      
+      // Route to appropriate category handler
+      const amount = amountMatch ? parseInt(amountMatch[1]) : null;
+      
+      switch (category) {
+        case 'GAMING':
+          // Gaming top-up flow
+          if (amount) {
+            return await sendWhatsAppText({
+              to: from,
+              text: `🎮 *Betting Top-ups Coming Soon!*\n\nYou wanted: R${amount} for gaming\n\nThis feature is launching soon! For now, try:\n• Buy airtime\n• Buy electricity\n• Redeem a voucher`,
+            });
+          }
+          return await handleListGamingProducts({ from, account });
+          
+        case 'LIFESTYLE':
+          // Lifestyle voucher flow
+          if (amount) {
+            return await sendWhatsAppText({
+              to: from,
+              text: `🎬 *Lifestyle Vouchers Coming Soon!*\n\nYou wanted: R${amount} voucher\n\nThis feature is launching soon! For now, try:\n• Buy airtime\n• Buy electricity\n• Redeem a voucher`,
+            });
+          }
+          return await handleListLifestyleProducts({ from, account });
+          
+        case 'ELECTRICITY':
+          // Electricity purchase flow - start it
+          if (amount) {
+            await updateConversationState(from, 'ELECTRICITY_METER', { amountCents: amount * 100 });
+            return await sendWhatsAppText({
+              to: from,
+              text: `💡 *Buy R${amount} Electricity*\n\nPlease enter your meter number:`,
+            });
+          }
+          return await handleListElectricityProducts({ from, account });
+          
+        case 'AIRTIME':
+          // Airtime flow - start it
+          if (amount) {
+            await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents: amount * 100 });
+            return await sendWhatsAppText({
+              to: from,
+              text: `📱 *Buy R${amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`,
+            });
+          }
+          return await handleListAirtimeBundles({ from, account, networkCode: null });
+          
+        case 'DATA':
+          // Data flow
+          return await handleListDataBundles({ from, account, entities: {} });
+          
+        default:
+          // Unknown category - fall through to normal detection
+          break;
+      }
+    }
   }
 
   // Detect ONLY explicit intents, route everything else to AI
@@ -706,7 +817,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             return await sendWhatsAppText({
               to: from,
               text: `🔐 *Enter Your PIN*\n\n` +
-                    `To complete your R${amountCents / 100} airtime purchase to ${msisdn}, please enter your 5-digit WaPay PIN.`,
+                    `To complete your R${amountCents / 100} airtime purchase to ${msisdn}, please enter your WaPay PIN.`,
             });
             
           } catch (error) {
@@ -745,9 +856,9 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
-        // If not exactly 5 digits, provide helpful message
+        // PIN must be 4-6 digits (as defined in packages/auth/src/pin.ts)
         const digitsOnly = text.replace(/[^\d]/g, '');
-        if (digitsOnly.length !== 5) {
+        if (digitsOnly.length < 4 || digitsOnly.length > 6) {
           // If no digits at all, user probably wants out
           if (digitsOnly.length === 0) {
             await updateConversationState(from, null);
@@ -759,7 +870,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           
           return await sendWhatsAppText({
             to: from,
-            text: `❌ Invalid PIN. Please enter your 5-digit WaPay PIN.\n\nReply "cancel" to stop.`,
+            text: `❌ Invalid PIN. Please enter your 4-6 digit WaPay PIN.\n\nReply "cancel" to stop.`,
           });
         }
         
@@ -991,24 +1102,71 @@ async function handleConversationState({ from, text, state, data, account }) {
           }
           
           // Log execute initiated
-          logStructured('vas_electricity_execute_initiated', {
+          logStructured('vas_electricity_preview_initiated', {
             from,
             accountId: account.id,
             meterNumber,
             amountCents,
           });
           
-          // Ask for PIN
-          await updateConversationState(from, 'ELECTRICITY_PIN', { 
-            amountCents,
-            meterNumber,
-          });
-          
-          return await sendWhatsAppText({
-            to: from,
-            text: `🔐 *Enter Your PIN*\n\n` +
-                  `To complete your R${amountCents / 100} electricity purchase, please enter your 5-digit WaPay PIN.`,
-          });
+          // Call preview API to validate balance and create preview
+          try {
+            const previewRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/vas/electricity/preview`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                accountId: account.id,
+                meterNumber,
+                amountCents,
+              }),
+            });
+            
+            const previewData = await previewRes.json();
+            
+            if (!previewData.ok) {
+              logStructured('vas_electricity_preview_failed', {
+                from,
+                accountId: account.id,
+                error: previewData.error,
+                message: previewData.message,
+              });
+              
+              await updateConversationState(from, null);
+              return await sendWhatsAppText({
+                to: from,
+                text: `❌ ${previewData.message || 'Could not process electricity purchase.'}\n\nPlease try again later.`,
+              });
+            }
+            
+            // Ask for PIN with preview details
+            await updateConversationState(from, 'ELECTRICITY_PIN', { 
+              previewId: previewData.previewId,
+              amountCents,
+              meterNumber,
+              serviceFee: previewData.preview?.serviceFee,
+              totalCents: previewData.preview?.totalCents,
+            });
+            
+            return await sendWhatsAppText({
+              to: from,
+              text: `🔐 *Enter Your PIN*\n\n` +
+                    `To complete your R${amountCents / 100} electricity purchase, please enter your WaPay PIN.`,
+            });
+            
+          } catch (error) {
+            console.error('Electricity preview API error:', error);
+            logStructured('vas_electricity_preview_error', {
+              from,
+              accountId: account.id,
+              error: error.message,
+            });
+            
+            await updateConversationState(from, null);
+            return await sendWhatsAppText({
+              to: from,
+              text: `❌ Service temporarily unavailable. Please try again later.`,
+            });
+          }
         }
         
         return await sendWhatsAppText({
@@ -1031,19 +1189,26 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
-        // Validate PIN format
+        // PIN must be 4-6 digits (as defined in packages/auth/src/pin.ts)
         const digitsOnly = text.replace(/[^\d]/g, '');
-        if (digitsOnly.length !== 5) {
+        if (digitsOnly.length < 4 || digitsOnly.length > 6) {
+          if (digitsOnly.length === 0) {
+            await updateConversationState(from, null);
+            return await sendWhatsAppText({
+              to: from,
+              text: `I've cancelled the electricity purchase. What else can I help you with?`,
+            });
+          }
           return await sendWhatsAppText({
             to: from,
-            text: `❌ Please enter your 5-digit PIN.\n\nOr reply "cancel" to stop.`,
+            text: `❌ Please enter your 4-6 digit WaPay PIN.\n\nOr reply "cancel" to stop.`,
           });
         }
         
         const pin = digitsOnly;
-        const { amountCents, meterNumber } = data || {};
+        const { previewId, amountCents, meterNumber } = data || {};
         
-        if (!amountCents || !meterNumber) {
+        if (!previewId || !amountCents || !meterNumber) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
@@ -1051,29 +1216,87 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
-        // For now, electricity is coming soon
-        // Clear state
-        await updateConversationState(from, null);
-        
-        logStructured('vas_electricity_execute_pending', {
-          from,
-          accountId: account.id,
-          meterNumber,
-          amountCents,
-          status: 'coming_soon',
-        });
-        
-        return await sendWhatsAppText({
+        // Send processing message
+        await sendWhatsAppText({
           to: from,
-          text: `⚡ *Electricity Purchases Coming Soon!*\n\n` +
-                `We're still connecting to electricity providers.\n\n` +
-                `Your request:\n` +
-                `• Amount: R${amountCents / 100}\n` +
-                `• Meter: ${meterNumber}\n\n` +
-                `We'll notify you when this service is live! For now, try:\n` +
-                `• Buy airtime\n` +
-                `• Redeem a voucher`,
+          text: `⏳ Processing your electricity purchase...`,
         });
+        
+        // Call execute API
+        try {
+          const executeRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/vas/electricity/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              previewId,
+              accountId: account.id,
+              pin,
+            }),
+          });
+          
+          const executeData = await executeRes.json();
+          
+          // Clear state
+          await updateConversationState(from, null);
+          
+          if (!executeData.ok) {
+            logStructured('vas_electricity_execute_failed', {
+              from,
+              accountId: account.id,
+              previewId,
+              error: executeData.error,
+              message: executeData.message,
+            });
+            
+            return await sendWhatsAppText({
+              to: from,
+              text: `❌ ${executeData.message || 'Electricity purchase failed.'}\n\nPlease try again later.`,
+            });
+          }
+          
+          // Success!
+          logStructured('vas_electricity_execute_success', {
+            from,
+            accountId: account.id,
+            previewId,
+            providerRef: executeData.reference,
+            token: executeData.transaction?.token,
+            amountCents,
+            meterNumber,
+          });
+          
+          // Format token for display (add spaces every 4 digits for readability)
+          const token = executeData.transaction?.token || 'N/A';
+          const formattedToken = token.replace(/(.{4})/g, '$1 ').trim();
+          
+          return await sendWhatsAppText({
+            to: from,
+            text: `✅ *Electricity Purchase Successful!*\n\n` +
+                  `⚡ Token: *${formattedToken}*\n\n` +
+                  `💰 Amount: R${amountCents / 100}\n` +
+                  `📟 Meter: ${meterNumber}\n` +
+                  `🔋 Units: ${executeData.transaction?.units || 'N/A'} kWh\n` +
+                  `📝 Reference: ${executeData.reference}\n` +
+                  `💳 New Balance: R${(executeData.transaction?.newBalance / 100).toFixed(2)}\n\n` +
+                  `Enter this token into your prepaid meter. Thank you for using WaPay! 🎉`,
+          });
+          
+        } catch (error) {
+          console.error('Electricity execute API error:', error);
+          await updateConversationState(from, null);
+          
+          logStructured('vas_electricity_execute_error', {
+            from,
+            accountId: account.id,
+            previewId,
+            error: error.message,
+          });
+          
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ Service temporarily unavailable. Please try again later.`,
+          });
+        }
       }
 
     default:
@@ -1757,6 +1980,87 @@ async function showCategoryProducts({ from, account, category, text }) {
 // ==============================================================================
 
 /**
+ * Handle listing airtime options
+ */
+async function handleListAirtimeBundles({ from, account, networkCode }) {
+  logStructured('vas_airtime_fetch_call', {
+    from,
+    accountId: account.id,
+    intent: 'LIST_AIRTIME',
+    networkCode,
+  });
+
+  try {
+    // Build query
+    const where = {
+      category: 'AIRTIME',
+      active: true,
+    };
+    
+    if (networkCode) {
+      where.networkCode = networkCode;
+    }
+
+    const products = await prisma.vasProduct.findMany({
+      where,
+      orderBy: [
+        { networkCode: 'asc' },
+        { fixedPriceCents: 'asc' },
+      ],
+      take: 20,
+    });
+
+    if (products.length === 0) {
+      // No products in DB - show generic airtime info
+      let message = `📱 *Airtime*\n\nYou can buy airtime for any SA network:\n\n`;
+      message += `• Vodacom\n• MTN\n• Cell C\n• Telkom\n\n`;
+      message += `Amount: R5 - R1000\n\n`;
+      message += `Reply: *"Buy R50 airtime for 0821234567"* and I'll help you!`;
+      
+      await setActiveCategory(from, 'AIRTIME', ['VODACOM', 'MTN', 'CELLC', 'TELKOM']);
+      
+      return await sendWhatsAppText({
+        to: from,
+        text: message,
+      });
+    }
+
+    // Group by network
+    const byNetwork = {};
+    for (const p of products) {
+      const net = p.networkCode || 'OTHER';
+      if (!byNetwork[net]) byNetwork[net] = [];
+      byNetwork[net].push(p);
+    }
+
+    const networkDisplay = networkCode ? `${networkCode} ` : '';
+    let message = `📱 *${networkDisplay}Airtime Options*\n\n`;
+    
+    for (const [network, networkProducts] of Object.entries(byNetwork)) {
+      message += `*${network}*\n`;
+      message += `   R5 - R1000 (any amount)\n\n`;
+    }
+    
+    message += `Reply: *"Buy R50 airtime for 0821234567"* and I'll help you purchase!`;
+
+    // Set active category so follow-up messages are interpreted correctly
+    await setActiveCategory(from, 'AIRTIME', Object.keys(byNetwork));
+    
+    return await sendWhatsAppText({
+      to: from,
+      text: message,
+    });
+
+  } catch (error) {
+    console.error('List airtime error:', error);
+    return await sendWhatsAppText({
+      to: from,
+      text: `❌ Sorry, I couldn't fetch the airtime options right now. Please try again later.`,
+    });
+  }
+}
+
+/**
  * Handle listing data bundles from the catalogue
  */
 async function handleListDataBundles({ from, account, entities }) {
@@ -1844,6 +2148,9 @@ async function handleListDataBundles({ from, account, entities }) {
     
     message += `Reply like: *"Buy 1GB data for 0821234567"* and I'll help you purchase.`;
     
+    // Set active category so follow-up messages are interpreted correctly
+    await setActiveCategory(from, 'DATA', bundles.map(b => b.label).slice(0, 5));
+    
     return await sendWhatsAppText({
       to: from,
       text: message,
@@ -1924,6 +2231,9 @@ async function handleListElectricityProducts({ from, account }) {
     message += `Reply: *"Buy R50 electricity for [meter number]"*\n\n`;
     message += `I'll help you purchase electricity tokens! ⚡`;
 
+    // Set active category so follow-up messages are interpreted correctly
+    await setActiveCategory(from, 'ELECTRICITY', Object.keys(byOperator));
+    
     return await sendWhatsAppText({
       to: from,
       text: message,
@@ -1998,6 +2308,9 @@ async function handleListLifestyleProducts({ from, account }) {
     
     message += `Reply: *"Buy R50 Netflix voucher"* and I'll help you purchase.`;
 
+    // Set active category so follow-up messages are interpreted correctly
+    await setActiveCategory(from, 'LIFESTYLE', Object.keys(byOperator));
+    
     return await sendWhatsAppText({
       to: from,
       text: message,
@@ -2118,6 +2431,9 @@ async function handleListGamingProducts({ from, account }) {
     
     message += `Reply: *"Top up Hollywoodbets R50"* and I'll help you.`;
 
+    // Set active category so follow-up messages are interpreted correctly
+    await setActiveCategory(from, 'GAMING', Object.keys(byOperator));
+    
     return await sendWhatsAppText({
       to: from,
       text: message,

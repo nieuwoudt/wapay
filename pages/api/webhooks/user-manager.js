@@ -200,6 +200,118 @@ export async function getConversationHistory(waId, limit = 5) {
 }
 
 /**
+ * Set active category context
+ * Used to track what category the user was browsing
+ * so follow-up messages can be interpreted correctly
+ */
+export async function setActiveCategory(waId, category, products = []) {
+  try {
+    const account = await prisma.account.findFirst({
+      where: { waId },
+      select: {
+        conversationData: true,
+      },
+    });
+    
+    const existingData = account?.conversationData || {};
+    
+    await prisma.account.update({
+      where: { waId },
+      data: {
+        conversationData: {
+          ...existingData,
+          activeCategory: category,
+          categoryTimestamp: Date.now(),
+          recentProducts: products.slice(0, 5), // Store up to 5 recent products shown
+        },
+      },
+    });
+    
+    console.log('✅ Active category set:', { waId, category });
+    return { ok: true };
+  } catch (error) {
+    console.error('❌ Error setting active category:', error);
+    return { ok: false, error: error.message };
+  }
+}
+
+/**
+ * Get active category context
+ * Returns the category user was browsing and when
+ */
+export async function getActiveCategory(waId) {
+  try {
+    const account = await prisma.account.findFirst({
+      where: { waId },
+      select: {
+        conversationData: true,
+      },
+    });
+    
+    const data = account?.conversationData || {};
+    
+    // Check if context is still valid (within 5 minutes)
+    const categoryTimestamp = data.categoryTimestamp;
+    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+    
+    if (categoryTimestamp && categoryTimestamp > fiveMinutesAgo) {
+      return {
+        category: data.activeCategory || null,
+        timestamp: categoryTimestamp,
+        products: data.recentProducts || [],
+        isValid: true,
+      };
+    }
+    
+    return {
+      category: null,
+      timestamp: null,
+      products: [],
+      isValid: false,
+    };
+  } catch (error) {
+    console.error('❌ Error getting active category:', error);
+    return {
+      category: null,
+      timestamp: null,
+      products: [],
+      isValid: false,
+    };
+  }
+}
+
+/**
+ * Clear active category context
+ */
+export async function clearActiveCategory(waId) {
+  try {
+    const account = await prisma.account.findFirst({
+      where: { waId },
+      select: {
+        conversationData: true,
+      },
+    });
+    
+    const existingData = account?.conversationData || {};
+    
+    // Remove category context but keep history
+    const { activeCategory, categoryTimestamp, recentProducts, ...rest } = existingData;
+    
+    await prisma.account.update({
+      where: { waId },
+      data: {
+        conversationData: rest,
+      },
+    });
+    
+    return { ok: true };
+  } catch (error) {
+    console.error('❌ Error clearing active category:', error);
+    return { ok: false, error: error.message };
+  }
+}
+
+/**
  * Get user balance
  */
 export async function getUserBalance(waId) {
