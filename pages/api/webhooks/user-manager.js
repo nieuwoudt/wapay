@@ -133,6 +133,73 @@ export async function getConversationState(waId) {
 }
 
 /**
+ * Add message to conversation history
+ * Stores last 10 messages for context
+ */
+export async function addToConversationHistory(waId, role, text) {
+  try {
+    const account = await prisma.account.findFirst({
+      where: { waId },
+      select: {
+        conversationData: true,
+      },
+    });
+    
+    const existingData = account?.conversationData || {};
+    const history = existingData.history || [];
+    
+    // Add new message
+    history.push({
+      role, // 'user' or 'assistant'
+      text,
+      timestamp: new Date().toISOString(),
+    });
+    
+    // Keep only last 10 messages
+    const trimmedHistory = history.slice(-10);
+    
+    await prisma.account.update({
+      where: { waId },
+      data: {
+        conversationData: {
+          ...existingData,
+          history: trimmedHistory,
+        },
+      },
+    });
+    
+    return { ok: true };
+  } catch (error) {
+    console.error('❌ Error adding to conversation history:', error);
+    return { ok: false, error: error.message };
+  }
+}
+
+/**
+ * Get recent conversation history
+ * Returns last N messages for AI context
+ */
+export async function getConversationHistory(waId, limit = 5) {
+  try {
+    const account = await prisma.account.findFirst({
+      where: { waId },
+      select: {
+        conversationData: true,
+      },
+    });
+    
+    const existingData = account?.conversationData || {};
+    const history = existingData.history || [];
+    
+    // Return last N messages
+    return history.slice(-limit);
+  } catch (error) {
+    console.error('❌ Error getting conversation history:', error);
+    return [];
+  }
+}
+
+/**
  * Get user balance
  */
 export async function getUserBalance(waId) {

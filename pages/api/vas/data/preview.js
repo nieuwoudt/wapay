@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
-  const { accountId, msisdn, productId, vendorId } = req.body;
+    const { accountId, msisdn, productId, vendorId } = req.body;
 
   // Log the preview call
   logStructured('vas_data_preview_call', {

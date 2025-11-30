@@ -5,7 +5,7 @@
  * Includes structured logging for debugging VAS flows.
  */
 
-import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState } from './user-manager.js';
+import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory } from './user-manager.js';
 import { sendWhatsAppText } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
 import { BluClient } from '@wapay/providers-blu';
@@ -862,6 +862,220 @@ async function handleConversationState({ from, text, state, data, account }) {
         text: `This feature is coming soon! For now, try:\n• "balance" - Check your balance\n• "redeem voucher" - Add money to your wallet`,
       });
 
+    // =================================================================
+    // ELECTRICITY PURCHASE FLOW
+    // =================================================================
+    case 'ELECTRICITY_AMOUNT':
+      // User needs to provide amount for electricity
+      {
+        const normalized = text.trim().toLowerCase();
+        
+        // Cancel keywords
+        if (/^(cancel|stop|no|reset|restart|quit|exit|back)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `👍 Electricity purchase cancelled. Let me know if you need anything else.`,
+          });
+        }
+        
+        // Extract amount from text (R50, R 100, 500, etc)
+        const amountMatch = text.match(/r?\s?(\d+)/i);
+        if (!amountMatch) {
+          return await sendWhatsAppText({
+            to: from,
+            text: `💡 Please enter an amount (e.g., R50, R100, R500)\n\nMin R10, Max R5000\n\nOr reply "cancel" to stop.`,
+          });
+        }
+        
+        const amount = parseInt(amountMatch[1]);
+        if (amount < 10 || amount > 5000) {
+          return await sendWhatsAppText({
+            to: from,
+            text: `💡 Amount must be between R10 and R5000.\n\nPlease enter a valid amount (e.g., R50, R100)`,
+          });
+        }
+        
+        const existingData = data || {};
+        
+        // If we already have meter number, go to confirm
+        if (existingData.meterNumber) {
+          await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
+            amountCents: amount * 100,
+            meterNumber: existingData.meterNumber,
+          });
+          return await sendWhatsAppText({
+            to: from,
+            text: `💡 *Buy Electricity*\n\nAmount: R${amount}\nMeter: ${existingData.meterNumber}\n\nReply *YES* to confirm or *NO* to cancel.`,
+          });
+        }
+        
+        // Need meter number
+        await updateConversationState(from, 'ELECTRICITY_METER', {
+          amountCents: amount * 100,
+        });
+        return await sendWhatsAppText({
+          to: from,
+          text: `💡 *Buy R${amount} Electricity*\n\nPlease enter your meter number:`,
+        });
+      }
+
+    case 'ELECTRICITY_METER':
+      // User needs to provide meter number
+      {
+        const normalized = text.trim().toLowerCase();
+        
+        // Cancel keywords
+        if (/^(cancel|stop|no|reset|restart|quit|exit|back)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `👍 Electricity purchase cancelled. Let me know if you need anything else.`,
+          });
+        }
+        
+        // Meter numbers are typically 10-14 digits
+        const meterNumber = text.trim().replace(/[\s-]/g, '');
+        if (!/^\d{8,14}$/.test(meterNumber)) {
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ That doesn't look like a valid meter number.\n\nMeter numbers are usually 10-14 digits.\n\nPlease enter your meter number or reply "cancel" to stop.`,
+          });
+        }
+        
+        const existingData = data || {};
+        
+        // Go to confirm
+        await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
+          amountCents: existingData.amountCents || 5000, // Default to R50 if missing
+          meterNumber,
+        });
+        return await sendWhatsAppText({
+          to: from,
+          text: `💡 *Buy Electricity*\n\nAmount: R${(existingData.amountCents || 5000) / 100}\nMeter: ${meterNumber}\n\nReply *YES* to confirm or *NO* to cancel.`,
+        });
+      }
+
+    case 'ELECTRICITY_CONFIRM':
+      // User confirming electricity purchase
+      {
+        const normalized = text.trim().toLowerCase();
+        
+        // Cancel keywords
+        if (/^(no|cancel|stop|reset|restart)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `👍 Electricity purchase cancelled. Let me know if you need anything else.`,
+          });
+        }
+        
+        // Not yes/no - clear state
+        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `I've cancelled that request. Feel free to ask me anything else!`,
+          });
+        }
+        
+        if (/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
+          const { amountCents, meterNumber } = data || {};
+          
+          if (!amountCents || !meterNumber) {
+            await updateConversationState(from, null);
+            return await sendWhatsAppText({
+              to: from,
+              text: `❌ Something went wrong. Please start again by saying "buy electricity".`,
+            });
+          }
+          
+          // Log execute initiated
+          logStructured('vas_electricity_execute_initiated', {
+            from,
+            accountId: account.id,
+            meterNumber,
+            amountCents,
+          });
+          
+          // Ask for PIN
+          await updateConversationState(from, 'ELECTRICITY_PIN', { 
+            amountCents,
+            meterNumber,
+          });
+          
+          return await sendWhatsAppText({
+            to: from,
+            text: `🔐 *Enter Your PIN*\n\n` +
+                  `To complete your R${amountCents / 100} electricity purchase, please enter your 5-digit WaPay PIN.`,
+          });
+        }
+        
+        return await sendWhatsAppText({
+          to: from,
+          text: `Please reply *YES* to confirm or *NO* to cancel.`,
+        });
+      }
+
+    case 'ELECTRICITY_PIN':
+      // User entering PIN for electricity purchase
+      {
+        const normalized = text.trim();
+        
+        // Cancel keywords
+        if (/^(cancel|stop|no|reset|restart)$/i.test(normalized.toLowerCase())) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `👍 Electricity purchase cancelled.`,
+          });
+        }
+        
+        // Validate PIN format
+        const digitsOnly = text.replace(/[^\d]/g, '');
+        if (digitsOnly.length !== 5) {
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ Please enter your 5-digit PIN.\n\nOr reply "cancel" to stop.`,
+          });
+        }
+        
+        const pin = digitsOnly;
+        const { amountCents, meterNumber } = data || {};
+        
+        if (!amountCents || !meterNumber) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ Session expired. Please start again by saying "buy electricity".`,
+          });
+        }
+        
+        // For now, electricity is coming soon
+        // Clear state
+        await updateConversationState(from, null);
+        
+        logStructured('vas_electricity_execute_pending', {
+          from,
+          accountId: account.id,
+          meterNumber,
+          amountCents,
+          status: 'coming_soon',
+        });
+        
+        return await sendWhatsAppText({
+          to: from,
+          text: `⚡ *Electricity Purchases Coming Soon!*\n\n` +
+                `We're still connecting to electricity providers.\n\n` +
+                `Your request:\n` +
+                `• Amount: R${amountCents / 100}\n` +
+                `• Meter: ${meterNumber}\n\n` +
+                `We'll notify you when this service is live! For now, try:\n` +
+                `• Buy airtime\n` +
+                `• Redeem a voucher`,
+        });
+      }
+
     default:
       // Unknown state, route to AI for help
       await updateConversationState(from, null);
@@ -871,21 +1085,33 @@ async function handleConversationState({ from, text, state, data, account }) {
 
 /**
  * Handle AI chat for unknown queries
+ * Now uses conversation history for context
  */
 async function handleAIChat({ from, text, account }) {
   console.log('🤖 Routing to AI chat:', text);
 
+  // Store user message in conversation history
+  await addToConversationHistory(from, 'user', text);
+
   // Check if OpenAI is configured
   if (!process.env.OPENAI_API_KEY) {
     console.log('⚠️ OpenAI not configured, using fallback');
+    const fallbackMsg = `👋 Hi there!\n\nI didn't quite understand that. Here's what I can help you with:\n\n💰 Check balance\n📱 Buy airtime\n📶 Buy data\n💡 Buy electricity\n🎬 Lifestyle vouchers\n🎮 Betting top-ups\n🎟️ Redeem voucher\n\nType "help" to see more options!`;
+    await addToConversationHistory(from, 'assistant', fallbackMsg);
     return await sendWhatsAppText({
       to: from,
-      text: `👋 Hi there!\n\nI didn't quite understand that. Here's what I can help you with:\n\n💰 Check balance\n📱 Buy airtime\n📶 Buy data\n🎟️ Redeem voucher\n\nType "help" to see more options!`,
+      text: fallbackMsg,
     });
   }
 
   try {
-    const aiResponse = await chatWithAI(text);
+    // Get conversation history for context
+    const history = await getConversationHistory(from, 5);
+    const contextString = history.length > 0 
+      ? `RECENT CONVERSATION:\n${history.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n')}\n\nNow respond to the latest message.`
+      : '';
+
+    const aiResponse = await chatWithAI(text, contextString);
 
     // Log AI response with intent
     if (aiResponse.triggerAction && aiResponse.intent) {
@@ -904,10 +1130,9 @@ async function handleAIChat({ from, text, account }) {
       console.log('🎯 AI detected intent:', aiResponse.intent, aiResponse.entities);
 
       // IMPORTANT: Do NOT send raw JSON to users
-      // Extract only the text field if it's a structured response
       const responseText = typeof aiResponse.text === 'string' ? aiResponse.text : 'Let me help you with that.';
 
-      // Then handle the intent (send acknowledgment only for actions that need follow-up)
+      // Handle each intent
       switch (aiResponse.intent) {
         case 'BUY_AIRTIME':
           // Start airtime flow
@@ -915,47 +1140,135 @@ async function handleAIChat({ from, text, account }) {
             await updateConversationState(from, 'AIRTIME_MSISDN', { 
               amountCents: aiResponse.entities.amount * 100 
             });
-          return await sendWhatsAppText({
-            to: from,
-              text: `📱 *Buy R${aiResponse.entities.amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`,
+            const msg = `📱 *Buy R${aiResponse.entities.amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`;
+            await addToConversationHistory(from, 'assistant', msg);
+            return await sendWhatsAppText({
+              to: from,
+              text: msg,
             });
           }
           
           await updateConversationState(from, 'AIRTIME_AMOUNT', aiResponse.entities || {});
+          const airtimeMsg = `📱 *Buy Airtime*\n\nHow much airtime would you like to buy?\n\nReply with an amount (e.g., R10, R50, R100)`;
+          await addToConversationHistory(from, 'assistant', airtimeMsg);
           return await sendWhatsAppText({
             to: from,
-            text: `📱 *Buy Airtime*\n\nHow much airtime would you like to buy?\n\nReply with an amount (e.g., R10, R50, R100)`,
+            text: airtimeMsg,
           });
 
         case 'BUY_DATA':
           await updateConversationState(from, 'AI_DATA_PURCHASE', aiResponse.entities);
+          const dataMsg = `📶 Data bundles are coming soon! For now, you can:\n• Check your balance\n• Buy airtime\n• Redeem a voucher`;
+          await addToConversationHistory(from, 'assistant', dataMsg);
           return await sendWhatsAppText({
             to: from,
-            text: `📶 Data bundles are coming soon! For now, you can:\n• Check your balance\n• Buy airtime\n• Redeem a voucher`,
+            text: dataMsg,
           });
+
+        case 'BUY_ELECTRICITY':
+          // Start electricity purchase flow
+          if (aiResponse.entities?.amount && aiResponse.entities?.meterNumber) {
+            // Both amount and meter provided - go to confirm
+            await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
+              amountCents: aiResponse.entities.amount * 100,
+              meterNumber: aiResponse.entities.meterNumber,
+            });
+            const confirmMsg = `💡 *Buy Electricity*\n\nAmount: R${aiResponse.entities.amount}\nMeter: ${aiResponse.entities.meterNumber}\n\nReply *YES* to confirm or *NO* to cancel.`;
+            await addToConversationHistory(from, 'assistant', confirmMsg);
+            return await sendWhatsAppText({
+              to: from,
+              text: confirmMsg,
+            });
+          } else if (aiResponse.entities?.amount) {
+            // Amount provided, need meter number
+            await updateConversationState(from, 'ELECTRICITY_METER', {
+              amountCents: aiResponse.entities.amount * 100,
+            });
+            const meterMsg = `💡 *Buy R${aiResponse.entities.amount} Electricity*\n\nPlease enter your meter number:`;
+            await addToConversationHistory(from, 'assistant', meterMsg);
+            return await sendWhatsAppText({
+              to: from,
+              text: meterMsg,
+            });
+          } else {
+            // Need amount
+            await updateConversationState(from, 'ELECTRICITY_AMOUNT', {
+              meterNumber: aiResponse.entities?.meterNumber,
+            });
+            const amountMsg = `💡 *Buy Electricity*\n\nHow much electricity would you like to buy?\n\nReply with an amount (e.g., R50, R100, R500)\n(Min R10, Max R5000)`;
+            await addToConversationHistory(from, 'assistant', amountMsg);
+            return await sendWhatsAppText({
+              to: from,
+              text: amountMsg,
+            });
+          }
 
         case 'REDEEM_VOUCHER':
           await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+          const voucherMsg = `🎟️ *Redeem Voucher*\n\nPlease enter your 16-digit Blu Voucher PIN:\n\nExample: 1234-5678-9012-3456`;
+          await addToConversationHistory(from, 'assistant', voucherMsg);
           return await sendWhatsAppText({
             to: from,
-            text: `🎟️ *Redeem Voucher*\n\nPlease enter your 16-digit Blu Voucher PIN:\n\nExample: 1234-5678-9012-3456`,
+            text: voucherMsg,
           });
 
         case 'CHECK_BALANCE':
           const { balance, displayName } = await getUserBalance(from);
+          const balanceMsg = `💰 *Your WaPay Balance*\n\nHi ${displayName}!\nYour current balance is R ${balance}\n\nWhat would you like to do next?`;
+          await addToConversationHistory(from, 'assistant', balanceMsg);
           return await sendWhatsAppText({
             to: from,
-            text: `💰 *Your WaPay Balance*\n\nHi ${displayName}!\nYour current balance is R ${balance}\n\nWhat would you like to do next?`,
+            text: balanceMsg,
+          });
+
+        case 'LIST_PRODUCTS':
+          return await handleListAllProducts({ from, account });
+
+        case 'LIST_CATEGORY':
+          const category = aiResponse.entities?.category;
+          if (category === 'ELECTRICITY') {
+            return await handleListElectricityProducts({ from, account });
+          } else if (category === 'DATA') {
+            return await handleListDataBundles({ from, account, networkCode: null });
+          } else if (category === 'AIRTIME') {
+            return await handleListAirtimeBundles({ from, account, networkCode: null });
+          } else if (category === 'LIFESTYLE') {
+            return await handleListLifestyleProducts({ from, account });
+          } else if (category === 'GAMING') {
+            return await handleListGamingProducts({ from, account });
+          } else if (category === 'BILLPAY') {
+            return await handleListBillpayProducts({ from, account });
+          } else {
+            return await handleListAllProducts({ from, account });
+          }
+
+        case 'BUY_LIFESTYLE':
+          const lifestyleMsg = `🎬 *Lifestyle Vouchers*\n\nLifestyle purchases (Netflix, Uber, etc.) are coming soon!\n\nFor now, I can help with:\n• Airtime\n• Prepaid electricity\n• Voucher redemption`;
+          await addToConversationHistory(from, 'assistant', lifestyleMsg);
+          return await sendWhatsAppText({
+            to: from,
+            text: lifestyleMsg,
+          });
+
+        case 'BUY_GAMING':
+          const gamingMsg = `🎮 *Betting Top-ups*\n\nBetting top-ups (Hollywoodbets, etc.) are coming soon!\n\nFor now, I can help with:\n• Airtime\n• Prepaid electricity\n• Voucher redemption`;
+          await addToConversationHistory(from, 'assistant', gamingMsg);
+          return await sendWhatsAppText({
+            to: from,
+            text: gamingMsg,
           });
 
         case 'HELP':
+          const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n🎬 *Lifestyle* - "Netflix voucher"\n🎮 *Betting* - "Hollywoodbets top-up"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words!`;
+          await addToConversationHistory(from, 'assistant', helpMsg);
           return await sendWhatsAppText({
             to: from,
-            text: `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance*\n"What's my balance?"\n\n📱 *Airtime*\n"Buy R50 airtime"\n\n📶 *Data*\n"Buy 1GB data"\n\n🎟️ *Voucher*\n"Redeem voucher"\n\nJust ask me in your own words! I understand natural language.`,
+            text: helpMsg,
           });
 
         default:
           // For unhandled intents, send only the text (never JSON)
+          await addToConversationHistory(from, 'assistant', responseText);
           return await sendWhatsAppText({
             to: from,
             text: responseText,
@@ -968,8 +1281,9 @@ async function handleAIChat({ from, text, account }) {
       ? aiResponse.text 
       : typeof aiResponse === 'string' 
         ? aiResponse 
-        : 'I can help you with balance checks, airtime, data, and vouchers. What would you like to do?';
+        : 'I can help you with balance checks, airtime, data, electricity, and vouchers. What would you like to do?';
     
+    await addToConversationHistory(from, 'assistant', finalText);
     return await sendWhatsAppText({
       to: from,
       text: finalText,
@@ -986,6 +1300,7 @@ async function handleAIChat({ from, text, account }) {
       fallbackMessage = `Service configuration issue. Please type "help" for available commands.`;
     }
 
+    await addToConversationHistory(from, 'assistant', fallbackMessage);
     return await sendWhatsAppText({
       to: from,
       text: fallbackMessage,
@@ -1003,6 +1318,11 @@ async function handleAIChat({ from, text, account }) {
  * Instead of hardcoding regex patterns for every product,
  * this function queries the database and matches user text
  * against actual categories, operators, and networks.
+ * 
+ * PRIORITY RULES:
+ * 1. Strong category indicators (electricity + meter) always win
+ * 2. Purchase intent (buy + amount + category) triggers purchase flow
+ * 3. Only ask for clarification if truly ambiguous
  */
 async function handleSmartProductQuery({ from, account, text }) {
   const lowerText = text.toLowerCase();
@@ -1014,6 +1334,137 @@ async function handleSmartProductQuery({ from, account, text }) {
   });
 
   try {
+    // =========================================================
+    // PRIORITY 1: Strong category indicators ALWAYS WIN
+    // No clarification needed for these
+    // =========================================================
+    
+    // ELECTRICITY: meter, eskom, prepaid power, electricity, units
+    const electricityIndicators = ['meter', 'eskom', 'prepaid power', 'electricity', 'elec', 'units', 'token'];
+    const hasElectricityIntent = electricityIndicators.some(k => lowerText.includes(k));
+    
+    // If user clearly mentions electricity-related terms, it's electricity
+    if (hasElectricityIntent) {
+      // Check if they want to BUY (have amount) or just LIST
+      const amountMatch = lowerText.match(/r\s?(\d+)/i);
+      const meterMatch = lowerText.match(/\b(\d{10,14})\b/); // Meter numbers are typically 10-14 digits
+      
+      if (amountMatch || lowerText.includes('buy')) {
+        // They want to BUY electricity
+        const amount = amountMatch ? parseInt(amountMatch[1]) : null;
+        const meterNumber = meterMatch ? meterMatch[1] : null;
+        
+        if (amount && meterNumber) {
+          // Both amount and meter - go to confirm
+          await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
+            amountCents: amount * 100,
+            meterNumber,
+          });
+          const confirmMsg = `💡 *Buy Electricity*\n\nAmount: R${amount}\nMeter: ${meterNumber}\n\nReply *YES* to confirm or *NO* to cancel.`;
+          await addToConversationHistory(from, 'assistant', confirmMsg);
+          return await sendWhatsAppText({
+            to: from,
+            text: confirmMsg,
+          });
+        } else if (amount) {
+          // Have amount, need meter
+          await updateConversationState(from, 'ELECTRICITY_METER', {
+            amountCents: amount * 100,
+          });
+          const meterMsg = `💡 *Buy R${amount} Electricity*\n\nPlease enter your meter number:`;
+          await addToConversationHistory(from, 'assistant', meterMsg);
+          return await sendWhatsAppText({
+            to: from,
+            text: meterMsg,
+          });
+        } else {
+          // Need amount
+          await updateConversationState(from, 'ELECTRICITY_AMOUNT', {
+            meterNumber,
+          });
+          const amountMsg = `💡 *Buy Electricity*\n\nHow much electricity would you like to buy?\n\nReply with an amount (e.g., R50, R100, R500)\n(Min R10, Max R5000)`;
+          await addToConversationHistory(from, 'assistant', amountMsg);
+          return await sendWhatsAppText({
+            to: from,
+            text: amountMsg,
+          });
+        }
+      }
+      
+      // Just listing electricity
+      return await handleListElectricityProducts({ from, account });
+    }
+    
+    // AIRTIME: explicit airtime mention
+    const airtimeIndicators = ['airtime', 'phone credit', 'top up', 'topup', 'recharge'];
+    const hasAirtimeIntent = airtimeIndicators.some(k => lowerText.includes(k));
+    
+    if (hasAirtimeIntent && !lowerText.includes('data') && !lowerText.includes('bundle')) {
+      // Check if they want to BUY
+      const amountMatch = lowerText.match(/r\s?(\d+)/i);
+      
+      if (amountMatch || lowerText.includes('buy')) {
+        const amount = amountMatch ? parseInt(amountMatch[1]) : null;
+        if (amount) {
+          await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents: amount * 100 });
+          const msg = `📱 *Buy R${amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`;
+          await addToConversationHistory(from, 'assistant', msg);
+          return await sendWhatsAppText({ to: from, text: msg });
+        }
+        
+        await updateConversationState(from, 'AIRTIME_AMOUNT', {});
+        const msg = `📱 *Buy Airtime*\n\nHow much airtime would you like to buy?\n\nReply with an amount (e.g., R10, R50, R100)`;
+        await addToConversationHistory(from, 'assistant', msg);
+        return await sendWhatsAppText({ to: from, text: msg });
+      }
+      
+      // Just listing airtime
+      return await handleListAirtimeBundles({ from, account, networkCode: null });
+    }
+    
+    // DATA: explicit data/bundle mention
+    const dataIndicators = ['data', 'bundle', 'gig', 'gb', 'mb'];
+    const hasDataIntent = dataIndicators.some(k => lowerText.includes(k));
+    
+    if (hasDataIntent) {
+      // Extract network if mentioned
+      let networkCode = null;
+      if (/vodacom/i.test(lowerText)) networkCode = 'VODACOM';
+      else if (/mtn/i.test(lowerText)) networkCode = 'MTN';
+      else if (/cell\s?c|cellc/i.test(lowerText)) networkCode = 'CELLC';
+      else if (/telkom/i.test(lowerText)) networkCode = 'TELKOM';
+      
+      return await handleListDataBundles({ from, account, entities: { networkCode } });
+    }
+    
+    // GAMING: betting indicators
+    const gamingIndicators = ['bet', 'betting', 'hollywood', 'lottostar', 'betway', 'supabets', 'gamble'];
+    const hasGamingIntent = gamingIndicators.some(k => lowerText.includes(k));
+    
+    if (hasGamingIntent) {
+      return await handleListGamingProducts({ from, account });
+    }
+    
+    // LIFESTYLE: streaming/voucher indicators
+    const lifestyleIndicators = ['netflix', 'uber', 'google play', 'steam', 'playstation', 'streaming'];
+    const hasLifestyleIntent = lifestyleIndicators.some(k => lowerText.includes(k));
+    
+    if (hasLifestyleIntent) {
+      return await handleListLifestyleProducts({ from, account });
+    }
+    
+    // BILLPAY: TV/subscription indicators
+    const billpayIndicators = ['dstv', 'gotv', 'multichoice', 'subscription'];
+    const hasBillpayIntent = billpayIndicators.some(k => lowerText.includes(k));
+    
+    if (hasBillpayIntent) {
+      return await handleListBillpayProducts({ from, account });
+    }
+
+    // =========================================================
+    // PRIORITY 2: Database-driven matching for other queries
+    // =========================================================
+    
     // Get all active products grouped by category
     const categories = await prisma.vasProduct.groupBy({
       by: ['category'],
@@ -1054,7 +1505,7 @@ async function handleSmartProductQuery({ from, account, text }) {
       DATA: ['data', 'bundle', 'bundles', 'mb', 'gb', 'gig', 'internet'],
       ELECTRICITY: ['electricity', 'prepaid', 'meter', 'token', 'units', 'power', 'elec', 'light', 'eskom'],
       LIFESTYLE: ['voucher', 'gift card', 'ott', 'streaming'],
-      BILLPAY: ['tv', 'subscription', 'bill', 'pay'],
+      BILLPAY: ['tv', 'subscription', 'bill'],
       GAMING: ['bet', 'betting', 'gamble', 'gambling', 'casino', 'lotto'],
       REMITTANCE: ['send money', 'transfer', 'remit', 'remittance'],
     };
@@ -1063,9 +1514,7 @@ async function handleSmartProductQuery({ from, account, text }) {
     for (const op of operators) {
       const cat = op.category;
       if (!categoryKeywords[cat]) categoryKeywords[cat] = [];
-      // Add operator code and extract brand name from label
       categoryKeywords[cat].push(op.operatorCode.toLowerCase());
-      // Extract first word of label as potential brand (e.g., "Netflix R100" -> "netflix")
       const brandName = op.label.split(' ')[0].toLowerCase();
       if (!categoryKeywords[cat].includes(brandName)) {
         categoryKeywords[cat].push(brandName);
@@ -1082,7 +1531,6 @@ async function handleSmartProductQuery({ from, account, text }) {
     // Find matching categories
     const matches = [];
     for (const [category, keywords] of Object.entries(categoryKeywords)) {
-      // Check if this category exists in our database
       if (!categories.some(c => c.category === category)) continue;
       
       for (const keyword of keywords) {
@@ -1106,29 +1554,9 @@ async function handleSmartProductQuery({ from, account, text }) {
       matchCount: matches.length,
     });
 
-    // No matches - ask what they want
+    // No matches - show all categories
     if (matches.length === 0) {
-      const availableCategories = categories.map(c => c.category);
-      const categoryNames = {
-        AIRTIME: 'Mobile Airtime',
-        DATA: 'Data Bundles',
-        ELECTRICITY: 'Prepaid Electricity',
-        LIFESTYLE: 'Lifestyle & OTT (Netflix, Uber)',
-        BILLPAY: 'Bill Payments (DStv)',
-        GAMING: 'Betting & Gaming',
-        REMITTANCE: 'Money Transfers',
-      };
-      
-      let message = `🤔 I'm not sure what product you're looking for.\n\nWe offer:\n`;
-      for (const cat of availableCategories) {
-        message += `• ${categoryNames[cat] || cat}\n`;
-      }
-      message += `\nWhich one would you like to see?`;
-      
-      return await sendWhatsAppText({
-        to: from,
-        text: message,
-      });
+      return await handleListVasProducts({ from, account });
     }
     
     // Single match - show products for that category
@@ -1137,27 +1565,18 @@ async function handleSmartProductQuery({ from, account, text }) {
       return await showCategoryProducts({ from, account, category, text });
     }
     
-    // Multiple matches - ask for clarification
-    const categoryNames = {
-      AIRTIME: 'Mobile Airtime',
-      DATA: 'Data Bundles',
-      ELECTRICITY: 'Prepaid Electricity',
-      LIFESTYLE: 'Lifestyle & OTT',
-      BILLPAY: 'Bill Payments',
-      GAMING: 'Betting & Gaming',
-      REMITTANCE: 'Money Transfers',
-    };
+    // Multiple matches - pick the highest confidence one instead of asking
+    // This prevents confusing users with unnecessary questions
+    matches.sort((a, b) => b.confidence - a.confidence);
+    const bestMatch = matches[0];
     
-    let message = `🤔 I found a few options. Did you mean:\n\n`;
-    for (const match of matches) {
-      message += `• ${categoryNames[match.category] || match.category}\n`;
-    }
-    message += `\nJust tell me which one!`;
-    
-    return await sendWhatsAppText({
-      to: from,
-      text: message,
+    logStructured('smart_product_query_best_match', {
+      from,
+      bestMatch: bestMatch.category,
+      allMatches: matches.map(m => ({ cat: m.category, conf: m.confidence })),
     });
+    
+    return await showCategoryProducts({ from, account, category: bestMatch.category, text });
 
   } catch (error) {
     console.error('Smart product query error:', error);

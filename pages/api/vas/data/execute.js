@@ -116,7 +116,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
-  const { previewId, pin, accountId } = req.body;
+    const { previewId, pin, accountId } = req.body;
 
   // Log the execute call
   logStructured('vas_data_execute_call', {
@@ -256,7 +256,7 @@ export default async function handler(req, res) {
 
     const wallet = account.wallets[0];
     const { totalCents, msisdn, productId, productName, vendorId, priceCents } = metadata;
-    
+
     // Check balance again
     if (wallet.availableCents < totalCents) {
       logStructured('vas_data_execute_result', {
@@ -304,7 +304,7 @@ export default async function handler(req, res) {
     logStructured('vas_data_ledger_created', {
       journalEntryId: journalEntry.id,
       idemKey,
-      amountCents: totalCents,
+        amountCents: totalCents,
     });
 
     // =========================================================================
