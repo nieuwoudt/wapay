@@ -71,7 +71,7 @@ export default async function handler(req, res) {
     // Get account and wallet
     const account = await prisma.account.findUnique({
       where: { id: accountId },
-      include: { wallet: true }
+      include: { wallets: true }
     });
 
     if (!account) {
@@ -86,7 +86,8 @@ export default async function handler(req, res) {
       });
     }
 
-    if (!account.wallet) {
+    const wallet = account.wallets?.[0];
+    if (!wallet) {
       logStructured('vas_data_preview_result', {
         accountId,
         success: false,
@@ -140,7 +141,7 @@ export default async function handler(req, res) {
     }
 
     // Check balance
-    const availableBalance = account.wallet.availableCents;
+    const availableBalance = wallet.availableCents;
     const feeCents = 0; // No fee for now
     const totalCents = product.amountCents + feeCents;
 
