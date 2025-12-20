@@ -8,6 +8,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { BluVasClient } from '@wapay/providers-blu';
+import { isValidSaMsisdn, normaliseMsisdn } from '../../../../lib/msisdn.js';
 
 const prisma = new PrismaClient();
 
@@ -29,11 +30,12 @@ export default async function handler(req, res) {
   }
 
     const { accountId, msisdn, amountCents, vendorId } = req.body;
+    const normalisedMsisdn = normaliseMsisdn(msisdn || '');
 
   // Log the preview call
   logStructured('vas_airtime_preview_call', {
     accountId,
-    msisdn,
+    msisdn: normalisedMsisdn,
     amountCents,
     vendorId,
   });
@@ -49,6 +51,21 @@ export default async function handler(req, res) {
       return res.status(400).json({
         error: 'USER_INPUT',
         message: 'Missing required fields: accountId, msisdn, amountCents'
+      });
+    }
+
+    // Validate MSISDN
+    if (!isValidSaMsisdn(msisdn)) {
+      logStructured('msisdn_validation_failed', {
+        type: 'msisdn_validation_failed',
+        accountId,
+        rawInput: msisdn,
+        normalisedMsisdn,
+        reason: 'format_validation_failed',
+      });
+      return res.status(400).json({
+        error: 'USER_INPUT',
+        message: 'Invalid phone number format. Please use a valid SA mobile number (e.g., 0781234567)'
       });
     }
 
@@ -119,19 +136,19 @@ export default async function handler(req, res) {
     if (!vendorId) {
       try {
         const bluClient = new BluVasClient();
-        const networkInfo = await bluClient.checkMobileNumber(msisdn);
+        const networkInfo = await bluClient.checkMobileNumber(normalisedMsisdn);
         detectedVendorName = networkInfo.vendorName;
         detectedVendorId = bluClient.vendorNameToId(networkInfo.vendorName);
         
         logStructured('vas_airtime_network_detected', {
-          msisdn,
+          msisdn: normalisedMsisdn,
           vendorId: detectedVendorId,
           vendorName: detectedVendorName,
         });
       } catch (error) {
         console.error('Network detection failed:', error);
         logStructured('vas_airtime_network_detection_failed', {
-          msisdn,
+          msisdn: normalisedMsisdn,
           error: error.message,
           reason: error.reason,
         });
@@ -140,7 +157,7 @@ export default async function handler(req, res) {
         if (error.message === 'INVALID_PHONE_NUMBER') {
           logStructured('vas_airtime_preview_result', {
             accountId,
-            msisdn,
+            msisdn: normalisedMsisdn,
             success: false,
             error: 'INVALID_PHONE_NUMBER',
           });
@@ -167,7 +184,7 @@ export default async function handler(req, res) {
         status: 'PENDING',
         accountId: accountId,
         metadata: {
-          msisdn,
+          msisdn: normalisedMsisdn,
           amountCents,
           vendorId: detectedVendorId,
           vendorName: detectedVendorName,
@@ -182,7 +199,7 @@ export default async function handler(req, res) {
     logStructured('vas_airtime_preview_result', {
       accountId,
       previewId,
-      msisdn,
+      msisdn: normalisedMsisdn,
       amountCents,
       vendorId: detectedVendorId,
       totalCents,
@@ -195,7 +212,7 @@ export default async function handler(req, res) {
       previewId,
       preview: {
         type: 'airtime',
-        msisdn,
+        msisdn: normalisedMsisdn,
         amountCents,
         vendorId: detectedVendorId,
         vendorName: detectedVendorName || (detectedVendorId ? detectedVendorId.toUpperCase() : 'Unknown'),
@@ -211,7 +228,7 @@ export default async function handler(req, res) {
     console.error('Airtime preview error:', error);
     logStructured('vas_airtime_preview_result', {
       accountId,
-      msisdn,
+      msisdn: normalisedMsisdn,
       success: false,
       error: 'UNHANDLED_ERROR',
       errorMessage: error.message,

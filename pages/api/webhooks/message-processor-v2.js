@@ -11,6 +11,9 @@ import prisma from '../../../lib/prisma.js';
 import { BluClient } from '@wapay/providers-blu';
 import { postBluDeposit } from '@wapay/domain';
 import { chatWithAI } from '@wapay/ai';
+import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
+import { getCategoryDisplayName, getLiveCategories, isCategoryLive } from '../../../lib/vas-config.js';
+import { apiUrl } from '../../../lib/api-url.js';
 import {
   getOnboardingState,
   handleS0Initial,
@@ -33,51 +36,57 @@ function logStructured(type, data) {
 }
 
 /**
- * Blu QA Test Numbers - Whitelisted by Blu for testing
- * These are valid test MSISDNs confirmed by Blu support
+ * Ensure user-facing messages never expose raw JSON blobs.
  */
-const BLU_QA_TEST_NUMBERS = new Set([
-  '0840012300', // Cell C
-  '0720012345', // Vodacom
-  '0830012300', // MTN
-  '0850012345', // Telkom
-]);
+function sanitizeUserText(text) {
+  if (typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return null;
+  return text;
+}
 
-/**
- * SA Mobile Number Regex
- * Valid prefixes: 06x, 07x, 08x (covers all SA mobile networks)
- * - 060-069: MTN, Vodacom
- * - 070-079: Vodacom, Cell C, Telkom
- * - 080-089: MTN, Vodacom, Cell C, Telkom (includes 085 Telkom)
- */
-const SA_MSISDN_REGEX = /^0[6-8]\d{8}$/;
+function categoryUnavailableMessage(category) {
+  const display = getCategoryDisplayName(category);
+  return `🚧 ${display} is not available yet. I'll let you know when it's live. In the meantime, you can buy airtime or data.`;
+}
 
-/**
- * Validate SA mobile number format
- * Accepts standard SA mobile format + Blu QA test numbers
- */
-function isValidMsisdn(msisdn) {
-  if (!msisdn || typeof msisdn !== 'string') {
-    return false;
+async function replyCategoryUnavailable(to, category) {
+  return await sendWhatsAppText({
+    to,
+    text: categoryUnavailableMessage(category),
+  });
+}
+
+function extractMsisdnFromText(text = '') {
+  const digits = text.replace(/\D/g, '');
+  if (digits.startsWith('27') && digits.length === 11) return `0${digits.slice(2)}`;
+  if (digits.length === 10 && digits.startsWith('0')) return digits;
+  return null;
+}
+
+function resolveAirtimeSlots({ text, entities = {}, stateData = {} }) {
+  let amountCents = stateData.amountCents;
+  if (!amountCents && typeof entities.amount === 'number') {
+    amountCents = entities.amount * 100;
   }
-  
-  // Clean the number first (remove any non-digit characters)
-  const cleaned = msisdn.replace(/\D/g, '');
-  
-  // Whitelist Blu QA test numbers (check both original and cleaned)
-  if (BLU_QA_TEST_NUMBERS.has(msisdn) || BLU_QA_TEST_NUMBERS.has(cleaned)) {
-    console.log(`✅ MSISDN ${msisdn} matched Blu QA whitelist`);
-    return true;
+  if (!amountCents) {
+    const amtMatch = text.match(/r?\s?(\d+)/i);
+    if (amtMatch) {
+      const parsed = parseInt(amtMatch[1], 10) * 100;
+      if (parsed >= 500 && parsed <= 100000) amountCents = parsed;
+    }
   }
-  
-  // Standard SA mobile: 10 digits, prefix 06x/07x/08x
-  const isValid = SA_MSISDN_REGEX.test(cleaned);
-  
-  if (!isValid) {
-    console.log(`❌ MSISDN validation failed: ${msisdn} (cleaned: ${cleaned})`);
+
+  let msisdn = stateData.msisdn || entities.msisdn;
+  if (!msisdn) {
+    const parsed = extractMsisdnFromText(text);
+    if (parsed && isValidSaMsisdn(parsed)) {
+      msisdn = normaliseMsisdn(parsed);
+    }
   }
-  
-  return isValid;
+
+  return { amountCents, msisdn };
 }
 
 /**
@@ -238,26 +247,25 @@ async function handlePostOnboarding({ account, from, text }) {
       
       switch (category) {
         case 'GAMING':
-          // Gaming top-up flow
+          if (!isCategoryLive('GAMING')) {
+            return await replyCategoryUnavailable(from, 'GAMING');
+          }
           if (amount) {
-            return await sendWhatsAppText({
-              to: from,
-              text: `🎮 *Betting Top-ups Coming Soon!*\n\nYou wanted: R${amount} for gaming\n\nThis feature is launching soon! For now, try:\n• Buy airtime\n• Buy electricity\n• Redeem a voucher`,
-            });
+            return await handleListGamingProducts({ from, account });
           }
           return await handleListGamingProducts({ from, account });
           
         case 'LIFESTYLE':
-          // Lifestyle voucher flow
-          if (amount) {
-            return await sendWhatsAppText({
-              to: from,
-              text: `🎬 *Lifestyle Vouchers Coming Soon!*\n\nYou wanted: R${amount} voucher\n\nThis feature is launching soon! For now, try:\n• Buy airtime\n• Buy electricity\n• Redeem a voucher`,
-            });
+          if (!isCategoryLive('LIFESTYLE')) {
+            return await replyCategoryUnavailable(from, 'LIFESTYLE');
           }
+          // Lifestyle voucher flow
           return await handleListLifestyleProducts({ from, account });
           
         case 'ELECTRICITY':
+          if (!isCategoryLive('ELECTRICITY')) {
+            return await replyCategoryUnavailable(from, 'ELECTRICITY');
+          }
           // Electricity purchase flow - start it
           if (amount) {
             await updateConversationState(from, 'ELECTRICITY_METER', { amountCents: amount * 100 });
@@ -342,24 +350,59 @@ async function handlePostOnboarding({ account, from, text }) {
           entities: detection.entities,
         });
         
-        await updateConversationState(from, 'AIRTIME_AMOUNT', detection.entities || {});
-        
-        // Check if we already have amount from the message
-        if (detection.entities?.amount) {
-          // Ask for phone number
-          await updateConversationState(from, 'AIRTIME_MSISDN', { 
-            amountCents: detection.entities.amount * 100 
-          });
+        const airtimeSlots = resolveAirtimeSlots({ text, entities: detection.entities });
+        const slotsComplete = airtimeSlots.amountCents && airtimeSlots.msisdn && isValidSaMsisdn(airtimeSlots.msisdn);
+
+        logStructured('slot_fill_airtime', {
+          from,
+          accountId: account.id,
+          amountCents: airtimeSlots.amountCents,
+          msisdn: airtimeSlots.msisdn,
+          missingAmount: !airtimeSlots.amountCents,
+          missingMsisdn: !airtimeSlots.msisdn,
+          slotsComplete,
+        });
+
+        if (slotsComplete) {
+          const normalisedMsisdn = normaliseMsisdn(airtimeSlots.msisdn);
+          await updateConversationState(from, 'AIRTIME_CONFIRM', { amountCents: airtimeSlots.amountCents, msisdn: normalisedMsisdn });
           return await sendWhatsAppText({
             to: from,
-            text: `📱 *Buy R${detection.entities.amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`,
+            text: `📱 *Confirm Airtime Purchase*\n\n` +
+                  `Amount: R${airtimeSlots.amountCents / 100}\n` +
+                  `Number: ${normalisedMsisdn}\n\n` +
+                  `Reply *YES* to confirm or *NO* to cancel.`,
+          });
+        }
+
+        // If we have amount but no MSISDN, jump to msisdn collection
+        if (airtimeSlots.amountCents) {
+          await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents: airtimeSlots.amountCents });
+          return await sendWhatsAppText({
+            to: from,
+            text: `📱 *Buy R${airtimeSlots.amountCents / 100} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`,
           });
         }
         
+        // Otherwise collect amount first
+        await updateConversationState(from, 'AIRTIME_AMOUNT', detection.entities || {});
         return await sendWhatsAppText({
           to: from,
           text: `📱 *Buy Airtime*\n\nHow much airtime would you like to buy?\n\nReply with an amount (e.g., R10, R50, R100)`,
         });
+
+      case 'BUY_DATA':
+        logStructured('vas_data_flow_start', {
+          from,
+          accountId: account.id,
+          entities: detection.entities,
+        });
+
+        if (!isCategoryLive('DATA')) {
+          return await replyCategoryUnavailable(from, 'DATA');
+        }
+
+        return await handleListDataBundles({ from, account, entities: detection.entities });
 
       // ====================================================================
       // SMART PRODUCT QUERY - Uses database to match categories
@@ -680,27 +723,21 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
-        let msisdn = text.trim();
+        const rawMsisdnInput = /^(me|my\s*number|my\s*phone|myself)$/i.test(normalized)
+          ? account.msisdn
+          : text.trim();
+
+        const normalisedMsisdn = normaliseMsisdn(rawMsisdnInput || '');
         
-        // Handle "me" or "my number"
-        if (/^(me|my\s*number|my\s*phone|myself)$/i.test(normalized)) {
-          msisdn = account.msisdn;
-        }
-        
-        // Normalize phone number
-        msisdn = msisdn.replace(/[\s-]/g, '');
-        if (msisdn.startsWith('+27')) {
-          msisdn = '0' + msisdn.substring(3);
-        } else if (msisdn.startsWith('27')) {
-          msisdn = '0' + msisdn.substring(2);
-        }
-        
-        // Validate phone number format
-        if (!isValidMsisdn(msisdn)) {
+        // Validate phone number format (allow Blu QA numbers)
+        if (!isValidSaMsisdn(rawMsisdnInput)) {
           logStructured('msisdn_validation_failed', {
+            type: 'msisdn_validation_failed',
             from,
+            waUserId: from,
             accountId: account.id,
-            msisdn,
+            rawInput: rawMsisdnInput,
+            normalisedMsisdn,
             reason: 'format_validation_failed',
           });
           
@@ -716,18 +753,18 @@ async function handleConversationState({ from, text, state, data, account }) {
         logStructured('vas_airtime_preview_initiated', {
           from,
           accountId: account.id,
-          msisdn,
+          msisdn: normalisedMsisdn,
           amountCents,
         });
         
         // Move to confirmation state
-        await updateConversationState(from, 'AIRTIME_CONFIRM', { amountCents, msisdn });
+        await updateConversationState(from, 'AIRTIME_CONFIRM', { amountCents, msisdn: normalisedMsisdn });
         
         return await sendWhatsAppText({
           to: from,
           text: `📱 *Confirm Airtime Purchase*\n\n` +
                 `Amount: R${amountCents / 100}\n` +
-                `Number: ${msisdn}\n\n` +
+                `Number: ${normalisedMsisdn}\n\n` +
                 `Reply *YES* to confirm or *NO* to cancel.`,
         });
       }
@@ -779,7 +816,9 @@ async function handleConversationState({ from, text, state, data, account }) {
           
           // Call preview API
           try {
-            const previewRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/vas/airtime/preview`, {
+            const previewUrl = apiUrl('/api/vas/airtime/preview');
+            logStructured('internal_fetch_call', { url: previewUrl, path: '/api/vas/airtime/preview' });
+            const previewRes = await fetch(previewUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -825,6 +864,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             logStructured('vas_airtime_preview_error', {
               from,
               accountId: account.id,
+              url: apiUrl('/api/vas/airtime/preview'),
               error: error.message,
             });
             
@@ -895,7 +935,9 @@ async function handleConversationState({ from, text, state, data, account }) {
         
         // Call execute API
         try {
-          const executeRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/vas/airtime/execute`, {
+          const executeUrl = apiUrl('/api/vas/airtime/execute');
+          logStructured('internal_fetch_call', { url: executeUrl, path: '/api/vas/airtime/execute' });
+          const executeRes = await fetch(executeUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -954,6 +996,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             from,
             accountId: account.id,
             previewId,
+            url: apiUrl('/api/vas/airtime/execute'),
             error: error.message,
           });
           
@@ -966,11 +1009,19 @@ async function handleConversationState({ from, text, state, data, account }) {
 
     case 'AI_AIRTIME_PURCHASE':
     case 'AI_DATA_PURCHASE':
-      // AI-initiated purchase flow (placeholder for future VAS implementation)
       await updateConversationState(from, null);
+      if (state === 'AI_DATA_PURCHASE') {
+        if (!isCategoryLive('DATA')) {
+          return await replyCategoryUnavailable(from, 'DATA');
+        }
+        return await handleListDataBundles({ from, account, entities: data || {} });
+      }
+
+      // Airtime purchase intent from AI -> start normal airtime flow
+      await updateConversationState(from, 'AIRTIME_AMOUNT', data || {});
       return await sendWhatsAppText({
         to: from,
-        text: `This feature is coming soon! For now, try:\n• "balance" - Check your balance\n• "redeem voucher" - Add money to your wallet`,
+        text: `📱 *Buy Airtime*\n\nHow much airtime would you like to buy?\n\nReply with an amount (e.g., R10, R50, R100)`,
       });
 
     // =================================================================
@@ -1111,7 +1162,9 @@ async function handleConversationState({ from, text, state, data, account }) {
           
           // Call preview API to validate balance and create preview
           try {
-            const previewRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/vas/electricity/preview`, {
+            const previewUrl = apiUrl('/api/vas/electricity/preview');
+            logStructured('internal_fetch_call', { url: previewUrl, path: '/api/vas/electricity/preview' });
+            const previewRes = await fetch(previewUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1158,6 +1211,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             logStructured('vas_electricity_preview_error', {
               from,
               accountId: account.id,
+              url: apiUrl('/api/vas/electricity/preview'),
               error: error.message,
             });
             
@@ -1224,7 +1278,9 @@ async function handleConversationState({ from, text, state, data, account }) {
         
         // Call execute API
         try {
-          const executeRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/vas/electricity/execute`, {
+          const executeUrl = apiUrl('/api/vas/electricity/execute');
+          logStructured('internal_fetch_call', { url: executeUrl, path: '/api/vas/electricity/execute' });
+          const executeRes = await fetch(executeUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1289,6 +1345,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             from,
             accountId: account.id,
             previewId,
+            url: apiUrl('/api/vas/electricity/execute'),
             error: error.message,
           });
           
@@ -1353,7 +1410,7 @@ async function handleAIChat({ from, text, account }) {
       console.log('🎯 AI detected intent:', aiResponse.intent, aiResponse.entities);
 
       // IMPORTANT: Do NOT send raw JSON to users
-      const responseText = typeof aiResponse.text === 'string' ? aiResponse.text : 'Let me help you with that.';
+      const responseText = sanitizeUserText(aiResponse.text) || 'Let me help you with that.';
 
       // Handle each intent
       switch (aiResponse.intent) {
@@ -1380,13 +1437,11 @@ async function handleAIChat({ from, text, account }) {
           });
 
         case 'BUY_DATA':
-          await updateConversationState(from, 'AI_DATA_PURCHASE', aiResponse.entities);
-          const dataMsg = `📶 Data bundles are coming soon! For now, you can:\n• Check your balance\n• Buy airtime\n• Redeem a voucher`;
-          await addToConversationHistory(from, 'assistant', dataMsg);
-          return await sendWhatsAppText({
-            to: from,
-            text: dataMsg,
-          });
+          if (!isCategoryLive('DATA')) {
+            return await replyCategoryUnavailable(from, 'DATA');
+          }
+          await updateConversationState(from, null);
+          return await handleListDataBundles({ from, account, entities: aiResponse.entities });
 
         case 'BUY_ELECTRICITY':
           // Start electricity purchase flow
@@ -1466,20 +1521,16 @@ async function handleAIChat({ from, text, account }) {
           }
 
         case 'BUY_LIFESTYLE':
-          const lifestyleMsg = `🎬 *Lifestyle Vouchers*\n\nLifestyle purchases (Netflix, Uber, etc.) are coming soon!\n\nFor now, I can help with:\n• Airtime\n• Prepaid electricity\n• Voucher redemption`;
-          await addToConversationHistory(from, 'assistant', lifestyleMsg);
-          return await sendWhatsAppText({
-            to: from,
-            text: lifestyleMsg,
-          });
+          if (!isCategoryLive('LIFESTYLE')) {
+            return await replyCategoryUnavailable(from, 'LIFESTYLE');
+          }
+          return await handleListLifestyleProducts({ from, account });
 
         case 'BUY_GAMING':
-          const gamingMsg = `🎮 *Betting Top-ups*\n\nBetting top-ups (Hollywoodbets, etc.) are coming soon!\n\nFor now, I can help with:\n• Airtime\n• Prepaid electricity\n• Voucher redemption`;
-          await addToConversationHistory(from, 'assistant', gamingMsg);
-          return await sendWhatsAppText({
-            to: from,
-            text: gamingMsg,
-          });
+          if (!isCategoryLive('GAMING')) {
+            return await replyCategoryUnavailable(from, 'GAMING');
+          }
+          return await handleListGamingProducts({ from, account });
 
         case 'HELP':
           const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n🎬 *Lifestyle* - "Netflix voucher"\n🎮 *Betting* - "Hollywoodbets top-up"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words!`;
@@ -1500,11 +1551,14 @@ async function handleAIChat({ from, text, account }) {
     }
 
     // Otherwise, just send AI's informational response (text only, never JSON)
-    const finalText = typeof aiResponse === 'object' && aiResponse.text 
+    const finalTextCandidate = typeof aiResponse === 'object' && aiResponse.text 
       ? aiResponse.text 
       : typeof aiResponse === 'string' 
         ? aiResponse 
         : 'I can help you with balance checks, airtime, data, electricity, and vouchers. What would you like to do?';
+
+    const finalText = sanitizeUserText(finalTextCandidate) 
+      || 'I can help you with balance checks, airtime, data, electricity, and vouchers. What would you like to do?';
     
     await addToConversationHistory(from, 'assistant', finalText);
     return await sendWhatsAppText({
@@ -1665,6 +1719,9 @@ async function handleSmartProductQuery({ from, account, text }) {
     const hasGamingIntent = gamingIndicators.some(k => lowerText.includes(k));
     
     if (hasGamingIntent) {
+      if (!isCategoryLive('GAMING')) {
+        return await replyCategoryUnavailable(from, 'GAMING');
+      }
       return await handleListGamingProducts({ from, account });
     }
     
@@ -1673,6 +1730,9 @@ async function handleSmartProductQuery({ from, account, text }) {
     const hasLifestyleIntent = lifestyleIndicators.some(k => lowerText.includes(k));
     
     if (hasLifestyleIntent) {
+      if (!isCategoryLive('LIFESTYLE')) {
+        return await replyCategoryUnavailable(from, 'LIFESTYLE');
+      }
       return await handleListLifestyleProducts({ from, account });
     }
     
@@ -1681,6 +1741,9 @@ async function handleSmartProductQuery({ from, account, text }) {
     const hasBillpayIntent = billpayIndicators.some(k => lowerText.includes(k));
     
     if (hasBillpayIntent) {
+      if (!isCategoryLive('BILLPAY')) {
+        return await replyCategoryUnavailable(from, 'BILLPAY');
+      }
       return await handleListBillpayProducts({ from, account });
     }
 
@@ -2074,6 +2137,10 @@ async function handleListDataBundles({ from, account, entities }) {
     periodType,
   });
 
+  if (!isCategoryLive('DATA')) {
+    return await replyCategoryUnavailable(from, 'DATA');
+  }
+
   try {
     // Build query
     const where = {
@@ -2182,6 +2249,10 @@ async function handleListElectricityProducts({ from, account }) {
     intent: 'LIST_ELECTRICITY',
   });
 
+  if (!isCategoryLive('ELECTRICITY')) {
+    return await replyCategoryUnavailable(from, 'ELECTRICITY');
+  }
+
   try {
     const products = await prisma.vasProduct.findMany({
       where: {
@@ -2265,6 +2336,10 @@ async function handleListLifestyleProducts({ from, account }) {
     intent: 'LIST_LIFESTYLE',
   });
 
+  if (!isCategoryLive('LIFESTYLE')) {
+    return await replyCategoryUnavailable(from, 'LIFESTYLE');
+  }
+
   try {
     const products = await prisma.vasProduct.findMany({
       where: {
@@ -2335,6 +2410,10 @@ async function handleListBillpayProducts({ from, account }) {
     intent: 'LIST_BILLPAY',
   });
 
+  if (!isCategoryLive('BILLPAY')) {
+    return await replyCategoryUnavailable(from, 'BILLPAY');
+  }
+
   try {
     const products = await prisma.vasProduct.findMany({
       where: {
@@ -2387,6 +2466,10 @@ async function handleListGamingProducts({ from, account }) {
     accountId: account.id,
     intent: 'LIST_GAMING',
   });
+
+  if (!isCategoryLive('GAMING')) {
+    return await replyCategoryUnavailable(from, 'GAMING');
+  }
 
   try {
     const products = await prisma.vasProduct.findMany({
@@ -2458,6 +2541,10 @@ async function handleListRemittanceProducts({ from, account }) {
     intent: 'LIST_REMITTANCE',
   });
 
+  if (!isCategoryLive('REMITTANCE')) {
+    return await replyCategoryUnavailable(from, 'REMITTANCE');
+  }
+
   try {
     const products = await prisma.vasProduct.findMany({
       where: {
@@ -2521,6 +2608,15 @@ async function handleListVasProducts({ from, account }) {
       _count: { id: true },
     });
 
+    const liveCategoryCounts = categoryCounts.filter(cat => isCategoryLive(cat.category));
+
+    if (liveCategoryCounts.length === 0) {
+      return await sendWhatsAppText({
+        to: from,
+        text: `🚧 VAS products are not available yet. You can still buy airtime or data.`,
+      });
+    }
+
     // Build friendly category list
     const categoryNames = {
       AIRTIME: { name: '📱 Mobile Airtime', desc: 'Vodacom, MTN, Cell C, Telkom' },
@@ -2534,7 +2630,7 @@ async function handleListVasProducts({ from, account }) {
 
     let message = `🛒 *WaPay VAS Products*\n\nHere's what you can buy on WaPay:\n\n`;
     
-    for (const cat of categoryCounts) {
+    for (const cat of liveCategoryCounts) {
       const info = categoryNames[cat.category];
       if (info) {
         message += `${info.name}\n   _${info.desc}_\n\n`;
@@ -2551,7 +2647,7 @@ async function handleListVasProducts({ from, account }) {
 
     logStructured('vas_list_vas_products_result', {
       from,
-      categoryCount: categoryCounts.length,
+      categoryCount: liveCategoryCounts.length,
       success: true,
     });
 
@@ -2573,6 +2669,11 @@ async function handleListVasProducts({ from, account }) {
       text: `❌ Sorry, I couldn't fetch the product list right now. Please try again later.`,
     });
   }
+}
+
+// Legacy alias to ensure AI fallbacks route to catalogue-backed list
+async function handleListAllProducts({ from, account }) {
+  return await handleListVasProducts({ from, account });
 }
 
 /**
