@@ -992,14 +992,13 @@ async function handleConversationState({ from, text, state, data, account }) {
         
         // Use digitsOnly for PIN validation
         const pin = digitsOnly;
+        const { previewId, amountCents, msisdn, vendorName } = data || {};
         logStructured('vas_airtime_pin_received', {
           from,
           accountId: account.id,
           previewId,
           pinMasked: `${'*'.repeat(pin.length)}`,
         });
-        
-        const { previewId, amountCents, msisdn, vendorName } = data || {};
         
         if (!previewId) {
           await updateConversationState(from, null);
