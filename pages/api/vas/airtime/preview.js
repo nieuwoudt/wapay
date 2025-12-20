@@ -9,6 +9,7 @@
 import { PrismaClient } from '@prisma/client';
 import { BluVasClient } from '@wapay/providers-blu';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../../lib/msisdn.js';
+import { internalJsonHeaders } from '../../../../lib/api-url.js';
 
 const prisma = new PrismaClient();
 
@@ -143,11 +144,13 @@ export default async function handler(req, res) {
       try {
         step = 'network_detection';
         const bluClient = new BluVasClient();
+        const requestId = `blu-check-${Date.now()}`;
         logStructured('vas_airtime_preview_blu_call_start', {
           accountId,
           msisdn: normalisedMsisdn,
+          requestId,
         });
-        const networkInfo = await bluClient.checkMobileNumber(normalisedMsisdn);
+        const networkInfo = await bluClient.checkMobileNumber(normalisedMsisdn, { headers: internalJsonHeaders() });
         detectedVendorName = networkInfo.vendorName;
         detectedVendorId = bluClient.vendorNameToId(networkInfo.vendorName);
         
@@ -161,6 +164,7 @@ export default async function handler(req, res) {
           msisdn: normalisedMsisdn,
           vendorId: detectedVendorId,
           vendorName: detectedVendorName,
+          requestId,
         });
       } catch (error) {
         console.error('Network detection failed:', error);
@@ -258,6 +262,8 @@ export default async function handler(req, res) {
       error: 'UNHANDLED_ERROR',
       errorMessage: error.message,
       stack: error.stack,
+      bluStatus: error.status,
+      bluBody: error.body,
     });
     return res.status(500).json({
       error: 'RETRYABLE',

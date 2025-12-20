@@ -13,7 +13,7 @@ import { postBluDeposit } from '@wapay/domain';
 import { chatWithAI } from '@wapay/ai';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive } from '../../../lib/vas-config.js';
-import { apiUrl } from '../../../lib/api-url.js';
+import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import {
   getOnboardingState,
   handleS0Initial,
@@ -99,6 +99,10 @@ async function logInternalFetchResponse({ url, res }) {
 
   logStructured('internal_fetch_response', entry);
   return { contentType, status };
+}
+
+function withInternalHeaders(extra = {}) {
+  return { ...internalJsonHeaders(), ...extra };
 }
 
 function resolveAirtimeSlots({ text, entities = {}, stateData = {} }) {
@@ -881,7 +885,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             logInternalFetchCall({ url: previewUrl, path: '/api/vas/airtime/preview' });
             const previewRes = await fetch(previewUrl, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: withInternalHeaders(),
               body: JSON.stringify({
                 accountId: account.id,
                 msisdn,
@@ -1017,7 +1021,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           logInternalFetchCall({ url: executeUrl, path: '/api/vas/airtime/execute' });
           const executeRes = await fetch(executeUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: withInternalHeaders(),
             body: JSON.stringify({
               previewId,
               accountId: account.id,
@@ -1248,7 +1252,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             logInternalFetchCall({ url: previewUrl, path: '/api/vas/electricity/preview' });
             const previewRes = await fetch(previewUrl, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: withInternalHeaders(),
               body: JSON.stringify({
                 accountId: account.id,
                 meterNumber,
@@ -1367,7 +1371,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           logInternalFetchCall({ url: executeUrl, path: '/api/vas/electricity/execute' });
           const executeRes = await fetch(executeUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: withInternalHeaders(),
             body: JSON.stringify({
               previewId,
               accountId: account.id,
