@@ -46,6 +46,26 @@ pnpm run build
 pnpm run dev
 ```
 
+## Production Deployment (Git → Vercel auto-deploy)
+
+We deploy to production by pushing to `main`; Vercel Git integration builds and promotes automatically.
+
+Steps:
+1) Make and verify changes locally.
+2) Stage and commit:
+   - `git add -A`
+   - `git commit -m "your message"`
+3) Push:
+   - `git push`
+4) Vercel detects the push to `main` and deploys to production for project `wapay-api` (team `finfy-ai`).
+
+Prod base URL:
+- `APP_BASE_URL=https://wapay-api-finfy-ai.vercel.app` (set in Vercel env)
+
+Primary prod domains:
+- https://wapay-api.vercel.app
+- https://wapay-api-finfy-ai.vercel.app
+
 ## Testing
 
 ### Unit Tests
