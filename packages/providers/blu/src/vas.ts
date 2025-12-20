@@ -422,7 +422,20 @@ export class BluVasClient {
       }
 
       // Handle error - pass msisdn for better logging
-      const errorData = (await res.body.json()) as any;
+      let errorData: any;
+      try {
+        errorData = (await res.body.json()) as any;
+      } catch {
+        const text = await res.body.text();
+        errorData = { message: text };
+      }
+      console.log(JSON.stringify({
+        type: 'blu_vas_network_response_error',
+        statusCode: res.statusCode,
+        body: errorData,
+        msisdn: bluNumber,
+        timestamp: new Date().toISOString(),
+      }));
       this.handleError(res.statusCode, errorData, msisdn);
     });
   }

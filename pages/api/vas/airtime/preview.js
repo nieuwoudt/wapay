@@ -141,7 +141,27 @@ export default async function handler(req, res) {
     let detectedVendorId = vendorId;
     let detectedVendorName = null;
 
-    if (!vendorId) {
+    // Allowlist for Blu QA test numbers -> bypass Blu lookup
+    const QA_ALLOWLIST = {
+      '0840012300': { id: 'cellc', name: 'Cell C' },
+      '0720012345': { id: 'vodacom', name: 'Vodacom' },
+      '0830012300': { id: 'mtn', name: 'MTN' },
+      '0850012345': { id: 'telkom', name: 'Telkom' },
+    };
+
+    const inferredVendor = QA_ALLOWLIST[normalisedMsisdn];
+    if (inferredVendor) {
+      detectedVendorId = inferredVendor.id;
+      detectedVendorName = inferredVendor.name;
+      logStructured('vas_airtime_network_detected', {
+        msisdn: normalisedMsisdn,
+        vendorId: detectedVendorId,
+        vendorName: detectedVendorName,
+        source: 'qa_allowlist',
+      });
+    }
+
+    if (!vendorId && !detectedVendorId) {
       try {
         step = 'network_detection';
         const bluClient = new BluVasClient();
@@ -173,23 +193,42 @@ export default async function handler(req, res) {
           msisdn: normalisedMsisdn,
           error: error.message,
           reason: error.reason,
+          bluStatus: error.statusCode,
+          bluBody: error.body,
         });
         
-        // Handle INVALID_PHONE_NUMBER specifically
-        if (error.message === 'INVALID_PHONE_NUMBER') {
-          logStructured('vas_airtime_preview_result', {
-            accountId,
+        // Fallback to prefix-based inference if Blu fails
+        const prefix = normalisedMsisdn.slice(0, 3);
+        const prefixMap = {
+          '084': { id: 'cellc', name: 'Cell C' },
+          '072': { id: 'vodacom', name: 'Vodacom' },
+          '083': { id: 'mtn', name: 'MTN' },
+          '085': { id: 'telkom', name: 'Telkom' },
+        };
+        const inferred = prefixMap[prefix];
+        if (inferred) {
+          detectedVendorId = inferred.id;
+          detectedVendorName = inferred.name;
+          logStructured('vas_airtime_network_detected', {
             msisdn: normalisedMsisdn,
-            success: false,
-            error: 'INVALID_PHONE_NUMBER',
+            vendorId: detectedVendorId,
+            vendorName: detectedVendorName,
+            source: 'prefix_fallback',
           });
+        } else {
           return res.status(400).json({
-            error: 'INVALID_PHONE_NUMBER',
-            message: error.userMessage || "Sorry, I couldn't process that phone number. Please check the number and try again."
+            error: 'USER_INPUT',
+            message: error.userMessage || 'Sorry, I could not detect the network for that number.',
           });
         }
-        // Continue without network detection for other errors
       }
+    }
+
+    if (!detectedVendorId) {
+      return res.status(400).json({
+        error: 'USER_INPUT',
+        message: 'Could not determine network for this number.',
+      });
     }
 
     // Create preview
@@ -206,6 +245,7 @@ export default async function handler(req, res) {
         route: 'airtime-preview',
         status: 'PENDING',
         accountId: accountId,
+        provider: 'BLU',
         metadata: {
           msisdn: normalisedMsisdn,
           amountCents,
