@@ -392,12 +392,23 @@ export class BluVasClient {
     }
     
     const bluNumber = this.toBluFormat(msisdn);
-    const url = `${this.base}/mobile/airtime/mobile-number/check?mobileNumber=${encodeURIComponent(bluNumber)}`;
+    // Blu QA expects query param "mobile-number" (with dash) per swagger
+    const url = `${this.base}/mobile/airtime/mobile-number/check?mobile-number=${encodeURIComponent(bluNumber)}`;
 
     return this.callWithRetry(async () => {
+      const headers = this.headers();
+      // Log request metadata without api key
+      console.log(JSON.stringify({
+        type: 'blu_vas_network_request',
+        url,
+        headers: Object.keys(headers).filter((k) => k.toLowerCase() !== 'authorization'),
+        msisdn: bluNumber,
+        timestamp: new Date().toISOString(),
+      }));
+
       const res = await request(url, {
         method: 'GET',
-        headers: this.headers(),
+        headers,
         bodyTimeout: 30000,
         headersTimeout: 30000,
       });
