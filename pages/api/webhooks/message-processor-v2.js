@@ -2668,6 +2668,9 @@ async function handleVoucherRedemption({ from, pin, account }) {
 
   } catch (error) {
     console.error('❌ Voucher redemption error:', error);
+    
+    // Use userMessage if provided by BluClient (better error mapping)
+    const userMessage = error.userMessage;
     const reasonRaw = (error.reason || '').toString().trim();
     const sanitizedReason =
       reasonRaw && !['USER_INPUT', 'AUTH', 'RETRYABLE', 'Error'].includes(reasonRaw) && reasonRaw.toLowerCase() !== 'no message available'
@@ -2675,25 +2678,25 @@ async function handleVoucherRedemption({ from, pin, account }) {
         : '';
 
     // Determine error type and message
-    let errorMessage = 'Sorry, we could not process your voucher. Please try again later.';
+    let errorMessage = userMessage || 'Sorry, we could not process your voucher. Please try again later.';
     const errorType = error.message;
     const allowRetry = errorType === 'USER_INPUT' || errorType === 'RETRYABLE';
 
-    // Map Blu error messages to user-friendly text
-    if (errorType === 'USER_INPUT') {
-      // Use Blu's error message directly when available
-      if (sanitizedReason) {
+    // Map Blu error messages to user-friendly text (if no userMessage from client)
+    if (!userMessage) {
+      if (errorType === 'USER_INPUT') {
+        if (sanitizedReason) {
+          errorMessage = sanitizedReason;
+        } else {
+          errorMessage = 'Blu could not redeem that voucher PIN. The voucher may be invalid, already used, or expired. Please verify the digits and try another voucher if needed.';
+        }
+      } else if (errorType === 'AUTH') {
+        errorMessage = 'We couldn\'t complete your voucher redemption due to a provider configuration error. Please try again later or contact support.';
+      } else if (errorType === 'RETRYABLE') {
+        errorMessage = sanitizedReason || 'The voucher service is temporarily unavailable. Please try again in a few minutes.';
+      } else if (sanitizedReason) {
         errorMessage = sanitizedReason;
-      } else {
-        errorMessage = 'Blu could not redeem that voucher PIN. The voucher may be invalid, already used, or expired. Please verify the digits and try another voucher if needed.';
       }
-    } else if (errorType === 'AUTH') {
-      // Provider configuration/permission error - not user's fault
-      errorMessage = 'We couldn\'t complete your voucher redemption due to a provider configuration error. Please try again later or contact support.';
-    } else if (errorType === 'RETRYABLE') {
-      errorMessage = sanitizedReason || 'The voucher service is temporarily unavailable. Please try again in a few minutes.';
-    } else if (sanitizedReason) {
-      errorMessage = sanitizedReason;
     }
 
     // Keep user in voucher flow if retry makes sense (but NOT for AUTH errors)

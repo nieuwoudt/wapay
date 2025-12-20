@@ -18,26 +18,32 @@ export type BluVoucherStatus = {
 /**
  * Blu Voucher Client (Redemption)
  * 
- * Note: Blu Voucher + Blu VAS share the same BLT Trade API key (apikey header).
- * Use BLU_TRADE_API_KEY for all trade/v2 endpoints.
+ * IMPORTANT: Voucher endpoints use BLU_API_KEY (6b58e8ca...),
+ * NOT BLU_TRADE_API_KEY which is for VAS endpoints.
  * 
  * Environment Variables:
- * - BLU_BASE_URL: API base URL (e.g., https://api.bluvoucher.co.za)
- * - BLU_BASIC_USER: Basic auth username
- * - BLU_BASIC_PASS: Basic auth password
- * - BLU_TRADE_API_KEY: Shared API key for all Blu Trade API endpoints
+ * - BLU_BASE_URL: API base URL (e.g., https://api.qa.bltelecoms.net/v2/trade)
+ * - BLU_API_KEY: API key for voucher endpoints (REQUIRED: 6b58e8ca...)
  * - BLU_VEND_CHANNEL: Optional vend channel (default: 'API')
+ * - BLU_BASIC_USER: Basic auth username (optional)
+ * - BLU_BASIC_PASS: Basic auth password (optional)
  */
 export class BluClient {
   private base = requireEnv('BLU_BASE_URL');
-  private user = requireEnv('BLU_BASIC_USER');
-  private pass = requireEnv('BLU_BASIC_PASS');
-  // Shared API key for Blu Voucher + VAS (same BLT Trade API)
-  private apiKey = process.env.BLU_TRADE_API_KEY || process.env.BLU_API_KEY;
+  private user = process.env.BLU_BASIC_USER || '';
+  private pass = process.env.BLU_BASIC_PASS || '';
+  // MUST use BLU_API_KEY for voucher endpoints (not BLU_TRADE_API_KEY)
+  private apiKey = requireEnv('BLU_API_KEY');
   private vendChannel = process.env.BLU_VEND_CHANNEL || 'API';
 
   constructor() {
-    console.log('[Blu] Initialized with base URL:', this.base, 'vendChannel:', this.vendChannel);
+    const keyMask = this.apiKey ? `...${this.apiKey.slice(-4)}` : 'MISSING';
+    console.log('[Blu Voucher] Initialized', {
+      baseUrl: this.base,
+      vendChannel: this.vendChannel,
+      apikey: keyMask,
+      basicAuth: this.user && this.pass ? 'enabled' : 'disabled'
+    });
   }
 
   private headers(extra: Record<string, string> = {}) {
@@ -155,12 +161,24 @@ export class BluClient {
     }
     
     // Blu Swagger: POST /voucher/variable/redemptions
-    // Body: { requestId, token, amount (in cents) }
+    // IMPORTANT: Always include vendMetaData (Blu's working samples include it)
     const url = `${this.base}/voucher/variable/redemptions`;
+    const nowIso = new Date().toISOString();
+    
     const body = {
       requestId: idemKey,
       token: pin,
-      amount: amountCents, // Amount in cents, per Swagger
+      amount: amountCents, // Amount in cents
+      vendMetaData: {
+        transactionRequestDateTime: nowIso,
+        transactionReference: idemKey,
+        vendorId: 'WAPAY',
+        deviceId: 'WHATSAPP',
+        consumerAccountNumber: 'wapay-user',
+        clientId: 'WaPay',
+        emailAddress: 'support@wapay.dev',
+        cellphoneNumber: '0000000000',
+      },
     };
     const masked = maskVoucherPin(pin);
     
@@ -221,24 +239,38 @@ export class BluClient {
             extractedMessage: message,
           });
           
-          // Check for authorization/permission errors (even with 400 status)
-          const isAuthError = 
-            res.statusCode === 401 || 
-            res.statusCode === 403 ||
-            message.toLowerCase().includes('not authorized') ||
-            message.toLowerCase().includes('permission') ||
-            message.toLowerCase().includes('invalid transaction type');
+          // Check for specific error messages and map appropriately
+          const messageLower = message.toLowerCase();
           
-          if (isAuthError) {
-            const err = new Error('AUTH');
-            (err as any).reason = message;
+          // Already redeemed
+          if (messageLower.includes('already been redeemed') || messageLower.includes('already used')) {
+            const err = new Error('USER_INPUT');
+            (err as any).reason = 'This voucher has already been redeemed';
+            (err as any).userMessage = 'This voucher has already been used. Please try a different voucher.';
             throw err;
           }
           
-          // User input errors (400, 404, 409) - but only if not auth-related
+          // Authorization/permission errors
+          const isAuthError = 
+            res.statusCode === 401 || 
+            res.statusCode === 403 ||
+            messageLower.includes('not authorized') ||
+            messageLower.includes('permission') ||
+            messageLower.includes('invalid transaction type');
+          
+          if (isAuthError) {
+            const err = new Error('AUTH');
+            (err as any).reason = 'Voucher provider configuration issue';
+            (err as any).userMessage = 'Service configuration error. Please try again later or contact support.';
+            (err as any).originalMessage = message;
+            throw err;
+          }
+          
+          // User input errors (400, 404, 409)
           if (res.statusCode === 400 || res.statusCode === 404 || res.statusCode === 409) {
             const err = new Error('USER_INPUT');
             (err as any).reason = message;
+            (err as any).userMessage = message;
             throw err;
           }
           
