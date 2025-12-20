@@ -65,6 +65,42 @@ function extractMsisdnFromText(text = '') {
   return null;
 }
 
+function detectVendorLabel(msisdn = '') {
+  const num = normaliseMsisdn(msisdn);
+  const p3 = num.slice(0, 3);
+  const vodacom = ['072', '076', '079', '082', '084'];
+  const mtn = ['073', '078', '083', '081'];
+  const cellc = ['061', '062', '063', '084'];
+  const telkom = ['081', '085'];
+
+  if (telkom.includes(p3)) return 'Telkom';
+  if (vodacom.includes(p3)) return 'Vodacom';
+  if (mtn.includes(p3)) return 'MTN';
+  if (cellc.includes(p3)) return 'Cell C';
+  return 'Detected';
+}
+
+function logInternalFetchCall({ url, path, method = 'POST' }) {
+  logStructured('internal_fetch_call', { url, path, method });
+}
+
+async function logInternalFetchResponse({ url, res }) {
+  const contentType = res.headers.get('content-type') || '';
+  const status = res.status;
+  const path = url.replace(/https?:\/\/[^/]+/, '');
+  const entry = { url, path, status, contentType };
+
+  if (!contentType.includes('application/json')) {
+    const bodyText = await res.text();
+    entry.bodyPrefix = bodyText.slice(0, 200);
+    logStructured('internal_fetch_response_non_json', entry);
+    return { contentType, bodyText, status };
+  }
+
+  logStructured('internal_fetch_response', entry);
+  return { contentType, status };
+}
+
 function resolveAirtimeSlots({ text, entities = {}, stateData = {} }) {
   let amountCents = stateData.amountCents;
   if (!amountCents && typeof entities.amount === 'number') {
@@ -87,6 +123,17 @@ function resolveAirtimeSlots({ text, entities = {}, stateData = {} }) {
   }
 
   return { amountCents, msisdn };
+}
+
+function resolveDataSlots({ text, entities = {}, stateData = {} }) {
+  let msisdn = stateData.msisdn || entities.msisdn;
+  if (!msisdn) {
+    const parsed = extractMsisdnFromText(text);
+    if (parsed && isValidSaMsisdn(parsed)) {
+      msisdn = normaliseMsisdn(parsed);
+    }
+  }
+  return { msisdn };
 }
 
 /**
@@ -365,12 +412,13 @@ async function handlePostOnboarding({ account, from, text }) {
 
         if (slotsComplete) {
           const normalisedMsisdn = normaliseMsisdn(airtimeSlots.msisdn);
-          await updateConversationState(from, 'AIRTIME_CONFIRM', { amountCents: airtimeSlots.amountCents, msisdn: normalisedMsisdn });
+          const vendorLabel = detectVendorLabel(normalisedMsisdn);
+          await updateConversationState(from, 'AIRTIME_CONFIRM', { amountCents: airtimeSlots.amountCents, msisdn: normalisedMsisdn, vendorLabel });
           return await sendWhatsAppText({
             to: from,
             text: `📱 *Confirm Airtime Purchase*\n\n` +
                   `Amount: R${airtimeSlots.amountCents / 100}\n` +
-                  `Number: ${normalisedMsisdn}\n\n` +
+                  `Number: ${normalisedMsisdn} (${vendorLabel})\n\n` +
                   `Reply *YES* to confirm or *NO* to cancel.`,
           });
         }
@@ -402,7 +450,16 @@ async function handlePostOnboarding({ account, from, text }) {
           return await replyCategoryUnavailable(from, 'DATA');
         }
 
-        return await handleListDataBundles({ from, account, entities: detection.entities });
+        const dataSlots = resolveDataSlots({ text, entities: detection.entities });
+        logStructured('slot_fill_data', {
+          from,
+          accountId: account.id,
+          msisdn: dataSlots.msisdn,
+          missingMsisdn: !dataSlots.msisdn,
+        });
+
+        const mergedEntities = { ...(detection.entities || {}), ...(dataSlots.msisdn ? { msisdn: dataSlots.msisdn } : {}) };
+        return await handleListDataBundles({ from, account, entities: mergedEntities });
 
       // ====================================================================
       // SMART PRODUCT QUERY - Uses database to match categories
@@ -749,22 +806,25 @@ async function handleConversationState({ from, text, state, data, account }) {
         
         const amountCents = data?.amountCents || 1000;
         
+        const vendorLabel = detectVendorLabel(normalisedMsisdn);
+
         // Log VAS preview call
         logStructured('vas_airtime_preview_initiated', {
           from,
           accountId: account.id,
           msisdn: normalisedMsisdn,
           amountCents,
+          vendorLabel,
         });
         
         // Move to confirmation state
-        await updateConversationState(from, 'AIRTIME_CONFIRM', { amountCents, msisdn: normalisedMsisdn });
+        await updateConversationState(from, 'AIRTIME_CONFIRM', { amountCents, msisdn: normalisedMsisdn, vendorLabel });
         
         return await sendWhatsAppText({
           to: from,
           text: `📱 *Confirm Airtime Purchase*\n\n` +
                 `Amount: R${amountCents / 100}\n` +
-                `Number: ${normalisedMsisdn}\n\n` +
+                `Number: ${normalisedMsisdn} (${vendorLabel})\n\n` +
                 `Reply *YES* to confirm or *NO* to cancel.`,
         });
       }
@@ -793,7 +853,8 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         
         if (/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
-          const { amountCents, msisdn } = data || {};
+          const { amountCents, msisdn, vendorLabel: stateVendorLabel } = data || {};
+          const vendorLabel = stateVendorLabel || detectVendorLabel(msisdn || '');
           
           if (!amountCents || !msisdn) {
             await updateConversationState(from, null);
@@ -817,7 +878,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           // Call preview API
           try {
             const previewUrl = apiUrl('/api/vas/airtime/preview');
-            logStructured('internal_fetch_call', { url: previewUrl, path: '/api/vas/airtime/preview' });
+            logInternalFetchCall({ url: previewUrl, path: '/api/vas/airtime/preview' });
             const previewRes = await fetch(previewUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -827,8 +888,11 @@ async function handleConversationState({ from, text, state, data, account }) {
                 amountCents,
               }),
             });
+            await logInternalFetchResponse({ url: previewUrl, res: previewRes });
             
-            const previewData = await previewRes.json();
+            const previewData = previewRes.headers.get('content-type')?.includes('application/json')
+              ? await previewRes.json()
+              : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
             
             if (!previewData.ok) {
               logStructured('vas_airtime_preview_failed', {
@@ -851,6 +915,14 @@ async function handleConversationState({ from, text, state, data, account }) {
               amountCents,
               msisdn,
               vendorName: previewData.preview?.vendorName,
+              vendorLabel,
+            });
+            logStructured('vas_airtime_pin_requested', {
+              from,
+              accountId: account.id,
+              previewId: previewData.previewId,
+              msisdn,
+              amountCents,
             });
             
             return await sendWhatsAppText({
@@ -916,6 +988,12 @@ async function handleConversationState({ from, text, state, data, account }) {
         
         // Use digitsOnly for PIN validation
         const pin = digitsOnly;
+        logStructured('vas_airtime_pin_received', {
+          from,
+          accountId: account.id,
+          previewId,
+          pinMasked: `${'*'.repeat(pin.length)}`,
+        });
         
         const { previewId, amountCents, msisdn, vendorName } = data || {};
         
@@ -936,7 +1014,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         // Call execute API
         try {
           const executeUrl = apiUrl('/api/vas/airtime/execute');
-          logStructured('internal_fetch_call', { url: executeUrl, path: '/api/vas/airtime/execute' });
+          logInternalFetchCall({ url: executeUrl, path: '/api/vas/airtime/execute' });
           const executeRes = await fetch(executeUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -947,7 +1025,11 @@ async function handleConversationState({ from, text, state, data, account }) {
             }),
           });
           
-          const executeData = await executeRes.json();
+          await logInternalFetchResponse({ url: executeUrl, res: executeRes });
+
+          const executeData = executeRes.headers.get('content-type')?.includes('application/json')
+            ? await executeRes.json()
+            : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from execute' };
           
           // Clear state
           await updateConversationState(from, null);
@@ -1163,7 +1245,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           // Call preview API to validate balance and create preview
           try {
             const previewUrl = apiUrl('/api/vas/electricity/preview');
-            logStructured('internal_fetch_call', { url: previewUrl, path: '/api/vas/electricity/preview' });
+            logInternalFetchCall({ url: previewUrl, path: '/api/vas/electricity/preview' });
             const previewRes = await fetch(previewUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1173,8 +1255,11 @@ async function handleConversationState({ from, text, state, data, account }) {
                 amountCents,
               }),
             });
+            await logInternalFetchResponse({ url: previewUrl, res: previewRes });
             
-            const previewData = await previewRes.json();
+            const previewData = previewRes.headers.get('content-type')?.includes('application/json')
+              ? await previewRes.json()
+              : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
             
             if (!previewData.ok) {
               logStructured('vas_electricity_preview_failed', {
@@ -1279,7 +1364,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         // Call execute API
         try {
           const executeUrl = apiUrl('/api/vas/electricity/execute');
-          logStructured('internal_fetch_call', { url: executeUrl, path: '/api/vas/electricity/execute' });
+          logInternalFetchCall({ url: executeUrl, path: '/api/vas/electricity/execute' });
           const executeRes = await fetch(executeUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1290,7 +1375,11 @@ async function handleConversationState({ from, text, state, data, account }) {
             }),
           });
           
-          const executeData = await executeRes.json();
+          await logInternalFetchResponse({ url: executeUrl, res: executeRes });
+
+          const executeData = executeRes.headers.get('content-type')?.includes('application/json')
+            ? await executeRes.json()
+            : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from execute' };
           
           // Clear state
           await updateConversationState(from, null);

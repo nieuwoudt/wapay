@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     const normalisedMsisdn = normaliseMsisdn(msisdn || '');
 
   // Log the preview call
-  logStructured('vas_airtime_preview_call', {
+  logStructured('vas_airtime_preview_start', {
     accountId,
     msisdn: normalisedMsisdn,
     amountCents,
@@ -84,10 +84,13 @@ export default async function handler(req, res) {
     }
 
     // Get account and wallet
+    let step = 'start';
+
     const account = await prisma.account.findUnique({
       where: { id: accountId },
       include: { wallet: true }
     });
+    step = 'account';
 
     if (!account) {
       logStructured('vas_airtime_preview_result', {
@@ -100,6 +103,7 @@ export default async function handler(req, res) {
         message: 'Account not found'
       });
     }
+    logStructured('vas_airtime_preview_account_ok', { accountId });
 
     if (!account.wallet) {
       logStructured('vas_airtime_preview_result', {
@@ -115,6 +119,7 @@ export default async function handler(req, res) {
 
     // Check balance
     const availableBalance = account.wallet.availableCents;
+    step = 'balance';
     if (availableBalance < amountCents) {
       logStructured('vas_airtime_preview_result', {
         accountId,
@@ -128,6 +133,7 @@ export default async function handler(req, res) {
         message: `Insufficient balance. Available: R${(availableBalance / 100).toFixed(2)}`
       });
     }
+    logStructured('vas_airtime_preview_balance_ok', { accountId, availableBalance, amountCents });
 
     // Auto-detect network if not provided
     let detectedVendorId = vendorId;
@@ -135,12 +141,23 @@ export default async function handler(req, res) {
 
     if (!vendorId) {
       try {
+        step = 'network_detection';
         const bluClient = new BluVasClient();
+        logStructured('vas_airtime_preview_blu_call_start', {
+          accountId,
+          msisdn: normalisedMsisdn,
+        });
         const networkInfo = await bluClient.checkMobileNumber(normalisedMsisdn);
         detectedVendorName = networkInfo.vendorName;
         detectedVendorId = bluClient.vendorNameToId(networkInfo.vendorName);
         
         logStructured('vas_airtime_network_detected', {
+          msisdn: normalisedMsisdn,
+          vendorId: detectedVendorId,
+          vendorName: detectedVendorName,
+        });
+        logStructured('vas_airtime_preview_blu_call_ok', {
+          accountId,
           msisdn: normalisedMsisdn,
           vendorId: detectedVendorId,
           vendorName: detectedVendorName,
@@ -174,6 +191,7 @@ export default async function handler(req, res) {
     const previewId = `preview-air-${Date.now()}-${accountId}`;
     const feeCents = 0; // No fee for now
     const totalCents = amountCents + feeCents;
+    step = 'db_create';
 
     // Store preview in database (expires in 5 minutes)
     await prisma.providerRequest.create({
@@ -205,6 +223,12 @@ export default async function handler(req, res) {
       totalCents,
       success: true,
     });
+    logStructured('vas_airtime_preview_db_ok', {
+      accountId,
+      previewId,
+      vendorId: detectedVendorId,
+      totalCents,
+    });
 
     // Return preview
     return res.status(200).json({
@@ -226,12 +250,14 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Airtime preview error:', error);
-    logStructured('vas_airtime_preview_result', {
+    logStructured('vas_airtime_preview_fail', {
       accountId,
       msisdn: normalisedMsisdn,
+      step: typeof step === 'string' ? step : 'unknown',
       success: false,
       error: 'UNHANDLED_ERROR',
       errorMessage: error.message,
+      stack: error.stack,
     });
     return res.status(500).json({
       error: 'RETRYABLE',
