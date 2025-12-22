@@ -59,9 +59,18 @@ async function replyCategoryUnavailable(to, category) {
 }
 
 function extractMsisdnFromText(text = '') {
-  const digits = text.replace(/\D/g, '');
-  if (digits.startsWith('27') && digits.length === 11) return `0${digits.slice(2)}`;
-  if (digits.length === 10 && digits.startsWith('0')) return digits;
+  // Extract a plausible MSISDN substring instead of concatenating all digits
+  // Supports: 0XXXXXXXXX, 27XXXXXXXXX, +27XXXXXXXXX (prefer the last match in the message)
+  const compact = String(text || '').replace(/[\s-]/g, '');
+  const matches = compact.match(/(\+?27\d{9}|0\d{9})/g);
+  if (!matches || matches.length === 0) return null;
+
+  let candidate = matches[matches.length - 1];
+  if (candidate.startsWith('+')) candidate = candidate.slice(1);
+  if (candidate.startsWith('27') && candidate.length === 11) {
+    candidate = `0${candidate.slice(2)}`;
+  }
+  if (candidate.length === 10 && candidate.startsWith('0')) return candidate;
   return null;
 }
 
