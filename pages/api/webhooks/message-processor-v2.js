@@ -1012,6 +1012,26 @@ async function handleConversationState({ from, text, state, data, account }) {
           await sendWhatsAppText({ to: from, text: `👍 Airtime purchase cancelled.` });
           return await renderHome({ from, account });
         }
+
+        // Slot-fill inside state: if user provides amount+msisdn in one message, skip questions
+        const filled = resolveAirtimeSlots({ text, entities: {}, stateData: data || {} });
+        if (filled.amountCents && filled.msisdn && isValidSaMsisdn(filled.msisdn)) {
+          const normalisedMsisdn = normaliseMsisdn(filled.msisdn);
+          const vendorLabel = detectVendorLabel(normalisedMsisdn);
+          await updateConversationState(from, 'AIRTIME_CONFIRM', {
+            amountCents: filled.amountCents,
+            msisdn: normalisedMsisdn,
+            vendorLabel,
+          });
+          return await sendWhatsAppText({
+            to: from,
+            text:
+              `📱 *Confirm Airtime Purchase*\n\n` +
+              `Amount: R${filled.amountCents / 100}\n` +
+              `Number: ${normalisedMsisdn} (${vendorLabel})\n\n` +
+              `Reply *YES* to confirm or *NO* to cancel.`,
+          });
+        }
         
         // If message doesn't look like a phone number at all, assume user wants to cancel
         const digitsOnly = text.replace(/[^\d]/g, '');
@@ -1024,14 +1044,13 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
-        const rawMsisdnInput = /^(me|my\s*number|my\s*phone|myself)$/i.test(normalized)
-          ? account.msisdn
-          : text.trim();
-
+        const isMe = /^(me|my\s*number|my\s*phone|myself)$/i.test(normalized);
+        const extracted = extractMsisdnFromText(text);
+        const rawMsisdnInput = isMe ? account.msisdn : (extracted || text.trim());
         const normalisedMsisdn = normaliseMsisdn(rawMsisdnInput || '');
         
         // Validate phone number format (allow Blu QA numbers)
-        if (!isValidSaMsisdn(rawMsisdnInput)) {
+        if (!isValidSaMsisdn(normalisedMsisdn)) {
           logStructured('msisdn_validation_failed', {
             type: 'msisdn_validation_failed',
             from,
