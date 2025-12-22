@@ -77,7 +77,8 @@ function extractMsisdnFromText(text = '') {
 function detectVendorLabel(msisdn = '') {
   const num = normaliseMsisdn(msisdn);
   const p3 = num.slice(0, 3);
-  const vodacom = ['072', '076', '079', '082', '084'];
+  // Note: 084 is ambiguous in SA and conflicts with Blu QA allowlist; do not guess it as Vodacom.
+  const vodacom = ['072', '076', '079', '082'];
   const mtn = ['073', '078', '083', '081'];
   const cellc = ['061', '062', '063', '084'];
   const telkom = ['081', '085'];
@@ -87,6 +88,52 @@ function detectVendorLabel(msisdn = '') {
   if (mtn.includes(p3)) return 'MTN';
   if (cellc.includes(p3)) return 'Cell C';
   return 'Detected';
+}
+
+async function startAirtimePreviewAndConfirm({ from, account, amountCents, msisdn }) {
+  const previewUrl = apiUrl('/api/vas/airtime/preview');
+  logInternalFetchCall({ url: previewUrl, path: '/api/vas/airtime/preview' });
+
+  const previewRes = await fetch(previewUrl, {
+    method: 'POST',
+    headers: withInternalHeaders(),
+    body: JSON.stringify({
+      accountId: account.id,
+      msisdn,
+      amountCents,
+    }),
+  });
+
+  await logInternalFetchResponse({ url: previewUrl, res: previewRes });
+
+  const previewData = previewRes.headers.get('content-type')?.includes('application/json')
+    ? await previewRes.json()
+    : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
+
+  if (!previewData.ok) {
+    return await sendWhatsAppText({
+      to: from,
+      text: `❌ ${previewData.message || 'Could not process airtime purchase.'}\n\nPlease try again later.`,
+    });
+  }
+
+  const vendorName = previewData.preview?.vendorName || detectVendorLabel(msisdn);
+
+  await updateConversationState(from, 'AIRTIME_CONFIRM', {
+    amountCents,
+    msisdn,
+    vendorLabel: vendorName,
+    previewId: previewData.previewId,
+  });
+
+  return await sendWhatsAppText({
+    to: from,
+    text:
+      `📱 *Confirm Airtime Purchase*\n\n` +
+      `Amount: R${(amountCents / 100).toFixed(0)}\n` +
+      `Number: ${msisdn} (${vendorName})\n\n` +
+      `Reply *YES* to confirm or *NO* to cancel.`,
+  });
 }
 
 function logInternalFetchCall({ url, path, method = 'POST' }) {
@@ -622,14 +669,11 @@ async function handlePostOnboarding({ account, from, text }) {
 
         if (slotsComplete) {
           const normalisedMsisdn = normaliseMsisdn(airtimeSlots.msisdn);
-          const vendorLabel = detectVendorLabel(normalisedMsisdn);
-          await updateConversationState(from, 'AIRTIME_CONFIRM', { amountCents: airtimeSlots.amountCents, msisdn: normalisedMsisdn, vendorLabel });
-          return await sendWhatsAppText({
-            to: from,
-            text: `📱 *Confirm Airtime Purchase*\n\n` +
-                  `Amount: R${airtimeSlots.amountCents / 100}\n` +
-                  `Number: ${normalisedMsisdn} (${vendorLabel})\n\n` +
-                  `Reply *YES* to confirm or *NO* to cancel.`,
+          return await startAirtimePreviewAndConfirm({
+            from,
+            account,
+            amountCents: airtimeSlots.amountCents,
+            msisdn: normalisedMsisdn,
           });
         }
 
@@ -1017,19 +1061,11 @@ async function handleConversationState({ from, text, state, data, account }) {
         const filled = resolveAirtimeSlots({ text, entities: {}, stateData: data || {} });
         if (filled.amountCents && filled.msisdn && isValidSaMsisdn(filled.msisdn)) {
           const normalisedMsisdn = normaliseMsisdn(filled.msisdn);
-          const vendorLabel = detectVendorLabel(normalisedMsisdn);
-          await updateConversationState(from, 'AIRTIME_CONFIRM', {
+          return await startAirtimePreviewAndConfirm({
+            from,
+            account,
             amountCents: filled.amountCents,
             msisdn: normalisedMsisdn,
-            vendorLabel,
-          });
-          return await sendWhatsAppText({
-            to: from,
-            text:
-              `📱 *Confirm Airtime Purchase*\n\n` +
-              `Amount: R${filled.amountCents / 100}\n` +
-              `Number: ${normalisedMsisdn} (${vendorLabel})\n\n` +
-              `Reply *YES* to confirm or *NO* to cancel.`,
           });
         }
         
@@ -1070,7 +1106,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         const amountCents = data?.amountCents || 1000;
         
         const vendorLabel = detectVendorLabel(normalisedMsisdn);
-
+        
         // Log VAS preview call
         logStructured('vas_airtime_preview_initiated', {
           from,
@@ -1114,7 +1150,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         
         if (/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
-          const { amountCents, msisdn, vendorLabel: stateVendorLabel } = data || {};
+          const { amountCents, msisdn, vendorLabel: stateVendorLabel, previewId: existingPreviewId } = data || {};
           const vendorLabel = stateVendorLabel || detectVendorLabel(msisdn || '');
           
           if (!amountCents || !msisdn) {
@@ -1133,79 +1169,34 @@ async function handleConversationState({ from, text, state, data, account }) {
             amountCents,
           });
           
-          // Clear state first
+          // If we already have a previewId from the confirmation step, do NOT preview again.
+          const previewId = existingPreviewId;
+          if (!previewId) {
+            // Backwards compatibility: if preview wasn't created yet, create it now.
           await updateConversationState(from, null);
-          
-          // Call preview API
-          try {
-            const previewUrl = apiUrl('/api/vas/airtime/preview');
-            logInternalFetchCall({ url: previewUrl, path: '/api/vas/airtime/preview' });
-            const previewRes = await fetch(previewUrl, {
-              method: 'POST',
-              headers: withInternalHeaders(),
-              body: JSON.stringify({
-                accountId: account.id,
-                msisdn,
+            return await startAirtimePreviewAndConfirm({ from, account, amountCents, msisdn });
+          }
+
+          await updateConversationState(from, 'AIRTIME_PIN', { 
+            previewId,
                 amountCents,
-              }),
+            msisdn,
+            vendorName: vendorLabel,
+            vendorLabel,
             });
-            await logInternalFetchResponse({ url: previewUrl, res: previewRes });
             
-            const previewData = previewRes.headers.get('content-type')?.includes('application/json')
-              ? await previewRes.json()
-              : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
-            
-            if (!previewData.ok) {
-              logStructured('vas_airtime_preview_failed', {
+          logStructured('vas_airtime_pin_requested', {
                 from,
                 accountId: account.id,
-                error: previewData.error,
-                message: previewData.message,
+            previewId,
+            msisdn,
+            amountCents,
               });
               
               return await sendWhatsAppText({
                 to: from,
-                text: `❌ ${previewData.message || 'Could not process airtime purchase.'}\n\nPlease try again later.`,
-              });
-            }
-            
-            // For now, we need PIN to execute
-            // In stub mode, we'll simulate success
-            await updateConversationState(from, 'AIRTIME_PIN', { 
-              previewId: previewData.previewId,
-              amountCents,
-              msisdn,
-              vendorName: previewData.preview?.vendorName,
-              vendorLabel,
-            });
-            logStructured('vas_airtime_pin_requested', {
-              from,
-              accountId: account.id,
-              previewId: previewData.previewId,
-              msisdn,
-              amountCents,
-            });
-            
-            return await sendWhatsAppText({
-              to: from,
-              text: `🔐 *Enter Your PIN*\n\n` +
-                    `To complete your R${amountCents / 100} airtime purchase to ${msisdn}, please enter your WaPay PIN.`,
-            });
-            
-          } catch (error) {
-            console.error('Preview API error:', error);
-            logStructured('vas_airtime_preview_error', {
-              from,
-              accountId: account.id,
-              url: apiUrl('/api/vas/airtime/preview'),
-              error: error.message,
-            });
-            
-            return await sendWhatsAppText({
-              to: from,
-              text: `❌ Service temporarily unavailable. Please try again later.`,
-            });
-          }
+            text: `🔐 *Enter Your PIN*\n\nTo complete your R${(amountCents / 100).toFixed(0)} airtime purchase to ${msisdn} (${vendorLabel}), please enter your WaPay PIN.`,
+          });
         }
         
         // Unrecognized response
@@ -1231,8 +1222,8 @@ async function handleConversationState({ from, text, state, data, account }) {
           : text.trim();
         const normalisedMsisdn = normaliseMsisdn(rawMsisdnInput || '');
         if (!isValidSaMsisdn(normalisedMsisdn)) {
-          return await sendWhatsAppText({
-            to: from,
+            return await sendWhatsAppText({
+              to: from,
             text: `❌ Invalid phone number format.\n\nPlease enter a valid SA mobile number (e.g., 0781234567)\n\nOr reply "cancel" to stop.`,
           });
         }
@@ -1335,10 +1326,10 @@ async function handleConversationState({ from, text, state, data, account }) {
             vendorId,
             amountCents: previewData.preview?.totalCents || amountCents,
             productName: previewData.preview?.productName,
-          });
-
-          return await sendWhatsAppText({
-            to: from,
+            });
+            
+            return await sendWhatsAppText({
+              to: from,
             text: `🔐 *Enter Your PIN*\n\nTo complete your data purchase for ${msisdn}, please enter your WaPay PIN.`,
           });
         } catch (e) {
@@ -1387,7 +1378,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           }
           const msisdn = data?.msisdn || '';
           await sendReceipt({
-            to: from,
+          to: from,
             productLabel: 'Data',
             targetLabel: '📱 Number',
             targetValue: msisdn,
@@ -1505,7 +1496,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             amountCents,
             msisdn,
           });
-
+          
           await sendReceipt({
             to: from,
             productLabel: 'Airtime',
