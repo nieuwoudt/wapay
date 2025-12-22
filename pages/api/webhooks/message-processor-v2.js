@@ -48,7 +48,7 @@ function sanitizeUserText(text) {
 
 function categoryUnavailableMessage(category) {
   const display = getCategoryDisplayName(category);
-  return `🚧 ${display} is not available yet. I'll let you know when it's live. In the meantime, you can buy airtime or data.`;
+  return `🚧 ${display} is listed, but purchasing is not enabled yet.\n\nYou can still buy airtime, data, or electricity right now.`;
 }
 
 async function replyCategoryUnavailable(to, category) {
@@ -105,6 +105,117 @@ function withInternalHeaders(extra = {}) {
   return { ...internalJsonHeaders(), ...extra };
 }
 
+function isHomeTrigger(text = '') {
+  const t = text.trim().toLowerCase();
+  return /^(hi|hello|hey|start|menu|home|help)$/i.test(t);
+}
+
+function formatMoneyZar(amountRandsString = '0.00') {
+  const num = Number(amountRandsString);
+  if (Number.isFinite(num)) return `R${num.toFixed(2)}`;
+  return `R${amountRandsString}`;
+}
+
+function formatDateTimeZa(date = new Date()) {
+  try {
+    return new Date(date).toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch {
+    return new Date().toLocaleString('en-ZA');
+  }
+}
+
+async function sendReceipt({ to, productLabel, targetLabel, targetValue, network, amountCents, reference, newBalanceCents, dateTime, extraLines = [] }) {
+  const receipt =
+    `✅ ${productLabel} purchase successful!\n\n` +
+    `${targetLabel}: ${targetValue}\n` +
+    `🌐 Network: ${network}\n` +
+    `💰 Amount: R${(amountCents / 100).toFixed(2)}\n` +
+    (Array.isArray(extraLines) && extraLines.length ? `${extraLines.join('\n')}\n` : '') +
+    `🧾 Reference: ${reference}\n` +
+    `📅 ${formatDateTimeZa(dateTime)}\n\n` +
+    `💳 New balance: R${(newBalanceCents / 100).toFixed(2)}`;
+
+  await addToConversationHistory(to, 'assistant', receipt);
+  return await sendWhatsAppText({ to, text: receipt });
+}
+
+async function sendPostTransactionCta(to) {
+  const cta =
+    `What would you like to do next?\n\n` +
+    `• Buy more airtime\n` +
+    `• Buy data\n` +
+    `• Send money\n` +
+    `• Go to home`;
+  await addToConversationHistory(to, 'assistant', cta);
+  return await sendWhatsAppText({ to, text: cta });
+}
+
+async function renderHome({ from, account }) {
+  const { balance, displayName } = await getUserBalance(from);
+
+  const msg1 = `👋 Hi ${displayName}!\n\n💰 Balance: ${formatMoneyZar(balance)}`;
+  const msg2 =
+    `What would you like to do today?\n\n` +
+    `🛒 Buy\n` +
+    `• Airtime\n` +
+    `• Data\n` +
+    `• Electricity\n` +
+    `• Vouchers\n\n` +
+    `💸 Send money\n` +
+    `🏪 Pay a merchant\n` +
+    `📄 View transactions\n` +
+    `⚙️ Settings`;
+
+  // Quick actions (best-effort). Prefer last successful VAS if available.
+  let quickActions = [
+    'Buy airtime',
+    'Buy data',
+    'Check balance',
+  ];
+
+  try {
+    const last = await prisma.providerRequest.findFirst({
+      where: {
+        accountId: account.id,
+        status: 'SUCCESS',
+        route: { in: ['airtime-execute', 'data-execute', 'electricity-execute'] },
+      },
+      orderBy: { requestTs: 'desc' },
+    });
+
+    const meta = last?.metadata || {};
+    if (last?.route === 'airtime-execute' && meta?.amountCents && meta?.msisdn) {
+      const amt = (meta.amountCents / 100).toFixed(0);
+      quickActions = [
+        `Buy R${amt} airtime again`,
+        `Buy airtime for ${meta.msisdn}`,
+        'Check balance',
+      ];
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  const msg3 =
+    `⚡ Quick actions:\n` +
+    `• ${quickActions[0]}\n` +
+    `• ${quickActions[1]}\n` +
+    `• ${quickActions[2]}`;
+
+  logStructured('home_render', { from, accountId: account.id });
+
+  await addToConversationHistory(from, 'assistant', msg1);
+  await sendWhatsAppText({ to: from, text: msg1 });
+
+  await addToConversationHistory(from, 'assistant', msg2);
+  await sendWhatsAppText({ to: from, text: msg2 });
+
+  await addToConversationHistory(from, 'assistant', msg3);
+  await sendWhatsAppText({ to: from, text: msg3 });
+
+  return { ok: true };
+}
+
 function resolveAirtimeSlots({ text, entities = {}, stateData = {} }) {
   let amountCents = stateData.amountCents;
   if (!amountCents && typeof entities.amount === 'number') {
@@ -138,6 +249,92 @@ function resolveDataSlots({ text, entities = {}, stateData = {} }) {
     }
   }
   return { msisdn };
+}
+
+function extractAmountCents(text = '') {
+  const match = text.match(/r?\s?(\d{1,5})/i);
+  if (!match) return null;
+  const cents = parseInt(match[1], 10) * 100;
+  if (!Number.isFinite(cents)) return null;
+  return cents;
+}
+
+function extractMeterNumber(text = '') {
+  const m = text.match(/\b(\d{8,20})\b/);
+  return m ? m[1] : null;
+}
+
+function extractGbMb(text = '') {
+  const m = text.toLowerCase().match(/(\d+(?:\.\d+)?)\s*(gb|mb)\b/);
+  if (!m) return null;
+  const qty = Number(m[1]);
+  if (!Number.isFinite(qty)) return null;
+  const unit = m[2];
+  const mb = unit === 'gb' ? Math.round(qty * 1024) : Math.round(qty);
+  return mb;
+}
+
+function extractPeriodType(text = '') {
+  const t = text.toLowerCase();
+  if (t.includes('daily') || t.includes('day')) return 'DAILY';
+  if (t.includes('weekly') || t.includes('week')) return 'WEEKLY';
+  if (t.includes('monthly') || t.includes('month')) return 'MONTHLY';
+  if (t.includes('night')) return 'NIGHT';
+  return null;
+}
+
+function extractNetworkCode(text = '') {
+  const t = text.toLowerCase();
+  if (t.includes('vodacom')) return 'VODACOM';
+  if (t.includes('mtn')) return 'MTN';
+  if (t.includes('cell c') || t.includes('cellc')) return 'CELLC';
+  if (t.includes('telkom')) return 'TELKOM';
+  return null;
+}
+
+function resolveElectricitySlots({ text, entities = {}, stateData = {} }) {
+  const amountCents = stateData.amountCents || (typeof entities.amount === 'number' ? entities.amount * 100 : null) || extractAmountCents(text);
+  const meterNumber = stateData.meterNumber || entities.meterNumber || extractMeterNumber(text);
+  // provider/operator is optional at this stage; can be selected later from catalogue.
+  const operatorCode = stateData.operatorCode || entities.operatorCode || null;
+  return { amountCents, meterNumber, operatorCode };
+}
+
+function resolvePayTvSlots({ text, entities = {}, stateData = {} }) {
+  const smartcardNumber = stateData.smartcardNumber || entities.smartcardNumber || extractMeterNumber(text);
+  const amountCents = stateData.amountCents || (typeof entities.amount === 'number' ? entities.amount * 100 : null) || extractAmountCents(text);
+  const operatorCode = stateData.operatorCode || entities.operatorCode || (text.toLowerCase().includes('dstv') ? 'DSTV' : null);
+  const packageCode = stateData.packageCode || entities.packageCode || null;
+  return { smartcardNumber, amountCents, operatorCode, packageCode };
+}
+
+function resolveVoucherSlots({ text, entities = {}, stateData = {} }) {
+  const amountCents = stateData.amountCents || (typeof entities.amount === 'number' ? entities.amount * 100 : null) || extractAmountCents(text);
+  const operatorCode = stateData.operatorCode || entities.operatorCode || null; // netflix/showmax/etc or retail brand
+  const deliveryEmail = stateData.deliveryEmail || entities.deliveryEmail || (text.includes('@') ? text.trim() : null);
+  return { amountCents, operatorCode, deliveryEmail };
+}
+
+function resolveBettingSlots({ text, entities = {}, stateData = {} }) {
+  const amountCents = stateData.amountCents || (typeof entities.amount === 'number' ? entities.amount * 100 : null) || extractAmountCents(text);
+  const accountNumber = stateData.accountNumber || entities.accountNumber || null;
+  const operatorCode = stateData.operatorCode || entities.operatorCode || null;
+  return { amountCents, accountNumber, operatorCode };
+}
+
+function resolveRemittanceSlots({ text, entities = {}, stateData = {} }) {
+  const amountCents = stateData.amountCents || (typeof entities.amount === 'number' ? entities.amount * 100 : null) || extractAmountCents(text);
+  const country = stateData.country || entities.country || (text.toLowerCase().includes('zimbabwe') ? 'ZIMBABWE' : null);
+  const recipientRef = stateData.recipientRef || entities.recipientRef || null;
+  return { amountCents, country, recipientRef };
+}
+
+function resolveDataPurchaseSlots({ text, entities = {}, stateData = {} }) {
+  const msisdn = resolveDataSlots({ text, entities, stateData }).msisdn;
+  const dataMb = stateData.dataMb || entities.dataMb || extractGbMb(text);
+  const periodType = stateData.periodType || entities.periodType || extractPeriodType(text);
+  const networkCode = stateData.networkCode || entities.networkCode || extractNetworkCode(text);
+  return { msisdn, dataMb, periodType, networkCode };
 }
 
 /**
@@ -262,6 +459,12 @@ async function handlePostOnboarding({ account, from, text }) {
     return await handleConversationState({ from, text, state, data, account });
   }
 
+  // Home triggers (never interrupt active flows; we already returned above if state exists)
+  if (isHomeTrigger(text)) {
+    await updateConversationState(from, null);
+    return await renderHome({ from, account });
+  }
+
   // =====================================================================
   // CONTEXT-AWARE INTENT DETECTION
   // Check if user was recently browsing a category - interpret follow-ups
@@ -298,18 +501,12 @@ async function handlePostOnboarding({ account, from, text }) {
       
       switch (category) {
         case 'GAMING':
-          if (!isCategoryLive('GAMING')) {
-            return await replyCategoryUnavailable(from, 'GAMING');
-          }
           if (amount) {
             return await handleListGamingProducts({ from, account });
           }
           return await handleListGamingProducts({ from, account });
           
         case 'LIFESTYLE':
-          if (!isCategoryLive('LIFESTYLE')) {
-            return await replyCategoryUnavailable(from, 'LIFESTYLE');
-          }
           // Lifestyle voucher flow
           return await handleListLifestyleProducts({ from, account });
           
@@ -454,15 +651,50 @@ async function handlePostOnboarding({ account, from, text }) {
           return await replyCategoryUnavailable(from, 'DATA');
         }
 
-        const dataSlots = resolveDataSlots({ text, entities: detection.entities });
+        const dataSlots = resolveDataPurchaseSlots({ text, entities: detection.entities });
         logStructured('slot_fill_data', {
           from,
           accountId: account.id,
-          msisdn: dataSlots.msisdn,
+          ...dataSlots,
           missingMsisdn: !dataSlots.msisdn,
+          missingDataMb: !dataSlots.dataMb,
+          missingPeriodType: !dataSlots.periodType,
+          missingNetworkCode: !dataSlots.networkCode,
         });
 
-        const mergedEntities = { ...(detection.entities || {}), ...(dataSlots.msisdn ? { msisdn: dataSlots.msisdn } : {}) };
+        // If user clearly asked to BUY data (has size), drive purchase; otherwise list bundles
+        if (dataSlots.dataMb) {
+          // If missing destination number, ask for it
+          if (!dataSlots.msisdn) {
+            await updateConversationState(from, 'DATA_MSISDN', { ...dataSlots });
+            return await sendWhatsAppText({
+              to: from,
+              text: `📶 *Buy Data*\n\nWhich phone number should I send the data to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`,
+            });
+          }
+
+          // If missing network/period, ask only what's missing (one question)
+          if (!dataSlots.networkCode) {
+            await updateConversationState(from, 'DATA_NETWORK', { ...dataSlots });
+            return await sendWhatsAppText({
+              to: from,
+              text: `📶 *Buy Data*\n\nWhich network is this for?\n\nReply: Vodacom, MTN, Cell C, or Telkom.`,
+            });
+          }
+          if (!dataSlots.periodType) {
+            await updateConversationState(from, 'DATA_PERIOD', { ...dataSlots });
+            return await sendWhatsAppText({
+              to: from,
+              text: `📶 *Buy Data*\n\nWhich bundle period?\n\nReply: daily, weekly, monthly, or night.`,
+            });
+          }
+
+          // Resolve productId from catalogue and confirm
+          return await handleDataPurchaseFromSlots({ from, account, slots: dataSlots });
+        }
+
+        // Default: list bundles
+        const mergedEntities = { ...(detection.entities || {}), ...(dataSlots.networkCode ? { networkCode: dataSlots.networkCode } : {}) };
         return await handleListDataBundles({ from, account, entities: mergedEntities });
 
       // ====================================================================
@@ -482,7 +714,10 @@ async function handlePostOnboarding({ account, from, text }) {
 
       case 'AI_CHAT':
       default:
-        // Everything else goes to AI for natural conversation
+        // If we're unsure, default back to Home (spec). Only use AI for long, explicit questions.
+        if ((text || '').trim().length <= 80) {
+          return await renderHome({ from, account });
+        }
         return await handleAIChat({ from, text, account });
     }
   } catch (error) {
@@ -726,10 +961,8 @@ async function handleConversationState({ from, text, state, data, account }) {
         // Cancel keywords - be more permissive
         if (/^(cancel|stop|no|not now|later|reset|restart|start over|quit|exit|back)$/i.test(normalized)) {
           await updateConversationState(from, null);
-          return await sendWhatsAppText({
-            to: from,
-            text: `👍 No problem. Let me know when you want to buy airtime.`,
-          });
+          await sendWhatsAppText({ to: from, text: `👍 Airtime purchase cancelled.` });
+          return await renderHome({ from, account });
         }
         
         // Parse amount
@@ -767,10 +1000,8 @@ async function handleConversationState({ from, text, state, data, account }) {
         // Cancel keywords - be more permissive
         if (/^(cancel|stop|no|not now|later|reset|restart|start over|quit|exit|back)$/i.test(normalized)) {
           await updateConversationState(from, null);
-          return await sendWhatsAppText({
-            to: from,
-            text: `👍 No problem. Let me know when you want to buy airtime.`,
-          });
+          await sendWhatsAppText({ to: from, text: `👍 Airtime purchase cancelled.` });
+          return await renderHome({ from, account });
         }
         
         // If message doesn't look like a phone number at all, assume user wants to cancel
@@ -841,10 +1072,8 @@ async function handleConversationState({ from, text, state, data, account }) {
         // Cancel keywords - be more permissive
         if (/^(no|cancel|stop|not now|later|reset|restart|start over)$/i.test(normalized)) {
           await updateConversationState(from, null);
-          return await sendWhatsAppText({
-            to: from,
-            text: `👍 Airtime purchase cancelled. Let me know if you need anything else.`,
-          });
+          await sendWhatsAppText({ to: from, text: `👍 Airtime purchase cancelled.` });
+          return await renderHome({ from, account });
         }
         
         // If user says something that's not yes/no, clear state and let them try again
@@ -958,6 +1187,195 @@ async function handleConversationState({ from, text, state, data, account }) {
         });
       }
 
+    // =================================================================
+    // DATA PURCHASE FLOW (slot-filled)
+    // =================================================================
+    case 'DATA_MSISDN':
+      {
+        const normalized = text.trim().toLowerCase();
+        if (/^(cancel|stop|no|reset|restart|back)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({ to: from, text: `👍 Data purchase cancelled.` });
+        }
+
+        const rawMsisdnInput = /^(me|my\s*number|my\s*phone|myself)$/i.test(normalized)
+          ? account.msisdn
+          : text.trim();
+        const normalisedMsisdn = normaliseMsisdn(rawMsisdnInput || '');
+        if (!isValidSaMsisdn(normalisedMsisdn)) {
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ Invalid phone number format.\n\nPlease enter a valid SA mobile number (e.g., 0781234567)\n\nOr reply "cancel" to stop.`,
+          });
+        }
+
+        const merged = { ...(data || {}), msisdn: normalisedMsisdn };
+        const slots = resolveDataPurchaseSlots({ text: '', entities: merged, stateData: merged });
+        if (!slots.networkCode) {
+          await updateConversationState(from, 'DATA_NETWORK', merged);
+          return await sendWhatsAppText({ to: from, text: `📶 *Buy Data*\n\nWhich network is this for?\n\nReply: Vodacom, MTN, Cell C, or Telkom.` });
+        }
+        if (!slots.periodType) {
+          await updateConversationState(from, 'DATA_PERIOD', merged);
+          return await sendWhatsAppText({ to: from, text: `📶 *Buy Data*\n\nWhich bundle period?\n\nReply: daily, weekly, monthly, or night.` });
+        }
+        await updateConversationState(from, null);
+        return await handleDataPurchaseFromSlots({ from, account, slots });
+      }
+
+    case 'DATA_NETWORK':
+      {
+        const normalized = text.trim().toLowerCase();
+        if (/^(cancel|stop|no|reset|restart|back)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({ to: from, text: `👍 Data purchase cancelled.` });
+        }
+        const networkCode = extractNetworkCode(text);
+        if (!networkCode) {
+          return await sendWhatsAppText({ to: from, text: `❌ Please reply with a network: Vodacom, MTN, Cell C, or Telkom.` });
+        }
+        const merged = { ...(data || {}), networkCode };
+        const slots = resolveDataPurchaseSlots({ text: '', entities: merged, stateData: merged });
+        if (!slots.periodType) {
+          await updateConversationState(from, 'DATA_PERIOD', merged);
+          return await sendWhatsAppText({ to: from, text: `📶 *Buy Data*\n\nWhich bundle period?\n\nReply: daily, weekly, monthly, or night.` });
+        }
+        await updateConversationState(from, null);
+        return await handleDataPurchaseFromSlots({ from, account, slots });
+      }
+
+    case 'DATA_PERIOD':
+      {
+        const normalized = text.trim().toLowerCase();
+        if (/^(cancel|stop|no|reset|restart|back)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({ to: from, text: `👍 Data purchase cancelled.` });
+        }
+        const periodType = extractPeriodType(text);
+        if (!periodType) {
+          return await sendWhatsAppText({ to: from, text: `❌ Please reply with: daily, weekly, monthly, or night.` });
+        }
+        const merged = { ...(data || {}), periodType };
+        const slots = resolveDataPurchaseSlots({ text: '', entities: merged, stateData: merged });
+        await updateConversationState(from, null);
+        return await handleDataPurchaseFromSlots({ from, account, slots });
+      }
+
+    case 'DATA_CONFIRM':
+      {
+        const normalized = text.trim().toLowerCase();
+        if (/^(no|cancel|stop|not now|later|reset|restart|start over)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({ to: from, text: `👍 Data purchase cancelled.` });
+        }
+        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
+          return await sendWhatsAppText({ to: from, text: `Please reply *YES* to confirm or *NO* to cancel.` });
+        }
+
+        const { msisdn, productId, vendorId, amountCents } = data || {};
+        if (!msisdn || !productId || !vendorId) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({ to: from, text: `❌ Session expired. Please try again.` });
+        }
+
+        try {
+          const previewUrl = apiUrl('/api/vas/data/preview');
+          logInternalFetchCall({ url: previewUrl, path: '/api/vas/data/preview' });
+          const previewRes = await fetch(previewUrl, {
+            method: 'POST',
+            headers: withInternalHeaders(),
+            body: JSON.stringify({
+              accountId: account.id,
+              msisdn,
+              productId,
+              vendorId,
+            }),
+          });
+          await logInternalFetchResponse({ url: previewUrl, res: previewRes });
+          const previewData = previewRes.headers.get('content-type')?.includes('application/json')
+            ? await previewRes.json()
+            : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
+
+          if (!previewData.ok) {
+            await updateConversationState(from, null);
+            return await sendWhatsAppText({ to: from, text: `❌ ${previewData.message || 'Could not process data purchase.'}\n\nPlease try again later.` });
+          }
+
+          await updateConversationState(from, 'DATA_PIN', {
+            previewId: previewData.previewId,
+            msisdn,
+            vendorId,
+            amountCents: previewData.preview?.totalCents || amountCents,
+            productName: previewData.preview?.productName,
+          });
+
+          return await sendWhatsAppText({
+            to: from,
+            text: `🔐 *Enter Your PIN*\n\nTo complete your data purchase for ${msisdn}, please enter your WaPay PIN.`,
+          });
+        } catch (e) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({ to: from, text: `❌ Service temporarily unavailable. Please try again later.` });
+        }
+      }
+
+    case 'DATA_PIN':
+      {
+        const normalized = text.trim().toLowerCase();
+        if (/^(cancel|stop|no|reset|restart)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({ to: from, text: `👍 Data purchase cancelled.` });
+        }
+        const digitsOnly = text.replace(/[^\d]/g, '');
+        if (digitsOnly.length < 4 || digitsOnly.length > 6) {
+          return await sendWhatsAppText({ to: from, text: `❌ Invalid PIN. Please enter your 4-6 digit WaPay PIN.\n\nReply "cancel" to stop.` });
+        }
+        const pin = digitsOnly;
+        const { previewId } = data || {};
+        if (!previewId) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({ to: from, text: `❌ Session expired. Please start again.` });
+        }
+
+        await sendWhatsAppText({ to: from, text: `⏳ Processing your data purchase...` });
+
+        try {
+          const executeUrl = apiUrl('/api/vas/data/execute');
+          logInternalFetchCall({ url: executeUrl, path: '/api/vas/data/execute' });
+          const executeRes = await fetch(executeUrl, {
+            method: 'POST',
+            headers: withInternalHeaders(),
+            body: JSON.stringify({ previewId, accountId: account.id, pin }),
+          });
+          await logInternalFetchResponse({ url: executeUrl, res: executeRes });
+          const executeData = executeRes.headers.get('content-type')?.includes('application/json')
+            ? await executeRes.json()
+            : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from execute' };
+
+          await updateConversationState(from, null);
+
+          if (!executeData.ok) {
+            return await sendWhatsAppText({ to: from, text: `❌ ${executeData.message || 'Data purchase failed.'}\n\nPlease try again later.` });
+          }
+          const msisdn = data?.msisdn || '';
+          await sendReceipt({
+            to: from,
+            productLabel: 'Data',
+            targetLabel: '📱 Number',
+            targetValue: msisdn,
+            network: data?.vendorId ? String(data.vendorId).toUpperCase() : 'Detected',
+            amountCents: executeData.transaction?.amountCents || data?.amountCents || 0,
+            reference: executeData.reference,
+            newBalanceCents: executeData.transaction?.newBalance || 0,
+            dateTime: executeData.transaction?.dateTime || new Date(),
+          });
+          return await sendPostTransactionCta(from);
+        } catch (e) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({ to: from, text: `❌ Service temporarily unavailable. Please try again later.` });
+        }
+      }
+
     case 'AIRTIME_PIN':
       // User entering PIN to complete airtime purchase
       {
@@ -966,10 +1384,8 @@ async function handleConversationState({ from, text, state, data, account }) {
         // Cancel keywords - be more permissive
         if (/^(cancel|stop|no|reset|restart)$/i.test(normalized.toLowerCase())) {
           await updateConversationState(from, null);
-          return await sendWhatsAppText({
-            to: from,
-            text: `👍 Airtime purchase cancelled.`,
-          });
+          await sendWhatsAppText({ to: from, text: `👍 Airtime purchase cancelled.` });
+          return await renderHome({ from, account });
         }
         
         // PIN must be 4-6 digits (as defined in packages/auth/src/pin.ts)
@@ -1052,7 +1468,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             });
           }
           
-          // Success!
+          // Success! One unified receipt message.
           logStructured('vas_airtime_execute_success', {
             from,
             accountId: account.id,
@@ -1061,17 +1477,20 @@ async function handleConversationState({ from, text, state, data, account }) {
             amountCents,
             msisdn,
           });
-          
-          return await sendWhatsAppText({
+
+          await sendReceipt({
             to: from,
-            text: `✅ *Airtime Purchase Successful!*\n\n` +
-                  `📱 Amount: R${amountCents / 100}\n` +
-                  `📞 Number: ${msisdn}\n` +
-                  `🏢 Network: ${vendorName || 'Detected'}\n` +
-                  `📝 Reference: ${executeData.reference}\n` +
-                  `💰 New Balance: R${(executeData.transaction?.newBalance / 100).toFixed(2)}\n\n` +
-                  `Thank you for using WaPay! 🎉`,
+            productLabel: 'Airtime',
+            targetLabel: '📱 Number',
+            targetValue: msisdn,
+            network: vendorName || 'Detected',
+            amountCents,
+            reference: executeData.reference,
+            newBalanceCents: executeData.transaction?.newBalance || 0,
+            dateTime: executeData.transaction?.dateTime || new Date(),
           });
+
+          return await sendPostTransactionCta(from);
           
         } catch (error) {
           console.error('Execute API error:', error);
@@ -1417,17 +1836,23 @@ async function handleConversationState({ from, text, state, data, account }) {
           const token = executeData.transaction?.token || 'N/A';
           const formattedToken = token.replace(/(.{4})/g, '$1 ').trim();
           
-          return await sendWhatsAppText({
+          await sendReceipt({
             to: from,
-            text: `✅ *Electricity Purchase Successful!*\n\n` +
-                  `⚡ Token: *${formattedToken}*\n\n` +
-                  `💰 Amount: R${amountCents / 100}\n` +
-                  `📟 Meter: ${meterNumber}\n` +
-                  `🔋 Units: ${executeData.transaction?.units || 'N/A'} kWh\n` +
-                  `📝 Reference: ${executeData.reference}\n` +
-                  `💳 New Balance: R${(executeData.transaction?.newBalance / 100).toFixed(2)}\n\n` +
-                  `Enter this token into your prepaid meter. Thank you for using WaPay! 🎉`,
+            productLabel: 'Electricity',
+            targetLabel: '📟 Meter',
+            targetValue: meterNumber,
+            network: 'Electricity',
+            amountCents,
+            reference: executeData.reference,
+            newBalanceCents: executeData.transaction?.newBalance || 0,
+            dateTime: executeData.transaction?.dateTime || new Date(),
+            extraLines: [
+              `⚡ Token: *${formattedToken}*`,
+              `🔋 Units: ${executeData.transaction?.units || 'N/A'} kWh`,
+            ],
           });
+
+          return await sendPostTransactionCta(from);
           
         } catch (error) {
           console.error('Electricity execute API error:', error);
@@ -2331,6 +2756,58 @@ async function handleListDataBundles({ from, account, entities }) {
   }
 }
 
+async function handleDataPurchaseFromSlots({ from, account, slots }) {
+  const { msisdn, dataMb, periodType, networkCode } = slots;
+
+  // Find best matching product in catalogue
+  const product = await prisma.vasProduct.findFirst({
+    where: {
+      active: true,
+      category: 'DATA',
+      networkCode,
+      periodType,
+      dataMb,
+    },
+    orderBy: [
+      { popularity: 'desc' },
+      { fixedPriceCents: 'asc' },
+      { priceCents: 'asc' },
+    ],
+  });
+
+  if (!product) {
+    return await sendWhatsAppText({
+      to: from,
+      text:
+        `❌ I couldn't find a ${networkCode} ${periodType.toLowerCase()} ${dataMb >= 1024 ? `${(dataMb / 1024).toFixed(0)}GB` : `${dataMb}MB`} bundle in our catalogue.\n\n` +
+        `Try a different size/period or ask: "Show me ${networkCode} ${periodType.toLowerCase()} bundles".`,
+    });
+  }
+
+  const priceCents = product.fixedPriceCents || product.priceCents || 0;
+  const sizeLabel = dataMb >= 1024 ? `${(dataMb / 1024).toFixed(0)}GB` : `${dataMb}MB`;
+  const vendorLabel = networkCode === 'CELLC' ? 'Cell C' : networkCode.charAt(0) + networkCode.slice(1).toLowerCase();
+
+  await updateConversationState(from, 'DATA_CONFIRM', {
+    msisdn,
+    productId: product.externalCode,
+    productName: product.label,
+    vendorId: networkCode.toLowerCase(),
+    vendorName: vendorLabel,
+    amountCents: priceCents,
+  });
+
+  return await sendWhatsAppText({
+    to: from,
+    text:
+      `📶 *Confirm Data Purchase*\n\n` +
+      `Bundle: ${sizeLabel} ${periodType.toLowerCase()}\n` +
+      `Number: ${msisdn} (${vendorLabel})\n` +
+      `Amount: R${(priceCents / 100).toFixed(2)}\n\n` +
+      `Reply *YES* to confirm or *NO* to cancel.`,
+  });
+}
+
 /**
  * Handle listing electricity products
  */
@@ -2428,10 +2905,6 @@ async function handleListLifestyleProducts({ from, account }) {
     intent: 'LIST_LIFESTYLE',
   });
 
-  if (!isCategoryLive('LIFESTYLE')) {
-    return await replyCategoryUnavailable(from, 'LIFESTYLE');
-  }
-
   try {
     const products = await prisma.vasProduct.findMany({
       where: {
@@ -2502,10 +2975,6 @@ async function handleListBillpayProducts({ from, account }) {
     intent: 'LIST_BILLPAY',
   });
 
-  if (!isCategoryLive('BILLPAY')) {
-    return await replyCategoryUnavailable(from, 'BILLPAY');
-  }
-
   try {
     const products = await prisma.vasProduct.findMany({
       where: {
@@ -2558,10 +3027,6 @@ async function handleListGamingProducts({ from, account }) {
     accountId: account.id,
     intent: 'LIST_GAMING',
   });
-
-  if (!isCategoryLive('GAMING')) {
-    return await replyCategoryUnavailable(from, 'GAMING');
-  }
 
   try {
     const products = await prisma.vasProduct.findMany({
@@ -2633,10 +3098,6 @@ async function handleListRemittanceProducts({ from, account }) {
     intent: 'LIST_REMITTANCE',
   });
 
-  if (!isCategoryLive('REMITTANCE')) {
-    return await replyCategoryUnavailable(from, 'REMITTANCE');
-  }
-
   try {
     const products = await prisma.vasProduct.findMany({
       where: {
@@ -2700,12 +3161,10 @@ async function handleListVasProducts({ from, account }) {
       _count: { id: true },
     });
 
-    const liveCategoryCounts = categoryCounts.filter(cat => isCategoryLive(cat.category));
-
-    if (liveCategoryCounts.length === 0) {
+    if (categoryCounts.length === 0) {
       return await sendWhatsAppText({
         to: from,
-        text: `🚧 VAS products are not available yet. You can still buy airtime or data.`,
+        text: `🚧 I couldn't find any VAS products in our catalogue right now.`,
       });
     }
 
@@ -2722,7 +3181,7 @@ async function handleListVasProducts({ from, account }) {
 
     let message = `🛒 *WaPay VAS Products*\n\nHere's what you can buy on WaPay:\n\n`;
     
-    for (const cat of liveCategoryCounts) {
+    for (const cat of categoryCounts) {
       const info = categoryNames[cat.category];
       if (info) {
         message += `${info.name}\n   _${info.desc}_\n\n`;
@@ -2739,7 +3198,7 @@ async function handleListVasProducts({ from, account }) {
 
     logStructured('vas_list_vas_products_result', {
       from,
-      categoryCount: liveCategoryCounts.length,
+      categoryCount: categoryCounts.length,
       success: true,
     });
 

@@ -450,18 +450,9 @@ export default async function handler(req, res) {
     });
 
     // =========================================================================
-    // Send WhatsApp Receipt (non-blocking)
+    // WhatsApp receipts are handled by the WhatsApp orchestrator (message-processor)
+    // to guarantee exactly-once user messaging.
     // =========================================================================
-    sendPurchaseReceipt({
-      msisdn,
-      customerName: account.displayName,
-      productName: bluResult.productName,
-      priceCents,
-      providerRef: bluResult.providerRef,
-      waId: account.waId,
-    }).catch(err => {
-      console.error('⚠️ Receipt send failed (non-blocking):', err.message);
-    });
 
     // Log overall latency
     const totalLatency = Date.now() - startTime;
