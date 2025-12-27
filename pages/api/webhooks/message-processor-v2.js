@@ -59,18 +59,18 @@ async function replyCategoryUnavailable(to, category) {
 }
 
 function extractMsisdnFromText(text = '') {
-  // Extract a plausible MSISDN substring instead of concatenating all digits
-  // Supports: 0XXXXXXXXX, 27XXXXXXXXX, +27XXXXXXXXX (prefer the last match in the message)
-  const compact = String(text || '').replace(/[\s-]/g, '');
-  const matches = compact.match(/(\+?27\d{9}|0\d{9})/g);
+  // Extract a plausible MSISDN substring without accidentally concatenating unrelated numbers.
+  // Allows separators/formatting between digits (spaces, punctuation, unicode marks).
+  // Matches: 0XXXXXXXXX OR 27XXXXXXXXX OR +27XXXXXXXXX, even if digits are separated by non-digits.
+  const s = String(text || '');
+  const re = /(?:\+?27|0)(?:[^\d]*\d){9}/g;
+  const matches = s.match(re);
   if (!matches || matches.length === 0) return null;
 
-  let candidate = matches[matches.length - 1];
-  if (candidate.startsWith('+')) candidate = candidate.slice(1);
-  if (candidate.startsWith('27') && candidate.length === 11) {
-    candidate = `0${candidate.slice(2)}`;
-  }
-  if (candidate.length === 10 && candidate.startsWith('0')) return candidate;
+  const raw = matches[matches.length - 1];
+  let digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('27') && digits.length === 11) digits = `0${digits.slice(2)}`;
+  if (digits.length === 10 && digits.startsWith('0')) return digits;
   return null;
 }
 
@@ -949,10 +949,14 @@ function detectExplicitIntent(text = '') {
     const match = squashed.match(pattern);
     if (match) {
       const amount = match[1] ? parseInt(match[1], 10) : null;
+      const extractedMsisdn = extractMsisdnFromText(text);
       return { 
         intent: 'BUY_AIRTIME', 
         confidence: 0.9, 
-        entities: amount ? { amount } : {},
+        entities: {
+          ...(amount ? { amount } : {}),
+          ...(extractedMsisdn ? { msisdn: extractedMsisdn } : {}),
+        },
         triggerAction: true,
       };
     }
