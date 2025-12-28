@@ -6,6 +6,50 @@
 
 import prisma from '../../../lib/prisma';
 
+export async function wasMessageProcessed(waId, messageId) {
+  if (!waId || !messageId) return false;
+  try {
+    const account = await prisma.account.findFirst({
+      where: { waId },
+      select: { conversationData: true },
+    });
+    const data = account?.conversationData || {};
+    const ids = Array.isArray(data.processedMessageIds) ? data.processedMessageIds : [];
+    return ids.includes(messageId);
+  } catch (e) {
+    console.error('❌ Error checking processed messageId:', e);
+    return false;
+  }
+}
+
+export async function markMessageProcessed(waId, messageId) {
+  if (!waId || !messageId) return { ok: true };
+  try {
+    const account = await prisma.account.findFirst({
+      where: { waId },
+      select: { conversationData: true },
+    });
+    const existingData = account?.conversationData || {};
+    const ids = Array.isArray(existingData.processedMessageIds) ? existingData.processedMessageIds : [];
+    if (ids.includes(messageId)) return { ok: true, dedup: true };
+
+    const next = [...ids, messageId].slice(-25); // keep last 25
+    await prisma.account.update({
+      where: { waId },
+      data: {
+        conversationData: {
+          ...existingData,
+          processedMessageIds: next,
+        },
+      },
+    });
+    return { ok: true };
+  } catch (e) {
+    console.error('❌ Error marking processed messageId:', e);
+    return { ok: false, error: e.message };
+  }
+}
+
 /**
  * Get or create user account
  */

@@ -5,7 +5,7 @@
  * Includes structured logging for debugging VAS flows.
  */
 
-import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory, setActiveCategory, getActiveCategory, clearActiveCategory } from './user-manager.js';
+import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed } from './user-manager.js';
 import { sendWhatsAppText } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
 import { BluClient } from '@wapay/providers-blu';
@@ -447,6 +447,15 @@ export async function processMessage({ from, text, messageId, profile }) {
   // Get or create user
   const { account, isNewUser } = await getOrCreateUser(from, profile);
 
+  // De-duplicate inbound message IDs to prevent repeated replies if Meta retries delivery
+  if (messageId && (await wasMessageProcessed(from, messageId))) {
+    logStructured('whatsapp_inbound_deduped', { from, messageId, accountId: account.id });
+    return { ok: true, deduped: true };
+  }
+  if (messageId) {
+    await markMessageProcessed(from, messageId);
+  }
+
   // Get onboarding state
   const onboardingState = await getOnboardingState(account.id);
   
@@ -561,6 +570,28 @@ async function handlePostOnboarding({ account, from, text }) {
   // Unified slot parsing: MUST happen before routing decisions and before any state transitions.
   const slots = parseSlots(text, { waId: from, accountId: account.id });
 
+  // Deterministic short-circuit BEFORE context-aware category handling:
+  // If we already have complete commerce slots, do not allow activeCategory to hijack routing.
+  if (slots?.productHint === 'AIRTIME' && slots.amountCents && slots.msisdn) {
+    logSlotFill({
+      intent: 'PRE_ROUTING',
+      text,
+      slots,
+      routeDecision: 'AIRTIME_PREVIEW_CONFIRM',
+      missing: [],
+      from,
+      accountId: account.id,
+    });
+    return await startAirtimePreviewAndConfirm({
+      from,
+      account,
+      amountCents: slots.amountCents,
+      msisdn: slots.msisdn,
+      intent: 'PRE_ROUTING',
+      rawText: text,
+    });
+  }
+
   // =====================================================================
   // CONTEXT-AWARE INTENT DETECTION
   // Check if user was recently browsing a category - interpret follow-ups
@@ -577,8 +608,12 @@ async function handlePostOnboarding({ account, from, text }) {
     const isFollowUp = amountMatch || 
                        /^(yes|ok|buy|get|top\s*up|1|2|3|first|second|that\s*one)$/i.test(normalized) ||
                        /^r?\d+/i.test(normalized);
+
+    // If the user explicitly mentions a different product than the active category, do NOT hijack.
+    // This is the core regression that caused airtime messages to be routed to DATA bundles.
+    const categoryMismatch = slots?.productHint && slots.productHint !== category;
     
-    if (isFollowUp) {
+    if (isFollowUp && !categoryMismatch) {
       console.log(`🎯 Context-aware: User was browsing ${category}, interpreting "${text}" in that context`);
       
       logStructured('context_aware_intent', {
@@ -657,6 +692,11 @@ async function handlePostOnboarding({ account, from, text }) {
           // Unknown category - fall through to normal detection
           break;
       }
+    }
+
+    if (categoryMismatch) {
+      // Clear stale context so normal routing can proceed.
+      await clearActiveCategory(from);
     }
   }
 

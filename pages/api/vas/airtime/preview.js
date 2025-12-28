@@ -200,9 +200,22 @@ export default async function handler(req, res) {
         // Fallback to prefix-based inference if Blu fails
         const prefix = normalisedMsisdn.slice(0, 3);
         const prefixMap = {
-          '084': { id: 'cellc', name: 'Cell C' },
+          // Vodacom (common)
           '072': { id: 'vodacom', name: 'Vodacom' },
+          '076': { id: 'vodacom', name: 'Vodacom' },
+          '079': { id: 'vodacom', name: 'Vodacom' },
+          '082': { id: 'vodacom', name: 'Vodacom' },
+          // MTN (common)
+          '073': { id: 'mtn', name: 'MTN' },
+          '078': { id: 'mtn', name: 'MTN' },
           '083': { id: 'mtn', name: 'MTN' },
+          // Cell C (common)
+          '061': { id: 'cellc', name: 'Cell C' },
+          '062': { id: 'cellc', name: 'Cell C' },
+          '063': { id: 'cellc', name: 'Cell C' },
+          // 084 is ambiguous in SA. We only infer it as Cell C as a *fallback*.
+          '084': { id: 'cellc', name: 'Cell C' },
+          // Telkom
           '085': { id: 'telkom', name: 'Telkom' },
         };
         const inferred = prefixMap[prefix];
