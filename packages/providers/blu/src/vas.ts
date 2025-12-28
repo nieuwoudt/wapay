@@ -287,7 +287,10 @@ export class BluVasClient {
     const body = {
       requestId: params.idemKey,
       vendorId: params.vendorId,
+      // Blu endpoints have inconsistent naming; send both to avoid 400 "Technical Error"
+      // (we've previously confirmed `mobile-number` is required on the check endpoint).
       mobileNumber: bluMsisdn,
+      'mobile-number': bluMsisdn,
       amount: params.amountCents,
       vendMetaData: this.buildVendMetaData({
         accountId: params.accountId,
@@ -519,6 +522,7 @@ export class BluVasClient {
       vendorId: params.vendorId,
       productId: params.productId,
       mobileNumber: this.toBluFormat(params.msisdn),
+      'mobile-number': this.toBluFormat(params.msisdn),
       vendMetaData: this.buildVendMetaData({
         accountId: params.accountId,
         journalEntryId: params.journalEntryId,

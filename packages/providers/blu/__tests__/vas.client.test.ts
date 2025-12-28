@@ -123,6 +123,7 @@ describe('BluVasClient', () => {
       mockPool.intercept({
         path: '/mobile/airtime/sales',
         method: 'POST',
+        body: /"mobile-number":"0821234567"/,
       }).reply(200, {
         requestId: 'test-idem-123',
         reference: 'BLU-REF-789',
