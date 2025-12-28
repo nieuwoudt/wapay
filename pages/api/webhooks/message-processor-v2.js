@@ -14,6 +14,7 @@ import { chatWithAI } from '@wapay/ai';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
+import { parseSlots } from '../../../lib/slot-parser.js';
 import {
   getOnboardingState,
   handleS0Initial,
@@ -44,6 +45,32 @@ function sanitizeUserText(text) {
   if (!trimmed) return null;
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) return null;
   return text;
+}
+
+function missingFromSlots(slots, requiredKeys = []) {
+  return requiredKeys.filter((k) => !slots?.[k]);
+}
+
+function logSlotFill({ intent, text, slots, routeDecision, missing = [], from, accountId }) {
+  logStructured('slot_fill', {
+    intent,
+    text,
+    slots: {
+      amountCents: slots?.amountCents,
+      msisdn: slots?.msisdn,
+      meterNumber: slots?.meterNumber,
+      productHint: slots?.productHint,
+      retailer: slots?.retailer,
+      dataMb: slots?.dataMb,
+      periodType: slots?.periodType,
+      networkCode: slots?.networkCode,
+      confidence: slots?.confidence,
+    },
+    routeDecision,
+    missing,
+    from,
+    accountId,
+  });
 }
 
 function categoryUnavailableMessage(category) {
@@ -90,7 +117,7 @@ function detectVendorLabel(msisdn = '') {
   return 'Detected';
 }
 
-async function startAirtimePreviewAndConfirm({ from, account, amountCents, msisdn }) {
+async function startAirtimePreviewAndConfirm({ from, account, amountCents, msisdn, intent = 'BUY_AIRTIME', rawText = '' }) {
   const previewUrl = apiUrl('/api/vas/airtime/preview');
   logInternalFetchCall({ url: previewUrl, path: '/api/vas/airtime/preview' });
 
@@ -118,6 +145,16 @@ async function startAirtimePreviewAndConfirm({ from, account, amountCents, msisd
   }
 
   const vendorName = previewData.preview?.vendorName || detectVendorLabel(msisdn);
+
+  logSlotFill({
+    intent,
+    text: rawText,
+    slots: { amountCents, msisdn, productHint: 'AIRTIME' },
+    routeDecision: 'AIRTIME_CONFIRM',
+    missing: [],
+    from,
+    accountId: account.id,
+  });
 
   await updateConversationState(from, 'AIRTIME_CONFIRM', {
     amountCents,
@@ -521,6 +558,9 @@ async function handlePostOnboarding({ account, from, text }) {
     return await renderHome({ from, account });
   }
 
+  // Unified slot parsing: MUST happen before routing decisions and before any state transitions.
+  const slots = parseSlots(text, { waId: from, accountId: account.id });
+
   // =====================================================================
   // CONTEXT-AWARE INTENT DETECTION
   // Check if user was recently browsing a category - interpret follow-ups
@@ -572,6 +612,15 @@ async function handlePostOnboarding({ account, from, text }) {
           }
           // Electricity purchase flow - start it
           if (amount) {
+            logSlotFill({
+              intent: 'CONTEXT_AWARE',
+              text,
+              slots,
+              routeDecision: 'ELECTRICITY_METER',
+              missing: ['meterNumber'],
+              from,
+              accountId: account.id,
+            });
             await updateConversationState(from, 'ELECTRICITY_METER', { amountCents: amount * 100 });
             return await sendWhatsAppText({
               to: from,
@@ -583,6 +632,15 @@ async function handlePostOnboarding({ account, from, text }) {
         case 'AIRTIME':
           // Airtime flow - start it
           if (amount) {
+            logSlotFill({
+              intent: 'CONTEXT_AWARE',
+              text,
+              slots,
+              routeDecision: 'AIRTIME_MSISDN',
+              missing: ['msisdn'],
+              from,
+              accountId: account.id,
+            });
             await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents: amount * 100 });
             return await sendWhatsAppText({
               to: from,
@@ -604,6 +662,23 @@ async function handlePostOnboarding({ account, from, text }) {
 
   // Detect ONLY explicit intents, route everything else to AI
   const detection = detectExplicitIntent(text);
+  // Deterministic commerce routing overrides (prevents SMART_PRODUCT_QUERY bypass).
+  // If slots are complete for a product, force the correct intent.
+  if (slots?.productHint === 'AIRTIME' && slots.amountCents && slots.msisdn) {
+    detection.intent = 'BUY_AIRTIME';
+    detection.entities = { ...(detection.entities || {}), amount: Math.round(slots.amountCents / 100), msisdn: slots.msisdn };
+  }
+  if (slots?.productHint === 'DATA' && slots.dataMb) {
+    detection.intent = 'BUY_DATA';
+    detection.entities = {
+      ...(detection.entities || {}),
+      msisdn: slots.msisdn,
+      dataMb: slots.dataMb,
+      periodType: slots.periodType,
+      networkCode: slots.networkCode,
+    };
+  }
+
   const intent = detection.intent;
   
   // Log NLP intent detection
@@ -637,6 +712,15 @@ async function handlePostOnboarding({ account, from, text }) {
 
       case 'REDEEM_VOUCHER':
         // Explicit: "redeem voucher"
+        logSlotFill({
+          intent: 'REDEEM_VOUCHER',
+          text,
+          slots,
+          routeDecision: 'AWAITING_VOUCHER_PIN',
+          missing: [],
+          from,
+          accountId: account.id,
+        });
         await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
         return await sendWhatsAppText({
           to: from,
@@ -668,17 +752,37 @@ async function handlePostOnboarding({ account, from, text }) {
         });
 
         if (slotsComplete) {
+          logSlotFill({
+            intent: 'BUY_AIRTIME',
+            text,
+            slots: { ...slots, amountCents: airtimeSlots.amountCents, msisdn: airtimeSlots.msisdn, productHint: 'AIRTIME' },
+            routeDecision: 'AIRTIME_PREVIEW_CONFIRM',
+            missing: [],
+            from,
+            accountId: account.id,
+          });
           const normalisedMsisdn = normaliseMsisdn(airtimeSlots.msisdn);
           return await startAirtimePreviewAndConfirm({
             from,
             account,
             amountCents: airtimeSlots.amountCents,
             msisdn: normalisedMsisdn,
+            intent: 'BUY_AIRTIME',
+            rawText: text,
           });
         }
 
         // If we have amount but no MSISDN, jump to msisdn collection
         if (airtimeSlots.amountCents) {
+          logSlotFill({
+            intent: 'BUY_AIRTIME',
+            text,
+            slots: { ...slots, amountCents: airtimeSlots.amountCents, productHint: 'AIRTIME' },
+            routeDecision: 'AIRTIME_MSISDN',
+            missing: ['msisdn'],
+            from,
+            accountId: account.id,
+          });
           await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents: airtimeSlots.amountCents });
           return await sendWhatsAppText({
             to: from,
@@ -687,6 +791,15 @@ async function handlePostOnboarding({ account, from, text }) {
         }
         
         // Otherwise collect amount first
+        logSlotFill({
+          intent: 'BUY_AIRTIME',
+          text,
+          slots: { ...slots, productHint: 'AIRTIME' },
+          routeDecision: 'AIRTIME_AMOUNT',
+          missing: ['amountCents'],
+          from,
+          accountId: account.id,
+        });
         await updateConversationState(from, 'AIRTIME_AMOUNT', detection.entities || {});
         return await sendWhatsAppText({
           to: from,
@@ -719,6 +832,15 @@ async function handlePostOnboarding({ account, from, text }) {
         if (dataSlots.dataMb) {
           // If missing destination number, ask for it
           if (!dataSlots.msisdn) {
+            logSlotFill({
+              intent: 'BUY_DATA',
+              text,
+              slots,
+              routeDecision: 'DATA_MSISDN',
+              missing: ['msisdn'],
+              from,
+              accountId: account.id,
+            });
             await updateConversationState(from, 'DATA_MSISDN', { ...dataSlots });
             return await sendWhatsAppText({
               to: from,
@@ -728,6 +850,15 @@ async function handlePostOnboarding({ account, from, text }) {
 
           // If missing network/period, ask only what's missing (one question)
           if (!dataSlots.networkCode) {
+            logSlotFill({
+              intent: 'BUY_DATA',
+              text,
+              slots,
+              routeDecision: 'DATA_NETWORK',
+              missing: ['networkCode'],
+              from,
+              accountId: account.id,
+            });
             await updateConversationState(from, 'DATA_NETWORK', { ...dataSlots });
             return await sendWhatsAppText({
               to: from,
@@ -735,6 +866,15 @@ async function handlePostOnboarding({ account, from, text }) {
             });
           }
           if (!dataSlots.periodType) {
+            logSlotFill({
+              intent: 'BUY_DATA',
+              text,
+              slots,
+              routeDecision: 'DATA_PERIOD',
+              missing: ['periodType'],
+              from,
+              accountId: account.id,
+            });
             await updateConversationState(from, 'DATA_PERIOD', { ...dataSlots });
             return await sendWhatsAppText({
               to: from,
@@ -754,7 +894,7 @@ async function handlePostOnboarding({ account, from, text }) {
       // SMART PRODUCT QUERY - Uses database to match categories
       // ====================================================================
       case 'SMART_PRODUCT_QUERY':
-        return await handleSmartProductQuery({ from, account, text });
+        return await handleSmartProductQuery({ from, account, text, slots, entities: detection.entities || {} });
 
       // ====================================================================
       // LIST INTENTS - Show real catalogue data, not generic responses
@@ -1061,15 +1201,26 @@ async function handleConversationState({ from, text, state, data, account }) {
           return await renderHome({ from, account });
         }
 
-        // Slot-fill inside state: if user provides amount+msisdn in one message, skip questions
-        const filled = resolveAirtimeSlots({ text, entities: {}, stateData: data || {} });
-        if (filled.amountCents && filled.msisdn && isValidSaMsisdn(filled.msisdn)) {
-          const normalisedMsisdn = normaliseMsisdn(filled.msisdn);
+        // Slot-fill inside state: if user provides MSISDN (and maybe amount) in one message, skip.
+        const filledSlots = parseSlots(text, { waId: from, accountId: account.id });
+        const amountCents = filledSlots.amountCents || data?.amountCents;
+        if (amountCents && filledSlots.msisdn) {
+          logSlotFill({
+            intent: 'STATE_AIRTIME_MSISDN',
+            text,
+            slots: { ...filledSlots, amountCents, productHint: 'AIRTIME' },
+            routeDecision: 'AIRTIME_PREVIEW_CONFIRM',
+            missing: [],
+            from,
+            accountId: account.id,
+          });
           return await startAirtimePreviewAndConfirm({
             from,
             account,
-            amountCents: filled.amountCents,
-            msisdn: normalisedMsisdn,
+            amountCents,
+            msisdn: filledSlots.msisdn,
+            intent: 'STATE_AIRTIME_MSISDN',
+            rawText: text,
           });
         }
         
@@ -1085,8 +1236,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         
         const isMe = /^(me|my\s*number|my\s*phone|myself)$/i.test(normalized);
-        const extracted = extractMsisdnFromText(text);
-        const rawMsisdnInput = isMe ? account.msisdn : (extracted || text.trim());
+        const rawMsisdnInput = isMe ? account.msisdn : (filledSlots.msisdn || text.trim());
         const normalisedMsisdn = normaliseMsisdn(rawMsisdnInput || '');
         
         // Validate phone number format (allow Blu QA numbers)
@@ -1107,7 +1257,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
-        const amountCents = data?.amountCents || 1000;
+        const amountCents2 = data?.amountCents || 1000;
         
         const vendorLabel = detectVendorLabel(normalisedMsisdn);
         
@@ -1116,17 +1266,26 @@ async function handleConversationState({ from, text, state, data, account }) {
           from,
           accountId: account.id,
           msisdn: normalisedMsisdn,
-          amountCents,
+          amountCents: amountCents2,
           vendorLabel,
         });
         
         // Move to confirmation state
-        await updateConversationState(from, 'AIRTIME_CONFIRM', { amountCents, msisdn: normalisedMsisdn, vendorLabel });
+        logSlotFill({
+          intent: 'STATE_AIRTIME_MSISDN',
+          text,
+          slots: { ...filledSlots, amountCents: amountCents2, msisdn: normalisedMsisdn, productHint: 'AIRTIME' },
+          routeDecision: 'AIRTIME_CONFIRM',
+          missing: [],
+          from,
+          accountId: account.id,
+        });
+        await updateConversationState(from, 'AIRTIME_CONFIRM', { amountCents: amountCents2, msisdn: normalisedMsisdn, vendorLabel });
         
         return await sendWhatsAppText({
           to: from,
           text: `📱 *Confirm Airtime Purchase*\n\n` +
-                `Amount: R${amountCents / 100}\n` +
+                `Amount: R${amountCents2 / 100}\n` +
                 `Number: ${normalisedMsisdn} (${vendorLabel})\n\n` +
                 `Reply *YES* to confirm or *NO* to cancel.`,
         });
@@ -2141,8 +2300,10 @@ async function handleAIChat({ from, text, account }) {
  * 2. Purchase intent (buy + amount + category) triggers purchase flow
  * 3. Only ask for clarification if truly ambiguous
  */
-async function handleSmartProductQuery({ from, account, text }) {
+async function handleSmartProductQuery({ from, account, text, slots: incomingSlots, entities }) {
   const lowerText = text.toLowerCase();
+  const entitiesBefore = entities || {};
+  const slots = incomingSlots || parseSlots(text, { waId: from, accountId: account.id });
   
   logStructured('smart_product_query', {
     from,
@@ -2150,7 +2311,73 @@ async function handleSmartProductQuery({ from, account, text }) {
     text,
   });
 
+  logStructured('smart_query_slots', {
+    from,
+    accountId: account.id,
+    entitiesBefore,
+    slots: {
+      amountCents: slots?.amountCents,
+      msisdn: slots?.msisdn,
+      meterNumber: slots?.meterNumber,
+      productHint: slots?.productHint,
+      retailer: slots?.retailer,
+      dataMb: slots?.dataMb,
+      periodType: slots?.periodType,
+      networkCode: slots?.networkCode,
+      confidence: slots?.confidence,
+    },
+    entitiesAfter: {
+      ...entitiesBefore,
+      ...(slots?.amountCents ? { amountCents: slots.amountCents } : {}),
+      ...(slots?.msisdn ? { msisdn: slots.msisdn } : {}),
+      ...(slots?.meterNumber ? { meterNumber: slots.meterNumber } : {}),
+      ...(slots?.retailer ? { retailer: slots.retailer } : {}),
+      ...(slots?.productHint ? { productHint: slots.productHint } : {}),
+    },
+  });
+
   try {
+    // Deterministic short-circuit: if we have complete AIRTIME slots, never go to AIRTIME_MSISDN.
+    if (slots?.productHint === 'AIRTIME' && slots.amountCents && slots.msisdn) {
+      logSlotFill({
+        intent: 'SMART_PRODUCT_QUERY',
+        text,
+        slots,
+        routeDecision: 'AIRTIME_PREVIEW_CONFIRM',
+        missing: [],
+        from,
+        accountId: account.id,
+      });
+      return await startAirtimePreviewAndConfirm({
+        from,
+        account,
+        amountCents: slots.amountCents,
+        msisdn: slots.msisdn,
+        intent: 'SMART_PRODUCT_QUERY',
+        rawText: text,
+      });
+    }
+
+    // Deterministic electricity short-circuit
+    if (slots?.productHint === 'ELECTRICITY' && slots.amountCents && slots.meterNumber) {
+      logSlotFill({
+        intent: 'SMART_PRODUCT_QUERY',
+        text,
+        slots,
+        routeDecision: 'ELECTRICITY_CONFIRM',
+        missing: [],
+        from,
+        accountId: account.id,
+      });
+      await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
+        amountCents: slots.amountCents,
+        meterNumber: slots.meterNumber,
+      });
+      const confirmMsg = `💡 *Buy Electricity*\n\nAmount: R${(slots.amountCents / 100).toFixed(0)}\nMeter: ${slots.meterNumber}\n\nReply *YES* to confirm or *NO* to cancel.`;
+      await addToConversationHistory(from, 'assistant', confirmMsg);
+      return await sendWhatsAppText({ to: from, text: confirmMsg });
+    }
+
     // =========================================================
     // PRIORITY 1: Strong category indicators ALWAYS WIN
     // No clarification needed for these
@@ -2223,6 +2450,15 @@ async function handleSmartProductQuery({ from, account, text }) {
       if (amountMatch || lowerText.includes('buy')) {
         const amount = amountMatch ? parseInt(amountMatch[1]) : null;
         if (amount) {
+          logSlotFill({
+            intent: 'SMART_PRODUCT_QUERY',
+            text,
+            slots,
+            routeDecision: 'AIRTIME_MSISDN',
+            missing: ['msisdn'],
+            from,
+            accountId: account.id,
+          });
           await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents: amount * 100 });
           const msg = `📱 *Buy R${amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`;
           await addToConversationHistory(from, 'assistant', msg);

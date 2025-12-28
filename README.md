@@ -68,6 +68,74 @@ Primary prod domains:
 
 ## Testing
 
+## Agentic Commerce & Natural-Language Slot Filling
+
+WaPay supports “agentic commerce”: users can send natural language like:
+
+- `Buy R10 airtime for 0840012300`
+- `Ek wil R10 airtime koop vir 0840012300`
+- `Send R30 to 0879890808`
+
+### Unified slot parsing (single source of truth)
+
+All commerce routing and state handlers must use the shared parser:
+
+- `lib/slot-parser.js` → `parseSlots(text, context?)`
+
+This returns a single, deterministic slot object (examples):
+
+- Airtime: `amountCents`, `msisdn`
+- Data: `dataMb`, `periodType`, `networkCode`, `msisdn`
+- Electricity: `amountCents`, `meterNumber`
+- Retail Pay: `amountCents`, `retailer`
+
+### Deterministic routing rules (non-negotiable)
+
+- If slots contain **(amountCents + msisdn)** and `productHint=AIRTIME`:\n  - Never go to `AIRTIME_MSISDN`\n  - Immediately do **preview → confirm → PIN → execute → single receipt**
+- Missing slots are the **only** acceptable reason to ask follow-ups.\n  - Never ask for the same slot twice if it’s present in the user message.
+
+### Preview-first + vendor correctness
+
+For Airtime (and later Data), confirmation must show the **authoritative vendor/network** from preview.\nPrefix guessing is only a fallback when preview is not available.
+
+## Known Pitfall: SMART_PRODUCT_QUERY Slot Bypass (Regression Guard)
+
+### Symptom
+
+User says: `Buy R10 airtime for 0840012300`\nBot asks again: “Which phone number should I send the airtime to?”
+
+### Log signature (prod)
+
+- `nlp_intent.intent = SMART_PRODUCT_QUERY`\n- `entities = {}`\n- then state becomes `AIRTIME_MSISDN`
+
+### Root cause
+
+The SMART_PRODUCT_QUERY handler performed state transitions **without running slot parsing**, so the system believed slots were missing even when present.
+
+### Fix (guard)
+
+- `parseSlots()` is called **before routing** and also inside state handlers.\n- `message-processor-v2` deterministically overrides routing when slots are complete.\n- Regression tests (`tests/routing-regression.test.mjs`) fail if we ever regress.
+
+## Slot coverage checklist (QA baseline)
+
+### Airtime
+- Required: `amountCents`, `msisdn`\n- Flow: parse → preview → confirm → PIN → execute → single receipt → CTA/Home
+
+### Data
+- Required: `dataMb` (or bundle SKU), `msisdn`\n- Flow: parse → match catalogue → preview → confirm → PIN → execute → receipt
+
+### Electricity
+- Required: `meterNumber`, `amountCents`\n- Flow: parse → preview/lookup → confirm → PIN → execute → token receipt
+
+### Vouchers (Blu catalogue)
+- Required: product selection + denomination\n- Flow: list → select → preview → confirm → PIN → vend → code receipt
+
+### Send Money
+- Required: `amountCents`, recipient `msisdn`\n- Flow: parse → confirm → PIN → transfer → receipt
+
+### Retail Pay (wiCode / wiGroup)
+- Required: `amountCents`, `retailer` (MVP: Boxer, Checkers, Shoprite, Usave, Pick n Pay, Engen)\n- Flow: parse → confirm → PIN → generate token → receipt
+
 ### Unit Tests
 
 ```bash
