@@ -291,12 +291,12 @@ describe('BluVasClient', () => {
   // Network Detection Tests
   // ===========================================================================
   describe('checkMobileNumber', () => {
-    it('should detect Vodacom network', async () => {
+    it('should detect Vodacom network (201 success)', async () => {
       const mockPool = mockAgent.get(baseUrl);
       mockPool.intercept({
         path: /\/mobile\/airtime\/mobile-number\/check/,
         method: 'GET',
-      }).reply(200, {
+      }).reply(201, {
         vendorName: 'Vodacom',
         mobileNumber: '0821234567',
       });

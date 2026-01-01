@@ -427,8 +427,20 @@ export class BluVasClient {
         headersTimeout: 30000,
       });
 
-      if (res.statusCode === 200) {
+      // Blu QA returns 201 for successful network detection (observed in prod logs).
+      if (res.statusCode === 200 || res.statusCode === 201) {
         const data = (await res.body.json()) as any;
+        console.log(JSON.stringify({
+          type: 'blu_vas_network_response',
+          statusCode: res.statusCode,
+          body: {
+            vendorName: data?.vendorName,
+            mobileNumber: data?.mobileNumber,
+            vendorReference: data?.vendorReference,
+          },
+          msisdn: bluNumber,
+          timestamp: new Date().toISOString(),
+        }));
         return {
           vendorName: data.vendorName,
           mobileNumber: data.mobileNumber,
