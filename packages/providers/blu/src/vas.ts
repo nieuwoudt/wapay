@@ -147,14 +147,15 @@ export class BluVasClient {
     accountId: string;
     journalEntryId: string;
     msisdn: string;
+    idemKey?: string;
   }): VendMetaData {
+    // Canonical (curl-confirmed) minimal payload:
+    // { transactionRequestDateTime, transactionReference }
+    // Blu appears to be strict for some vendors; keep this minimal and deterministic.
+    const transactionReference = params.idemKey || `WAPAY-${params.journalEntryId}`;
     return {
       transactionRequestDateTime: new Date().toISOString(),
-      transactionReference: `WAPAY-${params.journalEntryId}`,
-      vendorId: 'WAPAY-001',
-      deviceId: 'WHATSAPP-BOT',
-      consumerAccountNumber: params.accountId,
-      cellphoneNumber: this.toBluFormat(params.msisdn),
+      transactionReference,
     };
   }
 
@@ -296,25 +297,33 @@ export class BluVasClient {
         accountId: params.accountId,
         journalEntryId: params.journalEntryId,
         msisdn: params.msisdn,
+        idemKey: params.idemKey,
       }),
     };
+
+    const bodyJson = JSON.stringify(body);
+    const headers = this.headers();
+    const redactedHeaders: Record<string, string> = { ...headers };
+    if (redactedHeaders.apikey) redactedHeaders.apikey = `${String(redactedHeaders.apikey).slice(0, 4)}...${String(redactedHeaders.apikey).slice(-4)}`;
 
     // Log the request for debugging
     console.log(JSON.stringify({
       type: 'blu_vas_airtime_request',
       url,
+      headers: Object.keys(headers),
       vendorId: params.vendorId,
       mobileNumber: bluMsisdn,
       amount: params.amountCents,
       requestId: params.idemKey,
+      body: bodyJson,
       timestamp: new Date().toISOString(),
     }));
 
     return this.callWithRetry(async () => {
       const res = await request(url, {
         method: 'POST',
-        headers: this.headers(),
-        body: JSON.stringify(body),
+        headers,
+        body: bodyJson,
         bodyTimeout: 60000,
         headersTimeout: 60000,
       });
@@ -527,14 +536,18 @@ export class BluVasClient {
         accountId: params.accountId,
         journalEntryId: params.journalEntryId,
         msisdn: params.msisdn,
+        idemKey: params.idemKey,
       }),
     };
+
+    const bodyJson = JSON.stringify(body);
+    const headers = this.headers();
 
     return this.callWithRetry(async () => {
       const res = await request(url, {
         method: 'POST',
-        headers: this.headers(),
-        body: JSON.stringify(body),
+        headers,
+        body: bodyJson,
         bodyTimeout: 60000,
         headersTimeout: 60000,
       });

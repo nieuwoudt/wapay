@@ -82,14 +82,11 @@ describe('BluVasClient', () => {
         accountId: 'acc-123',
         journalEntryId: 'journal-456',
         msisdn: '+27821234567',
+        idemKey: 'test-idem-123',
       });
 
       expect(result).toMatchObject({
-        transactionReference: 'WAPAY-journal-456',
-        vendorId: 'WAPAY-001',
-        deviceId: 'WHATSAPP-BOT',
-        consumerAccountNumber: 'acc-123',
-        cellphoneNumber: '0821234567',
+        transactionReference: 'test-idem-123',
       });
       expect(result.transactionRequestDateTime).toBeDefined();
     });
@@ -99,9 +96,10 @@ describe('BluVasClient', () => {
         accountId: 'acc-123',
         journalEntryId: 'journal-456',
         msisdn: '+27831234567',
+        idemKey: 'test-idem-123',
       });
 
-      expect(result.cellphoneNumber).toBe('0831234567');
+      expect(result.transactionReference).toBe('test-idem-123');
     });
   });
 

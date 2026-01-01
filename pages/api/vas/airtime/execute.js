@@ -276,7 +276,8 @@ export default async function handler(req, res) {
     // =========================================================================
     // Create Idempotency Key and Double-Entry Journal
     // =========================================================================
-    const idemKey = `wapay-air-${Date.now()}-${accountId}`;
+    // Deterministic requestId/idempotency per execution attempt (stable for retries)
+    const idemKey = `wapay-air-exec-${previewId}`;
 
     // Create double-entry journal entry
     const journalEntry = await prisma.journalEntry.create({
