@@ -45,10 +45,12 @@ export const BLU_QA_TEST_MSISDNS = {
 export interface VendMetaData {
   transactionRequestDateTime: string;
   transactionReference: string;
-  vendorId: string;
-  deviceId: string;
-  consumerAccountNumber: string;
-  cellphoneNumber: string;
+  // Optional fields: Blu accepts a minimal canonical vendMetaData (curl-confirmed).
+  // Some vendors may be strict about unknown/extra metadata, so WaPay may omit these.
+  vendorId?: string;
+  deviceId?: string;
+  consumerAccountNumber?: string;
+  cellphoneNumber?: string;
   clientId?: string;
   emailAddress?: string;
 }
