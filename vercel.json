@@ -1,1 +1,22 @@
-{}
+{
+  "functions": {
+    "pages/api/vas/**/*.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
+    "pages/api/cron/**/*.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "pages/api/admin/**/*.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/daily-vas-sync",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

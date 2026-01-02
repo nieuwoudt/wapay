@@ -242,6 +242,33 @@ All amounts below are ZAR. When calling Blu `/electricity/info`, amounts are sen
 
 Source: `Copy of Electricity Test Meters -2025 Compliance001.csv` / `.pdf`
 
+## Catalogue Sync + Daily Checks (Prevent “missing Telkom/Cell C bundles” regressions)
+
+WaPay lists bundles from the **DB catalogue** (`VasProduct`). If Telkom/Cell C returns 0 bundles, it usually means the DB catalogue was never populated or went stale.
+
+### What we run daily (Vercel Cron)
+
+- `GET /api/cron/daily-vas-sync`
+  - Fetches Blu DATA products for `vodacom`, `mtn`, `cellc`, `telkom`
+  - Upserts them into `VasProduct` (`category=DATA`, `externalCode=product.id`, `fixedPriceCents=amount`)
+
+### Manual sync (admin)
+
+Trigger a sync manually (requires `ADMIN_API_KEY`):
+
+- `POST /api/admin/sync-vas-catalog?key=...`
+
+Env vars:
+
+- `ADMIN_API_KEY`: protects admin sync endpoint
+- `CRON_SECRET` (optional): allows calling cron endpoint via `?key=` (Vercel Cron header also works)
+
+### Troubleshooting
+
+- If WhatsApp `show telkom bundles` still shows none:
+  - check Vercel logs for `cron_daily_vas_sync` results
+  - if `telkom` returns `count: 0`, it’s likely a **Blu QA catalogue** issue for that vendor.
+
 ## Known Pitfall: SMART_PRODUCT_QUERY Slot Bypass (Regression Guard)
 
 ### Symptom
