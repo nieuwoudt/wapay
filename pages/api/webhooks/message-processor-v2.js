@@ -132,6 +132,15 @@ function detectVendorLabel(msisdn = '') {
   return 'Detected';
 }
 
+function detectNetworkCodeFromMsisdn(msisdn = '') {
+  const label = detectVendorLabel(msisdn);
+  if (label === 'Vodacom') return 'VODACOM';
+  if (label === 'MTN') return 'MTN';
+  if (label === 'Telkom') return 'TELKOM';
+  if (label === 'Cell C') return 'CELLC';
+  return null;
+}
+
 async function startAirtimePreviewAndConfirm({ from, account, amountCents, msisdn, intent = 'BUY_AIRTIME', rawText = '' }) {
   const previewUrl = apiUrl('/api/vas/airtime/preview');
   logInternalFetchCall({ url: previewUrl, path: '/api/vas/airtime/preview' });
@@ -903,7 +912,12 @@ async function handlePostOnboarding({ account, from, text }) {
             });
           }
 
-          // If missing network/period, ask only what's missing (one question)
+          // Auto-infer network from MSISDN if missing
+          if (!dataSlots.networkCode && dataSlots.msisdn) {
+            dataSlots.networkCode = detectNetworkCodeFromMsisdn(dataSlots.msisdn);
+          }
+
+          // If still missing network, ask for it (single question)
           if (!dataSlots.networkCode) {
             logSlotFill({
               intent: 'BUY_DATA',
@@ -918,22 +932,6 @@ async function handlePostOnboarding({ account, from, text }) {
             return await sendWhatsAppText({
               to: from,
               text: `📶 *Buy Data*\n\nWhich network is this for?\n\nReply: Vodacom, MTN, Cell C, or Telkom.`,
-            });
-          }
-          if (!dataSlots.periodType) {
-            logSlotFill({
-              intent: 'BUY_DATA',
-              text,
-              slots,
-              routeDecision: 'DATA_PERIOD',
-              missing: ['periodType'],
-              from,
-              accountId: account.id,
-            });
-            await updateConversationState(from, 'DATA_PERIOD', { ...dataSlots });
-            return await sendWhatsAppText({
-              to: from,
-              text: `📶 *Buy Data*\n\nWhich bundle period?\n\nReply: daily, weekly, monthly, or night.`,
             });
           }
 
@@ -1940,8 +1938,9 @@ async function handleConversationState({ from, text, state, data, account }) {
               });
               
               await updateConversationState(from, null);
-              return await sendWhatsAppText({
+              return await sendWhatsAppErrorOnce({
                 to: from,
+                errorKey: `elec_preview:${previewData.error || 'ERROR'}`,
                 text: `❌ ${previewData.message || 'Could not process electricity purchase.'}\n\nPlease try again later.`,
               });
             }
@@ -1971,8 +1970,9 @@ async function handleConversationState({ from, text, state, data, account }) {
             });
             
             await updateConversationState(from, null);
-            return await sendWhatsAppText({
+            return await sendWhatsAppErrorOnce({
               to: from,
+              errorKey: `elec_preview:SERVICE_UNAVAILABLE`,
               text: `❌ Service temporarily unavailable. Please try again later.`,
             });
           }
@@ -3084,7 +3084,9 @@ async function handleListDataBundles({ from, account, entities }) {
 }
 
 async function handleDataPurchaseFromSlots({ from, account, slots }) {
-  const { msisdn, dataMb, periodType, networkCode } = slots;
+  const { msisdn, dataMb } = slots;
+  const networkCode = slots.networkCode || detectNetworkCodeFromMsisdn(msisdn || '');
+  const periodType = slots.periodType || null;
 
   // Find best matching product in catalogue
   const product = await prisma.vasProduct.findFirst({
@@ -3092,7 +3094,7 @@ async function handleDataPurchaseFromSlots({ from, account, slots }) {
       active: true,
       category: 'DATA',
       networkCode,
-      periodType,
+      ...(periodType ? { periodType } : {}),
       dataMb,
     },
     orderBy: [
@@ -3106,13 +3108,14 @@ async function handleDataPurchaseFromSlots({ from, account, slots }) {
     return await sendWhatsAppText({
       to: from,
       text:
-        `❌ I couldn't find a ${networkCode} ${periodType.toLowerCase()} ${dataMb >= 1024 ? `${(dataMb / 1024).toFixed(0)}GB` : `${dataMb}MB`} bundle in our catalogue.\n\n` +
-        `Try a different size/period or ask: "Show me ${networkCode} ${periodType.toLowerCase()} bundles".`,
+        `❌ I couldn't find a ${networkCode || 'matching'} ${periodType ? periodType.toLowerCase() + ' ' : ''}${dataMb >= 1024 ? `${(dataMb / 1024).toFixed(0)}GB` : `${dataMb}MB`} bundle in our catalogue.\n\n` +
+        `Try a different size, or ask: "Show me ${networkCode || ''} bundles".`,
     });
   }
 
   const priceCents = product.fixedPriceCents || product.priceCents || 0;
   const sizeLabel = dataMb >= 1024 ? `${(dataMb / 1024).toFixed(0)}GB` : `${dataMb}MB`;
+  const resolvedPeriod = product.periodType || periodType || 'ONCE_OFF';
   const vendorLabel = networkCode === 'CELLC' ? 'Cell C' : networkCode.charAt(0) + networkCode.slice(1).toLowerCase();
 
   await updateConversationState(from, 'DATA_CONFIRM', {
@@ -3128,7 +3131,7 @@ async function handleDataPurchaseFromSlots({ from, account, slots }) {
     to: from,
     text:
       `📶 *Confirm Data Purchase*\n\n` +
-      `Bundle: ${sizeLabel} ${periodType.toLowerCase()}\n` +
+      `Bundle: ${sizeLabel} ${String(resolvedPeriod).toLowerCase()}\n` +
       `Number: ${msisdn} (${vendorLabel})\n` +
       `Amount: R${(priceCents / 100).toFixed(2)}\n\n` +
       `Reply *YES* to confirm or *NO* to cancel.`,

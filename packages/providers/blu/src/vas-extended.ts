@@ -28,9 +28,9 @@ import type {
   DataProduct,
   
   // Electricity
-  ElectricityPurchaseParams,
+  ElectricityInfoResult,
+  ElectricitySaleParams,
   ElectricityPurchaseResult,
-  MeterValidationResult,
   
   // PayTV
   DstvPaymentParams,
@@ -147,7 +147,9 @@ export class BluVasExtendedClient {
       try {
         return await fn();
       } catch (error: any) {
-        if (error.message === 'USER_INPUT' || error.message === 'AUTH') {
+        // Electricity/info and sales calls often fail due to provider config/enablement
+        // or user input; never retry these.
+        if (error.message === 'USER_INPUT' || error.message === 'AUTH' || error.message === 'INVALID_PHONE_NUMBER') {
           throw error;
         }
         if (attempt === maxAttempts) {
@@ -308,14 +310,23 @@ export class BluVasExtendedClient {
   // ==========================================================================
 
   /**
-   * Validate an electricity meter number
-   * 
-   * Blu Endpoint: GET /electricity/meter/validate?meterNumber=xxx
-   * 
-   * Returns customer info if meter is valid
+   * Confirm meter + get quote/info for electricity purchase.
+   *
+   * Blu Support confirmed deprecated/non-functional:
+   * - POST /electricity/confirmCustomer (do not use)
+   *
+   * Correct confirm step:
+   * - GET /electricity/info?amount={cents}&free-basic-electricity=false&meter-number={meter}
+   *
+   * Returns a `reference` required for the sale.
    */
-  async validateMeter(meterNumber: string): Promise<MeterValidationResult> {
-    const url = `${this.base}/electricity/meter/validate?meterNumber=${encodeURIComponent(meterNumber)}`;
+  async getElectricityInfo(params: { meterNumber: string; amountCents: number; freeBasicElectricity?: boolean }): Promise<ElectricityInfoResult> {
+    const freeBasic = params.freeBasicElectricity === true ? 'true' : 'false';
+    const url =
+      `${this.base}/electricity/info` +
+      `?amount=${encodeURIComponent(String(params.amountCents))}` +
+      `&free-basic-electricity=${encodeURIComponent(freeBasic)}` +
+      `&meter-number=${encodeURIComponent(params.meterNumber)}`;
 
     return this.callWithRetry(async () => {
       const res = await request(url, {
@@ -325,25 +336,20 @@ export class BluVasExtendedClient {
         headersTimeout: 30000,
       });
 
-      if (res.statusCode === 200) {
+      if (res.statusCode === 200 || res.statusCode === 201) {
         const data = (await res.body.json()) as any;
+        const reference = data.reference || data.vendorReference || data.ref || data.transactionReference;
         return {
-          meterNumber: data.meterNumber,
-          valid: true,
+          reference: String(reference || ''),
+          meterNumber: data.meterNumber || data['meter-number'] || params.meterNumber,
+          amountCents: data.amount ?? data.amountCents ?? params.amountCents,
           customerName: data.customerName,
           customerAddress: data.customerAddress,
-          municipalityCode: data.municipalityCode,
           municipalityName: data.municipalityName,
-          meterType: data.meterType,
-          lastPurchaseDate: data.lastPurchaseDate,
+          municipalityCode: data.municipalityCode,
+          vat: data.vat,
+          serviceCharge: data.serviceCharge,
           arrears: data.arrears,
-        };
-      }
-
-      if (res.statusCode === 404) {
-        return {
-          meterNumber,
-          valid: false,
         };
       }
 
@@ -353,24 +359,19 @@ export class BluVasExtendedClient {
   }
 
   /**
-   * Purchase prepaid electricity
-   * 
+   * Purchase prepaid electricity token using the reference from `getElectricityInfo`.
+   *
    * Blu Endpoint: POST /electricity/sales
-   * 
-   * Returns STS token to enter into meter
    */
-  async purchaseElectricity(params: ElectricityPurchaseParams): Promise<ElectricityPurchaseResult> {
+  async purchaseElectricity(params: ElectricitySaleParams): Promise<ElectricityPurchaseResult> {
     const url = `${this.base}/electricity/sales`;
     
     const body = {
       requestId: params.idemKey,
-      meterNumber: params.meterNumber,
-      amount: params.amountCents,
-      municipalityCode: params.municipalityCode,
+      reference: params.reference,
       vendMetaData: this.buildVendMetaData({
         accountId: params.accountId,
         journalEntryId: params.journalEntryId,
-        meterNumber: params.meterNumber,
       }),
     };
 
@@ -393,7 +394,7 @@ export class BluVasExtendedClient {
           tokenType: data.tokenType || 'STS_1',
           units: data.units,
           unitRate: data.unitRate,
-          meterNumber: data.meterNumber,
+          meterNumber: data.meterNumber || '',
           municipalityName: data.municipalityName,
           customerName: data.customerName,
           customerAddress: data.customerAddress,

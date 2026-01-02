@@ -35,4 +35,13 @@ test('routing: send money with amount+msisdn routes to confirm (placeholder)', (
   assert.equal(r.routeDecision, 'SEND_MONEY_CONFIRM');
 });
 
+test('routing: one-shot electricity with amount+meter routes to electricity confirm', () => {
+  const r = decideCommerceRoute({ text: 'buy R100 electricity for meter 100228728', currentState: null, stateData: null });
+  assert.equal(r.routeDecision, 'ELECTRICITY_CONFIRM');
+  assert.equal(r.nextState, 'ELECTRICITY_CONFIRM');
+  assert.equal(r.missing.length, 0);
+  assert.equal(r.slots.amountCents, 10000);
+  assert.equal(r.slots.meterNumber, '100228728');
+});
+
 

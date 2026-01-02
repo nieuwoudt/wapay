@@ -14,7 +14,7 @@
 import { PrismaClient } from '@prisma/client';
 import { BluVasExtendedClient } from '@wapay/providers-blu';
 import { verifyPIN } from '@wapay/auth';
-import { isCategoryEnabled } from '../../../../lib/vas-config.js';
+import { isCategoryEnabledForWaId } from '../../../../lib/vas-config.js';
 
 const prisma = new PrismaClient();
 
@@ -54,9 +54,15 @@ export default async function handler(req, res) {
   });
 
   try {
-    // Check if electricity is enabled
-    if (!isCategoryEnabled('ELECTRICITY')) {
+    // Check if electricity is enabled (optionally allowlisted by waId)
+    const accountForGate = await prisma.account.findUnique({
+      where: { id: accountId },
+      select: { waId: true },
+    });
+    const waId = accountForGate?.waId || null;
+    if (!isCategoryEnabledForWaId('ELECTRICITY', waId)) {
       return res.status(400).json({
+        ok: false,
         error: 'USER_INPUT',
         message: 'Electricity purchases are not available yet.'
       });
@@ -158,7 +164,7 @@ export default async function handler(req, res) {
     }
 
     // Extract purchase details from preview
-    const { meterNumber, amountCents, serviceFee, totalCents, municipalityCode } = metadata;
+    const { meterNumber, amountCents, serviceFee, totalCents, reference } = metadata;
 
     // Get wallet and verify balance again
     const wallet = await prisma.wallet.findFirst({
@@ -178,8 +184,8 @@ export default async function handler(req, res) {
       });
     }
 
-    // Create idempotency key
-    const idemKey = `elec_${accountId}_${meterNumber}_${amountCents}_${Date.now()}`;
+    // Create idempotency key (stable per preview)
+    const idemKey = `wapay-elec-exec-${previewId}`;
 
     // Create journal entry (debit customer, credit VAS clearing)
     const journalEntry = await prisma.journalEntry.create({
@@ -222,15 +228,18 @@ export default async function handler(req, res) {
           amountCents,
           token: `${Math.floor(Math.random() * 9000000000000000) + 1000000000000000}`, // 16-digit token
           tokenType: 'STS_1',
-          units: (amountCents / 100 * 10).toFixed(2), // ~10 units per Rand (estimate)
+          units: Number((amountCents / 100 * 10).toFixed(2)), // ~10 units per Rand (estimate)
           meterNumber,
           municipalityName: 'STUB Municipality',
         };
       } else {
+        if (!reference) {
+          const err = new Error('UPSTREAM_FAILURE');
+          (err as any).reason = 'Missing electricity reference from preview';
+          throw err;
+        }
         bluResult = await bluClient.purchaseElectricity({
-          meterNumber,
-          amountCents,
-          municipalityCode: municipalityCode || 'ESKOMDIRECT',
+          reference,
           idemKey,
           accountId,
           journalEntryId: journalEntry.id,
@@ -268,16 +277,25 @@ export default async function handler(req, res) {
         data: { status: 'FAILED' }
       });
 
+      const reason = error?.reason || error?.message || 'Electricity purchase failed';
+      const friendly =
+        String(reason || '').toLowerCase().includes('invalid transaction type')
+          ? 'Electricity is not enabled for this environment yet.'
+          : (error?.userMessage || 'Failed to purchase electricity. Please try again.');
+
       logStructured('vas_electricity_execute_result', {
         previewId,
         accountId,
         success: false,
         error: error.message,
+        reason,
       });
 
-      return res.status(500).json({
-        error: 'PROVIDER_ERROR',
-        message: 'Failed to purchase electricity. Please try again.'
+      return res.status(400).json({
+        ok: false,
+        error: error.message || 'UPSTREAM_FAILURE',
+        message: friendly,
+        reference: idemKey,
       });
     }
 

@@ -142,16 +142,25 @@ export interface DataProduct {
 // ============================================================================
 
 /**
- * Electricity purchase request
- * 
- * Endpoint: POST /electricity/sales
- * PurchaseType: TOKEN_BASED
+ * Electricity meter info/quote (confirm meter) response
+ *
+ * Endpoint: GET /electricity/info?amount=...&free-basic-electricity=...&meter-number=...
+ * Returns a reference that must be used for the sale request.
+ *
+ * Note: Field names are kept flexible because Blu responses vary by environment.
  */
-export interface ElectricityPurchaseParams extends BasePurchaseParams {
-  meterNumber: string;      // 11-13 digit STS meter number
-  amountCents: number;      // Amount in cents (excl. service fees)
-  municipalityCode?: string; // Optional: specific utility provider
-  vendMetaData?: VendMetaData;
+export interface ElectricityInfoResult {
+  reference: string;
+  meterNumber?: string;
+  amountCents?: number;
+  customerName?: string;
+  customerAddress?: string;
+  municipalityName?: string;
+  municipalityCode?: string;
+  // Optional financial breakdown (cents)
+  vat?: number;
+  serviceCharge?: number;
+  arrears?: number;
 }
 
 export interface ElectricityPurchaseResult extends BasePurchaseResult {
@@ -167,6 +176,17 @@ export interface ElectricityPurchaseResult extends BasePurchaseResult {
   debt?: number;            // Debt collected (cents)
   vat?: number;             // VAT amount (cents)
   serviceCharge?: number;   // Service charge (cents)
+}
+
+/**
+ * Electricity sale request (voucher/token)
+ *
+ * Endpoint: POST /electricity/sales
+ * Uses the `reference` returned by GET /electricity/info.
+ */
+export interface ElectricitySaleParams extends BasePurchaseParams {
+  reference: string;
+  vendMetaData?: VendMetaData;
 }
 
 /**

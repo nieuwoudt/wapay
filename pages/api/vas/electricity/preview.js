@@ -6,7 +6,8 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import { isCategoryEnabled } from '../../../../lib/vas-config.js';
+import { isCategoryEnabledForWaId } from '../../../../lib/vas-config.js';
+import { BluVasExtendedClient } from '@wapay/providers-blu';
 
 const prisma = new PrismaClient();
 
@@ -48,8 +49,13 @@ export default async function handler(req, res) {
   });
 
   try {
-    // Check if electricity is enabled
-    if (!isCategoryEnabled('ELECTRICITY')) {
+    // Check if electricity is enabled (optionally allowlisted by waId)
+    const accountForGate = await prisma.account.findUnique({
+      where: { id: accountId },
+      select: { waId: true },
+    });
+    const waId = accountForGate?.waId || null;
+    if (!isCategoryEnabledForWaId('ELECTRICITY', waId)) {
       logStructured('vas_electricity_preview_result', {
         accountId,
         success: false,
@@ -153,6 +159,48 @@ export default async function handler(req, res) {
       });
     }
 
+    // Confirm meter / get provider reference from Blu (required for sale)
+    let info;
+    try {
+      const bluClient = new BluVasExtendedClient();
+      info = await bluClient.getElectricityInfo({
+        meterNumber: meterNumber.replace(/\D/g, ''),
+        amountCents,
+        freeBasicElectricity: false,
+      });
+      logStructured('vas_electricity_info_ok', {
+        accountId,
+        meterNumber,
+        amountCents,
+        reference: info?.reference,
+      });
+      if (!info?.reference) {
+        return res.status(502).json({
+          error: 'UPSTREAM_FAILURE',
+          message: 'Electricity service unavailable. Please try again later.',
+        });
+      }
+    } catch (e) {
+      const reason = e?.reason || e?.message || 'Electricity info lookup failed';
+      logStructured('vas_electricity_info_failed', {
+        accountId,
+        meterNumber,
+        amountCents,
+        error: e?.message,
+        reason,
+        statusCode: e?.statusCode,
+      });
+      // Blu sometimes returns AUTH with message like "Invalid transaction type" for disabled flows.
+      const friendly =
+        String(reason || '').toLowerCase().includes('invalid transaction type')
+          ? 'Electricity is not enabled for this environment yet.'
+          : 'Electricity service unavailable. Please try again later.';
+      return res.status(502).json({
+        error: 'UPSTREAM_FAILURE',
+        message: friendly,
+      });
+    }
+
     // Create preview record
     const preview = await prisma.providerRequest.create({
       data: {
@@ -167,6 +215,7 @@ export default async function handler(req, res) {
           municipalityCode: municipalityCode || 'AUTO',
           serviceFee,
           totalCents,
+          reference: info.reference,
         }),
         metadata: {
           meterNumber,
@@ -174,6 +223,11 @@ export default async function handler(req, res) {
           municipalityCode: municipalityCode || 'AUTO',
           serviceFee,
           totalCents,
+          reference: info.reference,
+          customerName: info.customerName,
+          customerAddress: info.customerAddress,
+          municipalityName: info.municipalityName,
+          municipalityCodeFromInfo: info.municipalityCode,
           accountId,
           waId: account.waId,
           expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 min expiry
@@ -201,6 +255,8 @@ export default async function handler(req, res) {
         totalCents,
         availableBalance,
         newBalance: availableBalance - totalCents,
+        customerName: info.customerName,
+        municipalityName: info.municipalityName,
       }
     });
 

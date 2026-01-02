@@ -143,6 +143,38 @@ Regression tests that enforce this:
 - `tests/no-whatsapp-sends-in-api-routes.test.mjs` (API routes must not send WhatsApp messages)
 - `packages/providers/blu/__tests__/vas.client.test.ts` (no retries on `INVALID_PHONE_NUMBER`)
 
+## Agentic Electricity Vending (Blu-supported flow)
+
+Blu Support confirmed the correct electricity flow:
+
+- Confirm meter / quote: `GET /electricity/info?amount={cents}&free-basic-electricity=false&meter-number={meter}`
+- Vend token: `POST /electricity/sales` using the `reference` returned by the info call
+
+WaPay implementation:
+
+- Preview: `POST /api/vas/electricity/preview`
+  - validates wallet balance
+  - calls Blu `GET /electricity/info` and stores `reference` in the preview metadata
+- Execute: `POST /api/vas/electricity/execute`
+  - uses stable idempotency key `wapay-elec-exec-${previewId}`
+  - calls Blu `POST /electricity/sales` with `{ requestId, reference, vendMetaData }`
+
+Safety:
+
+- You can restrict electricity to specific WhatsApp IDs by setting:
+  - `VAS_ALLOWLIST_ELECTRICITY=27787051175,27760000000`
+
+## Agentic Data Bundles (improved)
+
+Data agentic flow supports natural language like:
+
+- `buy 2GB data for 0787051175`
+
+Behavior:
+
+- If size + MSISDN are present, WaPay will infer the network from the MSISDN prefix (fallback) and select the best matching bundle in `VasProduct` by popularity/price.
+- If the network cannot be inferred, the bot asks **only** for the missing network.
+
 ## Known Pitfall: SMART_PRODUCT_QUERY Slot Bypass (Regression Guard)
 
 ### Symptom
