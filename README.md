@@ -91,32 +91,57 @@ This returns a single, deterministic slot object (examples):
 
 ### Deterministic routing rules (non-negotiable)
 
-- If slots contain **(amountCents + msisdn)** and `productHint=AIRTIME`:\n  - Never go to `AIRTIME_MSISDN`\n  - Immediately do **preview → confirm → PIN → execute → single receipt**
-- Missing slots are the **only** acceptable reason to ask follow-ups.\n  - Never ask for the same slot twice if it’s present in the user message.
+- If slots contain **(amountCents + msisdn)** and `productHint=AIRTIME`:
+  - Never go to `AIRTIME_MSISDN`
+  - Immediately do **preview → confirm → PIN → execute → single receipt**
+- Missing slots are the **only** acceptable reason to ask follow-ups.
+  - Never ask for the same slot twice if it’s present in the user message.
 
 ### Preview-first + vendor correctness
 
-For Airtime (and later Data), confirmation must show the **authoritative vendor/network** from preview.\nPrefix guessing is only a fallback when preview is not available.
+For Airtime (and later Data), confirmation must show the **authoritative vendor/network** from preview.
+Prefix guessing is only a fallback when preview is not available.
 
 ## Agentic Airtime Vending (QA Verified)
 
-Verified working via WhatsApp (Blu Trade QA):
+Verified working via WhatsApp (Blu Trade QA), using the agentic flow:
+parse → preview → confirm → PIN → execute → single receipt → next actions
 
 - Vodacom: `buy R10 airtime for 0829837088`
 - MTN: `buy R10 airtime for 0831118881`
 - Telkom: `buy R10 airtime for 0850012345`
+- Cell C (Blu-approved): `buy R10 airtime for 0840012300`
 
-Expected limitation (Blu QA/config):
+Important (Blu QA allowlist/config):
 
-- Cell C: `vendorId=cellc` currently returns `400 Invalid phone number` for certain Cell C numbers.\n  This is treated as a provider/config issue (expected fail), not a WaPay payload issue.
-
-Flow (Airtime): parse → preview → confirm → PIN → execute → single receipt → next actions
+- Some Cell C numbers in QA will return `400 Invalid phone number` (example: `0624404849`).
+- When this happens, it is almost always **Blu QA allowlist/config** (not WaPay payload/slot parsing).
+- Action: confirm with Blu which Cell C MSISDNs are enabled/approved in the target environment.
 
 ## Single Error Message Guarantee (Global Guard)
 
 WaPay guarantees the user receives **at most one WhatsApp error message** per failed attempt:
 
-- All user-facing errors are sent **only** by `pages/api/webhooks/message-processor-v2.js` (the WhatsApp orchestrator).\n- Internal VAS API routes (`/api/vas/*/execute`) **never** send WhatsApp messages directly.\n- Error delivery is deduped by `(previewId + errorCode)` stored in `account.conversationData.sentErrorKeys`.\n- Blu client never retries 400-class request problems like `INVALID_PHONE_NUMBER`, preventing repeated provider calls and repeat errors.
+- All user-facing errors are sent **only** by `pages/api/webhooks/message-processor-v2.js` (the WhatsApp orchestrator).
+- Internal VAS API routes (`/api/vas/*/execute`) **never** send WhatsApp messages directly.
+- Error delivery is deduped by `(previewId + errorCode)` stored in `account.conversationData.sentErrorKeys`.
+- Blu client never retries 400-class request problems like `INVALID_PHONE_NUMBER`, preventing repeated provider calls and repeat errors.
+
+## Why Agentic Airtime Won’t Regress (Guardrails)
+
+If any of these break, we consider it a regression:
+
+- **Slot parsing is universal**: `lib/slot-parser.js` runs before routing and inside state handlers.
+- **Deterministic override**: when slots are complete for airtime, the bot must route to preview/confirm and never ask for MSISDN again.
+- **Preview-first vendor**: the vendor/network displayed in confirmation comes from preview.
+- **Exactly-once errors**: failed executes produce only one WhatsApp error message (no duplicates).
+
+Regression tests that enforce this:
+
+- `tests/routing-regression.test.mjs` (one-shot airtime should not ask for MSISDN)
+- `tests/slot-parser.test.mjs` (amount + MSISDN extraction robustness)
+- `tests/no-whatsapp-sends-in-api-routes.test.mjs` (API routes must not send WhatsApp messages)
+- `packages/providers/blu/__tests__/vas.client.test.ts` (no retries on `INVALID_PHONE_NUMBER`)
 
 ## Known Pitfall: SMART_PRODUCT_QUERY Slot Bypass (Regression Guard)
 
