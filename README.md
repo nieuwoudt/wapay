@@ -246,6 +246,15 @@ Source: `Copy of Electricity Test Meters -2025 Compliance001.csv` / `.pdf`
 
 WaPay lists bundles from the **DB catalogue** (`VasProduct`). If Telkom/Cell C returns 0 bundles, it usually means the DB catalogue was never populated or went stale.
 
+### Cron job note (why this exists)
+
+✅ Root cause (Telkom/Cell C bundles missing) was **our issue in two ways**:
+
+- Fallback was broken at runtime: `message-processor-v2` called `new BluVasClient()` but didn’t import `BluVasClient`, so Telkom/Cell C fallback silently failed and you saw “0 bundles”.
+- Network parsing missed `cell-c`: slot parser handled `cell c` / `cellc` but not `cell-c`, so the request sometimes became “All Networks”.
+
+Both are fixed, and the cron job ensures we never depend on manual seeding again.
+
 ### What we run daily (Vercel Cron)
 
 - `GET /api/cron/daily-vas-sync`
@@ -260,8 +269,8 @@ Trigger a sync manually (requires `ADMIN_API_KEY`):
 
 Env vars:
 
-- `ADMIN_API_KEY`: protects admin sync endpoint
-- `CRON_SECRET` (optional): allows calling cron endpoint via `?key=` (Vercel Cron header also works)
+- `ADMIN_API_KEY`: protects admin sync endpoint (so only you can trigger a DB sync)
+- `CRON_SECRET` (optional): allows calling the cron endpoint via `?key=` (Vercel Cron header also works)
 
 ### Troubleshooting
 
