@@ -5,7 +5,7 @@
  * Includes structured logging for debugging VAS flows.
  */
 
-import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed } from './user-manager.js';
+import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed, wasErrorSent, markErrorSent } from './user-manager.js';
 import { sendWhatsAppText } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
 import { BluClient } from '@wapay/providers-blu';
@@ -71,6 +71,21 @@ function logSlotFill({ intent, text, slots, routeDecision, missing = [], from, a
     from,
     accountId,
   });
+}
+
+async function sendWhatsAppErrorOnce({ to, errorKey, text }) {
+  if (!to || !text) return { ok: false };
+  const key = String(errorKey || '');
+  if (key) {
+    const already = await wasErrorSent(to, key);
+    if (already) {
+      logStructured('whatsapp_error_deduped', { to, errorKey: key });
+      return { ok: true, deduped: true };
+    }
+    await markErrorSent(to, key);
+  }
+  await addToConversationHistory(to, 'assistant', text);
+  return await sendWhatsAppText({ to, text });
 }
 
 function categoryUnavailableMessage(category) {
@@ -1577,7 +1592,12 @@ async function handleConversationState({ from, text, state, data, account }) {
           await updateConversationState(from, null);
 
           if (!executeData.ok) {
-            return await sendWhatsAppText({ to: from, text: `❌ ${executeData.message || 'Data purchase failed.'}\n\nPlease try again later.` });
+            const errorText = `❌ ${executeData.message || 'Data purchase failed.'}\n\nPlease try again later.`;
+            return await sendWhatsAppErrorOnce({
+              to: from,
+              errorKey: `${data?.previewId || 'data'}:${executeData.error || 'ERROR'}`,
+              text: errorText,
+            });
           }
           const msisdn = data?.msisdn || '';
           await sendReceipt({
@@ -1594,7 +1614,11 @@ async function handleConversationState({ from, text, state, data, account }) {
           return await sendPostTransactionCta(from);
         } catch (e) {
           await updateConversationState(from, null);
-          return await sendWhatsAppText({ to: from, text: `❌ Service temporarily unavailable. Please try again later.` });
+          return await sendWhatsAppErrorOnce({
+            to: from,
+            errorKey: `${data?.previewId || 'data'}:SERVICE_UNAVAILABLE`,
+            text: `❌ Service temporarily unavailable. Please try again later.`,
+          });
         }
       }
 
@@ -1684,8 +1708,9 @@ async function handleConversationState({ from, text, state, data, account }) {
               message: executeData.message,
             });
             
-            return await sendWhatsAppText({
+            return await sendWhatsAppErrorOnce({
               to: from,
+              errorKey: `${previewId || 'air'}:${executeData.error || 'ERROR'}`,
               text: `❌ ${executeData.message || 'Airtime purchase failed.'}\n\nPlease try again later.`,
             });
           }
@@ -1726,8 +1751,9 @@ async function handleConversationState({ from, text, state, data, account }) {
             error: error.message,
           });
           
-          return await sendWhatsAppText({
+          return await sendWhatsAppErrorOnce({
             to: from,
+            errorKey: `${previewId || 'air'}:SERVICE_UNAVAILABLE`,
             text: `❌ Service temporarily unavailable. Please try again later.`,
           });
         }
@@ -2037,8 +2063,9 @@ async function handleConversationState({ from, text, state, data, account }) {
               message: executeData.message,
             });
             
-            return await sendWhatsAppText({
+            return await sendWhatsAppErrorOnce({
               to: from,
+              errorKey: `${previewId || 'elec'}:${executeData.error || 'ERROR'}`,
               text: `❌ ${executeData.message || 'Electricity purchase failed.'}\n\nPlease try again later.`,
             });
           }
@@ -2088,8 +2115,9 @@ async function handleConversationState({ from, text, state, data, account }) {
             error: error.message,
           });
           
-          return await sendWhatsAppText({
+          return await sendWhatsAppErrorOnce({
             to: from,
+            errorKey: `${previewId || 'elec'}:SERVICE_UNAVAILABLE`,
             text: `❌ Service temporarily unavailable. Please try again later.`,
           });
         }

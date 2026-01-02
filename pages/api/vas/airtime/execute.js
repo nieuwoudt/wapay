@@ -16,7 +16,8 @@
 import { PrismaClient } from '@prisma/client';
 import { BluVasClient } from '@wapay/providers-blu';
 import { verifyPIN } from '@wapay/auth';
-import { sendWhatsAppTemplate, sendWhatsAppText } from '@wapay/whatsapp';
+// IMPORTANT: This API route must NEVER send WhatsApp messages directly.
+// User-facing messages are orchestrated by `message-processor-v2` to guarantee exactly-once delivery.
 
 const prisma = new PrismaClient();
 
@@ -63,50 +64,7 @@ function logMetric(name, value, tags = {}) {
   console.log('📊 METRIC:', JSON.stringify(metric));
 }
 
-/**
- * Send WhatsApp purchase receipt
- */
-async function sendPurchaseReceipt({ msisdn, customerName, amountCents, vendorName, providerRef, waId }) {
-  try {
-    // Try template first, fall back to plain text
-    const result = await sendWhatsAppText({
-      to: waId,
-      text: `✅ *Airtime Purchase Successful*\n\n` +
-            `Hi ${customerName || 'there'}!\n\n` +
-            `*Amount:* R${(amountCents / 100).toFixed(2)}\n` +
-            `*Number:* ${msisdn}\n` +
-            `*Network:* ${vendorName}\n` +
-            `*Reference:* ${providerRef}\n` +
-            `*Date:* ${new Date().toLocaleString('en-ZA')}\n\n` +
-            `Thank you for using WaPay! 🎉`,
-    });
-    
-    if (result.ok) {
-      logStructured('vas_airtime_receipt_sent', { msisdn, providerRef, waId });
-    } else {
-      console.error('⚠️ Failed to send WhatsApp receipt:', result.error);
-    }
-    
-    return result;
-  } catch (error) {
-    console.error('⚠️ WhatsApp receipt error (non-blocking):', error.message);
-    return { ok: false, error: error.message };
-  }
-}
-
-/**
- * Send error message to user via WhatsApp
- */
-async function sendErrorMessage(waId, message) {
-  try {
-    await sendWhatsAppText({
-      to: waId,
-      text: `❌ ${message}`,
-    });
-  } catch (error) {
-    console.error('⚠️ Failed to send error message:', error.message);
-  }
-}
+// NOTE: receipts and errors are handled by the WhatsApp orchestrator (message-processor).
 
 export default async function handler(req, res) {
   const startTime = Date.now();
@@ -375,14 +333,6 @@ export default async function handler(req, res) {
           providerMessage: error.providerMessage,
         });
         
-        // Send friendly error to user
-        if (account.waId) {
-          sendErrorMessage(
-            account.waId, 
-            error.userMessage || "Sorry, I couldn't process that airtime purchase. The network is rejecting this phone number. Please try with a different number or contact support."
-          ).catch(() => {});
-        }
-
         return res.status(400).json({
           error: 'INVALID_PHONE_NUMBER',
           message: error.userMessage || "Sorry, I couldn't process that airtime purchase. The network is rejecting this phone number.",

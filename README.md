@@ -98,6 +98,26 @@ This returns a single, deterministic slot object (examples):
 
 For Airtime (and later Data), confirmation must show the **authoritative vendor/network** from preview.\nPrefix guessing is only a fallback when preview is not available.
 
+## Agentic Airtime Vending (QA Verified)
+
+Verified working via WhatsApp (Blu Trade QA):
+
+- Vodacom: `buy R10 airtime for 0829837088`
+- MTN: `buy R10 airtime for 0831118881`
+- Telkom: `buy R10 airtime for 0850012345`
+
+Expected limitation (Blu QA/config):
+
+- Cell C: `vendorId=cellc` currently returns `400 Invalid phone number` for certain Cell C numbers.\n  This is treated as a provider/config issue (expected fail), not a WaPay payload issue.
+
+Flow (Airtime): parse → preview → confirm → PIN → execute → single receipt → next actions
+
+## Single Error Message Guarantee (Global Guard)
+
+WaPay guarantees the user receives **at most one WhatsApp error message** per failed attempt:
+
+- All user-facing errors are sent **only** by `pages/api/webhooks/message-processor-v2.js` (the WhatsApp orchestrator).\n- Internal VAS API routes (`/api/vas/*/execute`) **never** send WhatsApp messages directly.\n- Error delivery is deduped by `(previewId + errorCode)` stored in `account.conversationData.sentErrorKeys`.\n- Blu client never retries 400-class request problems like `INVALID_PHONE_NUMBER`, preventing repeated provider calls and repeat errors.
+
 ## Known Pitfall: SMART_PRODUCT_QUERY Slot Bypass (Regression Guard)
 
 ### Symptom

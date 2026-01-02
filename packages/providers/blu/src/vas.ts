@@ -233,7 +233,7 @@ export class BluVasClient {
         return await fn();
       } catch (error: any) {
         // Don't retry user errors or auth errors
-        if (error.message === 'USER_INPUT' || error.message === 'AUTH') {
+        if (error.message === 'USER_INPUT' || error.message === 'AUTH' || error.message === 'INVALID_PHONE_NUMBER') {
           throw error;
         }
         

@@ -170,6 +170,30 @@ describe('BluVasClient', () => {
       await expect(client.purchaseAirtime(airtimeParams)).rejects.toThrow('USER_INPUT');
     });
 
+    it('should not retry on INVALID_PHONE_NUMBER error', async () => {
+      const mockPool = mockAgent.get(baseUrl);
+      // If retry happens, the second call will succeed and the expectation to throw will fail.
+      mockPool.intercept({
+        path: '/mobile/airtime/sales',
+        method: 'POST',
+      }).reply(400, {
+        error: 'Bad Request',
+        message: 'Invalid phone number',
+      });
+
+      mockPool.intercept({
+        path: '/mobile/airtime/sales',
+        method: 'POST',
+      }).reply(201, {
+        reference: 'BLU-REF-SHOULD-NOT-HAPPEN',
+        amount: 5000,
+        vendorName: 'Vodacom',
+        dateTime: '2025-01-15T10:30:00Z',
+      });
+
+      await expect(client.purchaseAirtime(airtimeParams)).rejects.toThrow('INVALID_PHONE_NUMBER');
+    });
+
     it('should throw USER_INPUT error on 404 response', async () => {
       const mockPool = mockAgent.get(baseUrl);
       mockPool.intercept({

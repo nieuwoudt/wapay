@@ -50,6 +50,50 @@ export async function markMessageProcessed(waId, messageId) {
   }
 }
 
+export async function wasErrorSent(waId, errorKey) {
+  if (!waId || !errorKey) return false;
+  try {
+    const account = await prisma.account.findFirst({
+      where: { waId },
+      select: { conversationData: true },
+    });
+    const data = account?.conversationData || {};
+    const keys = Array.isArray(data.sentErrorKeys) ? data.sentErrorKeys : [];
+    return keys.includes(errorKey);
+  } catch (e) {
+    console.error('❌ Error checking sent errorKey:', e);
+    return false;
+  }
+}
+
+export async function markErrorSent(waId, errorKey) {
+  if (!waId || !errorKey) return { ok: true };
+  try {
+    const account = await prisma.account.findFirst({
+      where: { waId },
+      select: { conversationData: true },
+    });
+    const existingData = account?.conversationData || {};
+    const keys = Array.isArray(existingData.sentErrorKeys) ? existingData.sentErrorKeys : [];
+    if (keys.includes(errorKey)) return { ok: true, dedup: true };
+
+    const next = [...keys, errorKey].slice(-50); // keep last 50
+    await prisma.account.update({
+      where: { waId },
+      data: {
+        conversationData: {
+          ...existingData,
+          sentErrorKeys: next,
+        },
+      },
+    });
+    return { ok: true };
+  } catch (e) {
+    console.error('❌ Error marking sent errorKey:', e);
+    return { ok: false, error: e.message };
+  }
+}
+
 /**
  * Get or create user account
  */
