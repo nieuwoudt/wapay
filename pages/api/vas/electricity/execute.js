@@ -235,7 +235,8 @@ export default async function handler(req, res) {
       } else {
         if (!reference) {
           const err = new Error('UPSTREAM_FAILURE');
-          (err as any).reason = 'Missing electricity reference from preview';
+          // JS-safe attachment of extra context (this file is .js, not .ts)
+          err.reason = 'Missing electricity reference from preview';
           throw err;
         }
         bluResult = await bluClient.purchaseElectricity({
