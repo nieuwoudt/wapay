@@ -175,6 +175,73 @@ Behavior:
 - If size + MSISDN are present, WaPay will infer the network from the MSISDN prefix (fallback) and select the best matching bundle in `VasProduct` by popularity/price.
 - If the network cannot be inferred, the bot asks **only** for the missing network.
 
+## Agentic VAS Test Data (QA)
+
+This section is the **single source of truth** for known-good QA test inputs used to validate WaPay’s agentic VAS vending end-to-end.
+
+### Airtime (Blu Trade QA)
+
+Use these in WhatsApp messages like:
+
+- `buy R10 airtime for 0829837088`
+
+Known-good test MSISDNs:
+
+- **Vodacom**: `0829837088`
+- **MTN**: `0831118881`
+- **Telkom**: `0850012345`
+- **Cell C (Blu-approved)**: `0840012300`
+
+Known-bad / expected failure (provider/config):
+
+- **Cell C (not approved in QA)**: `0624404849` → often returns `400 Invalid phone number`
+
+### Data Bundles (Blu Trade QA)
+
+Use WhatsApp messages like:
+
+- `buy 2GB data for 0787051175`
+
+Notes:
+
+- Vending uses `POST /mobile/bundle/sales` and requires `productId` (not `id`).
+- WaPay resolves `productId` from `VasProduct.externalCode` after matching size/network/period (and may infer network from MSISDN as a fallback).
+
+### Electricity (Blu Trade QA)
+
+Electricity uses the Blu-supported flow:
+
+- Confirm meter/quote: `GET /electricity/info?amount={cents}&free-basic-electricity=false&meter-number={meter}`
+- Vend token: `POST /electricity/sales` using the `reference` returned by `/electricity/info`
+
+Recommended WhatsApp format:
+
+- `buy R200 electricity for meter 000001020001`
+
+#### Electricity test meters (Compliance 2025 list)
+
+All amounts below are ZAR. When calling Blu `/electricity/info`, amounts are sent as **cents** (e.g., R200.00 → `20000`).
+
+| Test case | Scenario | Meter number | Utility/Transaction type | Amount |
+|---:|---|---|---|---|
+| 1 | Generic Vend - 1 Credit Token | `000001020001` | None | R200.00 |
+| 2 | Generic Vend - Credit Token with Second FBE Token | `00001100000` | None | R200.00 |
+| 3 | FBE Basic Electricity ONLY request - No amount | `00001000000` | None | R0.00 |
+| 4 | Prepaid Water Meter Test | `000000000100` | Ontec | R200.00 |
+| 5 | Smart Meter Topup where NO Token is present | `00000100000` | None | R200.00 |
+| 6 | Minimum Vend in Meter Confirmation Response | `00000100100` | None | R5.00 |
+| 7 | Maximum Vend in Meter Confirmation Response | `00000110000` | None | R12,000.00 |
+| 8 | Partial Block Scenario | `00000100110` | None | Any Amount |
+| 9 | Full Block Scenario | `00000110100` | None | R100.00 |
+| 10 | Credit Token with two additional Key Change Tokens - 3 Tokens | `00200100000` | None | R200.00 |
+| 11 | Credit Token with FBE Token with additional Key Change Tokens - 4 Tokens | `0020110000` | None | R200.00 |
+| 12 | Credit Token + FBE with additional Key Change Tokens - 3 Tokens | `00201100000` | None | R200.00 |
+| 13 | Tariff Details contained in Vend Responses - 1 Tariff | `00000210011` | None | R200.00 |
+| 14 | Tariff Details contained in Vend Responses - Step Tar | `00000130000` | None | R200.00 |
+| 15 | Credit + FBE unit amount combined in 1 Token | `00001100000` | None | R200.00 |
+
+Source: `Copy of Electricity Test Meters -2025 Compliance001.csv` / `.pdf`
+
 ## Known Pitfall: SMART_PRODUCT_QUERY Slot Bypass (Regression Guard)
 
 ### Symptom
