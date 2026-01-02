@@ -940,7 +940,11 @@ async function handlePostOnboarding({ account, from, text }) {
         }
 
         // Default: list bundles
-        const mergedEntities = { ...(detection.entities || {}), ...(dataSlots.networkCode ? { networkCode: dataSlots.networkCode } : {}) };
+        const mergedEntities = {
+          ...(detection.entities || {}),
+          ...(dataSlots.networkCode ? { networkCode: dataSlots.networkCode } : {}),
+          ...(dataSlots.periodType ? { periodType: dataSlots.periodType } : {}),
+        };
         return await handleListDataBundles({ from, account, entities: mergedEntities });
 
       // ====================================================================
@@ -953,7 +957,16 @@ async function handlePostOnboarding({ account, from, text }) {
       // LIST INTENTS - Show real catalogue data, not generic responses
       // ====================================================================
       case 'LIST_DATA_BUNDLES':
-        return await handleListDataBundles({ from, account, entities: detection.entities });
+        // Ensure period/network slots parsed from natural language are not dropped.
+        return await handleListDataBundles({
+          from,
+          account,
+          entities: {
+            ...(detection.entities || {}),
+            ...(slots?.networkCode ? { networkCode: slots.networkCode } : {}),
+            ...(slots?.periodType ? { periodType: slots.periodType } : {}),
+          },
+        });
         
       case 'LIST_VAS_PRODUCTS':
         return await handleListVasProducts({ from, account });
@@ -2554,8 +2567,15 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
       else if (/mtn/i.test(lowerText)) networkCode = 'MTN';
       else if (/cell\s?c|cellc/i.test(lowerText)) networkCode = 'CELLC';
       else if (/telkom/i.test(lowerText)) networkCode = 'TELKOM';
+
+      // Extract period if mentioned (daily/weekly/monthly/night)
+      let periodType = null;
+      if (lowerText.includes('daily') || /\bday\b/i.test(lowerText)) periodType = 'DAILY';
+      else if (lowerText.includes('weekly') || /\bweek\b/i.test(lowerText)) periodType = 'WEEKLY';
+      else if (lowerText.includes('monthly') || /\bmonth\b/i.test(lowerText)) periodType = 'MONTHLY';
+      else if (lowerText.includes('night')) periodType = 'NIGHT';
       
-      return await handleListDataBundles({ from, account, entities: { networkCode } });
+      return await handleListDataBundles({ from, account, entities: { networkCode, periodType } });
     }
     
     // GAMING: betting indicators
@@ -3021,6 +3041,85 @@ async function handleListDataBundles({ from, account, entities }) {
     });
 
     if (bundles.length === 0) {
+      // Fallback: if our DB catalogue has no rows for this network, ask Blu directly.
+      if (networkCode) {
+        try {
+          const bluClient = new BluVasClient();
+          const vendorId = String(networkCode).toLowerCase(); // VODACOM|MTN|CELLC|TELKOM -> vendorId
+          const products = await bluClient.getDataProducts(vendorId);
+
+          // Infer period from Blu product name/category (best-effort)
+          function inferPeriod(p) {
+            const name = String(p?.name || '').toLowerCase();
+            const cat = String(p?.category || '').toLowerCase();
+            const s = `${name} ${cat}`;
+            if (s.includes('weekly') || /\bweek\b/.test(s)) return 'WEEKLY';
+            if (s.includes('monthly') || /\bmonth\b/.test(s)) return 'MONTHLY';
+            if (s.includes('daily') || /\bday\b/.test(s)) return 'DAILY';
+            if (s.includes('night')) return 'NIGHT';
+            return 'OTHER';
+          }
+
+          const filtered = (products || [])
+            .map(p => ({ ...p, _period: inferPeriod(p) }))
+            .filter(p => !periodType || p._period === periodType)
+            .slice(0, 15);
+
+          logStructured('vas_bundles_fallback_blu', {
+            from,
+            intent: 'LIST_DATA_BUNDLES',
+            networkCode,
+            periodType,
+            providerCount: products?.length || 0,
+            shownCount: filtered.length,
+            success: true,
+          });
+
+          if (filtered.length === 0) {
+            return await sendWhatsAppText({
+              to: from,
+              text: `📶 I couldn't find any ${networkCode} ${periodType?.toLowerCase() || ''} bundles right now.\n\nThis may be a provider catalogue issue for ${networkCode} in Blu QA.`,
+            });
+          }
+
+          const periodDisplay = periodType ? ` ${periodType.charAt(0) + periodType.slice(1).toLowerCase()}` : '';
+          let message = `📶 *${networkCode}${periodDisplay} Data Bundles*\n\n`;
+
+          // Group by inferred period if no explicit period requested
+          const byPeriod = {};
+          for (const p of filtered) {
+            const per = p._period || 'OTHER';
+            if (!byPeriod[per]) byPeriod[per] = [];
+            byPeriod[per].push(p);
+          }
+
+          for (const [per, perProducts] of Object.entries(byPeriod)) {
+            if (!periodType && Object.keys(byPeriod).length > 1) {
+              message += `*${per.charAt(0) + per.slice(1).toLowerCase()}*\n`;
+            }
+            for (const p of perProducts.slice(0, 5)) {
+              const sizeMb = p.sizeMb || 0;
+              const sizeLabel = sizeMb >= 1024 ? `${(sizeMb / 1024).toFixed(sizeMb % 1024 === 0 ? 0 : 1)}GB` : `${sizeMb}MB`;
+              const price = ((p.amountCents || 0) / 100).toFixed(0);
+              message += `• ${sizeLabel} – R${price}\n`;
+            }
+            message += '\n';
+          }
+
+          message += `Reply like: *"Buy 1GB data for 0821234567"* and I'll help you purchase.`;
+          await setActiveCategory(from, 'DATA', [networkCode]);
+          return await sendWhatsAppText({ to: from, text: message });
+        } catch (e) {
+          logStructured('vas_bundles_fallback_blu_failed', {
+            from,
+            intent: 'LIST_DATA_BUNDLES',
+            networkCode,
+            periodType,
+            error: e?.message,
+          });
+        }
+      }
+
       return await sendWhatsAppText({
         to: from,
         text: `📶 I couldn't find any ${networkCode || ''} ${periodType?.toLowerCase() || ''} bundles in our catalogue.\n\nTry asking for a different network (Vodacom, MTN, Cell C, Telkom) or period (daily, weekly, monthly).`,
