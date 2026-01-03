@@ -5,6 +5,7 @@
  */
 
 import prisma from '../../../lib/prisma';
+import { mergeConversationData } from '../../../lib/conversation-data.js';
 
 export async function wasMessageProcessed(waId, messageId) {
   if (!waId || !messageId) return false;
@@ -181,11 +182,26 @@ export async function updateOnboardingStatus(accountId, status) {
  */
 export async function updateConversationState(waId, state, data = null) {
   try {
+    const existing = await prisma.account.findFirst({
+      where: { waId },
+      select: { conversationState: true, conversationData: true },
+    });
+
+    const prevState = existing?.conversationState || null;
+    const prevData = existing?.conversationData || {};
+
+    const nextData = mergeConversationData({
+      prevState,
+      prevData,
+      nextState: state || null,
+      nextData: data,
+    });
+
     await prisma.account.update({
       where: { waId },
       data: {
         conversationState: state,
-        conversationData: data,
+        conversationData: nextData,
       },
     });
     

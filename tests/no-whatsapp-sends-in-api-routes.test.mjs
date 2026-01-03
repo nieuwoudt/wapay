@@ -13,10 +13,12 @@ async function fileText(relPath) {
 test('VAS execute routes must not send WhatsApp messages directly', async () => {
   const airtime = await fileText('pages/api/vas/airtime/execute.js');
   const data = await fileText('pages/api/vas/data/execute.js');
+  const electricity = await fileText('pages/api/vas/electricity/execute.js');
 
   for (const [name, text] of [
     ['airtime', airtime],
     ['data', data],
+    ['electricity', electricity],
   ]) {
     assert.ok(!text.includes('@wapay/whatsapp'), `${name}: should not import @wapay/whatsapp`);
     assert.ok(!text.includes('sendWhatsAppText'), `${name}: should not call sendWhatsAppText`);

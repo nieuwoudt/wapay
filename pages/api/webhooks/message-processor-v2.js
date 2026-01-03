@@ -15,6 +15,7 @@ import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
+import { sendTextOnce } from '../../../lib/error-guard.js';
 import {
   getOnboardingState,
   handleS0Initial,
@@ -74,18 +75,18 @@ function logSlotFill({ intent, text, slots, routeDecision, missing = [], from, a
 }
 
 async function sendWhatsAppErrorOnce({ to, errorKey, text }) {
-  if (!to || !text) return { ok: false };
-  const key = String(errorKey || '');
-  if (key) {
-    const already = await wasErrorSent(to, key);
-    if (already) {
-      logStructured('whatsapp_error_deduped', { to, errorKey: key });
-      return { ok: true, deduped: true };
-    }
-    await markErrorSent(to, key);
+  const res = await sendTextOnce({
+    to,
+    errorKey,
+    text,
+    wasSent: wasErrorSent,
+    markSent: markErrorSent,
+    send: sendWhatsAppText,
+  });
+  if (!res?.dedup && !res?.deduped) {
+    await addToConversationHistory(to, 'assistant', text);
   }
-  await addToConversationHistory(to, 'assistant', text);
-  return await sendWhatsAppText({ to, text });
+  return res;
 }
 
 function categoryUnavailableMessage(category) {
