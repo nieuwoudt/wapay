@@ -28,7 +28,7 @@ async function main() {
   const meters = metersEnv.split(',').map((m) => m.trim()).filter(Boolean);
   const base = (process.env.WAPAY_BASE_URL || 'https://wapay-api.vercel.app').replace(/\/$/, '');
   const url = `${base}/api/vas/electricity/preview`;
-  const amountCents = Number(process.env.WAPAY_TEST_AMOUNT_CENTS || '2000');
+  const amountCents = Number(process.env.WAPAY_TEST_AMOUNT_CENTS || '500');
 
   let passed = 0;
   let failed = 0;

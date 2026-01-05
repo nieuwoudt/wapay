@@ -42,8 +42,8 @@ async function main() {
 
   // 1) Catalog sync (best-effort)
   try {
-    const syncUrl = `${base}/api/vas/admin/sync`;
-    const res = await callJson(syncUrl, { method: 'POST', headers });
+    const syncUrl = `${base}/api/admin/sync-vas-catalog`;
+    const res = await callJson(syncUrl, { method: 'POST', headers: { ...headers, 'x-admin-key': process.env.ADMIN_API_KEY } });
     if (res.ok) summary.push('sync:PASS'); else summary.push(`sync:FAIL(${res.status})`);
   } catch (e) {
     summary.push('sync:SKIP');
