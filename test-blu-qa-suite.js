@@ -9,6 +9,21 @@
 const https = require('https');
 const crypto = require('crypto');
 
+function skipIfMissingEnv(required) {
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length) {
+    console.log(`SKIP: missing env vars: ${missing.join(', ')}`);
+    process.exit(0);
+  }
+}
+
+// Require Vercel base; skip if placeholder
+skipIfMissingEnv(['VERCEL_API_BASE']);
+if ((process.env.VERCEL_API_BASE || '').includes('your-app')) {
+  console.log('SKIP: VERCEL_API_BASE is placeholder (your-app...)');
+  process.exit(0);
+}
+
 // Configuration
 const VERCEL_API_BASE = process.env.VERCEL_API_BASE || 'https://your-app.vercel.app';
 const TEST_ACCOUNT_ID = process.env.TEST_ACCOUNT_ID || 'test-account-qa';

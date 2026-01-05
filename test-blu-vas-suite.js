@@ -21,6 +21,22 @@
 
 import { request } from 'undici';
 
+function skipIfMissingEnv(required) {
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length) {
+    console.log(`SKIP: missing env vars: ${missing.join(', ')}`);
+    process.exit(0);
+  }
+}
+
+const hasApiKey = process.env.BLU_TRADE_API_KEY || process.env.BLU_API_KEY;
+skipIfMissingEnv([
+  'BLU_BASIC_USER',
+  'BLU_BASIC_PASS',
+  hasApiKey ? null : 'BLU_TRADE_API_KEY|BLU_API_KEY',
+  'BLU_TEST_MSISDN',
+].filter(Boolean));
+
 // Configuration
 // Note: BLU_TRADE_API_KEY is the shared API key for both Voucher + VAS endpoints
 const config = {

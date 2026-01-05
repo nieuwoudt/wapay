@@ -60,11 +60,10 @@ Steps:
 4) Vercel detects the push to `main` and deploys to production for project `wapay-api` (team `finfy-ai`).
 
 Prod base URL:
-- `APP_BASE_URL=https://wapay-api-finfy-ai.vercel.app` (set in Vercel env)
+- `APP_BASE_URL=https://wapay-api.vercel.app` (set in Vercel env)
 
-Primary prod domains:
+Primary prod domain:
 - https://wapay-api.vercel.app
-- https://wapay-api-finfy-ai.vercel.app
 
 ## Testing
 
@@ -158,6 +157,24 @@ WaPay implementation:
 - Execute: `POST /api/vas/electricity/execute`
   - uses stable idempotency key `wapay-elec-exec-${previewId}`
   - calls Blu `POST /electricity/sales` with `{ requestId, reference, vendMetaData }`
+
+WhatsApp flow guardrails:
+- `ELECTRICITY_METER` calls preview once and stores `previewId, reference, transactionTypeId, utility, consumer, amountCents, meterNumber, freeBasicElectricity=false`.
+- `ELECTRICITY_CONFIRM` never re-calls preview; requires stored `previewId + reference`; otherwise resets to meter.
+- `ELECTRICITY_PIN` gates vend behind feature flag/allowlist and calls execute with the stored reference.
+
+Smoke & integration (non-vending)
+- Base URL: `https://wapay-api.vercel.app`
+- Confirm-meter runner (multi-meter CSV): `node tests/elec-confirm-meter-qa.mjs`
+  - env: `WAPAY_BASE_URL`, `WAPAY_INTERNAL_API_KEY`, `WAPAY_TEST_ACCOUNT_ID`, `WAPAY_TEST_METERS` (comma-separated), `WAPAY_TEST_AMOUNT_CENTS=2000`
+- Smoke: `node scripts/smoke-vas.js`
+  - env: `WAPAY_INTERNAL_API_KEY`, `WAPAY_TEST_ACCOUNT_ID`, `WAPAY_TEST_METER`, optional `WAPAY_TEST_AMOUNT_CENTS`; uses `WAPAY_BASE_URL` or defaults to prod domain.
+
+Data & social bundles (DB-first)
+- Blu catalog fully ingested to DB; local vendor filter; category override treats MB/GB or social-app bundles as DATA even if Blu labels airtime.
+- Normalization at sync: size/validity/period, app tags (WhatsApp/TikTok/YouTube/Facebook/Instagram/Social), product type, search tokens, valueScore.
+- Search/ranking: filters by category/network/period/app tags/query; guardrails exclude zero-price/decommissioned, penalize night/off-peak unless asked, period-fit weighted, valueScore clamped.
+- WhatsApp surfacing: summarizes, shows generic + app/social bundles, recommends cheaper social options; no raw dumps.
 
 Safety:
 
@@ -322,6 +339,43 @@ The SMART_PRODUCT_QUERY handler performed state transitions **without running sl
 # Run Blu VAS client tests
 cd packages/providers/blu
 pnpm test
+```
+
+## Agentic VAS Catalogue & Normalization (CP0–CP3)
+
+WaPay does not treat VAS as static menus. All airtime, data, and electricity products are normalized into a canonical catalogue that the agent reasons over.
+
+### Catalogue Sync
+- Blu VAS products are synced daily via cron (`/api/cron/daily-vas-sync`) and stored in the database.
+- Supported networks: Vodacom, MTN, Cell C, Telkom.
+- Supported categories: Data, Airtime, SMS (plus seeded variable-amount airtime).
+- Each product is stored with canonical fields (price, size, validity, network) and normalized metadata (app tags, product type, search tokens, value score).
+- Runtime user flows never depend on live Blu catalogue calls.
+
+### Normalization & Fuzzy Matching
+- Tolerates network misspellings (`cell-c`, `sell c`, `telcom`, `mtnn`, `vodacomn`).
+- Tolerates product/app misspellings (`whatapp`, `tik tok`, `insta`, `yt`, `fb`, “social”, “chat”, “streaming”).
+- Inputs are normalized with confidence scoring; when confidence is low the bot asks a clarification instead of guessing.
+
+### Product Intent Classification
+Products are grouped into intent buckets such as:
+- General Data
+- WhatsApp
+- TikTok
+- Social Media
+- Voice / Combo (where applicable)
+
+### Agentic Recommendations
+When a user asks for data, WaPay shows top generic bundles **and** app bundles that can save money. Results are ranked by intent match, value (MB per Rand), and validity fit. Long catalogue dumps are avoided; only a concise, helpful list is shown with a clear follow-up action.
+
+### Electricity (QA Enabled)
+- Electricity confirm uses **CONFIRM METER** (`/v2/trade/electricity/info?...&meter-number=...`).
+- Electricity vending stays feature-flagged until end-to-end confirmation is validated.
+
+### Running Tests Locally
+
+```bash
+pnpm test        # runs node --test (fuzzy matching, normalization, search ranking, error dedupe)
 ```
 
 ### Integration Tests (QA Environment)

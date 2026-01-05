@@ -6,6 +6,16 @@
 
 console.log('🔍 Testing Database Connection...\n');
 
+function skipIfMissingEnv(required) {
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length) {
+    console.log(`SKIP: missing env vars: ${missing.join(', ')}`);
+    process.exit(0);
+  }
+}
+
+skipIfMissingEnv(['DATABASE_URL']);
+
 // Check if DATABASE_URL is set
 const dbUrl = process.env.DATABASE_URL;
 

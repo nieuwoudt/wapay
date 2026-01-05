@@ -15,8 +15,10 @@ export interface ExtractedAmount {
 }
 
 export interface ExtractedNetwork {
-  code: 'VODACOM' | 'MTN' | 'CELL_C' | 'TELKOM';
+  code: 'VODACOM' | 'MTN' | 'CELLC' | 'TELKOM';
   raw: string;
+  confidence?: number;
+  candidates?: string[];
 }
 
 export interface ExtractedMSISDN {
@@ -71,32 +73,65 @@ export function extractAmount(text: string): ExtractedAmount | null {
   return null;
 }
 
-/**
- * Extract network from text
- * 
- * Patterns:
- * - vodacom, Vodacom, VODACOM
- * - mtn, MTN
- * - cell c, cellc, Cell C
- * - telkom
- */
-export function extractNetwork(text: string): ExtractedNetwork | null {
-  const networkPatterns: Array<{ pattern: RegExp; code: ExtractedNetwork['code'] }> = [
-    { pattern: /vodacom/i, code: 'VODACOM' },
-    { pattern: /\bmtn\b/i, code: 'MTN' },
-    { pattern: /cell\s*c/i, code: 'CELL_C' },
-    { pattern: /cellc/i, code: 'CELL_C' },
-    { pattern: /telkom/i, code: 'TELKOM' },
-  ];
+const NETWORK_ALIASES: Array<{ code: ExtractedNetwork['code']; aliases: string[] }> = [
+  { code: 'VODACOM', aliases: ['vodacom', 'voda', 'vodacomn'] },
+  { code: 'MTN', aliases: ['mtn', 'm t n', 'mtnn'] },
+  { code: 'CELLC', aliases: ['cellc', 'cell c', 'cell-c', 'celc', 'sell c', 'c c'] },
+  { code: 'TELKOM', aliases: ['telkom', 'telcom', 'tellkom', 'telk'] },
+];
 
-  for (const { pattern, code } of networkPatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      return {
-        code,
-        raw: match[0],
-      };
+function sanitize(text: string) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function levenshtein(a: string, b: string) {
+  const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
     }
+  }
+  return dp[a.length][b.length];
+}
+
+function scoreAlias(input: string, alias: string) {
+  const a = sanitize(alias).replace(/\s+/g, '');
+  const b = sanitize(input).replace(/\s+/g, '');
+  if (!a || !b) return 0;
+  if (b === a) return 1;
+  const dist = levenshtein(a, b);
+  return 1 - dist / Math.max(a.length, b.length);
+}
+
+export function extractNetwork(text: string): ExtractedNetwork | null {
+  const tokens = sanitize(text).split(/\s+/).filter(Boolean);
+  let best: { code: ExtractedNetwork['code']; score: number; raw: string } | null = null;
+  let second = 0;
+
+  for (const tok of tokens.length ? tokens : [sanitize(text)]) {
+    for (const { code, aliases } of NETWORK_ALIASES) {
+      for (const alias of aliases) {
+        const score = scoreAlias(tok, alias);
+        if (score > (best?.score ?? 0)) {
+          second = best?.score ?? 0;
+          best = { code, score, raw: tok };
+        } else if (score > second) {
+          second = score;
+        }
+      }
+    }
+  }
+
+  if (best && best.score >= 0.6) {
+    return {
+      code: best.code,
+      raw: best.raw,
+      confidence: best.score,
+      candidates: [best.code],
+    };
   }
 
   return null;

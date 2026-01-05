@@ -15,6 +15,7 @@ import { PrismaClient } from '@prisma/client';
 import { BluVasExtendedClient } from '@wapay/providers-blu';
 import { verifyPIN } from '@wapay/auth';
 import { isCategoryEnabledForWaId } from '../../../../lib/vas-config.js';
+import { buildElectricitySalePayload } from '../../../../lib/electricity-utils.js';
 
 const prisma = new PrismaClient();
 
@@ -164,7 +165,7 @@ export default async function handler(req, res) {
     }
 
     // Extract purchase details from preview
-    const { meterNumber, amountCents, serviceFee, totalCents, reference } = metadata;
+    const { meterNumber, amountCents, serviceFee, totalCents, reference, transactionTypeId, utility, consumer } = metadata;
 
     // Get wallet and verify balance again
     const wallet = await prisma.wallet.findFirst({
@@ -239,12 +240,13 @@ export default async function handler(req, res) {
           err.reason = 'Missing electricity reference from preview';
           throw err;
         }
-        bluResult = await bluClient.purchaseElectricity({
-          reference,
-          idemKey,
+        const payload = buildElectricitySalePayload({
+          draft: { meterNumber, amountCents, reference, transactionTypeId, utility, consumer },
           accountId,
           journalEntryId: journalEntry.id,
+          idemKey,
         });
+        bluResult = await bluClient.purchaseElectricity(payload);
       }
       
       const bluLatency = Date.now() - bluStartTime;
@@ -306,6 +308,10 @@ export default async function handler(req, res) {
       data: {
         status: 'COMPLETED',
         responseJson: JSON.stringify(bluResult),
+        metadata: {
+          ...metadata,
+          providerRef: bluResult.providerRef,
+        },
       }
     });
 

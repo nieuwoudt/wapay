@@ -249,6 +249,40 @@ export class BluVasClient {
     throw new Error('RETRYABLE');
   }
 
+/**
+ * Test helper (not used in production): mirrors callWithRetry logic so we can
+ * assert that USER_INPUT / AUTH / INVALID_PHONE_NUMBER errors are not retried.
+ */
+export async function __test_callWithRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3
+): Promise<{ attempts: number; result?: T; error?: any }> {
+  let attempts = 0;
+  try {
+    const result = await (async function retry() {
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        attempts = attempt;
+        try {
+          return await fn();
+        } catch (error: any) {
+          if (
+            error?.message === 'USER_INPUT' ||
+            error?.message === 'AUTH' ||
+            error?.message === 'INVALID_PHONE_NUMBER'
+          ) {
+            throw error;
+          }
+          if (attempt === maxAttempts) throw error;
+          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+        }
+      }
+    })();
+    return { attempts, result };
+  } catch (error) {
+    return { attempts, error };
+  }
+}
+
   // ==========================================================================
   // Mobile Airtime API
   // ==========================================================================

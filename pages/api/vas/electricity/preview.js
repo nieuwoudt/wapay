@@ -8,6 +8,7 @@
 import { PrismaClient } from '@prisma/client';
 import { isCategoryEnabledForWaId } from '../../../../lib/vas-config.js';
 import { BluVasExtendedClient } from '@wapay/providers-blu';
+import { buildElectricityDraft } from '../../../../lib/electricity-utils.js';
 
 const prisma = new PrismaClient();
 
@@ -201,6 +202,8 @@ export default async function handler(req, res) {
       });
     }
 
+    const draft = buildElectricityDraft({ meterNumber, amountCents, info });
+
     // Create preview record
     const preview = await prisma.providerRequest.create({
       data: {
@@ -215,7 +218,7 @@ export default async function handler(req, res) {
           municipalityCode: municipalityCode || 'AUTO',
           serviceFee,
           totalCents,
-          reference: info.reference,
+          reference: draft.reference,
         }),
         metadata: {
           meterNumber,
@@ -223,7 +226,10 @@ export default async function handler(req, res) {
           municipalityCode: municipalityCode || 'AUTO',
           serviceFee,
           totalCents,
-          reference: info.reference,
+          reference: draft.reference,
+          transactionTypeId: draft.transactionTypeId,
+          utility: draft.utility,
+          consumer: draft.consumer,
           customerName: info.customerName,
           customerAddress: info.customerAddress,
           municipalityName: info.municipalityName,
@@ -257,6 +263,10 @@ export default async function handler(req, res) {
         newBalance: availableBalance - totalCents,
         customerName: info.customerName,
         municipalityName: info.municipalityName,
+        transactionTypeId: draft.transactionTypeId,
+        reference: draft.reference,
+        utility: draft.utility,
+        consumer: draft.consumer,
       }
     });
 

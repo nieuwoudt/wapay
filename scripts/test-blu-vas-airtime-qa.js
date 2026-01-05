@@ -22,6 +22,20 @@
 
 const { request } = require('undici');
 
+function skipIfMissingEnv(required) {
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length) {
+    console.log(`SKIP: missing env vars: ${missing.join(', ')}`);
+    process.exit(0);
+  }
+}
+
+skipIfMissingEnv([
+  'BLU_BASIC_USER',
+  'BLU_BASIC_PASS',
+  (process.env.BLU_TRADE_API_KEY || process.env.BLU_API_KEY) ? null : 'BLU_TRADE_API_KEY|BLU_API_KEY',
+].filter(Boolean));
+
 // =============================================================================
 // Configuration
 // =============================================================================

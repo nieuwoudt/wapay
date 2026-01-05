@@ -12,10 +12,11 @@ import { BluClient, BluVasClient } from '@wapay/providers-blu';
 import { postBluDeposit } from '@wapay/domain';
 import { chatWithAI } from '@wapay/ai';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
-import { getCategoryDisplayName, getLiveCategories, isCategoryLive } from '../../../lib/vas-config.js';
+import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
+import { searchProducts } from '../../../lib/vas-search.js';
 import {
   getOnboardingState,
   handleS0Initial,
@@ -1824,21 +1825,10 @@ async function handleConversationState({ from, text, state, data, account }) {
         
         const existingData = data || {};
         
-        // If we already have meter number, go to confirm
-        if (existingData.meterNumber) {
-          await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
-            amountCents: amount * 100,
-            meterNumber: existingData.meterNumber,
-          });
-          return await sendWhatsAppText({
-            to: from,
-            text: `💡 *Buy Electricity*\n\nAmount: R${amount}\nMeter: ${existingData.meterNumber}\n\nReply *YES* to confirm or *NO* to cancel.`,
-          });
-        }
-        
-        // Need meter number
+        // Need meter number (or re-enter if prefilled)
         await updateConversationState(from, 'ELECTRICITY_METER', {
           amountCents: amount * 100,
+          meterNumber: existingData.meterNumber,
         });
         return await sendWhatsAppText({
           to: from,
@@ -1846,157 +1836,142 @@ async function handleConversationState({ from, text, state, data, account }) {
         });
       }
 
-    case 'ELECTRICITY_METER':
-      // User needs to provide meter number
-      {
-        const normalized = text.trim().toLowerCase();
-        
-        // Cancel keywords
-        if (/^(cancel|stop|no|reset|restart|quit|exit|back)$/i.test(normalized)) {
-          await updateConversationState(from, null);
-          return await sendWhatsAppText({
-            to: from,
-            text: `👍 Electricity purchase cancelled. Let me know if you need anything else.`,
-          });
-        }
-        
-        // Meter numbers are typically 10-14 digits
-        const meterNumber = text.trim().replace(/[\s-]/g, '');
-        if (!/^\d{8,14}$/.test(meterNumber)) {
-          return await sendWhatsAppText({
-            to: from,
-            text: `❌ That doesn't look like a valid meter number.\n\nMeter numbers are usually 10-14 digits.\n\nPlease enter your meter number or reply "cancel" to stop.`,
-          });
-        }
-        
-        const existingData = data || {};
-        
-        // Go to confirm
-        await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
-          amountCents: existingData.amountCents || 5000, // Default to R50 if missing
-          meterNumber,
-        });
+    case 'ELECTRICITY_METER': {
+      const normalized = text.trim().toLowerCase();
+      if (/^(cancel|stop|no|reset|restart|quit|exit|back)$/i.test(normalized)) {
+        await updateConversationState(from, null);
         return await sendWhatsAppText({
           to: from,
-          text: `💡 *Buy Electricity*\n\nAmount: R${(existingData.amountCents || 5000) / 100}\nMeter: ${meterNumber}\n\nReply *YES* to confirm or *NO* to cancel.`,
+          text: `👍 Electricity purchase cancelled. Let me know if you need anything else.`,
         });
       }
 
-    case 'ELECTRICITY_CONFIRM':
-      // User confirming electricity purchase
-      {
-        const normalized = text.trim().toLowerCase();
-        
-        // Cancel keywords
-        if (/^(no|cancel|stop|reset|restart)$/i.test(normalized)) {
-          await updateConversationState(from, null);
-          return await sendWhatsAppText({
-            to: from,
-            text: `👍 Electricity purchase cancelled. Let me know if you need anything else.`,
-          });
-        }
-        
-        // Not yes/no - clear state
-        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
-          await updateConversationState(from, null);
-          return await sendWhatsAppText({
-            to: from,
-            text: `I've cancelled that request. Feel free to ask me anything else!`,
-          });
-        }
-        
-        if (/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
-          const { amountCents, meterNumber } = data || {};
-          
-          if (!amountCents || !meterNumber) {
-            await updateConversationState(from, null);
-            return await sendWhatsAppText({
-              to: from,
-              text: `❌ Something went wrong. Please start again by saying "buy electricity".`,
-            });
-          }
-          
-          // Log execute initiated
-          logStructured('vas_electricity_preview_initiated', {
-            from,
+      const meterNumber = text.trim().replace(/[\s-]/g, '');
+      if (!/^\d{8,14}$/.test(meterNumber)) {
+        return await sendWhatsAppText({
+          to: from,
+          text: `❌ That doesn't look like a valid meter number.\n\nMeter numbers are usually 10-14 digits.\n\nPlease enter your meter number or reply "cancel" to stop.`,
+        });
+      }
+
+      const existingData = data || {};
+      const amountCents = existingData.amountCents || 5000;
+
+      try {
+        const previewUrl = apiUrl('/api/vas/electricity/preview');
+        logInternalFetchCall({ url: previewUrl, path: '/api/vas/electricity/preview' });
+        const previewRes = await fetch(previewUrl, {
+          method: 'POST',
+          headers: withInternalHeaders(),
+          body: JSON.stringify({
             accountId: account.id,
             meterNumber,
             amountCents,
+          }),
+        });
+        await logInternalFetchResponse({ url: previewUrl, res: previewRes });
+        const previewData = previewRes.headers.get('content-type')?.includes('application/json')
+          ? await previewRes.json()
+          : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
+
+        if (!previewData.ok) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppErrorOnce({
+            to: from,
+            errorKey: `elec_preview:${previewData.error || 'ERROR'}`,
+            text: `❌ ${previewData.message || 'Electricity service unavailable.'}`,
           });
-          
-          // Call preview API to validate balance and create preview
-          try {
-            const previewUrl = apiUrl('/api/vas/electricity/preview');
-            logInternalFetchCall({ url: previewUrl, path: '/api/vas/electricity/preview' });
-            const previewRes = await fetch(previewUrl, {
-              method: 'POST',
-              headers: withInternalHeaders(),
-              body: JSON.stringify({
-                accountId: account.id,
-                meterNumber,
-                amountCents,
-              }),
-            });
-            await logInternalFetchResponse({ url: previewUrl, res: previewRes });
-            
-            const previewData = previewRes.headers.get('content-type')?.includes('application/json')
-              ? await previewRes.json()
-              : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
-            
-            if (!previewData.ok) {
-              logStructured('vas_electricity_preview_failed', {
-                from,
-                accountId: account.id,
-                error: previewData.error,
-                message: previewData.message,
-              });
-              
-              await updateConversationState(from, null);
-              return await sendWhatsAppErrorOnce({
-                to: from,
-                errorKey: `elec_preview:${previewData.error || 'ERROR'}`,
-                text: `❌ ${previewData.message || 'Could not process electricity purchase.'}\n\nPlease try again later.`,
-              });
-            }
-            
-            // Ask for PIN with preview details
-            await updateConversationState(from, 'ELECTRICITY_PIN', { 
-              previewId: previewData.previewId,
-              amountCents,
-              meterNumber,
-              serviceFee: previewData.preview?.serviceFee,
-              totalCents: previewData.preview?.totalCents,
-            });
-            
-            return await sendWhatsAppText({
-              to: from,
-              text: `🔐 *Enter Your PIN*\n\n` +
-                    `To complete your R${amountCents / 100} electricity purchase, please enter your WaPay PIN.`,
-            });
-            
-          } catch (error) {
-            console.error('Electricity preview API error:', error);
-            logStructured('vas_electricity_preview_error', {
-              from,
-              accountId: account.id,
-              url: apiUrl('/api/vas/electricity/preview'),
-              error: error.message,
-            });
-            
-            await updateConversationState(from, null);
-            return await sendWhatsAppErrorOnce({
-              to: from,
-              errorKey: `elec_preview:SERVICE_UNAVAILABLE`,
-              text: `❌ Service temporarily unavailable. Please try again later.`,
-            });
-          }
         }
-        
-        return await sendWhatsAppText({
+
+        const preview = previewData.preview || {};
+        const name = preview.consumer?.name || preview.customerName || 'Customer';
+        const addr = preview.consumer?.address || 'N/A';
+        const util = preview.utility || preview.municipalityName || 'Utility';
+
+        await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
+          amountCents,
+          meterNumber,
+          previewId: previewData.previewId,
+          reference: preview.reference,
+          transactionTypeId: preview.transactionTypeId,
+          utility: util,
+          consumer: { name, address: addr },
+        });
+
+        const msg =
+          `💡 *Confirm Electricity*\n\n` +
+          `Utility: ${util}\n` +
+          `Name: ${name}\n` +
+          `Address: ${addr}\n` +
+          `Meter: ${meterNumber}\n` +
+          `Amount: R${(amountCents / 100).toFixed(2)}\n\n` +
+          `Reply *YES* to confirm or *NO* to cancel.`;
+
+        await addToConversationHistory(from, 'assistant', msg);
+        return await sendWhatsAppText({ to: from, text: msg });
+      } catch (e) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppErrorOnce({
           to: from,
-          text: `Please reply *YES* to confirm or *NO* to cancel.`,
+          errorKey: 'elec_preview:ERROR',
+          text: `❌ Electricity service unavailable. Please try again later.`,
         });
       }
+    }
+
+    case 'ELECTRICITY_CONFIRM': {
+      const normalized = text.trim().toLowerCase();
+
+      if (/^(no|cancel|stop|reset|restart)$/i.test(normalized)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({
+          to: from,
+          text: `👍 Electricity purchase cancelled. Let me know if you need anything else.`,
+        });
+      }
+
+      if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({
+          to: from,
+          text: `I've cancelled that request. Feel free to ask me anything else!`,
+        });
+      }
+
+      const { amountCents, meterNumber, previewId, reference, transactionTypeId, utility, consumer, freeBasicElectricity } = data || {};
+      if (!amountCents || !meterNumber || !previewId || !reference) {
+        await updateConversationState(from, 'ELECTRICITY_METER', { amountCents: amountCents || 5000 });
+        return await sendWhatsAppText({
+          to: from,
+          text: `⏳ Session expired. Please re-enter your meter number to continue.`,
+        });
+      }
+
+      await updateConversationState(from, 'ELECTRICITY_PIN', {
+        previewId,
+        meterNumber,
+        amountCents,
+        reference,
+        transactionTypeId,
+        utility,
+        consumer,
+        freeBasicElectricity: freeBasicElectricity === true,
+      });
+
+      const pinMsg =
+        `🔒 Please enter your 4-digit PIN to confirm.\n\n` +
+        `💡 Electricity: R${(amountCents / 100).toFixed(2)}\n` +
+        `🏢 Utility: ${utility || 'Utility'}\n` +
+        `👤 Name: ${(consumer && consumer.name) || 'Customer'}\n` +
+        `📍 Address: ${(consumer && consumer.address) || 'N/A'}\n` +
+        `📟 Meter: ${meterNumber}`;
+
+      await addToConversationHistory(from, 'assistant', pinMsg);
+      return await sendWhatsAppText({
+        to: from,
+        text: pinMsg,
+      });
+    }
 
     case 'ELECTRICITY_PIN':
       // User entering PIN for electricity purchase
@@ -2039,6 +2014,23 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
+        // Feature gate: allow preview but block vend if not enabled/allowlisted
+        const elecLive = isCategoryLive('ELECTRICITY');
+        const elecAllowlisted = isCategoryEnabledForWaId('ELECTRICITY', account.waId);
+        if (!elecLive || !elecAllowlisted) {
+          logStructured('vas_electricity_vend_blocked', {
+            waId: account.waId,
+            isLive: elecLive,
+            isAllowlisted: elecAllowlisted,
+            allowlistValue: process.env.VAS_ALLOWLIST_ELECTRICITY || null,
+          });
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `⚡ Electricity is coming soon. You'll be able to complete purchases once it's enabled for your account.`,
+          });
+        }
+
         // Send processing message
         await sendWhatsAppText({
           to: from,
@@ -2227,16 +2219,15 @@ async function handleAIChat({ from, text, account }) {
         case 'BUY_ELECTRICITY':
           // Start electricity purchase flow
           if (aiResponse.entities?.amount && aiResponse.entities?.meterNumber) {
-            // Both amount and meter provided - go to confirm
-            await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
+            // Both amount and meter provided - go to meter state to generate preview
+            await updateConversationState(from, 'ELECTRICITY_METER', {
               amountCents: aiResponse.entities.amount * 100,
-              meterNumber: aiResponse.entities.meterNumber,
             });
-            const confirmMsg = `💡 *Buy Electricity*\n\nAmount: R${aiResponse.entities.amount}\nMeter: ${aiResponse.entities.meterNumber}\n\nReply *YES* to confirm or *NO* to cancel.`;
-            await addToConversationHistory(from, 'assistant', confirmMsg);
+            const meterMsg = `💡 *Buy R${aiResponse.entities.amount} Electricity*\n\nPlease enter your meter number to confirm.`;
+            await addToConversationHistory(from, 'assistant', meterMsg);
             return await sendWhatsAppText({
               to: from,
-              text: confirmMsg,
+              text: meterMsg,
             });
           } else if (aiResponse.entities?.amount) {
             // Amount provided, need meter number
@@ -2446,18 +2437,17 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
         intent: 'SMART_PRODUCT_QUERY',
         text,
         slots,
-        routeDecision: 'ELECTRICITY_CONFIRM',
-        missing: [],
+        routeDecision: 'ELECTRICITY_METER',
+        missing: ['preview'],
         from,
         accountId: account.id,
       });
-      await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
+      await updateConversationState(from, 'ELECTRICITY_METER', {
         amountCents: slots.amountCents,
-        meterNumber: slots.meterNumber,
       });
-      const confirmMsg = `💡 *Buy Electricity*\n\nAmount: R${(slots.amountCents / 100).toFixed(0)}\nMeter: ${slots.meterNumber}\n\nReply *YES* to confirm or *NO* to cancel.`;
-      await addToConversationHistory(from, 'assistant', confirmMsg);
-      return await sendWhatsAppText({ to: from, text: confirmMsg });
+      const meterMsg = `💡 *Buy R${(slots.amountCents / 100).toFixed(0)} Electricity*\n\nPlease enter your meter number to continue.`;
+      await addToConversationHistory(from, 'assistant', meterMsg);
+      return await sendWhatsAppText({ to: from, text: meterMsg });
     }
 
     // =========================================================
@@ -2481,16 +2471,14 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
         const meterNumber = meterMatch ? meterMatch[1] : null;
         
         if (amount && meterNumber) {
-          // Both amount and meter - go to confirm
-          await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
+          await updateConversationState(from, 'ELECTRICITY_METER', {
             amountCents: amount * 100,
-            meterNumber,
           });
-          const confirmMsg = `💡 *Buy Electricity*\n\nAmount: R${amount}\nMeter: ${meterNumber}\n\nReply *YES* to confirm or *NO* to cancel.`;
-          await addToConversationHistory(from, 'assistant', confirmMsg);
+          const meterMsg = `💡 *Buy R${amount} Electricity*\n\nPlease enter your meter number to continue.`;
+          await addToConversationHistory(from, 'assistant', meterMsg);
           return await sendWhatsAppText({
             to: from,
-            text: confirmMsg,
+            text: meterMsg,
           });
         } else if (amount) {
           // Have amount, need meter
@@ -2992,7 +2980,7 @@ async function handleListAirtimeBundles({ from, account, networkCode }) {
  * Handle listing data bundles from the catalogue
  */
 async function handleListDataBundles({ from, account, entities }) {
-  const { networkCode, periodType } = entities || {};
+  const { networkCode, periodType, networkConfidence } = entities || {};
   
   logStructured('vas_bundles_fetch_call', {
     from,
@@ -3000,36 +2988,26 @@ async function handleListDataBundles({ from, account, entities }) {
     intent: 'LIST_DATA_BUNDLES',
     networkCode,
     periodType,
+    networkConfidence,
   });
 
   if (!isCategoryLive('DATA')) {
     return await replyCategoryUnavailable(from, 'DATA');
   }
 
-  try {
-    // Build query
-    const where = {
-      category: 'DATA',
-      active: true,
-    };
-    
-    if (networkCode) {
-      where.networkCode = networkCode;
-    }
-    
-    if (periodType) {
-      where.periodType = periodType;
-    }
+  if (networkConfidence && networkConfidence < 0.7) {
+    return await sendWhatsAppText({
+      to: from,
+      text: `Did you mean *Vodacom, MTN, Cell C, or Telkom*?`,
+    });
+  }
 
-    // Get bundles from database
-    const bundles = await prisma.vasProduct.findMany({
-      where,
-      orderBy: [
-        { periodType: 'asc' },
-        { dataMb: 'asc' },
-        { fixedPriceCents: 'asc' },
-      ],
-      take: 15,
+  try {
+    const bundles = await searchProducts({
+      category: 'DATA',
+      networkCode,
+      periodType: periodType ? periodType.toUpperCase() : undefined,
+      limit: 40,
     });
 
     logStructured('vas_bundles_fetch_result', {
@@ -3041,127 +3019,58 @@ async function handleListDataBundles({ from, account, entities }) {
       success: true,
     });
 
-    if (bundles.length === 0) {
-      // Fallback: if our DB catalogue has no rows for this network, ask Blu directly.
-      if (networkCode) {
-        try {
-          const bluClient = new BluVasClient();
-          const vendorId = String(networkCode).toLowerCase(); // VODACOM|MTN|CELLC|TELKOM -> vendorId
-          const products = await bluClient.getDataProducts(vendorId);
-
-          // Infer period from Blu product name/category (best-effort)
-          function inferPeriod(p) {
-            const name = String(p?.name || '').toLowerCase();
-            const cat = String(p?.category || '').toLowerCase();
-            const s = `${name} ${cat}`;
-            if (s.includes('weekly') || /\bweek\b/.test(s)) return 'WEEKLY';
-            if (s.includes('monthly') || /\bmonth\b/.test(s)) return 'MONTHLY';
-            if (s.includes('daily') || /\bday\b/.test(s)) return 'DAILY';
-            if (s.includes('night')) return 'NIGHT';
-            return 'OTHER';
-          }
-
-          const filtered = (products || [])
-            .map(p => ({ ...p, _period: inferPeriod(p) }))
-            .filter(p => !periodType || p._period === periodType)
-            .slice(0, 15);
-
-          logStructured('vas_bundles_fallback_blu', {
-            from,
-            intent: 'LIST_DATA_BUNDLES',
-            networkCode,
-            periodType,
-            providerCount: products?.length || 0,
-            shownCount: filtered.length,
-            success: true,
-          });
-
-          if (filtered.length === 0) {
-            return await sendWhatsAppText({
-              to: from,
-              text: `📶 I couldn't find any ${networkCode} ${periodType?.toLowerCase() || ''} bundles right now.\n\nThis may be a provider catalogue issue for ${networkCode} in Blu QA.`,
-            });
-          }
-
-          const periodDisplay = periodType ? ` ${periodType.charAt(0) + periodType.slice(1).toLowerCase()}` : '';
-          let message = `📶 *${networkCode}${periodDisplay} Data Bundles*\n\n`;
-
-          // Group by inferred period if no explicit period requested
-          const byPeriod = {};
-          for (const p of filtered) {
-            const per = p._period || 'OTHER';
-            if (!byPeriod[per]) byPeriod[per] = [];
-            byPeriod[per].push(p);
-          }
-
-          for (const [per, perProducts] of Object.entries(byPeriod)) {
-            if (!periodType && Object.keys(byPeriod).length > 1) {
-              message += `*${per.charAt(0) + per.slice(1).toLowerCase()}*\n`;
-            }
-            for (const p of perProducts.slice(0, 5)) {
-              const sizeMb = p.sizeMb || 0;
-              const sizeLabel = sizeMb >= 1024 ? `${(sizeMb / 1024).toFixed(sizeMb % 1024 === 0 ? 0 : 1)}GB` : `${sizeMb}MB`;
-              const price = ((p.amountCents || 0) / 100).toFixed(0);
-              message += `• ${sizeLabel} – R${price}\n`;
-            }
-            message += '\n';
-          }
-
-          message += `Reply like: *"Buy 1GB data for 0821234567"* and I'll help you purchase.`;
-          await setActiveCategory(from, 'DATA', [networkCode]);
-          return await sendWhatsAppText({ to: from, text: message });
-        } catch (e) {
-          logStructured('vas_bundles_fallback_blu_failed', {
-            from,
-            intent: 'LIST_DATA_BUNDLES',
-            networkCode,
-            periodType,
-            error: e?.message,
-          });
-        }
-      }
-
+    if (!bundles || bundles.length === 0) {
       return await sendWhatsAppText({
         to: from,
         text: `📶 I couldn't find any ${networkCode || ''} ${periodType?.toLowerCase() || ''} bundles in our catalogue.\n\nTry asking for a different network (Vodacom, MTN, Cell C, Telkom) or period (daily, weekly, monthly).`,
       });
     }
 
-    // Format bundles for display
+    const generic = [];
+    const appBundles = [];
+    for (const b of bundles) {
+      const normalized = b.metadata?.normalized || {};
+      if (normalized.appTags?.length) {
+        appBundles.push(b);
+      } else {
+        generic.push(b);
+      }
+    }
+
     const networkDisplay = networkCode ? `${networkCode}` : 'All Networks';
     const periodDisplay = periodType ? ` ${periodType.charAt(0) + periodType.slice(1).toLowerCase()}` : '';
-    
-    let message = `📶 *${networkDisplay}${periodDisplay} Data Bundles*\n\n`;
-    
-    // Group by period if no specific period requested
-    const byPeriod = {};
-    for (const b of bundles) {
-      const period = b.periodType || 'OTHER';
-      if (!byPeriod[period]) byPeriod[period] = [];
-      byPeriod[period].push(b);
-    }
-    
-    for (const [period, periodBundles] of Object.entries(byPeriod)) {
-      if (!periodType && Object.keys(byPeriod).length > 1) {
-        message += `*${period.charAt(0) + period.slice(1).toLowerCase()}*\n`;
-      }
-      
-      for (const b of periodBundles.slice(0, 5)) {
-        const sizeMb = b.dataMb;
-        const sizeLabel = sizeMb >= 1024 
-          ? `${(sizeMb / 1024).toFixed(sizeMb % 1024 === 0 ? 0 : 1)}GB`
-          : `${sizeMb}MB`;
-        const price = ((b.fixedPriceCents || b.priceCents) / 100).toFixed(0);
-        message += `• ${sizeLabel} – R${price}\n`;
-      }
+
+    let message = `📶 *${networkDisplay}${periodDisplay} Data Bundles*\n`;
+    message += `I’ll show a few great options (no long lists).\n\n`;
+
+    const fmt = (p) => {
+      const sizeMb = p.dataMb || p.metadata?.normalized?.dataMb;
+      const sizeLabel = sizeMb >= 1024
+        ? `${(sizeMb / 1024).toFixed(sizeMb % 1024 === 0 ? 0 : 1)}GB`
+        : `${sizeMb || '?'}MB`;
+      const price = ((p.fixedPriceCents || p.priceCents) / 100).toFixed(0);
+      return `• ${sizeLabel} – R${price}`;
+    };
+
+    if (generic.length) {
+      message += `*Top generic data*\n`;
+      generic.slice(0, 5).forEach((p) => { message += `${fmt(p)}\n`; });
       message += '\n';
     }
-    
+
+    if (appBundles.length) {
+      message += `*App bundles that can save money*\n`;
+      appBundles.slice(0, 5).forEach((p) => {
+        const apps = (p.metadata?.normalized?.appTags || []).join(', ');
+        message += `${fmt(p)} (${apps})\n`;
+      });
+      message += '\n';
+    }
+
     message += `Reply like: *"Buy 1GB data for 0821234567"* and I'll help you purchase.`;
-    
-    // Set active category so follow-up messages are interpreted correctly
-    await setActiveCategory(from, 'DATA', bundles.map(b => b.label).slice(0, 5));
-    
+
+    await setActiveCategory(from, 'DATA', bundles.map((b) => b.label).slice(0, 5));
+
     return await sendWhatsAppText({
       to: from,
       text: message,
