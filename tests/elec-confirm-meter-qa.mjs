@@ -4,7 +4,6 @@
  */
 
 import assert from 'node:assert/strict';
-import fetch from 'node-fetch';
 
 function skipIfMissingEnv(required) {
   const missing = required.filter((k) => !process.env[k]);
@@ -16,7 +15,6 @@ function skipIfMissingEnv(required) {
 
 async function main() {
   skipIfMissingEnv([
-    'WAPAY_BASE_URL',
     'WAPAY_INTERNAL_API_KEY',
     'WAPAY_TEST_ACCOUNT_ID',
   ]);
@@ -52,8 +50,9 @@ async function main() {
       });
 
       if (!res.ok) {
+        const text = await res.text().catch(() => '');
         failed += 1;
-        results.push(`FAIL meter=${meter} http=${res.status}`);
+        results.push(`FAIL meter=${meter} http=${res.status} body=${text.slice(0, 300)}`);
         continue;
       }
 
