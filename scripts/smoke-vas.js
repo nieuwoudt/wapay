@@ -10,8 +10,6 @@
  * Skips cleanly if required env vars are missing.
  */
 
-import fetch from 'node-fetch';
-
 function skipIfMissingEnv(required) {
   const missing = required.filter((k) => !process.env[k]);
   if (missing.length) {
