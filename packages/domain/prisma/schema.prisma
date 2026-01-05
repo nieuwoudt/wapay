@@ -106,6 +106,8 @@ model VasProduct {
   operatorCode     String?
   // Blu product / vendor code or identifier
   externalCode     String
+  // Optional SKU/alias (kept for backward compatibility with older schema)
+  skuCode          String?
   // Display label: "Vodacom 1GB Weekly", "R50 Electricity (Eskom)"
   label            String
   // For variable-amount products
