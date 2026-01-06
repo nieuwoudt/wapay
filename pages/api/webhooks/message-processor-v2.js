@@ -975,10 +975,8 @@ async function handlePostOnboarding({ account, from, text }) {
 
       case 'AI_CHAT':
       default:
-        // If we're unsure, default back to Home (spec). Only use AI for long, explicit questions.
-        if ((text || '').trim().length <= 80) {
-          return await renderHome({ from, account });
-        }
+        // Route to AI for natural language understanding
+        // AI can detect intents like "load money" → REDEEM_VOUCHER
         return await handleAIChat({ from, text, account });
     }
   } catch (error) {
