@@ -118,6 +118,8 @@ model VasProduct {
   fixedPriceCents  Int?
   // Legacy priceCents kept for compatibility
   priceCents       Int      @default(0)
+  // Unit type: DATA | CURRENCY | SMS (default DATA for non-airtime)
+  unitType         String   @default("DATA")
   // Bundle validity
   validityDays     Int?
   // Period type: DAILY | WEEKLY | MONTHLY | ONCE_OFF
