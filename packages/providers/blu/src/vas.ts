@@ -513,7 +513,7 @@ export class BluVasClient {
    */
   async getDataProducts(vendorId?: string): Promise<DataProduct[]> {
     const query = vendorId ? `?vendorId=${encodeURIComponent(vendorId)}` : '';
-    const url = `${this.base}/mobile/data/products${query}`;
+    const url = `${this.base}/mobile/bundle/products${query}`;
 
     return this.callWithRetry(async () => {
       const res = await request(url, {
