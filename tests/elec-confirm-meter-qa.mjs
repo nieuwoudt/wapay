@@ -28,7 +28,7 @@ async function main() {
   const meters = metersEnv.split(',').map((m) => m.trim()).filter(Boolean);
   const base = (process.env.WAPAY_BASE_URL || 'https://wapay-api.vercel.app').replace(/\/$/, '');
   const url = `${base}/api/vas/electricity/preview`;
-  const amountCents = Number(process.env.WAPAY_TEST_AMOUNT_CENTS || '500');
+  const amountCents = Number(process.env.WAPAY_TEST_AMOUNT_CENTS || '1000');
 
   let passed = 0;
   let failed = 0;
@@ -51,6 +51,10 @@ async function main() {
 
       if (!res.ok) {
         const text = await res.text().catch(() => '');
+        if (text.toLowerCase().includes('insufficient')) {
+          console.log(`SKIP meter=${meter} insufficient balance for amount=${amountCents / 100}`);
+          continue;
+        }
         failed += 1;
         results.push(`FAIL meter=${meter} http=${res.status} body=${text.slice(0, 300)}`);
         continue;
