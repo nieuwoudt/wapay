@@ -1,30 +1,23 @@
 /**
  * POST /api/vas/electricity/execute
- * 
+ *
  * Execute an electricity purchase after preview confirmation.
  * Requires PIN verification and valid preview.
- * 
+ *
  * Features:
  * - PIN verification with lockout protection
- * - Double-entry ledger
+ * - Money-safe hold pattern: reserveHold -> Blu -> settleHold / releaseHold
  * - Returns electricity token
  * - Structured logging
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../../lib/prisma.js';
 import { BluVasExtendedClient } from '@wapay/providers-blu';
 import { verifyPIN } from '@wapay/auth';
 import { isCategoryEnabledForWaId } from '../../../../lib/vas-config.js';
 import { buildElectricitySalePayload } from '../../../../lib/electricity-utils.js';
-
-const prisma = new PrismaClient();
-
-// Account codes for double-entry ledger
-const ACCOUNT_CODES = {
-  CUSTOMER_WALLET: (accountId) => `WALLET:${accountId}`,
-  VAS_CLEARING: 'LIABILITY:VAS_CLEARING',
-  VAS_REVENUE: 'REVENUE:VAS_FEES',
-};
+import { BALANCE, RAIL, buildSpend } from '../../../../lib/ledger-core.js';
+import { reserveHold, settleHold, releaseHold, ensureWallet } from '../../../../lib/ledger-post.js';
 
 /**
  * Structured logging helper
@@ -39,7 +32,7 @@ function logStructured(type, data) {
 
 export default async function handler(req, res) {
   const startTime = Date.now();
-  
+
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
@@ -98,7 +91,7 @@ export default async function handler(req, res) {
     }
 
     const pinResult = await verifyPIN({ accountId, pin });
-    
+
     if (!pinResult.ok) {
       logStructured('vas_electricity_execute_result', {
         previewId,
@@ -107,7 +100,7 @@ export default async function handler(req, res) {
         error: 'PIN_FAILED',
         pinError: pinResult.error,
       });
-      
+
       if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
         return res.status(403).json({
           error: 'AUTH',
@@ -115,7 +108,7 @@ export default async function handler(req, res) {
           lockedUntil: pinResult.lockedUntil?.toISOString(),
         });
       }
-      
+
       return res.status(401).json({
         error: 'AUTH',
         message: 'Invalid PIN',
@@ -167,60 +160,51 @@ export default async function handler(req, res) {
     // Extract purchase details from preview
     const { meterNumber, amountCents, serviceFee, totalCents, reference, transactionTypeId, utility, consumer } = metadata;
 
-    // Get wallet and verify balance again
-    const wallet = await prisma.wallet.findFirst({
-      where: { accountId }
-    });
+    // Spend flows always draw the no-KYC SPEND balance.
+    await ensureWallet({ accountId, balanceType: BALANCE.SPEND });
 
-    if (!wallet || wallet.availableCents < totalCents) {
-      logStructured('vas_electricity_execute_result', {
-        previewId,
-        accountId,
-        success: false,
-        error: 'INSUFFICIENT_BALANCE',
-      });
-      return res.status(400).json({
-        error: 'USER_INPUT',
-        message: 'Insufficient balance'
-      });
-    }
-
-    // Create idempotency key (stable per preview)
+    // Deterministic key per execution attempt, so a retry reuses the same hold
+    // and the same journal entry instead of double-charging.
     const idemKey = `wapay-elec-exec-${previewId}`;
 
-    // Create journal entry (debit customer, credit VAS clearing)
-    const journalEntry = await prisma.journalEntry.create({
-      data: {
-        id: `je_elec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        debitAccountCode: ACCOUNT_CODES.CUSTOMER_WALLET(accountId),
-        creditAccountCode: ACCOUNT_CODES.VAS_CLEARING,
+    // reserveHold does the balance check and the debit-to-pending in one atomic
+    // step. If the funds aren't there (or a concurrent spend took them first) it
+    // throws INSUFFICIENT_FUNDS and no money moves.
+    try {
+      await reserveHold({
+        accountId,
         amountCents: totalCents,
-        source: 'VAS_ELECTRICITY',
-        referenceId: previewId,
-        metadata: {
-          meterNumber,
-          amountCents,
-          serviceFee,
-          idemKey,
-        },
+        idemKey,
+        balanceType: BALANCE.SPEND,
+        reason: `electricity ${meterNumber}`,
+      });
+    } catch (error) {
+      if (error.code === 'INSUFFICIENT_FUNDS') {
+        logStructured('vas_electricity_execute_result', {
+          previewId,
+          accountId,
+          success: false,
+          error: 'INSUFFICIENT_BALANCE',
+          required: totalCents,
+          available: error.availableCents,
+        });
+        return res.status(400).json({
+          error: 'USER_INPUT',
+          message: 'Insufficient balance'
+        });
       }
-    });
+      throw error;
+    }
 
-    // Debit wallet
-    await prisma.wallet.update({
-      where: { id: wallet.id },
-      data: {
-        availableCents: { decrement: totalCents },
-      }
-    });
+    logStructured('vas_electricity_hold_reserved', { idemKey, amountCents: totalCents });
 
-    // Call Blu to purchase electricity
+    // Call Blu to purchase electricity (client enforces the 90s vend timeout)
     const bluClient = new BluVasExtendedClient();
     let bluResult;
-    
+
     try {
       const bluStartTime = Date.now();
-      
+
       // Check if stub mode is enabled
       if (process.env.BLU_VAS_STUB_MODE === 'true') {
         console.log('⚠️ BLU_VAS_STUB_MODE enabled - simulating electricity purchase');
@@ -240,15 +224,17 @@ export default async function handler(req, res) {
           err.reason = 'Missing electricity reference from preview';
           throw err;
         }
+        // transactionReference falls back to idemKey inside the payload builder:
+        // deterministic per preview, so a retried execute repeats the same
+        // reference to Blu instead of minting a new one.
         const payload = buildElectricitySalePayload({
           draft: { meterNumber, amountCents, reference, transactionTypeId, utility, consumer },
           accountId,
-          journalEntryId: journalEntry.id,
           idemKey,
         });
         bluResult = await bluClient.purchaseElectricity(payload);
       }
-      
+
       const bluLatency = Date.now() - bluStartTime;
       logStructured('vas_electricity_blu_success', {
         previewId,
@@ -256,23 +242,12 @@ export default async function handler(req, res) {
         bluLatency,
         providerRef: bluResult.providerRef,
       });
-      
+
     } catch (error) {
       console.error('Blu electricity purchase failed:', error);
-      
-      // Reverse the wallet debit
-      await prisma.wallet.update({
-        where: { id: wallet.id },
-        data: {
-          availableCents: { increment: totalCents },
-        }
-      });
 
-      // Mark journal entry as failed
-      await prisma.journalEntry.update({
-        where: { id: journalEntry.id },
-        data: { source: 'VAS_ELECTRICITY_FAILED' }
-      });
+      // Provider failed: give the money back and record nothing on the books.
+      await releaseHold({ idemKey, reason: `blu_failed:${error?.reason || error?.message || 'unknown'}` });
 
       // Update preview as failed
       await prisma.providerRequest.update({
@@ -302,11 +277,26 @@ export default async function handler(req, res) {
       });
     }
 
-    // Update preview as completed
+    // Provider succeeded: settle the hold and post the real double-entry.
+    // buildSpend books: Dr WALLET:{acct}:SPEND, Cr CLEARING:BLU (supplier cost),
+    // Cr REVENUE:COMMISSION:ELECTRICITY (our margin). settleHold clears the hold
+    // and posts the entry in one transaction, so the customer is debited exactly once.
+    const spendEntry = buildSpend({
+      accountId,
+      category: 'ELECTRICITY',
+      saleCents: totalCents,
+      idemKey: `wapay-elec-spend-${previewId}`,
+      rail: RAIL.BLU,
+      balanceType: BALANCE.SPEND,
+    });
+    await settleHold({ idemKey, entry: spendEntry });
+
+    // Update preview as completed (token kept in responseJson for receipt recovery)
     await prisma.providerRequest.update({
       where: { id: previewId },
       data: {
-        status: 'COMPLETED',
+        status: 'SUCCESS',
+        providerRef: bluResult.providerRef,
         responseJson: JSON.stringify(bluResult),
         metadata: {
           ...metadata,
@@ -317,11 +307,11 @@ export default async function handler(req, res) {
 
     // Get new balance
     const updatedWallet = await prisma.wallet.findFirst({
-      where: { accountId }
+      where: { accountId, balanceType: BALANCE.SPEND }
     });
 
     const totalTime = Date.now() - startTime;
-    
+
     logStructured('vas_electricity_execute_result', {
       previewId,
       accountId,
@@ -365,4 +355,3 @@ export default async function handler(req, res) {
     });
   }
 }
-

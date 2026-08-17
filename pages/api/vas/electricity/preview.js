@@ -9,6 +9,7 @@ import { PrismaClient } from '@prisma/client';
 import { isCategoryEnabledForWaId } from '../../../../lib/vas-config.js';
 import { BluVasExtendedClient } from '@wapay/providers-blu';
 import { buildElectricityDraft } from '../../../../lib/electricity-utils.js';
+import { requireInternalAuth } from '../../../../lib/internal-auth.js';
 
 const prisma = new PrismaClient();
 
@@ -38,6 +39,10 @@ export default async function handler(req, res) {
     res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
+
+  // Internal-only route: leaks wallet balance AND meter-holder
+  // name/address (from Blu getElectricityInfo) to any caller without this.
+  if (!requireInternalAuth(req, res)) return;
 
   const { accountId, meterNumber, amountCents, municipalityCode } = req.body;
 

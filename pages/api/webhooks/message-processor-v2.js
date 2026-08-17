@@ -6,10 +6,13 @@
  */
 
 import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed, wasErrorSent, markErrorSent } from './user-manager.js';
-import { sendWhatsAppText } from '@wapay/whatsapp';
+import { sendWhatsAppText, sendWhatsAppTemplate } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
+import { resolveGift, buildRecipientNotification, maskMsisdn } from '../../../lib/gifting.js';
+import crypto from 'crypto';
 import { BluClient, BluVasClient } from '@wapay/providers-blu';
-import { postBluDeposit } from '@wapay/domain';
+import { buildLoad, RAIL } from '../../../lib/ledger-core.js';
+import { postEntry, ensureWallet } from '../../../lib/ledger-post.js';
 import { chatWithAI } from '@wapay/ai';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
@@ -256,6 +259,83 @@ async function sendReceipt({ to, productLabel, targetLabel, targetValue, network
 
   await addToConversationHistory(to, 'assistant', receipt);
   return await sendWhatsAppText({ to, text: receipt });
+}
+
+/**
+ * WhatsApp Cloud API `to` must be international format (27...), while the VAS
+ * flows carry local 0XXXXXXXXX. Account waIds are already 27-prefixed.
+ */
+function waIdFromMsisdn(msisdn = '') {
+  const m = normaliseMsisdn(msisdn);
+  if (m.length === 10 && m.startsWith('0')) return `27${m.slice(1)}`;
+  return m;
+}
+
+/**
+ * Notify the recipient of a gifted purchase (purchase target !== buyer).
+ *
+ * Invariants:
+ * - The buyer has already been debited and the vend has settled; this
+ *   notification is best-effort and must NEVER throw, fail, or retry the
+ *   purchase. All failures are swallowed and logged as gift_notify_failed.
+ * - A recipient who has never messaged WaPay is outside the 24h session
+ *   window, so the approved template is tried FIRST; free text is only a
+ *   fallback for recipients with an open session.
+ */
+async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCents }) {
+  try {
+    const buyerMsisdn = normaliseMsisdn(account?.msisdn || '');
+    const targetMsisdn = normaliseMsisdn(recipientMsisdn || '');
+    // Self top-up is not a gift; missing target means nothing to notify.
+    if (!targetMsisdn || targetMsisdn === buyerMsisdn) return;
+
+    const note = buildRecipientNotification({
+      senderName: account?.displayName,
+      senderMsisdn: account?.msisdn,
+      product,
+      amountCents,
+    });
+    const to = waIdFromMsisdn(targetMsisdn);
+
+    // sendWhatsAppTemplate never throws; failure is signalled via ok:false.
+    const templateRes = await sendWhatsAppTemplate({
+      to,
+      templateName: note.templateName,
+      language: note.languageCode,
+      components: [
+        { type: 'body', parameters: note.bodyParams.map((text) => ({ type: 'text', text })) },
+      ],
+    });
+
+    if (!templateRes?.ok) {
+      const textRes = await sendWhatsAppText({ to, text: note.fallbackText });
+      if (!textRes?.ok) {
+        logStructured('gift_notify_failed', {
+          accountId: account?.id,
+          product,
+          amountCents,
+          recipientMasked: maskMsisdn(targetMsisdn),
+          templateError: templateRes?.error || 'TEMPLATE_SEND_FAILED',
+          textError: textRes?.error || 'TEXT_SEND_FAILED',
+        });
+        return;
+      }
+    }
+
+    logStructured('gift_sent', {
+      accountId: account?.id,
+      product,
+      amountCents,
+      recipientMasked: maskMsisdn(targetMsisdn),
+    });
+  } catch (error) {
+    logStructured('gift_notify_failed', {
+      accountId: account?.id,
+      product,
+      amountCents,
+      error: error?.message,
+    });
+  }
 }
 
 async function sendPostTransactionCta(to) {
@@ -743,6 +823,31 @@ async function handlePostOnboarding({ account, from, text }) {
       periodType: slots.periodType,
       networkCode: slots.networkCode,
     };
+  }
+
+  // Bare cash send ("Send R30 to 084...", "send money") — V1 has no
+  // person-to-person cash rail. Explicit intents keep priority (e.g. "load
+  // money via bank transfer" is still a deposit); only the would-be generic
+  // AI / remittance dead-end is replaced with the gifting redirect. The copy
+  // lives in resolveGift (CASH_SEND_UNSUPPORTED) so flow and tests share it.
+  if (
+    slots?.productHint === 'SEND_MONEY' &&
+    (detection.intent === 'AI_CHAT' || detection.intent === 'SMART_PRODUCT_QUERY')
+  ) {
+    const gift = resolveGift({ slots, senderMsisdn: account.msisdn });
+    if (gift.kind === 'CASH_SEND_UNSUPPORTED') {
+      logSlotFill({
+        intent: detection.intent,
+        text,
+        slots,
+        routeDecision: 'CASH_SEND_REDIRECT_GIFT',
+        missing: [],
+        from,
+        accountId: account.id,
+      });
+      await addToConversationHistory(from, 'assistant', gift.message);
+      return await sendWhatsAppText({ to: from, text: gift.message });
+    }
   }
 
   const intent = detection.intent;
@@ -1748,6 +1853,10 @@ async function handleConversationState({ from, text, state, data, account }) {
             dateTime: executeData.transaction?.dateTime || new Date(),
           });
 
+          // Vend target !== buyer means this was a gift; tell the recipient.
+          // Best-effort only: the purchase is settled and must not be affected.
+          await notifyGiftRecipient({ account, recipientMsisdn: msisdn, product: 'AIRTIME', amountCents });
+
           return await sendPostTransactionCta(from);
           
         } catch (error) {
@@ -2193,8 +2302,8 @@ async function handleAIChat({ from, text, account }) {
             });
             const msg = `📱 *Buy R${aiResponse.entities.amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`;
             await addToConversationHistory(from, 'assistant', msg);
-            return await sendWhatsAppText({
-              to: from,
+          return await sendWhatsAppText({
+            to: from,
               text: msg,
             });
           }
@@ -2223,8 +2332,8 @@ async function handleAIChat({ from, text, account }) {
             });
             const meterMsg = `💡 *Buy R${aiResponse.entities.amount} Electricity*\n\nPlease enter your meter number to confirm.`;
             await addToConversationHistory(from, 'assistant', meterMsg);
-            return await sendWhatsAppText({
-              to: from,
+          return await sendWhatsAppText({
+            to: from,
               text: meterMsg,
             });
           } else if (aiResponse.entities?.amount) {
@@ -2248,7 +2357,7 @@ async function handleAIChat({ from, text, account }) {
             return await sendWhatsAppText({
               to: from,
               text: amountMsg,
-            });
+          });
           }
 
         case 'REDEEM_VOUCHER':
@@ -3578,7 +3687,11 @@ async function handleVoucherRedemption({ from, pin, account }) {
 
   const bluClient = new BluClient();
   try {
-    const idemKey = `wapay-redeem-${account.id}-${Date.now()}`;
+    // The idemKey is derived from the voucher PIN itself: a voucher is a
+    // bearer instrument, so the same PIN must never be credited twice —
+    // not on a webhook retry, and not to a different account either.
+    const pinHash = crypto.createHash('sha256').update(String(pin)).digest('hex');
+    const idemKey = `wapay-redeem-${pinHash.slice(0, 32)}`;
 
     // Check voucher status first to get amount and validate state
     let statusInfo;
@@ -3627,16 +3740,24 @@ async function handleVoucherRedemption({ from, pin, account }) {
       amountCents: result.amount_cents
     });
 
-    // Post to ledger
+    // Post to ledger. buildLoad applies the locked NET credit policy
+    // (FEES.load.BLU): the customer is credited face value minus the rail's
+    // discount, so the books can never go negative on a load. postEntry is
+    // idempotent on idemKey — a replayed redemption returns the original
+    // entry instead of crediting twice.
     console.log('📖 Posting to ledger');
-    const { journalEntryId } = await postBluDeposit({
+    await ensureWallet({ accountId: account.id });
+    const loadEntry = buildLoad({
       accountId: account.id,
-      amountCents: result.amount_cents,
-      providerRef: result.providerRef,
+      rail: RAIL.BLU,
+      faceCents: result.amount_cents,
       idemKey,
     });
+    loadEntry.externalRef = result.providerRef;
+    const { journalEntryId, replayed } = await postEntry(loadEntry);
+    const creditedCents = loadEntry.meta.creditCents;
 
-    console.log('✅ Ledger posted:', journalEntryId);
+    console.log('✅ Ledger posted:', journalEntryId, replayed ? '(replayed)' : '');
 
     // Get updated balance
     const { balance, displayName } = await getUserBalance(from);
@@ -3644,13 +3765,14 @@ async function handleVoucherRedemption({ from, pin, account }) {
     // Clear conversation state
     await updateConversationState(from, null);
 
-    // Format amount
-    const amountRands = (result.amount_cents / 100).toFixed(2);
+    // Format amounts: show the voucher's face value and what actually landed.
+    const faceRands = (result.amount_cents / 100).toFixed(2);
+    const creditedRands = (creditedCents / 100).toFixed(2);
 
     // Send success message
     await sendWhatsAppText({
       to: from,
-      text: `✅ *Voucher Redeemed Successfully!*\n\n💰 Amount: R ${amountRands}\n📈 New Balance: R ${balance}\n📝 Reference: ${result.providerRef}\n\nWhat would you like to do next?\n• Check balance\n• Buy airtime\n• Buy data\n\nReply with your choice!`,
+      text: `✅ *Voucher Redeemed Successfully!*\n\n🎟️ Voucher value: R ${faceRands}\n💰 Added to your wallet: R ${creditedRands}\n📈 New Balance: R ${balance}\n📝 Reference: ${result.providerRef}\n\nWhat would you like to do next?\n• Check balance\n• Buy airtime\n• Buy data\n\nReply with your choice!`,
     });
 
     return { ok: true };
@@ -3673,18 +3795,18 @@ async function handleVoucherRedemption({ from, pin, account }) {
 
     // Map Blu error messages to user-friendly text (if no userMessage from client)
     if (!userMessage) {
-      if (errorType === 'USER_INPUT') {
-        if (sanitizedReason) {
-          errorMessage = sanitizedReason;
-        } else {
-          errorMessage = 'Blu could not redeem that voucher PIN. The voucher may be invalid, already used, or expired. Please verify the digits and try another voucher if needed.';
-        }
-      } else if (errorType === 'AUTH') {
-        errorMessage = 'We couldn\'t complete your voucher redemption due to a provider configuration error. Please try again later or contact support.';
-      } else if (errorType === 'RETRYABLE') {
-        errorMessage = sanitizedReason || 'The voucher service is temporarily unavailable. Please try again in a few minutes.';
-      } else if (sanitizedReason) {
+    if (errorType === 'USER_INPUT') {
+      if (sanitizedReason) {
         errorMessage = sanitizedReason;
+      } else {
+        errorMessage = 'Blu could not redeem that voucher PIN. The voucher may be invalid, already used, or expired. Please verify the digits and try another voucher if needed.';
+      }
+    } else if (errorType === 'AUTH') {
+        errorMessage = 'We couldn\'t complete your voucher redemption due to a provider configuration error. Please try again later or contact support.';
+    } else if (errorType === 'RETRYABLE') {
+      errorMessage = sanitizedReason || 'The voucher service is temporarily unavailable. Please try again in a few minutes.';
+    } else if (sanitizedReason) {
+      errorMessage = sanitizedReason;
       }
     }
 

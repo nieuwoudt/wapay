@@ -46,4 +46,24 @@ test('parseSlots: extracts send money intent-ish slots', () => {
   assert.equal(s.productHint, 'SEND_MONEY');
 });
 
+test('parseSlots: explicit product word beats generic send-to (gifting phrasing)', () => {
+  // "send ... to ..." with a product word is a gift of that product, never SEND_MONEY.
+  const airtime = parseSlots('send R50 airtime to 0840012300');
+  assert.equal(airtime.productHint, 'AIRTIME');
+  assert.equal(airtime.amountCents, 5000);
+  assert.equal(airtime.msisdn, '0840012300');
+
+  const data = parseSlots('Send R30 data to 0840012300');
+  assert.equal(data.productHint, 'DATA');
+  assert.equal(data.amountCents, 3000);
+  assert.equal(data.msisdn, '0840012300');
+});
+
+test('parseSlots: bare send-to (no product word) still yields SEND_MONEY', () => {
+  const s = parseSlots('Send R30 to 0840012300');
+  assert.equal(s.productHint, 'SEND_MONEY');
+  assert.equal(s.amountCents, 3000);
+  assert.equal(s.msisdn, '0840012300');
+});
+
 

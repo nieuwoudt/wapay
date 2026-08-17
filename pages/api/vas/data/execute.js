@@ -1,32 +1,25 @@
 /**
  * POST /api/vas/data/execute
- * 
+ *
  * Execute a data bundle purchase after preview confirmation.
  * Requires PIN verification and valid preview.
- * 
+ *
  * Production-Ready Features:
  * - PIN verification with lockout protection
- * - Double-entry ledger (Dr: Customer Wallet, Cr: VAS Clearing)
+ * - Atomic ledger: reserveHold -> provider -> settleHold/releaseHold
  * - WhatsApp receipt after successful purchase
  * - Sentry error tracking and metrics
- * - Idempotency protection
+ * - Idempotency protection (deterministic keys — safe to retry)
  * - Structured logging for debugging
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../../lib/prisma.js';
 import { BluVasClient } from '@wapay/providers-blu';
 import { verifyPIN } from '@wapay/auth';
+import { BALANCE, RAIL, buildSpend } from '../../../../lib/ledger-core.js';
+import { reserveHold, settleHold, releaseHold, ensureWallet } from '../../../../lib/ledger-post.js';
 // IMPORTANT: This API route must NEVER send WhatsApp messages directly.
 // User-facing messages are orchestrated by `message-processor-v2` to guarantee exactly-once delivery.
-
-const prisma = new PrismaClient();
-
-// Account codes for double-entry ledger
-const ACCOUNT_CODES = {
-  CUSTOMER_WALLET: (accountId) => `WALLET:${accountId}`,
-  VAS_CLEARING: 'LIABILITY:VAS_CLEARING',
-  VAS_REVENUE: 'REVENUE:VAS_FEES',
-};
 
 /**
  * Structured logging helper
@@ -44,7 +37,7 @@ function logStructured(type, data) {
  */
 function captureError(error, context = {}) {
   console.error('❌ VAS Data Error:', error.message, context);
-  
+
   // Sentry integration (if configured)
   if (process.env.SENTRY_DSN && typeof Sentry !== 'undefined') {
     Sentry.captureException(error, { extra: context });
@@ -68,13 +61,13 @@ function logMetric(name, value, tags = {}) {
 
 export default async function handler(req, res) {
   const startTime = Date.now();
-  
+
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
-    const { previewId, pin, accountId } = req.body;
+  const { previewId, pin, accountId } = req.body;
 
   // Log the execute call
   logStructured('vas_data_execute_call', {
@@ -115,7 +108,7 @@ export default async function handler(req, res) {
     }
 
     const pinResult = await verifyPIN({ accountId, pin });
-    
+
     if (!pinResult.ok) {
       logStructured('vas_data_execute_result', {
         previewId,
@@ -125,7 +118,7 @@ export default async function handler(req, res) {
         pinError: pinResult.error,
       });
       logMetric('vas.data.pin_failure', 1, { error: pinResult.error });
-      
+
       if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
         return res.status(403).json({
           error: 'AUTH',
@@ -133,7 +126,7 @@ export default async function handler(req, res) {
           lockedUntil: pinResult.lockedUntil?.toISOString(),
         });
       }
-      
+
       return res.status(401).json({
         error: 'AUTH',
         message: 'Invalid PIN',
@@ -192,14 +185,11 @@ export default async function handler(req, res) {
     }
 
     // =========================================================================
-    // Get Account and Wallet
+    // Get Account (the SPEND wallet is ensured below, not required to pre-exist)
     // =========================================================================
-    const account = await prisma.account.findUnique({
-      where: { id: accountId },
-      include: { wallets: true }
-    });
+    const account = await prisma.account.findUnique({ where: { id: accountId } });
 
-    if (!account || !account.wallets || account.wallets.length === 0) {
+    if (!account) {
       logStructured('vas_data_execute_result', {
         previewId,
         accountId,
@@ -208,131 +198,89 @@ export default async function handler(req, res) {
       });
       return res.status(404).json({
         error: 'USER_INPUT',
-        message: 'Account or wallet not found'
+        message: 'Account not found'
       });
     }
 
-    const wallet = account.wallets[0];
     const { totalCents, msisdn, productId, productName, vendorId, priceCents } = metadata;
 
-    // Check balance again
-    if (wallet.availableCents < totalCents) {
-      logStructured('vas_data_execute_result', {
-        previewId,
+    // Spend flows always draw the no-KYC SPEND balance.
+    await ensureWallet({ accountId, balanceType: BALANCE.SPEND });
+
+    // =========================================================================
+    // Reserve funds BEFORE calling Blu (atomic hold)
+    // =========================================================================
+    // Deterministic key per execution attempt, so a retry reuses the same hold
+    // and the same journal entry instead of double-charging.
+    const idemKey = `wapay-data-exec-${previewId}`;
+
+    // reserveHold does the balance check and the debit-to-pending in one atomic
+    // step. If the funds aren't there (or a concurrent spend took them first) it
+    // throws INSUFFICIENT_FUNDS and no money moves.
+    try {
+      await reserveHold({
         accountId,
-        success: false,
-        error: 'INSUFFICIENT_BALANCE',
-        required: totalCents,
-        available: wallet.availableCents,
+        amountCents: totalCents,
+        idemKey,
+        balanceType: BALANCE.SPEND,
+        reason: `data ${msisdn}`,
       });
-      return res.status(400).json({
-        error: 'USER_INPUT',
-        message: 'Insufficient balance'
-      });
+    } catch (error) {
+      if (error.code === 'INSUFFICIENT_FUNDS') {
+        logStructured('vas_data_execute_result', {
+          previewId, accountId, success: false, error: 'INSUFFICIENT_BALANCE',
+          required: totalCents, available: error.availableCents,
+        });
+        return res.status(400).json({ error: 'USER_INPUT', message: 'Insufficient balance' });
+      }
+      throw error;
     }
 
-    // =========================================================================
-    // Create Idempotency Key and Double-Entry Journal
-    // =========================================================================
-    const idemKey = `wapay-data-${Date.now()}-${accountId}`;
-
-    // Create double-entry journal entry
-    const journalEntry = await prisma.journalEntry.create({
-      data: {
-        externalRef: idemKey,
-        source: 'VAS_DATA',
-        lines: {
-          create: [
-            {
-              accountCode: ACCOUNT_CODES.CUSTOMER_WALLET(accountId),
-              debitCents: totalCents,
-              creditCents: null,
-            },
-            {
-              accountCode: ACCOUNT_CODES.VAS_CLEARING,
-              debitCents: null,
-              creditCents: totalCents,
-            },
-          ],
-        },
-      },
-      include: { lines: true },
-    });
-
-    logStructured('vas_data_ledger_created', {
-      journalEntryId: journalEntry.id,
-      idemKey,
-        amountCents: totalCents,
-    });
+    logStructured('vas_data_hold_reserved', { idemKey, amountCents: totalCents });
 
     // =========================================================================
     // Call Blu VAS API
     // =========================================================================
     const bluClient = new BluVasClient();
     let bluResult;
-    
+
     try {
       const bluStartTime = Date.now();
-      
+
       bluResult = await bluClient.purchaseDataBundle({
         msisdn,
         productId,
         vendorId,
         idemKey,
         accountId,
-        journalEntryId: journalEntry.id
       });
-      
+
       // Log success metrics
       const bluLatency = Date.now() - bluStartTime;
       logMetric('vas.data.blu_latency_ms', bluLatency, { vendorId, success: true });
       logMetric('vas.data.success', 1, { vendorId, productId });
-      
+
     } catch (error) {
       // Log failure metrics
-      logMetric('vas.data.failure', 1, { 
-        vendorId, 
+      logMetric('vas.data.failure', 1, {
+        vendorId,
         productId,
         errorType: error.message,
         statusCode: error.statusCode,
       });
-      
-      // Capture error for Sentry
-      captureError(error, {
-        accountId,
-        previewId,
-        vendorId,
-        productId,
-        idemKey,
-      });
-      
+      captureError(error, { accountId, previewId, vendorId, productId, idemKey });
       console.error('Blu data purchase failed:', error);
-      
-      // Reverse the journal entry (mark as failed, don't delete for audit)
-      await prisma.journalEntry.update({
-        where: { id: journalEntry.id },
-        data: { 
-          source: 'VAS_DATA_FAILED',
-        }
-      });
 
-      // Update preview as failed
-      await prisma.providerRequest.update({
-        where: { id: previewId },
-        data: { status: 'FAILED' }
-      });
+      // Provider failed: give the money back and record nothing on the books.
+      await releaseHold({ idemKey, reason: `blu_failed:${error.message}` });
+      await prisma.providerRequest.update({ where: { id: previewId }, data: { status: 'FAILED' } });
 
       // Handle INVALID_PHONE_NUMBER error specifically
       if (error.message === 'INVALID_PHONE_NUMBER') {
         logStructured('vas_data_execute_result', {
-          previewId,
-          accountId,
-          msisdn,
-          success: false,
-          error: 'INVALID_PHONE_NUMBER',
-          providerMessage: error.providerMessage,
+          previewId, accountId, msisdn, success: false,
+          error: 'INVALID_PHONE_NUMBER', providerMessage: error.providerMessage,
         });
-        
         return res.status(400).json({
           error: 'INVALID_PHONE_NUMBER',
           message: error.userMessage || "Sorry, I couldn't process that data purchase. The network is rejecting this phone number.",
@@ -342,16 +290,11 @@ export default async function handler(req, res) {
 
       // Log generic failure
       logStructured('vas_data_execute_result', {
-        previewId,
-        accountId,
-        msisdn,
-        success: false,
-        error: error.message,
-        reason: error.reason,
+        previewId, accountId, msisdn, success: false, error: error.message, reason: error.reason,
       });
 
       // Determine error type for user
-      const userError = error.message === 'AUTH' 
+      const userError = error.message === 'AUTH'
         ? 'Service temporarily unavailable'
         : error.reason || 'Data purchase failed';
 
@@ -363,27 +306,28 @@ export default async function handler(req, res) {
     }
 
     // =========================================================================
-    // Update Wallet Balance
+    // Provider succeeded: settle the hold and post the real double-entry.
     // =========================================================================
-    await prisma.wallet.update({
-      where: { id: wallet.id },
-      data: {
-        availableCents: { decrement: totalCents }
-      }
+    // buildSpend books: Dr WALLET:{acct}:SPEND, Cr CLEARING:BLU (supplier cost),
+    // Cr REVENUE:COMMISSION:DATA (our margin). settleHold clears the hold and
+    // posts the entry in one transaction, so the customer is debited exactly once.
+    const spendEntry = buildSpend({
+      accountId,
+      category: 'DATA',
+      saleCents: totalCents,
+      idemKey: `wapay-data-spend-${previewId}`,
+      rail: RAIL.BLU,
+      balanceType: BALANCE.SPEND,
     });
+    await settleHold({ idemKey, entry: spendEntry });
 
-    // Update preview as completed
     await prisma.providerRequest.update({
       where: { id: previewId },
-      data: {
-        status: 'SUCCESS',
-        providerRef: bluResult.providerRef
-      }
+      data: { status: 'SUCCESS', providerRef: bluResult.providerRef },
     });
 
-    // Get new balance
-    const updatedWallet = await prisma.wallet.findUnique({
-      where: { id: wallet.id }
+    const updatedWallet = await prisma.wallet.findFirst({
+      where: { accountId, balanceType: BALANCE.SPEND },
     });
 
     // Log success
@@ -430,11 +374,11 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    captureError(error, { 
+    captureError(error, {
       handler: 'vas/data/execute',
       body: { ...req.body, pin: '[REDACTED]' },
     });
-    
+
     logStructured('vas_data_execute_result', {
       previewId,
       accountId,
@@ -442,9 +386,9 @@ export default async function handler(req, res) {
       error: 'UNHANDLED_ERROR',
       errorMessage: error.message,
     });
-    
+
     logMetric('vas.data.unhandled_error', 1);
-    
+
     console.error('Data execute error:', error);
     return res.status(500).json({
       error: 'RETRYABLE',

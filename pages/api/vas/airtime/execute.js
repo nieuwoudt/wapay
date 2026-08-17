@@ -13,20 +13,13 @@
  * - Structured logging for debugging
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../../lib/prisma.js';
 import { BluVasClient } from '@wapay/providers-blu';
 import { verifyPIN } from '@wapay/auth';
+import { BALANCE, RAIL, buildSpend } from '../../../../lib/ledger-core.js';
+import { reserveHold, settleHold, releaseHold, ensureWallet } from '../../../../lib/ledger-post.js';
 // IMPORTANT: This API route must NEVER send WhatsApp messages directly.
 // User-facing messages are orchestrated by `message-processor-v2` to guarantee exactly-once delivery.
-
-const prisma = new PrismaClient();
-
-// Account codes for double-entry ledger
-const ACCOUNT_CODES = {
-  CUSTOMER_WALLET: (accountId) => `WALLET:${accountId}`,
-  VAS_CLEARING: 'LIABILITY:VAS_CLEARING',
-  VAS_REVENUE: 'REVENUE:VAS_FEES',
-};
 
 /**
  * Structured logging helper
@@ -192,14 +185,11 @@ export default async function handler(req, res) {
     }
 
     // =========================================================================
-    // Get Account and Wallet
+    // Get Account (the SPEND wallet is ensured below, not required to pre-exist)
     // =========================================================================
-    const account = await prisma.account.findUnique({
-      where: { id: accountId },
-      include: { wallets: true }
-    });
+    const account = await prisma.account.findUnique({ where: { id: accountId } });
 
-    if (!account || !account.wallets || account.wallets.length === 0) {
+    if (!account) {
       logStructured('vas_airtime_execute_result', {
         previewId,
         accountId,
@@ -208,182 +198,118 @@ export default async function handler(req, res) {
       });
       return res.status(404).json({
         error: 'USER_INPUT',
-        message: 'Account or wallet not found'
+        message: 'Account not found'
       });
     }
 
-    const wallet = account.wallets[0];
     const { amountCents, totalCents, msisdn, vendorId } = metadata;
-    
-    // Check balance again
-    if (wallet.availableCents < totalCents) {
-      logStructured('vas_airtime_execute_result', {
-        previewId,
-        accountId,
-        success: false,
-        error: 'INSUFFICIENT_BALANCE',
-        required: totalCents,
-        available: wallet.availableCents,
-      });
-      return res.status(400).json({
-        error: 'USER_INPUT',
-        message: 'Insufficient balance'
-      });
-    }
+
+    // Spend flows always draw the no-KYC SPEND balance.
+    await ensureWallet({ accountId, balanceType: BALANCE.SPEND });
 
     // =========================================================================
-    // Create Idempotency Key and Double-Entry Journal
+    // Reserve funds BEFORE calling Blu (atomic hold)
     // =========================================================================
-    // Deterministic requestId/idempotency per execution attempt (stable for retries)
+    // Deterministic key per execution attempt, so a retry reuses the same hold
+    // and the same journal entry instead of double-charging.
     const idemKey = `wapay-air-exec-${previewId}`;
 
-    // Create double-entry journal entry
-    const journalEntry = await prisma.journalEntry.create({
-      data: {
-        externalRef: idemKey,
-        source: 'VAS_AIRTIME',
-        lines: {
-          create: [
-            {
-              accountCode: ACCOUNT_CODES.CUSTOMER_WALLET(accountId),
-              debitCents: totalCents,
-              creditCents: null,
-            },
-            {
-              accountCode: ACCOUNT_CODES.VAS_CLEARING,
-              debitCents: null,
-              creditCents: totalCents,
-            },
-          ],
-        },
-      },
-      include: { lines: true },
-    });
+    // reserveHold does the balance check and the debit-to-pending in one atomic
+    // step. If the funds aren't there (or a concurrent spend took them first) it
+    // throws INSUFFICIENT_FUNDS and no money moves.
+    try {
+      await reserveHold({
+        accountId,
+        amountCents: totalCents,
+        idemKey,
+        balanceType: BALANCE.SPEND,
+        reason: `airtime ${msisdn}`,
+      });
+    } catch (error) {
+      if (error.code === 'INSUFFICIENT_FUNDS') {
+        logStructured('vas_airtime_execute_result', {
+          previewId, accountId, success: false, error: 'INSUFFICIENT_BALANCE',
+          required: totalCents, available: error.availableCents,
+        });
+        return res.status(400).json({ error: 'USER_INPUT', message: 'Insufficient balance' });
+      }
+      throw error;
+    }
 
-    logStructured('vas_airtime_ledger_created', {
-      journalEntryId: journalEntry.id,
-      idemKey,
-      amountCents: totalCents,
-    });
+    logStructured('vas_airtime_hold_reserved', { idemKey, amountCents: totalCents });
 
     // =========================================================================
     // Call Blu VAS API
     // =========================================================================
     const bluClient = new BluVasClient();
     let bluResult;
-    
+
     try {
       const bluStartTime = Date.now();
-      
+
       bluResult = await bluClient.purchaseAirtime({
         msisdn,
         amountCents,
         vendorId,
         idemKey,
         accountId,
-        journalEntryId: journalEntry.id
       });
-      
-      // Log success metrics
+
       const bluLatency = Date.now() - bluStartTime;
       logMetric('vas.airtime.blu_latency_ms', bluLatency, { vendorId, success: true });
       logMetric('vas.airtime.success', 1, { vendorId });
-      
+
     } catch (error) {
-      // Log failure metrics
-      logMetric('vas.airtime.failure', 1, { 
-        vendorId, 
-        errorType: error.message,
-        statusCode: error.statusCode,
-      });
-      
-      // Capture error for Sentry
-      captureError(error, {
-        accountId,
-        previewId,
-        vendorId,
-        amountCents,
-        idemKey,
-      });
-      
+      logMetric('vas.airtime.failure', 1, { vendorId, errorType: error.message, statusCode: error.statusCode });
+      captureError(error, { accountId, previewId, vendorId, amountCents, idemKey });
       console.error('Blu airtime purchase failed:', error);
-      
-      // Reverse the journal entry (mark as failed, don't delete for audit)
-      await prisma.journalEntry.update({
-        where: { id: journalEntry.id },
-        data: { 
-          source: 'VAS_AIRTIME_FAILED',
-        }
-      });
 
-      // Update preview as failed
-      await prisma.providerRequest.update({
-        where: { id: previewId },
-        data: { status: 'FAILED' }
-      });
+      // Provider failed: give the money back and record nothing on the books.
+      await releaseHold({ idemKey, reason: `blu_failed:${error.message}` });
+      await prisma.providerRequest.update({ where: { id: previewId }, data: { status: 'FAILED' } });
 
-      // Handle INVALID_PHONE_NUMBER error specifically
       if (error.message === 'INVALID_PHONE_NUMBER') {
         logStructured('vas_airtime_execute_result', {
-          previewId,
-          accountId,
-          msisdn,
-          success: false,
-          error: 'INVALID_PHONE_NUMBER',
-          providerMessage: error.providerMessage,
+          previewId, accountId, msisdn, success: false,
+          error: 'INVALID_PHONE_NUMBER', providerMessage: error.providerMessage,
         });
-        
         return res.status(400).json({
           error: 'INVALID_PHONE_NUMBER',
           message: error.userMessage || "Sorry, I couldn't process that airtime purchase. The network is rejecting this phone number.",
-          reference: idemKey
+          reference: idemKey,
         });
       }
 
-      // Log generic failure
       logStructured('vas_airtime_execute_result', {
-        previewId,
-        accountId,
-        msisdn,
-        success: false,
-        error: error.message,
-        reason: error.reason,
+        previewId, accountId, msisdn, success: false, error: error.message, reason: error.reason,
       });
-
-      // Determine error type for user
-      const userError = error.message === 'AUTH' 
-        ? 'Service temporarily unavailable'
-        : error.reason || 'Airtime purchase failed';
-
-      return res.status(400).json({
-        error: error.message || 'RETRYABLE',
-        message: userError,
-        reference: idemKey
-      });
+      const userError = error.message === 'AUTH' ? 'Service temporarily unavailable' : error.reason || 'Airtime purchase failed';
+      return res.status(400).json({ error: error.message || 'RETRYABLE', message: userError, reference: idemKey });
     }
 
     // =========================================================================
-    // Update Wallet Balance
+    // Provider succeeded: settle the hold and post the real double-entry.
     // =========================================================================
-    await prisma.wallet.update({
-      where: { id: wallet.id },
-      data: {
-        availableCents: { decrement: totalCents }
-      }
+    // buildSpend books: Dr WALLET:{acct}:SPEND, Cr CLEARING:BLU (supplier cost),
+    // Cr REVENUE:COMMISSION:AIRTIME (our margin). settleHold clears the hold and
+    // posts the entry in one transaction, so the customer is debited exactly once.
+    const spendEntry = buildSpend({
+      accountId,
+      category: 'AIRTIME',
+      saleCents: totalCents,
+      idemKey: `wapay-air-spend-${previewId}`,
+      rail: RAIL.BLU,
+      balanceType: BALANCE.SPEND,
     });
+    await settleHold({ idemKey, entry: spendEntry });
 
-    // Update preview as completed
     await prisma.providerRequest.update({
       where: { id: previewId },
-      data: {
-        status: 'SUCCESS',
-        providerRef: bluResult.providerRef
-      }
+      data: { status: 'SUCCESS', providerRef: bluResult.providerRef },
     });
 
-    // Get new balance
-    const updatedWallet = await prisma.wallet.findUnique({
-      where: { id: wallet.id }
+    const updatedWallet = await prisma.wallet.findFirst({
+      where: { accountId, balanceType: BALANCE.SPEND },
     });
 
     // Log success

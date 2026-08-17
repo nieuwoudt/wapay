@@ -9,6 +9,7 @@
 import { PrismaClient } from '@prisma/client';
 import { BluVasClient } from '@wapay/providers-blu';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../../lib/msisdn.js';
+import { requireInternalAuth } from '../../../../lib/internal-auth.js';
 
 const prisma = new PrismaClient();
 
@@ -28,6 +29,9 @@ export default async function handler(req, res) {
     res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
+
+  // Internal-only route: leaks wallet balance to any caller without this.
+  if (!requireInternalAuth(req, res)) return;
 
     const { accountId, msisdn, productId, vendorId } = req.body;
     const normalisedMsisdn = normaliseMsisdn(msisdn || '');

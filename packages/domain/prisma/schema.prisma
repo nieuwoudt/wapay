@@ -29,21 +29,57 @@ model Account {
   auditLogs          AuditLog[]
 }
 
+// A customer holds one wallet PER balance type:
+//   SPEND - phone-number identity, no KYC, cannot be withdrawn as cash
+//   CASH  - KYC verified, withdrawable, full P2P
+// The unique constraint on (accountId, balanceType) is what stops the
+// duplicate-wallet bug where spend paths picked wallets[0] arbitrarily.
 model Wallet {
   id            String   @id @default(cuid())
   account       Account  @relation(fields: [accountId], references: [id])
   accountId     String
+  balanceType   String   @default("SPEND")
   currency      String   @default("ZAR")
   availableCents Int     @default(0)
   pendingCents   Int     @default(0)
+  updatedAt     DateTime @default(now()) @updatedAt
+  holds         Hold[]
+
+  @@unique([accountId, balanceType])
+  @@index([accountId])
 }
 
+// Funds reserved against a wallet while a provider call is in flight.
+// Reserve -> (settle | release); never a bare balance mutation.
+model Hold {
+  id          String    @id @default(cuid())
+  wallet      Wallet    @relation(fields: [walletId], references: [id])
+  walletId    String
+  idemKey     String    @unique
+  amountCents Int
+  status      String    @default("ACTIVE") // ACTIVE | SETTLED | RELEASED
+  reason      String?
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  @@index([walletId, status])
+  @@index([status, createdAt])
+  @@map("holds")
+}
+
+// idemKey is UNIQUE: this is what makes a replayed money operation return
+// the original entry instead of posting a second one.
 model JournalEntry {
   id          String   @id @default(cuid())
+  idemKey     String   @unique
   externalRef String?
   source      String
+  metadata    Json?
   createdAt   DateTime @default(now())
   lines       JournalLine[]
+
+  @@index([source, createdAt])
+  @@index([createdAt])
 }
 
 model JournalLine {
@@ -53,6 +89,22 @@ model JournalLine {
   accountCode String
   debitCents  Int?
   creditCents Int?
+
+  // Reconciliation reads by accountCode, so it must be indexed.
+  @@index([accountCode])
+  @@index([entryId])
+}
+
+// Webhook de-duplication. Meta redelivers messages; without this a
+// redelivery replays an entire money flow. Uniqueness is the guard.
+model ProcessedMessage {
+  id          String   @id @default(cuid())
+  waMessageId String   @unique
+  accountId   String?
+  processedAt DateTime @default(now())
+
+  @@index([processedAt])
+  @@map("processed_messages")
 }
 
 model ProviderRequest {

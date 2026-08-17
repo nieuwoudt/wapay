@@ -8,6 +8,13 @@
 import { processMessage } from './message-processor-v2.js';
 import { isReady } from '../../../lib/initTemplates.js';
 import { ensureTemplatesReady } from './_middleware.js';
+import { checkInboundWebhook, readRawBody } from '../../../lib/webhook-security.js';
+import { claimMessage } from '../../../lib/ledger-post.js';
+
+// X-Hub-Signature-256 is an HMAC over the EXACT raw bytes Meta sent; Next's
+// body parser must stay off so those bytes are available. GET verification
+// only reads query params, so it is unaffected.
+export const config = { api: { bodyParser: false } };
 
 export default async function handler(req, res) {
   
@@ -19,10 +26,11 @@ export default async function handler(req, res) {
 
     console.log('Webhook verification request:', { mode, token: token ? 'present' : 'missing', challenge });
 
-    // Verify token matches our environment variable
-    const expectedToken = process.env.WHATSAPP_VERIFY_TOKEN || process.env.META_WEBHOOK_VERIFY_TOKEN || 'wapay_webhook_secret_2025';
-    
-    if (mode === 'subscribe' && token === expectedToken) {
+    // Verify token comes ONLY from env — the old hardcoded fallback value is
+    // public knowledge, so an unset env var must fail verification, not open it.
+    const expectedToken = process.env.WHATSAPP_VERIFY_TOKEN || process.env.META_WEBHOOK_VERIFY_TOKEN;
+
+    if (mode === 'subscribe' && expectedToken && token === expectedToken) {
       console.log('✅ Webhook verified successfully!');
       return res.status(200).send(challenge);
     } else {
@@ -33,197 +41,247 @@ export default async function handler(req, res) {
 
   // POST: Handle incoming messages
   if (req.method === 'POST') {
+    // IMPORTANT:
+    // - Meta expects a fast 200 OK from the webhook. If we block on template seeding
+    //   or message processing, Meta can consider the delivery failed/retry.
+    // - So we ACK immediately, then process asynchronously (best-effort).
+    // - The ONLY things allowed before the ACK are signature verification and
+    //   JSON parsing — an unverified payload must never reach processing.
+
+    let rawBody;
     try {
-      // Ensure templates are initialized (lazy init on first request)
-      if (!isReady()) {
-        console.log('⏳ Templates not ready, initializing now...');
-        try {
-          await ensureTemplatesReady();
-          console.log('✅ Templates initialized successfully');
-        } catch (error) {
-          console.error('❌ Failed to initialize templates:', error);
-          return res.status(503).json({ 
-            error: 'Service temporarily unavailable', 
-            message: 'Failed to initialize WhatsApp templates. Please check environment variables.' 
-          });
+      rawBody = await readRawBody(req);
+    } catch (error) {
+      console.error(JSON.stringify({ type: 'wa_webhook_body_read_error', error: error?.message }));
+      return res.status(400).json({ error: 'invalid body' });
+    }
+
+    const check = checkInboundWebhook({
+      rawBody,
+      signatureHeader: req.headers['x-hub-signature-256'],
+      appSecret: process.env.META_APP_SECRET,
+      env: process.env,
+    });
+
+    if (!check.ok) {
+      console.error(JSON.stringify({ type: 'wa_webhook_signature_rejected', reason: check.reason }));
+      return res.status(401).json({ error: 'invalid signature' });
+    }
+
+    let body;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      console.error(JSON.stringify({ type: 'wa_webhook_invalid_json' }));
+      return res.status(400).json({ error: 'invalid json' });
+    }
+
+    res.status(200).json({ ok: true });
+    console.log('✅ WA_WEBHOOK_ACK_SENT');
+
+    void (async () => {
+      try {
+        // Best-effort template initialization: never block the webhook ACK on this.
+        if (!isReady()) {
+          console.log('⏳ Templates not ready (non-blocking init)...');
+          try {
+            await ensureTemplatesReady();
+            console.log('✅ Templates initialized successfully');
+          } catch (error) {
+            console.error('❌ Template init failed (continuing without blocking):', error);
+          }
         }
-      }
 
-      const body = req.body;
+        // Log incoming webhook for debugging (keep it single-line for Vercel)
+        console.log('📱 Incoming WhatsApp webhook:', JSON.stringify(body));
 
-      // Log incoming webhook for debugging
-      console.log('📱 Incoming WhatsApp webhook:', JSON.stringify(body, null, 2));
+        // Check if this is a WhatsApp message event
+        if (body?.object === 'whatsapp_business_account') {
+          const entries = body.entry || [];
 
-      // Check if this is a WhatsApp message event
-      if (body.object === 'whatsapp_business_account') {
-        const entries = body.entry || [];
+          for (const entry of entries) {
+            const changes = entry.changes || [];
 
-        for (const entry of entries) {
-          const changes = entry.changes || [];
+            for (const change of changes) {
+              if (change.field === 'messages') {
+                const value = change.value || {};
+                const messages = value.messages || [];
+                const contacts = value.contacts || [];
+                const contact = contacts[0] || {};
+                const profile = contact.profile || {};
 
-          for (const change of changes) {
-            if (change.field === 'messages') {
-              const value = change.value || {};
-              const messages = value.messages || [];
-              const contacts = value.contacts || [];
-              const contact = contacts[0] || {};
-              const profile = contact.profile || {};
+                for (const message of messages) {
+                  const from = message.from; // User's WhatsApp ID
+                  const messageId = message.id;
+                  const messageType = message.type;
+                  const timestamp = message.timestamp;
 
-              for (const message of messages) {
-                const from = message.from; // User's WhatsApp ID
-                const messageId = message.id;
-                const messageType = message.type;
-                const timestamp = message.timestamp;
-
-                console.log('📩 Received message:', {
-                  from,
-                  messageId,
-                  messageType,
-                  timestamp,
-                  profile: profile.name || 'Unknown',
-                });
-
-                // Handle different message types
-                if (messageType === 'text') {
-                  const text = message.text?.body || '';
-                  console.log('💬 Text message:', text);
-
-                  // Process the message and send response
-                  await processMessage({
-                    from,
-                    text,
-                    messageId,
-                    profile,
-                  });
-                }
-
-                // Handle button clicks (quick reply buttons from templates)
-                // These come from Call-to-Action buttons in templates
-                if (messageType === 'button') {
-                  const buttonPayload = message.button?.payload || '';
-                  const buttonText = message.button?.text || '';
-                  
-                  console.log('🔘 Template button clicked:', { 
-                    payload: buttonPayload, 
-                    text: buttonText,
-                    template: 'Template button (quick_reply type)'
-                  });
-                  
-                  // Process button click as if user typed the button text
-                  // This works for ALL templates with buttons
-                  await processMessage({
-                    from,
-                    text: buttonText || buttonPayload || 'continue',
-                    messageId,
-                    profile,
-                  });
-                }
-
-                // Handle interactive messages (button_reply, list_reply, product selection)
-                // These come from interactive message APIs (not templates)
-                if (messageType === 'interactive') {
-                  const interactiveType = message.interactive?.type;
-                  console.log('🔘 Interactive message type:', interactiveType);
-
-                  // Handle button replies (Call-to-Action buttons)
-                  if (interactiveType === 'button_reply') {
-                    const buttonId = message.interactive?.button_reply?.id;
-                    const buttonTitle = message.interactive?.button_reply?.title;
-                    
-                    console.log('🔘 Interactive button clicked:', { 
-                      id: buttonId, 
-                      title: buttonTitle 
-                    });
-                    
-                    // Process as text message
-                    await processMessage({
+                  console.log(
+                    '📩 Received message:',
+                    JSON.stringify({
                       from,
-                      text: buttonTitle || buttonId || 'continue',
                       messageId,
-                      profile,
-                    });
+                      messageType,
+                      timestamp,
+                      profile: profile?.name || 'Unknown',
+                    })
+                  );
+
+                  // De-dupe: Meta retries deliveries, and a replayed message must
+                  // not drive a second money flow. claimMessage is a DB-unique
+                  // insert — false means this wa message id was already handled.
+                  // Status callbacks never enter this loop, so they are unaffected.
+                  if (messageId) {
+                    let claimed = true;
+                    try {
+                      claimed = await claimMessage({ waMessageId: messageId, accountId: undefined });
+                    } catch (dedupeError) {
+                      // Availability over dedupe: if the dedupe store is down we
+                      // still process (accepting duplicate risk) rather than
+                      // dropping the message.
+                      console.error(
+                        JSON.stringify({
+                          type: 'wa_webhook_dedupe_error',
+                          messageId,
+                          error: dedupeError?.message,
+                        })
+                      );
+                    }
+                    if (!claimed) {
+                      console.log(JSON.stringify({ type: 'wa_webhook_duplicate', messageId }));
+                      continue;
+                    }
                   }
-                  
-                  // Handle list replies (List message selections)
-                  if (interactiveType === 'list_reply') {
-                    const listId = message.interactive?.list_reply?.id;
-                    const listTitle = message.interactive?.list_reply?.title;
-                    const listDescription = message.interactive?.list_reply?.description;
-                    
-                    console.log('📋 List item selected:', { 
-                      id: listId, 
-                      title: listTitle,
-                      description: listDescription 
-                    });
-                    
-                    // Process as text message
+
+                  // Handle different message types
+                  if (messageType === 'text') {
+                    const text = message.text?.body || '';
+                    console.log('💬 Text message:', text);
+
                     await processMessage({
                       from,
-                      text: listTitle || listId || 'continue',
+                      text,
                       messageId,
                       profile,
                     });
                   }
 
-                  // Handle product selections (if using catalog/shopping features)
-                  if (interactiveType === 'product') {
-                    const productId = message.interactive?.product?.id;
-                    const productRetailerId = message.interactive?.product?.retailer_id;
-                    
-                    console.log('🛍️ Product selected:', { 
-                      id: productId, 
-                      retailerId: productRetailerId 
-                    });
-                    
-                    // Process product selection
+                  // Template quick-reply buttons
+                  if (messageType === 'button') {
+                    const buttonPayload = message.button?.payload || '';
+                    const buttonText = message.button?.text || '';
+
+                    console.log(
+                      '🔘 Template button clicked:',
+                      JSON.stringify({
+                        payload: buttonPayload,
+                        text: buttonText,
+                        template: 'Template button (quick_reply type)',
+                      })
+                    );
+
                     await processMessage({
                       from,
-                      text: `Product: ${productRetailerId || productId}`,
+                      text: buttonText || buttonPayload || 'continue',
                       messageId,
                       profile,
                     });
                   }
 
-                  // Handle nfm_reply (flows)
-                  if (interactiveType === 'nfm_reply') {
-                    const nfmReply = message.interactive?.nfm_reply;
-                    console.log('📱 Flow reply received:', nfmReply);
-                    
-                    // Process flow response
-                    await processMessage({
-                      from,
-                      text: 'Flow completed',
-                      messageId,
-                      profile,
-                    });
+                  // Interactive messages (button_reply, list_reply, product selection)
+                  if (messageType === 'interactive') {
+                    const interactiveType = message.interactive?.type;
+                    console.log('🔘 Interactive message type:', interactiveType);
+
+                    if (interactiveType === 'button_reply') {
+                      const buttonId = message.interactive?.button_reply?.id;
+                      const buttonTitle = message.interactive?.button_reply?.title;
+
+                      console.log(
+                        '🔘 Interactive button clicked:',
+                        JSON.stringify({ id: buttonId, title: buttonTitle })
+                      );
+
+                      await processMessage({
+                        from,
+                        text: buttonTitle || buttonId || 'continue',
+                        messageId,
+                        profile,
+                      });
+                    }
+
+                    if (interactiveType === 'list_reply') {
+                      const listId = message.interactive?.list_reply?.id;
+                      const listTitle = message.interactive?.list_reply?.title;
+                      const listDescription = message.interactive?.list_reply?.description;
+
+                      console.log(
+                        '📋 List item selected:',
+                        JSON.stringify({ id: listId, title: listTitle, description: listDescription })
+                      );
+
+                      await processMessage({
+                        from,
+                        text: listTitle || listId || 'continue',
+                        messageId,
+                        profile,
+                      });
+                    }
+
+                    if (interactiveType === 'product') {
+                      const productId = message.interactive?.product?.id;
+                      const productRetailerId = message.interactive?.product?.retailer_id;
+
+                      console.log(
+                        '🛍️ Product selected:',
+                        JSON.stringify({ id: productId, retailerId: productRetailerId })
+                      );
+
+                      await processMessage({
+                        from,
+                        text: `Product: ${productRetailerId || productId}`,
+                        messageId,
+                        profile,
+                      });
+                    }
+
+                    if (interactiveType === 'nfm_reply') {
+                      const nfmReply = message.interactive?.nfm_reply;
+                      console.log('📱 Flow reply received:', JSON.stringify(nfmReply));
+
+                      await processMessage({
+                        from,
+                        text: 'Flow completed',
+                        messageId,
+                        profile,
+                      });
+                    }
                   }
                 }
               }
-            }
 
-            // Handle message status updates
-            if (change.field === 'message_status') {
-              const statuses = change.value?.statuses || [];
-              for (const status of statuses) {
-                console.log('📊 Message status update:', {
-                  id: status.id,
-                  status: status.status,
-                  timestamp: status.timestamp,
-                });
+              if (change.field === 'message_status') {
+                const statuses = change.value?.statuses || [];
+                for (const status of statuses) {
+                  console.log(
+                    '📊 Message status update:',
+                    JSON.stringify({
+                      id: status.id,
+                      status: status.status,
+                      timestamp: status.timestamp,
+                    })
+                  );
+                }
               }
             }
           }
         }
+      } catch (error) {
+        console.error('❌ Error processing WhatsApp webhook (post-ACK):', error);
       }
+    })();
 
-      // Always return 200 to acknowledge receipt
-      return res.status(200).json({ ok: true, message: 'Webhook received' });
-
-    } catch (error) {
-      console.error('❌ Error processing WhatsApp webhook:', error);
-      // Still return 200 to prevent Meta from retrying
-      return res.status(200).json({ ok: true, error: error.message });
-    }
+    return;
   }
 
   // Method not allowed

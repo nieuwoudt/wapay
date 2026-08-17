@@ -9,7 +9,7 @@
 import { PrismaClient } from '@prisma/client';
 import { BluVasClient } from '@wapay/providers-blu';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../../lib/msisdn.js';
-import { internalJsonHeaders } from '../../../../lib/api-url.js';
+import { requireInternalAuth } from '../../../../lib/internal-auth.js';
 
 const prisma = new PrismaClient();
 
@@ -29,6 +29,9 @@ export default async function handler(req, res) {
     res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
+
+  // Internal-only route: leaks wallet balance to any caller without this.
+  if (!requireInternalAuth(req, res)) return;
 
     const { accountId, msisdn, amountCents, vendorId } = req.body;
     const normalisedMsisdn = normaliseMsisdn(msisdn || '');
@@ -171,7 +174,10 @@ export default async function handler(req, res) {
           msisdn: normalisedMsisdn,
           requestId,
         });
-        const networkInfo = await bluClient.checkMobileNumber(normalisedMsisdn, { headers: internalJsonHeaders() });
+        // NOTE: checkMobileNumber takes only the msisdn. Do NOT pass
+        // internalJsonHeaders() here — those headers carry internal secrets
+        // and must never reach a third-party provider.
+        const networkInfo = await bluClient.checkMobileNumber(normalisedMsisdn);
         detectedVendorName = networkInfo.vendorName;
         detectedVendorId = bluClient.vendorNameToId(networkInfo.vendorName);
         
