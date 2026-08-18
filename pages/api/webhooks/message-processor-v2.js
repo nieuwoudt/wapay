@@ -6,7 +6,7 @@
  */
 
 import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed, wasErrorSent, markErrorSent } from './user-manager.js';
-import { sendWhatsAppText, sendWhatsAppTemplate } from '@wapay/whatsapp';
+import { sendWhatsAppText, sendWhatsAppTemplate, sendWhatsAppCtaUrl } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
 import { resolveGift, buildRecipientNotification, buildVoucherClaimMessage, maskMsisdn } from '../../../lib/gifting.js';
 import { hasPendingGifts, claimPendingGifts } from '../../../lib/pending-gifts.js';
@@ -1587,11 +1587,39 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
     rail: 'PAYFAST',
   });
 
-  const msg =
-    `💳 Tap to pay ${randsShort(amountCents)} securely with PayFast: ${checkoutUrl}\n\n` +
-    `Your balance updates here the moment payment clears.`;
-  await addToConversationHistory(from, 'assistant', msg);
-  return await sendWhatsAppText({ to: from, text: msg });
+  // Preamble + tappable button (interactive cta_url) instead of a raw URL.
+  // The copy explains the round trip: PayFast for the payment, back to this
+  // chat after. Falls back to a plain-text link if the interactive send is
+  // rejected — a payment must never be blocked by presentation.
+  const bodyText =
+    `I'll take you to *PayFast*, our secure payment partner, to pay ` +
+    `${randsShort(amountCents)} by card or Instant EFT.\n\n` +
+    `When you've paid, tap *"Back to WaPay"* and you'll be brought straight ` +
+    `back to this chat. I'll confirm here the moment your money lands. 💰`;
+  await addToConversationHistory(from, 'assistant', bodyText);
+
+  const interactive = await sendWhatsAppCtaUrl({
+    to: from,
+    headerText: 'Add money to WaPay',
+    bodyText,
+    footerText: 'Secured by PayFast',
+    buttonText: `Pay ${randsShort(amountCents)} now`,
+    url: checkoutUrl,
+  });
+  if (interactive?.ok) return interactive;
+
+  logStructured('deposit_cta_fallback', {
+    from,
+    accountId: account.id,
+    paymentId,
+    error: interactive?.error || null,
+  });
+  return await sendWhatsAppText({
+    to: from,
+    text:
+      `💳 Tap to pay ${randsShort(amountCents)} securely with PayFast: ${checkoutUrl}\n\n` +
+      `Your balance updates here the moment payment clears.`,
+  });
 }
 
 /**

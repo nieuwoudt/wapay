@@ -3,8 +3,8 @@ import { request, Dispatcher } from 'undici';
 // Export template seeding and catalog functions
 export { seedWhatsappTemplates } from './seedTemplates.js';
 export { buildCatalog, resolveLanguage, isApproved, getAvailableTemplates, getAvailableLanguages } from './templateCatalog.js';
-export { sendWhatsAppTemplate, sendWhatsAppText } from './send.js';
-export type { SendTemplateArgs, SendTextArgs } from './send.js';
+export { sendWhatsAppTemplate, sendWhatsAppText, sendWhatsAppCtaUrl, buildCtaUrlPayload } from './send.js';
+export type { SendTemplateArgs, SendTextArgs, SendCtaUrlArgs } from './send.js';
 
 export type TemplateName =
   | 'redeem_in_progress'
