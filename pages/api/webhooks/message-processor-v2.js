@@ -1306,8 +1306,9 @@ function detectExplicitIntent(text = '') {
   const wantsDeposit =
     /(redeem|use|get)\s+(my\s+)?(blu\s+)?voucher/.test(squashed) ||
     /(voucher\s*(code|pin|number))/.test(squashed) ||
-    /(deposit|top\s*up|topup|add|load|put)\s+(money|funds|cash|to my wallet|to wallet|into wallet)/.test(squashed) ||
+    /(deposit|depsit|deposite|diposit|top\s*up|topup|add|load|put)\s+(money|funds|cash|to my wallet|to wallet|into wallet)/.test(squashed) ||
     squashed.includes('deposit money') ||
+    squashed.includes('depsit money') ||
     squashed.includes('blu voucher');
 
   if (wantsDeposit) {
@@ -1461,7 +1462,7 @@ function detectExplicitIntent(text = '') {
  * REQUIRED (bare "deposit money" still routes to the two-option prompt).
  * Kept on one line so tests can extract and exercise the shipped pattern.
  */
-const DEPOSIT_CARD_PATTERN = /\bdeposit\b(?:\s+(?:money|funds|cash))?\s*[:,-]?\s*r?\s*(\d+(?:[.,]\d{1,2})?)(?:\s*(?:rand|rande|zar))?\b/i;
+const DEPOSIT_CARD_PATTERN = /\b(?:deposit|depsit|deposite|diposit)\b(?:\s+(?:money|funds|cash))?\s*[:,-]?\s*r?\s*(\d+(?:[.,]\d{1,2})?)(?:\s*(?:rand|rande|zar))?\b/i;
 
 /**
  * Rand-string -> integer cents with string math only (no float multiplication
@@ -1602,11 +1603,14 @@ async function handleConversationState({ from, text, state, data, account }) {
       {
         const normalized = text.trim().toLowerCase();
 
-        if (/^(cancel|stop|no|not now|later|reset|restart)$/i.test(normalized)) {
+        // "home"/"menu" must always be an exit — being trapped in a state
+        // that answers everything with "Invalid Voucher PIN" reads as a
+        // broken bot (observed in user testing 2026-08-21).
+        if (/^(cancel|stop|no|not now|later|reset|restart|home|menu|back|exit)$/i.test(normalized)) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
-            text: `👍 No problem. When you're ready to add money again, just type "redeem voucher".`,
+            text: `👍 No problem. When you're ready to add money again, just type "redeem voucher" — or "deposit R100" to pay by card.`,
           });
         }
 
