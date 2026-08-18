@@ -472,22 +472,23 @@ async function renderHome({ from, account }) {
     // ignore
   }
 
-  const msg3 =
-    `⚡ Quick actions:\n` +
-    `• ${quickActions[0]}\n` +
-    `• ${quickActions[1]}\n` +
-    `• ${quickActions[2]}`;
+  // One message, one screen: the "bank home". Three separate bubbles read
+  // as clutter (user feedback 2026-08-21) and triple the send cost.
+  const home =
+    `👋 *Hi ${displayName}!*\n` +
+    `💰 Balance: *${formatMoneyZar(balance)}*\n` +
+    `━━━━━━━━━━━━━━━\n\n` +
+    `🛒 *Buy* — airtime, data, electricity\n` +
+    `💸 *Send* — "send R10 airtime to 083..."\n` +
+    `💳 *Deposit* — "deposit R100" or a Blu voucher\n` +
+    `📄 *Transactions* · ⚙️ *Settings*\n\n` +
+    `⚡ Quick: ${quickActions[0]} · ${quickActions[1]} · ${quickActions[2]}\n\n` +
+    `Just tell me what you need — in any language.`;
 
   logStructured('home_render', { from, accountId: account.id });
 
-  await addToConversationHistory(from, 'assistant', msg1);
-  await sendWhatsAppText({ to: from, text: msg1 });
-
-  await addToConversationHistory(from, 'assistant', msg2);
-  await sendWhatsAppText({ to: from, text: msg2 });
-
-  await addToConversationHistory(from, 'assistant', msg3);
-  await sendWhatsAppText({ to: from, text: msg3 });
+  await addToConversationHistory(from, 'assistant', home);
+  await sendWhatsAppText({ to: from, text: home });
 
   return { ok: true };
 }
@@ -1598,6 +1599,27 @@ async function handleConversationState({ from, text, state, data, account }) {
   console.log('💬 Handling conversation state:', { state, text, data });
 
   switch (state) {
+    case 'DEPOSIT_CARD_AMOUNT': {
+      const trimmed = text.trim().toLowerCase();
+      if (/^(cancel|stop|no|home|menu|back|exit)$/i.test(trimmed)) {
+        await updateConversationState(from, null);
+        return await renderHome({ from, account });
+      }
+      // Accept "20", "R20", "20 rand", "20.50" or a full "deposit R20".
+      const bare = trimmed.match(/^r?\s*(\d+(?:[.,]\d{1,2})?)(?:\s*(?:rand|rande|zar))?$/i);
+      const bareAmountCents = bare
+        ? depositAmountToCents(bare[1])
+        : matchCardDepositRequest(text);
+      if (bareAmountCents == null) {
+        return await sendWhatsAppText({
+          to: from,
+          text: `Please reply with just the amount you'd like to deposit, e.g. "R100" — or "cancel" to stop.`,
+        });
+      }
+      await updateConversationState(from, null);
+      return await handleCardDepositLink({ from, account, amountCents: bareAmountCents, rawText: text });
+    }
+
     case 'AWAITING_VOUCHER_PIN':
       // User entered voucher PIN - single-step flow
       {
@@ -1642,10 +1664,13 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
 
         if (normalized === '2') {
-          await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+          // Card path collects a bare amount next — parking the user in the
+          // voucher-PIN state here made "20" answer "Invalid Voucher PIN"
+          // (observed in user testing 2026-08-21).
+          await updateConversationState(from, 'DEPOSIT_CARD_AMOUNT');
           return await sendWhatsAppText({
             to: from,
-            text: `💳 *Card / Instant EFT*\n\nReply with the amount and I'll send you a secure payment link.\n\nExample: deposit R100`,
+            text: `💳 *Card / Instant EFT*\n\nHow much would you like to deposit? Just reply with the amount.\n\nExample: R100`,
           });
         }
 
