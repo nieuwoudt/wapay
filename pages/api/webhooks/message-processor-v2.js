@@ -15,7 +15,13 @@ import { BluClient, BluVasClient } from '@wapay/providers-blu';
 import { buildLoad, RAIL } from '../../../lib/ledger-core.js';
 import { postEntry, ensureWallet } from '../../../lib/ledger-post.js';
 import { buildCheckoutUrl } from '@wapay/providers-payfast';
-import { createDepositIntent, MIN_DEPOSIT_CENTS, MAX_DEPOSIT_CENTS } from '../../../lib/deposits.js';
+import {
+  createDepositIntent,
+  getLatestDepositIntent,
+  matchDepositStatusRequest,
+  MIN_DEPOSIT_CENTS,
+  MAX_DEPOSIT_CENTS,
+} from '../../../lib/deposits.js';
 import { chatWithAI } from '@wapay/ai';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
@@ -843,6 +849,23 @@ async function handlePostOnboarding({ account, from, text }) {
     return await handleCardDepositLink({ from, account, amountCents: cardDepositCents, rawText: text });
   }
 
+  // Deterministic short-circuit: deposit-status questions ("did my payment
+  // go through", "where is my money") are answered from the intent table +
+  // ledger, BEFORE the AI can see them — the AI must never invent
+  // transaction status.
+  if (matchDepositStatusRequest(text)) {
+    logSlotFill({
+      intent: 'DEPOSIT_STATUS',
+      text,
+      slots,
+      routeDecision: 'DEPOSIT_STATUS_LOOKUP',
+      missing: [],
+      from,
+      accountId: account.id,
+    });
+    return await handleDepositStatus({ from, account });
+  }
+
   // =====================================================================
   // CONTEXT-AWARE INTENT DETECTION
   // Check if user was recently browsing a category - interpret follow-ups
@@ -1620,6 +1643,70 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
       `💳 Tap to pay ${randsShort(amountCents)} securely with PayFast: ${checkoutUrl}\n\n` +
       `Your balance updates here the moment payment clears.`,
   });
+}
+
+/**
+ * Answer "did my payment go through" from the intent table + wallet — the
+ * factual, deterministic reply the founder asked for after the AI improvised
+ * "your balance will update shortly" (a promise no code path could honour).
+ *
+ * SUCCESS -> amount + current balance. PENDING -> "PayFast is still
+ * confirming" (the ITN confirmation message IS the promised follow-up).
+ * FAILED -> say so plainly and invite a retry. No intent -> explain how to
+ * deposit. Every answer carries the live balance so the user never sees a
+ * stale number without context.
+ */
+async function handleDepositStatus({ from, account }) {
+  let intent;
+  try {
+    intent = await getLatestDepositIntent({ accountId: account.id });
+  } catch (error) {
+    logStructured('deposit_status_lookup_error', {
+      from,
+      accountId: account.id,
+      error: error?.message,
+    });
+    return await sendWhatsAppText({
+      to: from,
+      text: `⚠️ I can't check your payment status right now — please try again in a moment.`,
+    });
+  }
+
+  const { balance } = await getUserBalance(from);
+
+  if (!intent) {
+    return await sendWhatsAppText({
+      to: from,
+      text:
+        `You haven't made a card deposit yet.\n\n` +
+        `💰 Balance: R${balance}\n\n` +
+        `To add money, reply e.g. "deposit R100".`,
+    });
+  }
+
+  const amountCents = intent.metadata?.amountCents;
+  const amount = Number.isInteger(amountCents) ? randsShort(amountCents) : 'your deposit';
+
+  let text;
+  if (intent.status === 'SUCCESS') {
+    text =
+      `✅ Your ${amount} deposit was received.\n\n` +
+      `💰 Balance: R${balance}`;
+  } else if (intent.status === 'FAILED') {
+    text =
+      `❌ Your ${amount} card payment didn't complete — nothing was credited.\n\n` +
+      `💰 Balance: R${balance}\n\n` +
+      `Want to try again? Reply "deposit ${Number.isInteger(amountCents) ? randsShort(amountCents) : 'R100'}".`;
+  } else {
+    // PENDING (or any non-terminal state): the ITN confirmation message is
+    // the promised follow-up — it fires the moment PayFast notifies us.
+    text =
+      `⏳ PayFast is still confirming your ${amount} — I'll message you here the moment it clears.\n\n` +
+      `💰 Balance: R${balance}`;
+  }
+
+  await addToConversationHistory(from, 'assistant', text);
+  return await sendWhatsAppText({ to: from, text });
 }
 
 /**
