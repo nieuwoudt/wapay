@@ -76,10 +76,15 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'invalid json' });
     }
 
-    res.status(200).json({ ok: true });
-    console.log('✅ WA_WEBHOOK_ACK_SENT');
-
-    void (async () => {
+    // Processing MUST complete before the ACK. On Vercel serverless,
+    // execution after the response is not guaranteed — a fire-and-forget
+    // block here is silently killed, which reads as a mute bot (this exact
+    // failure shipped on 2026-08-18 and cost a morning of debugging; the
+    // long-running January deployment awaited, which is why it was stable).
+    // Meta tolerates several seconds before retrying; typical processing is
+    // 2–10s, within the 60s function budget. Errors still ACK 200 so Meta
+    // does not retry-storm — message dedupe makes replays safe regardless.
+    await (async () => {
       try {
         // Best-effort template initialization: never block the webhook ACK on this.
         if (!isReady()) {
@@ -277,10 +282,12 @@ export default async function handler(req, res) {
           }
         }
       } catch (error) {
-        console.error('❌ Error processing WhatsApp webhook (post-ACK):', error);
+        console.error('❌ Error processing WhatsApp webhook:', error);
       }
     })();
 
+    res.status(200).json({ ok: true });
+    console.log('✅ WA_WEBHOOK_ACK_SENT');
     return;
   }
 

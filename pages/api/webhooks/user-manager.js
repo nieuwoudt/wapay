@@ -4,7 +4,7 @@
  * Handles user account creation and session management
  */
 
-import prisma from '../../../lib/prisma';
+import prisma from '../../../lib/prisma.js';
 import { mergeConversationData } from '../../../lib/conversation-data.js';
 
 export async function wasMessageProcessed(waId, messageId) {

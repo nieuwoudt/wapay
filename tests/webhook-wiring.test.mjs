@@ -50,7 +50,7 @@ test('webhook verifies the Meta signature with the security module', async () =>
   assert.ok(src.includes('status(401)'), 'must reject bad signatures with 401');
 });
 
-test('signature rejection happens before the ACK and before any processing', async () => {
+test('ordering: verify -> process (AWAITED) -> ACK', async () => {
   const src = await fileText(WEBHOOK);
   const verifyIdx = src.indexOf('checkInboundWebhook(');
   const rejectIdx = src.indexOf('status(401)');
@@ -58,9 +58,17 @@ test('signature rejection happens before the ACK and before any processing', asy
   const processIdx = src.indexOf('processMessage({');
 
   assert.ok(verifyIdx > -1 && rejectIdx > -1 && ackIdx > -1 && processIdx > -1);
-  assert.ok(verifyIdx < ackIdx, 'verification must run before the 200 ACK');
-  assert.ok(rejectIdx < ackIdx, 'the 401 path must precede the 200 ACK');
-  assert.ok(ackIdx < processIdx, 'ACK-fast-then-process ordering must be preserved');
+  assert.ok(verifyIdx < processIdx, 'verification must run before any processing');
+  assert.ok(rejectIdx < processIdx, 'the 401 path must precede processing');
+  // Processing MUST complete before the 200 ACK: on Vercel serverless,
+  // execution after the response is not guaranteed — fire-and-forget
+  // post-ACK work is silently killed (shipped 2026-08-18, read as a mute
+  // bot). The awaited-IIFE-then-ACK ordering is the invariant.
+  assert.ok(processIdx < ackIdx, 'processing must be awaited BEFORE the 200 ACK');
+  assert.ok(
+    !src.includes('void (async'),
+    'no fire-and-forget async blocks in the webhook'
+  );
 });
 
 test('the leaked hardcoded verify token is gone', async () => {
