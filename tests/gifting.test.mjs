@@ -112,10 +112,10 @@ test('buildRecipientNotification: uses sender name and formats the amount', () =
     product: 'AIRTIME',
     amountCents: 5000,
   });
-  assert.equal(n.templateName, 'gift_received');
+  assert.equal(n.templateName, 'wapay_voucher_received');
   assert.equal(n.requiresTemplate, true);
   assert.deepEqual(n.bodyParams, ['Sipho', 'R50 airtime']);
-  assert.match(n.fallbackText, /Sipho sent you R50 airtime/);
+  assert.match(n.fallbackText, /Sipho sent you R50 airtime with WaPay/);
 });
 
 test('buildRecipientNotification: falls back to a masked number when no name', () => {
