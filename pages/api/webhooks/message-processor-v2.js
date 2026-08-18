@@ -14,6 +14,8 @@ import crypto from 'crypto';
 import { BluClient, BluVasClient } from '@wapay/providers-blu';
 import { buildLoad, RAIL } from '../../../lib/ledger-core.js';
 import { postEntry, ensureWallet } from '../../../lib/ledger-post.js';
+import { buildCheckoutUrl } from '@wapay/providers-payfast';
+import { createDepositIntent, MIN_DEPOSIT_CENTS, MAX_DEPOSIT_CENTS } from '../../../lib/deposits.js';
 import { chatWithAI } from '@wapay/ai';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
@@ -822,6 +824,24 @@ async function handlePostOnboarding({ account, from, text }) {
     });
   }
 
+  // Deterministic short-circuit: an explicit card/EFT deposit request
+  // ("deposit R100") must never be hijacked by an active browse category —
+  // its bare amount would otherwise read as a category follow-up (e.g.
+  // R100 airtime). No PIN gate: the money is coming IN, not out.
+  const cardDepositCents = matchCardDepositRequest(text);
+  if (cardDepositCents) {
+    logSlotFill({
+      intent: 'DEPOSIT_CARD',
+      text,
+      slots: { ...slots, amountCents: cardDepositCents },
+      routeDecision: 'DEPOSIT_CARD_LINK',
+      missing: [],
+      from,
+      accountId: account.id,
+    });
+    return await handleCardDepositLink({ from, account, amountCents: cardDepositCents, rawText: text });
+  }
+
   // =====================================================================
   // CONTEXT-AWARE INTENT DETECTION
   // Check if user was recently browsing a category - interpret follow-ups
@@ -1049,7 +1069,7 @@ async function handlePostOnboarding({ account, from, text }) {
         await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
         return await sendWhatsAppText({
           to: from,
-          text: `🎟️ *Redeem Voucher*\n\nPlease enter your 16-digit Blu Voucher PIN:\n\nExample: 1234-5678-9012-3456\n\nYour balance will be updated instantly!`,
+          text: buildDepositPrompt(),
         });
       case 'VOUCHER_PIN':
         await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
@@ -1431,6 +1451,145 @@ function detectExplicitIntent(text = '') {
   return { intent: 'AI_CHAT', confidence: 1.0 };
 }
 
+// ===========================================================================
+// CARD / INSTANT EFT DEPOSITS (PayFast on-ramp)
+// ===========================================================================
+
+/**
+ * "deposit R100" / "deposit 100" / "deposit money R100" — the phrasing the
+ * deposit prompt teaches. Amount is the single capture group; an amount is
+ * REQUIRED (bare "deposit money" still routes to the two-option prompt).
+ * Kept on one line so tests can extract and exercise the shipped pattern.
+ */
+const DEPOSIT_CARD_PATTERN = /\bdeposit\b(?:\s+(?:money|funds|cash))?\s*[:,-]?\s*r?\s*(\d+(?:[.,]\d{1,2})?)(?:\s*(?:rand|rande|zar))?\b/i;
+
+/**
+ * Rand-string -> integer cents with string math only (no float multiplication
+ * on the money path). '100' -> 10000, '100.5' -> 10050, '100,50' -> 10050.
+ *
+ * @param {string} raw - digits with optional 1-2 decimals ('.' or ',')
+ * @returns {number|null} integer cents, or null when non-positive/unsafe
+ */
+function depositAmountToCents(raw) {
+  const [intPart, decPart = ''] = String(raw).replace(',', '.').split('.');
+  const cents = Number(intPart) * 100 + Number((decPart + '00').slice(0, 2));
+  if (!Number.isSafeInteger(cents) || cents <= 0) return null;
+  return cents;
+}
+
+/**
+ * Detect an explicit card/EFT deposit request in free text.
+ *
+ * @param {string} text - raw WhatsApp message
+ * @returns {number|null} requested amount in integer cents, or null
+ */
+function matchCardDepositRequest(text = '') {
+  const m = String(text || '').match(DEPOSIT_CARD_PATTERN);
+  if (!m) return null;
+  return depositAmountToCents(m[1]);
+}
+
+/**
+ * The deposit prompt: BOTH ways money comes into the wallet. Option 1 (Blu
+ * voucher) is the original path and stays first; option 2 is the PayFast
+ * card/EFT link. Shown from every "deposit money"-style trigger.
+ */
+function buildDepositPrompt() {
+  return (
+    `💰 *Add Money to WaPay*\n\n` +
+    `1️⃣ Blu voucher — buy at any till, send me the PIN\n` +
+    `Example: 1234-5678-9012-3456\n\n` +
+    `2️⃣ Card / Instant EFT — I'll send you a secure payment link. Reply with the amount, e.g. "deposit R100"`
+  );
+}
+
+/**
+ * Create a PayFast deposit link for the requested amount and send it.
+ *
+ * Deliberately NOT gated behind the wallet PIN: this flow only moves money
+ * INTO the wallet — the customer authenticates with their card at PayFast,
+ * and the wallet is only credited after the ITN webhook fully verifies the
+ * payment (signature incl. empty fields, source IP, amount, status, server
+ * confirmation). Withdrawals stay gated; deposits must be frictionless.
+ *
+ * m_payment_id is the deposit-intent row id — the ONLY key the ITN webhook
+ * looks the payment up by — and the checkout amount comes from the same
+ * intent, so verifyItn's amount check accepts the real ITN.
+ *
+ * @param {object} args
+ * @param {string} args.from - payer's WhatsApp id
+ * @param {object} args.account - the payer's account row
+ * @param {number} args.amountCents - requested deposit, integer cents
+ * @param {string} [args.rawText] - the message that triggered this, for logs
+ */
+async function handleCardDepositLink({ from, account, amountCents, rawText = '' }) {
+  if (!Number.isInteger(amountCents) || amountCents < MIN_DEPOSIT_CENTS || amountCents > MAX_DEPOSIT_CENTS) {
+    logSlotFill({
+      intent: 'DEPOSIT_CARD',
+      text: rawText,
+      slots: { amountCents },
+      routeDecision: 'DEPOSIT_CARD_AMOUNT_OUT_OF_RANGE',
+      missing: ['amountCents'],
+      from,
+      accountId: account.id,
+    });
+    return await sendWhatsAppText({
+      to: from,
+      text: `💳 Card / Instant EFT deposits are between ${randsShort(MIN_DEPOSIT_CENTS)} and ${randsShort(MAX_DEPOSIT_CENTS)}.\n\nReply with an amount in that range, e.g. "deposit R100".`,
+    });
+  }
+
+  let paymentId;
+  let checkoutUrl;
+  try {
+    const intent = await createDepositIntent({ accountId: account.id, waId: from, amountCents });
+    paymentId = intent.paymentId;
+
+    const base = String(process.env.APP_BASE_URL || '').replace(/\/+$/, '');
+    checkoutUrl = buildCheckoutUrl({
+      merchantId: process.env.PAYFAST_MERCHANT_ID,
+      merchantKey: process.env.PAYFAST_MERCHANT_KEY,
+      passphrase: process.env.PAYFAST_PASSPHRASE || undefined,
+      sandbox: process.env.PAYFAST_SANDBOX === 'true',
+      amountCents,
+      mPaymentId: paymentId,
+      itemName: 'WaPay top-up',
+      returnUrl: base,
+      cancelUrl: base,
+      notifyUrl: `${base}/api/payfast/itn`,
+    });
+  } catch (error) {
+    logStructured('deposit_link_error', {
+      from,
+      accountId: account.id,
+      amountCents,
+      paymentId: paymentId || null,
+      error: error?.message,
+    });
+    return await sendWhatsAppText({
+      to: from,
+      text: `❌ Sorry, I couldn't create your payment link. Please try again in a moment.`,
+    });
+  }
+
+  // The link IS the flow now — leave any pending conversation state behind.
+  await updateConversationState(from, null);
+
+  logStructured('deposit_link_sent', {
+    from,
+    accountId: account.id,
+    paymentId,
+    amountCents,
+    rail: 'PAYFAST',
+  });
+
+  const msg =
+    `💳 Tap to pay ${randsShort(amountCents)} securely with PayFast: ${checkoutUrl}\n\n` +
+    `Your balance updates here the moment payment clears.`;
+  await addToConversationHistory(from, 'assistant', msg);
+  return await sendWhatsAppText({ to: from, text: msg });
+}
+
 /**
  * Handle conversation state (multi-turn conversations)
  */
@@ -1448,6 +1607,41 @@ async function handleConversationState({ from, text, state, data, account }) {
           return await sendWhatsAppText({
             to: from,
             text: `👍 No problem. When you're ready to add money again, just type "redeem voucher".`,
+          });
+        }
+
+        // Option 2 of the deposit prompt: "deposit R100" -> PayFast card/EFT
+        // link. Checked BEFORE PIN handling so choosing card never trips the
+        // invalid-PIN reply. Creating the link needs no wallet PIN.
+        {
+          const cardDepositCents = matchCardDepositRequest(text);
+          if (cardDepositCents) {
+            logSlotFill({
+              intent: 'DEPOSIT_CARD',
+              text,
+              slots: { amountCents: cardDepositCents },
+              routeDecision: 'DEPOSIT_CARD_LINK',
+              missing: [],
+              from,
+              accountId: account.id,
+            });
+            return await handleCardDepositLink({ from, account, amountCents: cardDepositCents, rawText: text });
+          }
+        }
+
+        if (normalized === '1') {
+          await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+          return await sendWhatsAppText({
+            to: from,
+            text: `Great! Please enter your 16-digit Blu Voucher PIN (numbers only).\nExample: 1234567890123456\n\nReply "cancel" to stop.`,
+          });
+        }
+
+        if (normalized === '2') {
+          await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+          return await sendWhatsAppText({
+            to: from,
+            text: `💳 *Card / Instant EFT*\n\nReply with the amount and I'll send you a secure payment link.\n\nExample: deposit R100`,
           });
         }
 
@@ -2843,7 +3037,7 @@ async function handleAIChat({ from, text, account }) {
 
         case 'REDEEM_VOUCHER':
           await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
-          const voucherMsg = `🎟️ *Redeem Voucher*\n\nPlease enter your 16-digit Blu Voucher PIN:\n\nExample: 1234-5678-9012-3456`;
+          const voucherMsg = buildDepositPrompt();
           await addToConversationHistory(from, 'assistant', voucherMsg);
           return await sendWhatsAppText({
             to: from,
