@@ -117,7 +117,7 @@ test('getLatestDepositIntent requires an accountId', async () => {
 
 test('static: the status short-circuit runs before the AI path', () => {
   const shortCircuit = processorSource.indexOf("routeDecision: 'DEPOSIT_STATUS_LOOKUP'");
-  const aiCall = processorSource.indexOf('chatWithAI(');
+  const aiCall = processorSource.indexOf('await orchestrate(');
   assert.ok(shortCircuit > -1, 'processor must route DEPOSIT_STATUS_LOOKUP');
   assert.ok(aiCall > -1, 'processor still has the AI path');
   assert.ok(shortCircuit < aiCall, 'status questions must be intercepted before the AI sees them');

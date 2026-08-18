@@ -1,0 +1,1058 @@
+[
+ {
+  "language": "en",
+  "id": "balance-plain",
+  "text": "hey how much do i have in my wallet",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "en",
+  "id": "balance-typo",
+  "text": "wats my balnce quick",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "en",
+  "id": "deposit-100",
+  "text": "i want to load R100 into my wallet with my card",
+  "expectAction": "DEPOSIT_START",
+  "amountCents": 10000,
+  "msisdn": null
+ },
+ {
+  "language": "en",
+  "id": "deposit-status",
+  "text": "has my money come thru yet? paid it in earlier",
+  "expectAction": "DEPOSIT_STATUS",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "en",
+  "id": "airtime-self",
+  "text": "buy me R20 airtime please",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": null
+ },
+ {
+  "language": "en",
+  "id": "airtime-gift",
+  "text": "can you send R20 airtime to 0837654321 for my sister",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": "0837654321"
+ },
+ {
+  "language": "en",
+  "id": "data-want",
+  "text": "eish my data is finished, i need a data bundle",
+  "expectAction": "BUY_DATA",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "en",
+  "id": "electricity-200",
+  "text": "need R200 electrisity for meter 01234567890 pls lights are gonna go off",
+  "expectAction": "BUY_ELECTRICITY",
+  "amountCents": 20000,
+  "msisdn": null
+ },
+ {
+  "language": "en",
+  "id": "send-money",
+  "text": "send R50 to 0841234567 please, its for my brother",
+  "expectAction": "SEND_VOUCHER",
+  "amountCents": 5000,
+  "msisdn": "0841234567"
+ },
+ {
+  "language": "en",
+  "id": "redeem-voucher",
+  "text": "i bought a blu voucher at the shop, how do i load it",
+  "expectAction": "REDEEM_VOUCHER",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "en",
+  "id": "help",
+  "text": "howzit, what can this thing actually do?",
+  "expectAction": "HELP",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "en",
+  "id": "greeting",
+  "text": "heita",
+  "expectAction": "NONE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "af",
+  "id": "balance-plain",
+  "text": "hoeveel geld het ek in my wallet",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "af",
+  "id": "balance-typo",
+  "text": "wat is my balnce asb",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "af",
+  "id": "deposit-100",
+  "text": "ek wil R100 in my wallet laai met my kaart",
+  "expectAction": "DEPOSIT_START",
+  "amountCents": 10000,
+  "msisdn": null
+ },
+ {
+  "language": "af",
+  "id": "deposit-status",
+  "text": "het my geld al ingekom wat ek vroeer inbetaal het?",
+  "expectAction": "DEPOSIT_STATUS",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "af",
+  "id": "airtime-self",
+  "text": "koop vir my R20 airtime asb",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": null
+ },
+ {
+  "language": "af",
+  "id": "airtime-gift",
+  "text": "stuur R20 airtime na 0837654321 asb",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": "0837654321"
+ },
+ {
+  "language": "af",
+  "id": "data-want",
+  "text": "ek soek n data bundle my data is amper op",
+  "expectAction": "BUY_DATA",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "af",
+  "id": "electricity-200",
+  "text": "koop R200 prepaid elektrisiteit vir meter 01234567890",
+  "expectAction": "BUY_ELECTRICITY",
+  "amountCents": 20000,
+  "msisdn": null
+ },
+ {
+  "language": "af",
+  "id": "send-money",
+  "text": "stuur asb R50 geld vir 0841234567",
+  "expectAction": "SEND_VOUCHER",
+  "amountCents": 5000,
+  "msisdn": "0841234567"
+ },
+ {
+  "language": "af",
+  "id": "redeem-voucher",
+  "text": "ek het n Blu voucher by die winkel gekoop, hoe laai ek dit?",
+  "expectAction": "REDEEM_VOUCHER",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "af",
+  "id": "help",
+  "text": "hi wat kan ek alles hier doen? hoe werk di ding",
+  "expectAction": "HELP",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "af",
+  "id": "greeting",
+  "text": "hallo hoe gaan dit",
+  "expectAction": "NONE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "zu",
+  "id": "balance-plain",
+  "text": "sawubona, ngicela ukubona ukuthi nginamalini ku wallet yami",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "zu",
+  "id": "balance-typo",
+  "text": "yho bafo ngisele namalini la, chek balnce yami plz",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "zu",
+  "id": "deposit-100",
+  "text": "ngifuna ukufaka R100 ku wallet nge card yami",
+  "expectAction": "DEPOSIT_START",
+  "amountCents": 10000,
+  "msisdn": null
+ },
+ {
+  "language": "zu",
+  "id": "deposit-status",
+  "text": "imali engiyifake ekuseni isingenile yini?",
+  "expectAction": "DEPOSIT_STATUS",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "zu",
+  "id": "airtime-self",
+  "text": "ngicela ukuthenga airtime ka R20 kunumber yami",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": null
+ },
+ {
+  "language": "zu",
+  "id": "airtime-gift",
+  "text": "ngicela ukuthumela airtime ka R20 ku 0837654321",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": "0837654321"
+ },
+ {
+  "language": "zu",
+  "id": "data-want",
+  "text": "bafo ngifuna idata bundle, ngiphelelwe yi data",
+  "expectAction": "BUY_DATA",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "zu",
+  "id": "electricity-200",
+  "text": "ngicela ugesi ka R200, imeter number ithi 01234567890",
+  "expectAction": "BUY_ELECTRICITY",
+  "amountCents": 20000,
+  "msisdn": null
+ },
+ {
+  "language": "zu",
+  "id": "send-money",
+  "text": "ngicela ukuthumela imali ka R50 ku 0841234567",
+  "expectAction": "SEND_VOUCHER",
+  "amountCents": 5000,
+  "msisdn": "0841234567"
+ },
+ {
+  "language": "zu",
+  "id": "redeem-voucher",
+  "text": "ngithenge i Blu voucher esitolo, manje ngifuna ukuyifaka ku wallet yami",
+  "expectAction": "REDEEM_VOUCHER",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "zu",
+  "id": "help",
+  "text": "le service yenzani kanti, isebenza kanjani?",
+  "expectAction": "HELP",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "zu",
+  "id": "greeting",
+  "text": "heyta bafo unjani",
+  "expectAction": "NONE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "xh",
+  "id": "balance-plain",
+  "text": "molo, yimalini eseleyo kwi wallet yam?",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "xh",
+  "id": "balance-typo",
+  "text": "ndicela ubona ibalanse yam plz",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "xh",
+  "id": "deposit-100",
+  "text": "ndifuna ukufaka i R100 kwi wallet nge card yam",
+  "expectAction": "DEPOSIT_START",
+  "amountCents": 10000,
+  "msisdn": null
+ },
+ {
+  "language": "xh",
+  "id": "deposit-status",
+  "text": "ingaba imali endiyifakileyo ekuseni ifikile?",
+  "expectAction": "DEPOSIT_STATUS",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "xh",
+  "id": "airtime-self",
+  "text": "ndicela i airtime ye R20 kum",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": null
+ },
+ {
+  "language": "xh",
+  "id": "airtime-gift",
+  "text": "ndicela uthumela i airtime ye R20 ku 0837654321",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": "0837654321"
+ },
+ {
+  "language": "xh",
+  "id": "data-want",
+  "text": "ndifuna i data bundle bhuti, iphelile idata yam",
+  "expectAction": "BUY_DATA",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "xh",
+  "id": "electricity-200",
+  "text": "ndicela umbane we R200, imitha yam ngu 01234567890",
+  "expectAction": "BUY_ELECTRICITY",
+  "amountCents": 20000,
+  "msisdn": null
+ },
+ {
+  "language": "xh",
+  "id": "send-money",
+  "text": "ndifuna ukuthumela imali engu R50 ku 0841234567",
+  "expectAction": "SEND_VOUCHER",
+  "amountCents": 5000,
+  "msisdn": "0841234567"
+ },
+ {
+  "language": "xh",
+  "id": "redeem-voucher",
+  "text": "ndithenge i Blu voucher evenkileni, ndiyifaka njani apha?",
+  "expectAction": "REDEEM_VOUCHER",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "xh",
+  "id": "help",
+  "text": "le service yenza ntoni kanye kanye? isebenza njani?",
+  "expectAction": "HELP",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "xh",
+  "id": "greeting",
+  "text": "molo mfethu unjani",
+  "expectAction": "NONE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nso",
+  "id": "balance-plain",
+  "text": "dumela, ke na le bokae mo wallet ya ka?",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nso",
+  "id": "balance-typo",
+  "text": "ke kgopela go bona blance ya ka hle",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nso",
+  "id": "deposit-100",
+  "text": "ke nyaka go tsenya R100 ka wallet ka card ya ka",
+  "expectAction": "DEPOSIT_START",
+  "amountCents": 10000,
+  "msisdn": null
+ },
+ {
+  "language": "nso",
+  "id": "deposit-status",
+  "text": "naa tshelete ye ke e lefilego e fihlile?",
+  "expectAction": "DEPOSIT_STATUS",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nso",
+  "id": "airtime-self",
+  "text": "ke reka airtime ya R20 ya ka",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": null
+ },
+ {
+  "language": "nso",
+  "id": "airtime-gift",
+  "text": "nthomele airtime ya R20 go nomoro ye 0837654321",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": "0837654321"
+ },
+ {
+  "language": "nso",
+  "id": "data-want",
+  "text": "ke nyaka go reka data bundle hle, ya ka e fedile",
+  "expectAction": "BUY_DATA",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nso",
+  "id": "electricity-200",
+  "text": "ke reka mohlagase wa R200 wa prepaid, meter ke 01234567890",
+  "expectAction": "BUY_ELECTRICITY",
+  "amountCents": 20000,
+  "msisdn": null
+ },
+ {
+  "language": "nso",
+  "id": "send-money",
+  "text": "ke nyaka go romela tshelete ya R50 go 0841234567",
+  "expectAction": "SEND_VOUCHER",
+  "amountCents": 5000,
+  "msisdn": "0841234567"
+ },
+ {
+  "language": "nso",
+  "id": "redeem-voucher",
+  "text": "ke rekile voucher ya Blu ka lebenkeleng, ke e loada bjang?",
+  "expectAction": "REDEEM_VOUCHER",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nso",
+  "id": "help",
+  "text": "naa service ye e soma bjang? le ka nthusa ka eng?",
+  "expectAction": "HELP",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nso",
+  "id": "greeting",
+  "text": "thobela, le kae?",
+  "expectAction": "NONE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "st",
+  "id": "balance-plain",
+  "text": "ke na le bokae ka walleteng ya ka?",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "st",
+  "id": "balance-typo",
+  "text": "balence ya ka ke bokae hle",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "st",
+  "id": "deposit-100",
+  "text": "ke batla ho kenya R100 ka wallet ka card",
+  "expectAction": "DEPOSIT_START",
+  "amountCents": 10000,
+  "msisdn": null
+ },
+ {
+  "language": "st",
+  "id": "deposit-status",
+  "text": "na chelete eo ke e patetseng e fihlile?",
+  "expectAction": "DEPOSIT_STATUS",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "st",
+  "id": "airtime-self",
+  "text": "nkgele airtime ya R20",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": null
+ },
+ {
+  "language": "st",
+  "id": "airtime-gift",
+  "text": "romela airtime ya R20 ho 0837654321",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": "0837654321"
+ },
+ {
+  "language": "st",
+  "id": "data-want",
+  "text": "ke batla data bundle hle",
+  "expectAction": "BUY_DATA",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "st",
+  "id": "electricity-200",
+  "text": "ke batla ho reka motlakase wa R200 prepaid, meter 01234567890",
+  "expectAction": "BUY_ELECTRICITY",
+  "amountCents": 20000,
+  "msisdn": null
+ },
+ {
+  "language": "st",
+  "id": "send-money",
+  "text": "romela chelete ya R50 ho nomoro 0841234567",
+  "expectAction": "SEND_VOUCHER",
+  "amountCents": 5000,
+  "msisdn": "0841234567"
+ },
+ {
+  "language": "st",
+  "id": "redeem-voucher",
+  "text": "ke rekile voucher ya Blu shopong, ke batla ho e loada",
+  "expectAction": "REDEEM_VOUCHER",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "st",
+  "id": "help",
+  "text": "ntho ena e sebetsa jwang? le ka nthusa ka eng?",
+  "expectAction": "HELP",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "st",
+  "id": "greeting",
+  "text": "dumela hle, o kae?",
+  "expectAction": "NONE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "tn",
+  "id": "balance-plain",
+  "text": "dumela, ke na le bokae mo wallet ya me?",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "tn",
+  "id": "balance-typo",
+  "text": "ke btla go bona balanse ya me tlhe",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "tn",
+  "id": "deposit-100",
+  "text": "ke batla go tsenya R100 mo wallet ka card ya me",
+  "expectAction": "DEPOSIT_START",
+  "amountCents": 10000,
+  "msisdn": null
+ },
+ {
+  "language": "tn",
+  "id": "deposit-status",
+  "text": "a madi a ke a duetseng maloba a setse a tsene?",
+  "expectAction": "DEPOSIT_STATUS",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "tn",
+  "id": "airtime-self",
+  "text": "nthekele airtime ya R20 tlhe",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": null
+ },
+ {
+  "language": "tn",
+  "id": "airtime-gift",
+  "text": "tswee tswee romela airtime ya R20 kwa nomorong 0837654321",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": "0837654321"
+ },
+ {
+  "language": "tn",
+  "id": "data-want",
+  "text": "ke batla data bundle, ya me e fedile",
+  "expectAction": "BUY_DATA",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "tn",
+  "id": "electricity-200",
+  "text": "ke batla go reka motlakase wa R200 wa prepaid, meter ke 01234567890",
+  "expectAction": "BUY_ELECTRICITY",
+  "amountCents": 20000,
+  "msisdn": null
+ },
+ {
+  "language": "tn",
+  "id": "send-money",
+  "text": "romela madi a R50 kwa go 0841234567 tlhe",
+  "expectAction": "SEND_VOUCHER",
+  "amountCents": 5000,
+  "msisdn": "0841234567"
+ },
+ {
+  "language": "tn",
+  "id": "redeem-voucher",
+  "text": "ke rekile blu voucher kwa shopong, ke batla go e loada mo wallet",
+  "expectAction": "REDEEM_VOUCHER",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "tn",
+  "id": "help",
+  "text": "hei, service e e dira eng? mpolelele gore e bereka jang",
+  "expectAction": "HELP",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "tn",
+  "id": "greeting",
+  "text": "dumela mma, o tsogile jang?",
+  "expectAction": "NONE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ss",
+  "id": "balance-plain",
+  "text": "sawubona, nginemalini ku wallet yami?",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ss",
+  "id": "balance-typo",
+  "text": "yebo bhuti ngicela ku cheka i blance yami",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ss",
+  "id": "deposit-100",
+  "text": "ngifuna kufaka R100 ku wallet nge card yami",
+  "expectAction": "DEPOSIT_START",
+  "amountCents": 10000,
+  "msisdn": null
+ },
+ {
+  "language": "ss",
+  "id": "deposit-status",
+  "text": "imali lengiyifake ekuseni seyingenile yini?",
+  "expectAction": "DEPOSIT_STATUS",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ss",
+  "id": "airtime-self",
+  "text": "ngicela kutsenga i airtime ye R20 yami",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": null
+ },
+ {
+  "language": "ss",
+  "id": "airtime-gift",
+  "text": "tfumela airtime ye R20 ku 0837654321 ngiyacela",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": "0837654321"
+ },
+ {
+  "language": "ss",
+  "id": "data-want",
+  "text": "bhuti ngifuna i data bundle, ngiphelelwe yi data",
+  "expectAction": "BUY_DATA",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ss",
+  "id": "electricity-200",
+  "text": "ngicela kutsenga gesi we R200 prepaid, meter number 01234567890",
+  "expectAction": "BUY_ELECTRICITY",
+  "amountCents": 20000,
+  "msisdn": null
+ },
+ {
+  "language": "ss",
+  "id": "send-money",
+  "text": "ngifuna kutfumela imali ye R50 ku 0841234567",
+  "expectAction": "SEND_VOUCHER",
+  "amountCents": 5000,
+  "msisdn": "0841234567"
+ },
+ {
+  "language": "ss",
+  "id": "redeem-voucher",
+  "text": "ngitsenge i Blu voucher esitolo, ngifuna kuyi loada la",
+  "expectAction": "REDEEM_VOUCHER",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ss",
+  "id": "help",
+  "text": "le service yenta ini? isebenta njani?",
+  "expectAction": "HELP",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ss",
+  "id": "greeting",
+  "text": "sawubona unjani",
+  "expectAction": "NONE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ve",
+  "id": "balance-plain",
+  "text": "ndi na masheleni mangana kha wallet yanga",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ve",
+  "id": "balance-typo",
+  "text": "balence yanga ndi mangana",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ve",
+  "id": "deposit-100",
+  "text": "ndi toda u longela R100 kha wallet nga card",
+  "expectAction": "DEPOSIT_START",
+  "amountCents": 10000,
+  "msisdn": null
+ },
+ {
+  "language": "ve",
+  "id": "deposit-status",
+  "text": "masheleni e nda badela nga murahu o no swika naa?",
+  "expectAction": "DEPOSIT_STATUS",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ve",
+  "id": "airtime-self",
+  "text": "ndi toda u renga airtime ya R20",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": null
+ },
+ {
+  "language": "ve",
+  "id": "airtime-gift",
+  "text": "rumela airtime ya R20 kha 0837654321",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": "0837654321"
+ },
+ {
+  "language": "ve",
+  "id": "data-want",
+  "text": "ndi khou toda data bundle",
+  "expectAction": "BUY_DATA",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ve",
+  "id": "electricity-200",
+  "text": "ndi renge electricity ya R200 meter 01234567890",
+  "expectAction": "BUY_ELECTRICITY",
+  "amountCents": 20000,
+  "msisdn": null
+ },
+ {
+  "language": "ve",
+  "id": "send-money",
+  "text": "rumela R50 kha nomboro 0841234567",
+  "expectAction": "SEND_VOUCHER",
+  "amountCents": 5000,
+  "msisdn": "0841234567"
+ },
+ {
+  "language": "ve",
+  "id": "redeem-voucher",
+  "text": "ndo renga voucher ya Blu shoponi ndi toda u i loadela",
+  "expectAction": "REDEEM_VOUCHER",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ve",
+  "id": "help",
+  "text": "heyi service i shuma hani, ni nga nthusa nga mini?",
+  "expectAction": "HELP",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ve",
+  "id": "greeting",
+  "text": "ndaa, vho vuwa hani",
+  "expectAction": "NONE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ts",
+  "id": "balance-plain",
+  "text": "hi mali muni leyi nga ka wallet ya mina",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ts",
+  "id": "balance-typo",
+  "text": "ndzi kombela ku vona balence ya mina",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ts",
+  "id": "deposit-100",
+  "text": "ndzi lava ku nghenisa R100 eka wallet hi card ya mina",
+  "expectAction": "DEPOSIT_START",
+  "amountCents": 10000,
+  "msisdn": null
+ },
+ {
+  "language": "ts",
+  "id": "deposit-status",
+  "text": "xana mali leyi ndzi yi hakeleke yi fikile ke",
+  "expectAction": "DEPOSIT_STATUS",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ts",
+  "id": "airtime-self",
+  "text": "ndzi xavela airtime ya R20",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": null
+ },
+ {
+  "language": "ts",
+  "id": "airtime-gift",
+  "text": "rhumela airtime ya R20 eka 0837654321",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": "0837654321"
+ },
+ {
+  "language": "ts",
+  "id": "data-want",
+  "text": "ndzi lava data bundle mfowethu",
+  "expectAction": "BUY_DATA",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ts",
+  "id": "electricity-200",
+  "text": "ndzi xavela gezi ya R200 meter 01234567890",
+  "expectAction": "BUY_ELECTRICITY",
+  "amountCents": 20000,
+  "msisdn": null
+ },
+ {
+  "language": "ts",
+  "id": "send-money",
+  "text": "rhumela mali ya R50 eka 0841234567",
+  "expectAction": "SEND_VOUCHER",
+  "amountCents": 5000,
+  "msisdn": "0841234567"
+ },
+ {
+  "language": "ts",
+  "id": "redeem-voucher",
+  "text": "ndzi xavile voucher ya Blu exitolo ndzi lava ku yi loada",
+  "expectAction": "REDEEM_VOUCHER",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ts",
+  "id": "help",
+  "text": "xana service leyi yi endla yini, yi tirha njhani",
+  "expectAction": "HELP",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "ts",
+  "id": "greeting",
+  "text": "avuxeni mfowethu u njhani",
+  "expectAction": "NONE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nr",
+  "id": "balance-plain",
+  "text": "lotjhani, ngingazi bona ngine malini na ewalletini yami",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nr",
+  "id": "balance-typo",
+  "text": "heyi ngicela ibhalance yami plz",
+  "expectAction": "CHECK_BALANCE",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nr",
+  "id": "deposit-100",
+  "text": "ngifuna ukufaka i R100 ewalletini ngekarada yami",
+  "expectAction": "DEPOSIT_START",
+  "amountCents": 10000,
+  "msisdn": null
+ },
+ {
+  "language": "nr",
+  "id": "deposit-status",
+  "text": "imali engiyifakileko ekuseni ifikile na?",
+  "expectAction": "DEPOSIT_STATUS",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nr",
+  "id": "airtime-self",
+  "text": "ngicela i airtime ye R20 kimi",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": null
+ },
+ {
+  "language": "nr",
+  "id": "airtime-gift",
+  "text": "thumela i airtime ye R20 ku 0837654321",
+  "expectAction": "BUY_AIRTIME",
+  "amountCents": 2000,
+  "msisdn": "0837654321"
+ },
+ {
+  "language": "nr",
+  "id": "data-want",
+  "text": "ngifuna idata bundle boss, ngiphelelwe yi data",
+  "expectAction": "BUY_DATA",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nr",
+  "id": "electricity-200",
+  "text": "ngicela ugezi we R200 prepaid, imitha ngu 01234567890",
+  "expectAction": "BUY_ELECTRICITY",
+  "amountCents": 20000,
+  "msisdn": null
+ },
+ {
+  "language": "nr",
+  "id": "send-money",
+  "text": "ngicela uthumele imali engu R50 ku 0841234567",
+  "expectAction": "SEND_VOUCHER",
+  "amountCents": 5000,
+  "msisdn": "0841234567"
+ },
+ {
+  "language": "nr",
+  "id": "redeem-voucher",
+  "text": "ngithenge i Blu voucher evinkilini, ngifuna ukuyifaka ewalletini",
+  "expectAction": "REDEEM_VOUCHER",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nr",
+  "id": "help",
+  "text": "le service yenzani kanti? isebenza njani",
+  "expectAction": "HELP",
+  "amountCents": null,
+  "msisdn": null
+ },
+ {
+  "language": "nr",
+  "id": "greeting",
+  "text": "lotjha mngani unjani",
+  "expectAction": "NONE",
+  "amountCents": null,
+  "msisdn": null
+ }
+]

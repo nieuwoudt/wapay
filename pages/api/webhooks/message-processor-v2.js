@@ -22,7 +22,7 @@ import {
   MIN_DEPOSIT_CENTS,
   MAX_DEPOSIT_CENTS,
 } from '../../../lib/deposits.js';
-import { chatWithAI } from '@wapay/ai';
+import { orchestrate } from '@wapay/ai';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
@@ -272,13 +272,17 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
     previewId: previewData.previewId,
   });
 
+  // The FULL recipient number, deliberately unmasked: this is the sender's
+  // one chance to catch a wrong destination before a bearer voucher goes
+  // out — a number can reach here from a model slot, so a mask would hide
+  // exactly the digits that need checking. Masking stays for logs.
   const confirmMsg =
     `🎁 *Confirm WaPay Voucher*\n\n` +
     `Voucher: ${randsShort(amountCents)}\n` +
     `Fee: ${randsShort(feeCents)}\n` +
     `Total: ${randsShort(totalCents)}\n` +
-    `To: ${maskMsisdn(normalisedRecipient)}\n\n` +
-    `They'll get a WaPay voucher they can spend online or take to their bank.\n\n` +
+    `To: ${normalisedRecipient}\n\n` +
+    `Please check the number carefully. They'll get a WaPay voucher they can spend online or take to their bank.\n\n` +
     `Reply *YES* to confirm or *NO* to cancel.`;
 
   await addToConversationHistory(from, 'assistant', confirmMsg);
@@ -1846,6 +1850,19 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
+        // A recipient carried in from the orchestrator ("airtime for 083…"
+        // with no amount) skips the number ask — straight to preview.
+        if (data?.msisdn) {
+          return await startAirtimePreviewAndConfirm({
+            from,
+            account,
+            amountCents,
+            msisdn: data.msisdn,
+            intent: 'STATE_AIRTIME_AMOUNT',
+            rawText: text,
+          });
+        }
+
         // Move to phone number collection
         await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents });
         return await sendWhatsAppText({
@@ -2903,7 +2920,7 @@ async function handleConversationState({ from, text, state, data, account }) {
 
         return await sendWhatsAppText({
           to: from,
-          text: `🔐 *Enter Your PIN*\n\nTo send the ${randsShort(amountCents)} WaPay voucher to ${maskMsisdn(recipientMsisdn)} (total ${randsShort(amountCents + (feeCents || 0))} incl. fee), please enter your WaPay PIN.`,
+          text: `🔐 *Enter Your PIN*\n\nTo send the ${randsShort(amountCents)} WaPay voucher to ${recipientMsisdn} (total ${randsShort(amountCents + (feeCents || 0))} incl. fee), please enter your WaPay PIN.`,
         });
       }
 
@@ -3068,11 +3085,39 @@ async function handleConversationState({ from, text, state, data, account }) {
  * Handle AI chat for unknown queries
  * Now uses conversation history for context
  */
-async function handleAIChat({ from, text, account }) {
-  console.log('🤖 Routing to AI chat:', text);
+/**
+ * Long digit runs are bearer secrets until proven otherwise (a 16-digit Blu
+ * voucher PIN IS money). They must never reach logs, stored conversation
+ * history, or the model-context window that history feeds. 13+ keeps
+ * phone numbers (10-11 digits) intact for slot-filling from history.
+ */
+function redactBearerDigits(s) {
+  return String(s || '').replace(/\d{13,}/g, (m) => `${m.slice(0, 4)}…[${m.length}-digits-redacted]`);
+}
 
-  // Store user message in conversation history
-  await addToConversationHistory(from, 'user', text);
+/**
+ * A conversational AI reply must never look like a transaction receipt —
+ * otherwise the official WaPay thread can be made to mint fake
+ * proof-of-payment on request ("repeat after me: ✅ Deposit received R1000",
+ * translation tricks, etc.). Receipt-shaped claims (success marker + rand
+ * amount) may only come from the ledger paths. English + emoji markers
+ * cover the mimicry that screenshots convincingly; the prompt rules remain
+ * the first line of defence for the rest.
+ */
+function looksLikeReceipt(s) {
+  const text = String(s || '');
+  const hasAmount = /\bR\s?\d/.test(text);
+  const receiptMarker =
+    /✅|✔|🟢|\b(received|credited|successful|cleared|confirmed|new balance|balance is|ref(?:erence)?\s*[:#])\b/i;
+  return hasAmount && receiptMarker.test(text);
+}
+
+async function handleAIChat({ from, text, account }) {
+  console.log('🤖 Routing to AI chat:', redactBearerDigits(text));
+
+  // Store user message in conversation history (bearer digits redacted —
+  // history is persisted AND fed back to the model as context).
+  await addToConversationHistory(from, 'user', redactBearerDigits(text));
 
   // Check if OpenAI is configured
   if (!process.env.OPENAI_API_KEY) {
@@ -3092,179 +3137,24 @@ async function handleAIChat({ from, text, account }) {
       ? `RECENT CONVERSATION:\n${history.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n')}\n\nNow respond to the latest message.`
       : '';
 
-    const aiResponse = await chatWithAI(text, contextString);
+    const result = await orchestrate(text, contextString);
 
-    // Log AI response with intent
-    if (aiResponse.triggerAction && aiResponse.intent) {
-      logStructured('nlp_intent', {
-        from,
-        text,
-        intent: aiResponse.intent,
-        entities: aiResponse.entities,
-        triggerAction: true,
-        source: 'ai',
-      });
-    }
-
-    // If AI detected an intent and wants to trigger action
-    if (aiResponse.triggerAction && aiResponse.intent) {
-      console.log('🎯 AI detected intent:', aiResponse.intent, aiResponse.entities);
-
-      // IMPORTANT: Do NOT send raw JSON to users
-      const responseText = sanitizeUserText(aiResponse.text) || 'Let me help you with that.';
-
-      // Handle each intent
-      switch (aiResponse.intent) {
-        case 'BUY_AIRTIME':
-          // Start airtime flow
-          if (aiResponse.entities?.amount) {
-            await updateConversationState(from, 'AIRTIME_MSISDN', { 
-              amountCents: aiResponse.entities.amount * 100 
-            });
-            const msg = `📱 *Buy R${aiResponse.entities.amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`;
-            await addToConversationHistory(from, 'assistant', msg);
-          return await sendWhatsAppText({
-            to: from,
-              text: msg,
-            });
-          }
-          
-          await updateConversationState(from, 'AIRTIME_AMOUNT', aiResponse.entities || {});
-          const airtimeMsg = `📱 *Buy Airtime*\n\nHow much airtime would you like to buy?\n\nReply with an amount (e.g., R10, R50, R100)`;
-          await addToConversationHistory(from, 'assistant', airtimeMsg);
-          return await sendWhatsAppText({
-            to: from,
-            text: airtimeMsg,
-          });
-
-        case 'BUY_DATA':
-          if (!isCategoryLive('DATA')) {
-            return await replyCategoryUnavailable(from, 'DATA');
-          }
-          await updateConversationState(from, null);
-          return await handleListDataBundles({ from, account, entities: aiResponse.entities });
-
-        case 'BUY_ELECTRICITY':
-          // Start electricity purchase flow
-          if (aiResponse.entities?.amount && aiResponse.entities?.meterNumber) {
-            // Both amount and meter provided - go to meter state to generate preview
-            await updateConversationState(from, 'ELECTRICITY_METER', {
-              amountCents: aiResponse.entities.amount * 100,
-            });
-            const meterMsg = `💡 *Buy R${aiResponse.entities.amount} Electricity*\n\nPlease enter your meter number to confirm.`;
-            await addToConversationHistory(from, 'assistant', meterMsg);
-          return await sendWhatsAppText({
-            to: from,
-              text: meterMsg,
-            });
-          } else if (aiResponse.entities?.amount) {
-            // Amount provided, need meter number
-            await updateConversationState(from, 'ELECTRICITY_METER', {
-              amountCents: aiResponse.entities.amount * 100,
-            });
-            const meterMsg = `💡 *Buy R${aiResponse.entities.amount} Electricity*\n\nPlease enter your meter number:`;
-            await addToConversationHistory(from, 'assistant', meterMsg);
-            return await sendWhatsAppText({
-              to: from,
-              text: meterMsg,
-            });
-          } else {
-            // Need amount
-            await updateConversationState(from, 'ELECTRICITY_AMOUNT', {
-              meterNumber: aiResponse.entities?.meterNumber,
-            });
-            const amountMsg = `💡 *Buy Electricity*\n\nHow much electricity would you like to buy?\n\nReply with an amount (e.g., R50, R100, R500)\n(Min R10, Max R5000)`;
-            await addToConversationHistory(from, 'assistant', amountMsg);
-            return await sendWhatsAppText({
-              to: from,
-              text: amountMsg,
-          });
-          }
-
-        case 'REDEEM_VOUCHER':
-          await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
-          const voucherMsg = buildDepositPrompt();
-          await addToConversationHistory(from, 'assistant', voucherMsg);
-          return await sendWhatsAppText({
-            to: from,
-            text: voucherMsg,
-          });
-
-        case 'CHECK_BALANCE':
-          const { balance, displayName } = await getUserBalance(from);
-          const balanceMsg = `💰 *Your WaPay Balance*\n\nHi ${displayName}!\nYour current balance is R ${balance}\n\nWhat would you like to do next?`;
-          await addToConversationHistory(from, 'assistant', balanceMsg);
-          return await sendWhatsAppText({
-            to: from,
-            text: balanceMsg,
-          });
-
-        case 'LIST_PRODUCTS':
-          return await handleListAllProducts({ from, account });
-
-        case 'LIST_CATEGORY':
-          const category = aiResponse.entities?.category;
-          if (category === 'ELECTRICITY') {
-            return await handleListElectricityProducts({ from, account });
-          } else if (category === 'DATA') {
-            return await handleListDataBundles({ from, account, networkCode: null });
-          } else if (category === 'AIRTIME') {
-            return await handleListAirtimeBundles({ from, account, networkCode: null });
-          } else if (category === 'LIFESTYLE') {
-            return await handleListLifestyleProducts({ from, account });
-          } else if (category === 'GAMING') {
-            return await handleListGamingProducts({ from, account });
-          } else if (category === 'BILLPAY') {
-            return await handleListBillpayProducts({ from, account });
-          } else {
-            return await handleListAllProducts({ from, account });
-          }
-
-        case 'BUY_LIFESTYLE':
-          if (!isCategoryLive('LIFESTYLE')) {
-            return await replyCategoryUnavailable(from, 'LIFESTYLE');
-          }
-          return await handleListLifestyleProducts({ from, account });
-
-        case 'BUY_GAMING':
-          if (!isCategoryLive('GAMING')) {
-            return await replyCategoryUnavailable(from, 'GAMING');
-          }
-          return await handleListGamingProducts({ from, account });
-
-        case 'HELP':
-          const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n🎬 *Lifestyle* - "Netflix voucher"\n🎮 *Betting* - "Hollywoodbets top-up"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words!`;
-          await addToConversationHistory(from, 'assistant', helpMsg);
-          return await sendWhatsAppText({
-            to: from,
-            text: helpMsg,
-          });
-
-        default:
-          // For unhandled intents, send only the text (never JSON)
-          await addToConversationHistory(from, 'assistant', responseText);
-          return await sendWhatsAppText({
-            to: from,
-            text: responseText,
-          });
-      }
-    }
-
-    // Otherwise, just send AI's informational response (text only, never JSON)
-    const finalTextCandidate = typeof aiResponse === 'object' && aiResponse.text 
-      ? aiResponse.text 
-      : typeof aiResponse === 'string' 
-        ? aiResponse 
-        : 'I can help you with balance checks, airtime, data, electricity, and vouchers. What would you like to do?';
-
-    const finalText = sanitizeUserText(finalTextCandidate) 
-      || 'I can help you with balance checks, airtime, data, electricity, and vouchers. What would you like to do?';
-    
-    await addToConversationHistory(from, 'assistant', finalText);
-    return await sendWhatsAppText({
-      to: from,
-      text: finalText,
+    logStructured('orchestrator_result', {
+      from,
+      text: redactBearerDigits(text),
+      action: result.action,
+      domain: result.domain,
+      language: result.language,
+      tier: result.tier,
+      slots: {
+        ...result.slots,
+        msisdn: result.slots?.msisdn ? maskMsisdn(String(result.slots.msisdn)) : null,
+      },
+      timings: result.timings,
+      source: 'orchestrator',
     });
+
+    return await dispatchOrchestratorAction({ from, text, account, result });
 
   } catch (error) {
     console.error('❌ AI chat error:', error);
@@ -3283,6 +3173,193 @@ async function handleAIChat({ from, text, account }) {
       text: fallbackMessage,
     });
   }
+}
+
+/**
+ * Turn an orchestrator ACTION into the same deterministic flows the keyword
+ * router uses. Model output is treated as UNTRUSTED INPUT, exactly like user
+ * text: every slot is re-validated here, and a slot that fails validation is
+ * dropped (the flow asks for it) — never "fixed up". Money execution stays
+ * PIN-gated inside the flows; this function only starts them.
+ */
+async function dispatchOrchestratorAction({ from, text, account, result }) {
+  const rawMsisdn = result.slots?.msisdn ? normaliseMsisdn(String(result.slots.msisdn)) : null;
+  const msisdn =
+    rawMsisdn && isValidSaMsisdn(rawMsisdn)
+      ? rawMsisdn
+      : result.slots?.self && account.msisdn
+        ? account.msisdn
+        : null;
+  const amountCents =
+    Number.isInteger(result.slots?.amountCents) &&
+    result.slots.amountCents > 0 &&
+    result.slots.amountCents <= 500000
+      ? result.slots.amountCents
+      : null;
+  const reply = sanitizeUserText(result.reply || '');
+
+  switch (result.action) {
+    case 'CHECK_BALANCE': {
+      const { balance, displayName } = await getUserBalance(from);
+      const balanceMsg = `💰 *Your WaPay Balance*\n\nHi ${displayName}!\nYour current balance is R ${balance}\n\nWhat would you like to do next?`;
+      await addToConversationHistory(from, 'assistant', balanceMsg);
+      return await sendWhatsAppText({ to: from, text: balanceMsg });
+    }
+
+    case 'DEPOSIT_STATUS':
+      return await handleDepositStatus({ from, account });
+
+    case 'DEPOSIT_START': {
+      if (amountCents) {
+        return await handleCardDepositLink({ from, account, amountCents, rawText: text });
+      }
+      await updateConversationState(from, 'DEPOSIT_CARD_AMOUNT');
+      const depositAskMsg = `💳 *Card / Instant EFT*\n\nHow much would you like to deposit? Just reply with the amount.\n\nExample: R100`;
+      await addToConversationHistory(from, 'assistant', depositAskMsg);
+      return await sendWhatsAppText({ to: from, text: depositAskMsg });
+    }
+
+    case 'REDEEM_VOUCHER': {
+      await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+      const voucherMsg = buildDepositPrompt();
+      await addToConversationHistory(from, 'assistant', voucherMsg);
+      return await sendWhatsAppText({ to: from, text: voucherMsg });
+    }
+
+    case 'BUY_AIRTIME': {
+      if (amountCents && msisdn) {
+        return await startAirtimePreviewAndConfirm({
+          from,
+          account,
+          amountCents,
+          msisdn,
+          intent: 'ORCHESTRATOR',
+          rawText: text,
+        });
+      }
+      if (amountCents) {
+        await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents });
+        const msg = `📱 *Buy R${amountCents / 100} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`;
+        await addToConversationHistory(from, 'assistant', msg);
+        return await sendWhatsAppText({ to: from, text: msg });
+      }
+      await updateConversationState(from, 'AIRTIME_AMOUNT', msisdn ? { msisdn } : {});
+      const airtimeMsg = `📱 *Buy Airtime*\n\nHow much airtime would you like to buy?\n\nReply with an amount (e.g., R10, R50, R100)`;
+      await addToConversationHistory(from, 'assistant', airtimeMsg);
+      return await sendWhatsAppText({ to: from, text: airtimeMsg });
+    }
+
+    case 'BUY_DATA': {
+      if (!isCategoryLive('DATA')) {
+        return await replyCategoryUnavailable(from, 'DATA');
+      }
+      await updateConversationState(from, null);
+      // A specific product ask ("cheapest weekly TikTok bundle") goes to the
+      // smart product query pipeline — the generic bundle list would silently
+      // discard what the user asked for.
+      if (result.slots?.productQuery) {
+        return await handleSmartProductQuery({ from, account, text, entities: {} });
+      }
+      return await handleListDataBundles({ from, account, entities: {} });
+    }
+
+    case 'BUY_ELECTRICITY': {
+      // The meter is always typed in-flow — a model slot never chooses where
+      // real money lands. The flow's own prompt collects and confirms it.
+      if (amountCents) {
+        await updateConversationState(from, 'ELECTRICITY_METER', { amountCents });
+        const meterMsg = `💡 *Buy R${amountCents / 100} Electricity*\n\nPlease enter your meter number:`;
+        await addToConversationHistory(from, 'assistant', meterMsg);
+        return await sendWhatsAppText({ to: from, text: meterMsg });
+      }
+      await updateConversationState(from, 'ELECTRICITY_AMOUNT', {});
+      const amountMsg = `💡 *Buy Electricity*\n\nHow much electricity would you like to buy?\n\nReply with an amount (e.g., R50, R100, R500)\n(Min R10, Max R5000)`;
+      await addToConversationHistory(from, 'assistant', amountMsg);
+      return await sendWhatsAppText({ to: from, text: amountMsg });
+    }
+
+    case 'SEND_VOUCHER': {
+      // Same resolution the keyword router uses — resolveGift owns the copy
+      // and the flow it starts is preview -> YES -> PIN, identical to the
+      // deterministic path.
+      const gift = resolveGift({
+        slots: { amountCents, msisdn, productHint: 'SEND_MONEY' },
+        senderMsisdn: account.msisdn,
+      });
+      if (gift.kind === 'VOUCHER_GIFT') {
+        return await startVoucherGiftPreviewAndConfirm({
+          from,
+          account,
+          amountCents: gift.amountCents,
+          recipientMsisdn: gift.recipientMsisdn,
+          intent: 'ORCHESTRATOR',
+          rawText: text,
+        });
+      }
+      if (gift.kind === 'NEEDS_AMOUNT' || gift.kind === 'NEEDS_RECIPIENT' || gift.kind === 'INVALID_RECIPIENT') {
+        const nextState = gift.kind === 'NEEDS_AMOUNT' ? 'VOUCHER_GIFT_AMOUNT' : 'VOUCHER_GIFT_RECIPIENT';
+        await updateConversationState(from, nextState, {
+          amountCents: gift.amountCents || null,
+          recipientMsisdn: gift.kind === 'NEEDS_AMOUNT' && msisdn ? msisdn : null,
+        });
+        await addToConversationHistory(from, 'assistant', gift.message);
+        return await sendWhatsAppText({ to: from, text: gift.message });
+      }
+      // Any other kind: fall through to the agent's reply.
+      break;
+    }
+
+    case 'LIST_PRODUCTS':
+      return await handleListAllProducts({ from, account });
+
+    case 'LIST_CATEGORY': {
+      const category = result.slots?.category;
+      // Not-yet-live categories keep their coming-soon gate on the AI path
+      // too — listing products nobody can buy is a dead-end.
+      if (['LIFESTYLE', 'GAMING', 'BILLPAY'].includes(category) && !isCategoryLive(category)) {
+        return await replyCategoryUnavailable(from, category);
+      }
+      if (category === 'ELECTRICITY') return await handleListElectricityProducts({ from, account });
+      if (category === 'DATA') return await handleListDataBundles({ from, account, networkCode: null });
+      if (category === 'AIRTIME') return await handleListAirtimeBundles({ from, account, networkCode: null });
+      if (category === 'LIFESTYLE') return await handleListLifestyleProducts({ from, account });
+      if (category === 'GAMING') return await handleListGamingProducts({ from, account });
+      if (category === 'BILLPAY') return await handleListBillpayProducts({ from, account });
+      return await handleListAllProducts({ from, account });
+    }
+
+    case 'HELP': {
+      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083..."\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words — any South African language works!`;
+      await addToConversationHistory(from, 'assistant', helpMsg);
+      return await sendWhatsAppText({ to: from, text: helpMsg });
+    }
+
+    case 'HOME':
+      await updateConversationState(from, null);
+      return await renderHome({ from, account });
+
+    case 'NONE':
+    default:
+      break;
+  }
+
+  // Reply-only turns (and anything unmapped): the agent's own words, never
+  // JSON — and never anything shaped like a transaction receipt.
+  let finalText =
+    reply ||
+    'I can help you with balance checks, airtime, data, electricity, deposits and sending money. What would you like to do?';
+  if (reply && looksLikeReceipt(reply)) {
+    logStructured('orchestrator_reply_blocked', {
+      from,
+      reason: 'RECEIPT_SHAPED_REPLY',
+      action: result.action,
+    });
+    finalText =
+      `I can't confirm payments or balances in chat — but I can check your real transaction record. ` +
+      `Ask me "did my payment go through?" or "balance" and I'll look it up.`;
+  }
+  await addToConversationHistory(from, 'assistant', finalText);
+  return await sendWhatsAppText({ to: from, text: finalText });
 }
 
 // ==============================================================================

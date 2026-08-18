@@ -2,7 +2,7 @@
 
 *What the platform can actually do today. Sourced from the code (`lib/vas-config.js`, `pages/api/*`, `packages/*`) and the build tracker. Last verified 2026-08-18. Update this file when a capability changes state — it ships with the code and is the single honest answer to "what works?".*
 
-Deployed baseline: commit `6096585` (webhook await-before-ACK fix). Bot confirmed replying end-to-end by the founder on 2026-08-18.
+Deployed baseline: 2026-08-18 evening (deposit UX + deposit-status + orchestration engine). Bot confirmed replying end-to-end by the founder on 2026-08-18.
 
 ---
 
@@ -11,7 +11,7 @@ Deployed baseline: commit `6096585` (webhook await-before-ACK fix). Bot confirme
 | Capability | State | Notes |
 |---|---|---|
 | Onboarding (new number → wallet) | **Live** | State machine S1→S4 in `packages/auth/src/onboarding.ts`: OTP verify → PIN set → consent template → SPEND wallet created. Re-onboarding verified on the new engine 2026-08-18. |
-| AI chat (free text) | **Live** | Single `chatWithAI` call (`@wapay/ai`, gpt-4o). Orchestrator + category-agent architecture is planned (prototype on gpt-4o/gpt-4o-mini, later Claude), not built. |
+| AI chat (free text) | **Live** | Two-tier orchestration engine (`@wapay/ai` `orchestrate`): gpt-4o orchestrator (language + domain + fast path) → gpt-4o-mini category agents, strict structured outputs, temp 0. All 11 official languages + typo tolerance — 132-case golden corpus evals ≥99% (`scripts/eval-orchestrator.mjs`). Actions dispatch onto the deterministic flows with slots re-validated (`dispatchOrchestratorAction`); the AI proposes, never executes. Models env-tunable for the Claude migration. |
 | Slot parsing | **Live** | `lib/slot-parser.js`. Invariant: an explicit product ("send R20 **airtime** to…") beats a bare send-to. Covered by `tests/gifting-routing.test.mjs`. |
 | Gifting (airtime/data to another number) | **Live** | `lib/gifting.js`; `GIFTABLE_PRODUCTS = {AIRTIME, DATA}`. Gift resolves gift/self/blocked; bare cash-send ("send R30 to 084…") is refused and redirected to gifting (regulatory guard — WaPay never does money transfer). Recipient notification: approved template first, text fallback, fire-and-forget. Caveats: notification to *new* numbers needs the `wapay_voucher_received` template approved in the WABA; DATA gifts vend but do not notify yet. |
 | Voucher redemption (load via Blu voucher) | **Live** | In `message-processor-v2.js`: PIN-hash-derived idemKey, NET amount credited, honest receipt. |
@@ -67,9 +67,11 @@ Gates live in `lib/vas-config.js` (`VAS_LIVE_*` env overrides; per-user `VAS_ALL
 - `hybridProductSearch` (`lib/vas-search.js`) is semantic-first with automatic **lexical fallback** to `rankProducts` (token/app-tag/period/value scoring) when embeddings or the API are unavailable.
 - Caveats: the chat free-text path still uses lexical `searchProducts` — wiring `hybridProductSearch` into the message processor is next in queue. The daily cron (`pages/api/cron/daily-vas-sync.js`) exceeds Vercel's 60s function budget and needs restructuring; the embeddings backfill was run locally instead.
 
-## 7. In build: voucher gift ("send money to spend online")
+## 7. Money in / money out
 
-The current priority feature. "Send R50 voucher to 084…" issues a real voucher to the recipient:
+- **PayFast card/EFT deposit — LIVE**: "deposit R100" → preamble + tappable **Pay now** CTA button (raw-link fallback) → signed PayFast checkout → 5-step-verified ITN → idempotent ledger credit at FACE → WhatsApp confirmation with new balance. Caps R10–R3000. First real deposit processed 2026-08-18 (R20, the ITN source-IP fix shipped after it).
+- **Deposit status — deterministic**: "did my payment go through" is answered from the intent table + ledger (`handleDepositStatus`), never by the AI.
+- **Voucher gift ("send money by number") — BUILT, blocked on OTT float + Reseller signature**: "Send R50 to 084…" issues a real voucher to the recipient:
 
 `reserveHold(SPEND)` → `OttClient.getVoucher` (deterministic uniqueReference from the idemKey) → `confirmVoucher` → `settleHold(buildSpend, category VOUCHER, rail OTT)` → PIN delivered to the **recipient** via template; sender gets a receipt. Timeout → `checkVoucher` then confirm/reject; delivery-impossible → `rejectVoucher` + `releaseHold`.
 

@@ -1,0 +1,36 @@
+Subject: OTT go-live — four items blocking our first voucher transaction
+
+Hi Ritesh,
+
+Our voucher-send feature is built, tested and deployed — the only thing
+standing between us and our first live transaction is on the OTT side.
+Four items, in priority order:
+
+1. TEST FLOAT — our sandbox account (WAPAYVIT) still shows R0.00
+   (checked today via GetBalance). Even a R100 test float lets us run
+   our first end-to-end voucher issue this week. This is the single
+   most urgent item.
+
+2. RESELLER (ISSUING) AGREEMENT — we're ready to sign. Please send the
+   final version / countersigned copy so issuing can move beyond sandbox.
+
+3. MERCHANT AGREEMENT — same status: ready to sign. This unlocks OTT
+   voucher redemption as a deposit option in WaPay (more volume for the
+   OTT network from day one).
+
+4. FORMAL CONFIRMATION on cash-out: can a holder of an OTT voucher
+   redeem it for cash through OTT's own payout/collect rails (bank
+   payout via PayShap, or cash at retail partners)? We need this in
+   writing for our counsel — it determines how we describe the product.
+   If yes, WaPay never touches payout and everything money-out runs
+   under OTT's licence, which makes OTT the exclusive money-out rail in
+   our stack.
+
+On rates: we have 4% + VAT noted for issuing — if there's a signed rate
+card to attach to the Reseller agreement, please include it.
+
+We can do a joint test call any day this week — the moment float lands
+we can issue a voucher live while you watch.
+
+Thanks,
+Nieuwoudt
