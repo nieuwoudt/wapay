@@ -1556,8 +1556,10 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
       amountCents,
       mPaymentId: paymentId,
       itemName: 'WaPay top-up',
-      returnUrl: base,
-      cancelUrl: base,
+      // wa.me deep link reopens the WaPay chat — returning to the bare API
+      // landing page strands the user outside WhatsApp (user-reported).
+      returnUrl: 'https://wa.me/27760497624',
+      cancelUrl: 'https://wa.me/27760497624',
       notifyUrl: `${base}/api/payfast/itn`,
     });
   } catch (error) {

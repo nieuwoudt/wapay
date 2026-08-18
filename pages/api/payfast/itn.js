@@ -116,6 +116,11 @@ export default async function handler(req, res) {
     // fails every real payment with INVALID_SIGNATURE while sandbox tests
     // without a passphrase still pass — an easy silent breakage.
     passphrase: process.env.PAYFAST_PASSPHRASE || undefined,
+    // PayFast's modern network (payment.payfast.io) sends ITNs from ranges
+    // beyond the documented 2019-era CIDRs (observed live: 102.216.36.1,
+    // 2026-08-21 — a real R20 was rejected). Signature + server POST-back are
+    // the strong checks, so IP is warn-only unless explicitly enforced.
+    enforceSourceIp: process.env.PAYFAST_ENFORCE_SOURCE_IP === 'true',
   });
 
   if (!verification.ok) {

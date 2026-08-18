@@ -125,7 +125,7 @@ describe('IP allowlist membership math', () => {
   });
 
   it('isPayfastIp covers both published ranges and strips ::ffff:', () => {
-    expect(PAYFAST_ITN_CIDRS).toEqual(['197.97.145.144/28', '41.74.179.192/27']);
+    expect(PAYFAST_ITN_CIDRS).toEqual(['197.97.145.144/28', '41.74.179.192/27', '102.216.36.0/24']);
     expect(isPayfastIp('197.97.145.150')).toBe(true);
     expect(isPayfastIp('41.74.179.200')).toBe(true);
     expect(isPayfastIp('::ffff:197.97.145.150')).toBe(true);

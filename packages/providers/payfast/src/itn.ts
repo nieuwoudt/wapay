@@ -23,6 +23,9 @@ import { centsToRand } from './checkout.js';
 export const PAYFAST_ITN_CIDRS: readonly string[] = [
   '197.97.145.144/28',
   '41.74.179.192/27',
+  // PayFast's modern network (payment.payfast.io) — observed live 2026-08-21:
+  // a real R20's ITN arrived from 102.216.36.1, outside the documented ranges.
+  '102.216.36.0/24',
 ];
 
 /** PayFast server-side validation endpoints (step 5 POST-back). */
