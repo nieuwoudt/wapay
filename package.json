@@ -26,6 +26,7 @@
     "@wapay/ledger": "workspace:*",
     "@wapay/nlp": "workspace:*",
     "@wapay/providers-blu": "workspace:*",
+    "@wapay/providers-ott": "workspace:*",
     "@wapay/providers-yoyo": "workspace:*",
     "@wapay/utils": "workspace:*",
     "@wapay/whatsapp": "workspace:*",

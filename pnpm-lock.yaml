@@ -29,6 +29,9 @@ importers:
       '@wapay/providers-blu':
         specifier: workspace:*
         version: link:packages/providers/blu
+      '@wapay/providers-ott':
+        specifier: workspace:*
+        version: link:packages/providers/ott
       '@wapay/providers-yoyo':
         specifier: workspace:*
         version: link:packages/providers/yoyo
@@ -183,6 +186,19 @@ importers:
       '@hey-api/openapi-ts':
         specifier: ^0.45.0
         version: 0.45.1(typescript@5.9.3)
+      vitest:
+        specifier: ^1.6.0
+        version: 1.6.1(@types/node@20.19.21)
+
+  packages/providers/ott:
+    dependencies:
+      '@wapay/utils':
+        specifier: workspace:*
+        version: link:../../utils
+      undici:
+        specifier: ^6.19.8
+        version: 6.22.0
+    devDependencies:
       vitest:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.21)
