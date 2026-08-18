@@ -236,7 +236,10 @@ export class BluVasExtendedClient {
 
   async getDataProducts(vendorId?: string): Promise<DataProduct[]> {
     const query = vendorId ? `?vendorId=${encodeURIComponent(vendorId)}` : '';
-    const url = `${this.base}/mobile/data/products${query}`;
+    // Blu deprecated /mobile/data/products; /mobile/bundle/products is the
+    // working catalogue endpoint (same fix vas.ts got in fa457a5 — this
+    // client was missed, which silently broke the nightly catalog sync).
+    const url = `${this.base}/mobile/bundle/products${query}`;
 
     return this.callWithRetry(async () => {
       const res = await request(url, {
