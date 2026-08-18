@@ -8,7 +8,8 @@
 import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed, wasErrorSent, markErrorSent } from './user-manager.js';
 import { sendWhatsAppText, sendWhatsAppTemplate } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
-import { resolveGift, buildRecipientNotification, maskMsisdn } from '../../../lib/gifting.js';
+import { resolveGift, buildRecipientNotification, buildVoucherClaimMessage, maskMsisdn } from '../../../lib/gifting.js';
+import { hasPendingGifts, claimPendingGifts } from '../../../lib/pending-gifts.js';
 import crypto from 'crypto';
 import { BluClient, BluVasClient } from '@wapay/providers-blu';
 import { buildLoad, RAIL } from '../../../lib/ledger-core.js';
@@ -200,6 +201,80 @@ async function startAirtimePreviewAndConfirm({ from, account, amountCents, msisd
       `Number: ${msisdn} (${vendorName})\n\n` +
       `Reply *YES* to confirm or *NO* to cancel.`,
   });
+}
+
+/** Rand display from integer cents: R53, or R53.50 when there are cents. */
+function randsShort(cents) {
+  return `R${((cents || 0) / 100).toFixed(2).replace(/\.00$/, '')}`;
+}
+
+/**
+ * Voucher gift ("Send R50 to 084...") — preview then confirm, mirroring
+ * startAirtimePreviewAndConfirm: self-HTTP to /api/vas/voucher/preview, park
+ * the previewId in VOUCHER_GIFT_CONFIRM state, and ask for YES/NO. The PIN
+ * step (VOUCHER_GIFT_PIN) executes against the same previewId.
+ */
+async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, recipientMsisdn, intent = 'VOUCHER_GIFT', rawText = '' }) {
+  const previewUrl = apiUrl('/api/vas/voucher/preview');
+  logInternalFetchCall({ url: previewUrl, path: '/api/vas/voucher/preview' });
+
+  const previewRes = await fetch(previewUrl, {
+    method: 'POST',
+    headers: withInternalHeaders(),
+    body: JSON.stringify({
+      accountId: account.id,
+      amountCents,
+      recipientMsisdn,
+    }),
+  });
+
+  await logInternalFetchResponse({ url: previewUrl, res: previewRes });
+
+  const previewData = previewRes.headers.get('content-type')?.includes('application/json')
+    ? await previewRes.json()
+    : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
+
+  if (!previewData.ok) {
+    await updateConversationState(from, null);
+    return await sendWhatsAppText({
+      to: from,
+      text: `❌ ${previewData.message || 'Could not process the voucher gift.'}\n\nPlease try again later.`,
+    });
+  }
+
+  const feeCents = previewData.feeCents;
+  const totalCents = previewData.totalCents;
+  const normalisedRecipient = previewData.recipientMsisdn || normaliseMsisdn(recipientMsisdn);
+
+  logSlotFill({
+    intent,
+    text: rawText,
+    slots: { amountCents, msisdn: normalisedRecipient, productHint: 'VOUCHER' },
+    routeDecision: 'VOUCHER_GIFT_CONFIRM',
+    missing: [],
+    from,
+    accountId: account.id,
+  });
+
+  await updateConversationState(from, 'VOUCHER_GIFT_CONFIRM', {
+    amountCents,
+    feeCents,
+    totalCents,
+    recipientMsisdn: normalisedRecipient,
+    previewId: previewData.previewId,
+  });
+
+  const confirmMsg =
+    `🎁 *Confirm WaPay Voucher*\n\n` +
+    `Voucher: ${randsShort(amountCents)}\n` +
+    `Fee: ${randsShort(feeCents)}\n` +
+    `Total: ${randsShort(totalCents)}\n` +
+    `To: ${maskMsisdn(normalisedRecipient)}\n\n` +
+    `They'll get a WaPay voucher they can spend online or take to their bank.\n\n` +
+    `Reply *YES* to confirm or *NO* to cancel.`;
+
+  await addToConversationHistory(from, 'assistant', confirmMsg);
+  return await sendWhatsAppText({ to: from, text: confirmMsg });
 }
 
 function logInternalFetchCall({ url, path, method = 'POST' }) {
@@ -659,6 +734,55 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
 async function handlePostOnboarding({ account, from, text }) {
   console.log('💬 Post-onboarding message:', text);
 
+  // ==========================================================================
+  // VOUCHER GIFT CLAIM DELIVERY — before any routing. If someone sent this
+  // number a WaPay voucher, hand it over now, then continue as normal.
+  // claimPendingGifts marks each row DELIVERED atomically (ISSUED -> DELIVERED
+  // guard), so a crash or a concurrent webhook can never double-deliver, and a
+  // failure here must never break message routing.
+  // The claim message carries the FULL voucher PIN by design: send it via
+  // WhatsApp only — never log it and never store it in conversation history.
+  // ==========================================================================
+  try {
+    if (await hasPendingGifts({ recipientMsisdn: account.msisdn })) {
+      const gifts = await claimPendingGifts({ recipientMsisdn: account.msisdn });
+      for (const gift of gifts) {
+        let senderName = null;
+        try {
+          const sender = await prisma.account.findUnique({ where: { id: gift.senderAccountId } });
+          senderName = sender?.displayName || null;
+        } catch (senderLookupError) {
+          // Name is cosmetic; the gift still gets delivered.
+        }
+
+        await sendWhatsAppText({
+          to: from,
+          text: buildVoucherClaimMessage({
+            senderName,
+            amountCents: gift.amountCents,
+            pin: gift.voucherPin,
+            serial: gift.voucherSerial,
+          }),
+        });
+
+        logStructured('voucher_gift_claim_delivered', {
+          from,
+          accountId: account.id,
+          giftId: gift.id,
+          amountCents: gift.amountCents,
+          rail: gift.rail,
+          recipientMasked: maskMsisdn(account.msisdn),
+        });
+      }
+    }
+  } catch (claimError) {
+    logStructured('voucher_gift_claim_failed', {
+      from,
+      accountId: account.id,
+      error: claimError?.message,
+    });
+  }
+
   // Check if user is in a conversation state (e.g., entering voucher PIN)
   const { state, data } = await getConversationState(from);
 
@@ -826,24 +950,54 @@ async function handlePostOnboarding({ account, from, text }) {
   }
 
   // Bare cash send ("Send R30 to 084...", "send money") — V1 has no
-  // person-to-person cash rail. Explicit intents keep priority (e.g. "load
+  // person-to-person cash rail. Instead the sender buys a WaPay VOUCHER (a
+  // GOODS voucher, OTT-issued) that the recipient can spend online or cash
+  // out via OTT's own rails. Explicit intents keep priority (e.g. "load
   // money via bank transfer" is still a deposit); only the would-be generic
-  // AI / remittance dead-end is replaced with the gifting redirect. The copy
-  // lives in resolveGift (CASH_SEND_UNSUPPORTED) so flow and tests share it.
+  // AI / remittance dead-end enters the voucher-gift flow. The copy lives in
+  // resolveGift (VOUCHER_GIFT + ask kinds) so flow and tests share it.
   if (
     slots?.productHint === 'SEND_MONEY' &&
     (detection.intent === 'AI_CHAT' || detection.intent === 'SMART_PRODUCT_QUERY')
   ) {
     const gift = resolveGift({ slots, senderMsisdn: account.msisdn });
-    if (gift.kind === 'CASH_SEND_UNSUPPORTED') {
+
+    if (gift.kind === 'VOUCHER_GIFT') {
       logSlotFill({
         intent: detection.intent,
         text,
         slots,
-        routeDecision: 'CASH_SEND_REDIRECT_GIFT',
+        routeDecision: 'VOUCHER_GIFT_PREVIEW_CONFIRM',
         missing: [],
         from,
         accountId: account.id,
+      });
+      return await startVoucherGiftPreviewAndConfirm({
+        from,
+        account,
+        amountCents: gift.amountCents,
+        recipientMsisdn: gift.recipientMsisdn,
+        intent: detection.intent,
+        rawText: text,
+      });
+    }
+
+    if (gift.kind === 'NEEDS_AMOUNT' || gift.kind === 'NEEDS_RECIPIENT' || gift.kind === 'INVALID_RECIPIENT') {
+      const nextState = gift.kind === 'NEEDS_AMOUNT' ? 'VOUCHER_GIFT_AMOUNT' : 'VOUCHER_GIFT_RECIPIENT';
+      logSlotFill({
+        intent: detection.intent,
+        text,
+        slots,
+        routeDecision: nextState,
+        missing: gift.kind === 'NEEDS_AMOUNT' ? ['amountCents'] : ['msisdn'],
+        from,
+        accountId: account.id,
+      });
+      await updateConversationState(from, nextState, {
+        amountCents: gift.amountCents || null,
+        // parseSlots only surfaces validated msisdns, so a NEEDS_AMOUNT ask
+        // can already carry the recipient forward.
+        recipientMsisdn: gift.kind === 'NEEDS_AMOUNT' && slots.msisdn ? slots.msisdn : null,
       });
       await addToConversationHistory(from, 'assistant', gift.message);
       return await sendWhatsAppText({ to: from, text: gift.message });
@@ -2231,6 +2385,333 @@ async function handleConversationState({ from, text, state, data, account }) {
           return await sendWhatsAppErrorOnce({
             to: from,
             errorKey: `${previewId || 'elec'}:SERVICE_UNAVAILABLE`,
+            text: `❌ Service temporarily unavailable. Please try again later.`,
+          });
+        }
+      }
+
+    // =================================================================
+    // VOUCHER GIFT FLOW ("Send R50 to 084...") — a GOODS voucher sale,
+    // never a money transfer. Mirrors the airtime confirm/PIN machine.
+    // =================================================================
+    case 'VOUCHER_GIFT_AMOUNT':
+      // User is entering the voucher amount
+      {
+        const normalized = text.trim().toLowerCase();
+
+        if (/^(cancel|stop|no|not now|later|reset|restart|start over|quit|exit|back)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          await sendWhatsAppText({ to: from, text: `👍 Voucher gift cancelled.` });
+          return await renderHome({ from, account });
+        }
+
+        // Slot-fill inside state: "R50" or "R50 to 0840012300" both work.
+        const filledSlots = parseSlots(text, { waId: from, accountId: account.id });
+        const amountCents = filledSlots.amountCents;
+        if (!amountCents) {
+          return await sendWhatsAppText({
+            to: from,
+            text: `Please enter a valid amount (e.g., R50, R100)\n\nReply "cancel" to stop.`,
+          });
+        }
+        if (amountCents < 1000 || amountCents > 100000) {
+          return await sendWhatsAppText({
+            to: from,
+            text: `Voucher amount must be between R10 and R1000.\n\nPlease enter a valid amount.`,
+          });
+        }
+
+        const knownRecipient = filledSlots.msisdn || data?.recipientMsisdn;
+        if (knownRecipient && isValidSaMsisdn(knownRecipient)) {
+          return await startVoucherGiftPreviewAndConfirm({
+            from,
+            account,
+            amountCents,
+            recipientMsisdn: normaliseMsisdn(knownRecipient),
+            intent: 'STATE_VOUCHER_GIFT_AMOUNT',
+            rawText: text,
+          });
+        }
+
+        await updateConversationState(from, 'VOUCHER_GIFT_RECIPIENT', { amountCents });
+        return await sendWhatsAppText({
+          to: from,
+          text: `🎁 *${randsShort(amountCents)} WaPay Voucher*\n\nWhich number should I send it to?\n\nReply with the recipient's cellphone number (e.g., 0781234567) or "cancel" to stop.`,
+        });
+      }
+
+    case 'VOUCHER_GIFT_RECIPIENT':
+      // User is entering the recipient's number
+      {
+        const normalized = text.trim().toLowerCase();
+
+        if (/^(cancel|stop|no|not now|later|reset|restart|start over|quit|exit|back)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          await sendWhatsAppText({ to: from, text: `👍 Voucher gift cancelled.` });
+          return await renderHome({ from, account });
+        }
+
+        const amountCents = data?.amountCents;
+        if (!amountCents) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ Session expired. Please start again, e.g. "send R50 to 0781234567".`,
+          });
+        }
+
+        // If the message doesn't look like a phone number at all, assume the
+        // user wants out (mirrors AIRTIME_MSISDN).
+        const digitsOnly = text.replace(/[^\d]/g, '');
+        if (digitsOnly.length < 8) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `I've cancelled the voucher gift. What else can I help you with?`,
+          });
+        }
+
+        const filledSlots = parseSlots(text, { waId: from, accountId: account.id });
+        const rawMsisdnInput = filledSlots.msisdn || text.trim();
+        const recipientMsisdn = normaliseMsisdn(rawMsisdnInput || '');
+
+        if (!isValidSaMsisdn(recipientMsisdn)) {
+          logStructured('msisdn_validation_failed', {
+            type: 'msisdn_validation_failed',
+            from,
+            waUserId: from,
+            accountId: account.id,
+            rawInput: rawMsisdnInput,
+            normalisedMsisdn: recipientMsisdn,
+            reason: 'format_validation_failed',
+          });
+
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ Invalid phone number format.\n\nPlease enter a valid SA mobile number (e.g., 0781234567)\n\nOr reply "cancel" to stop.`,
+          });
+        }
+
+        return await startVoucherGiftPreviewAndConfirm({
+          from,
+          account,
+          amountCents,
+          recipientMsisdn,
+          intent: 'STATE_VOUCHER_GIFT_RECIPIENT',
+          rawText: text,
+        });
+      }
+
+    case 'VOUCHER_GIFT_CONFIRM':
+      // User is confirming the voucher gift (mirrors AIRTIME_CONFIRM)
+      {
+        const normalized = text.trim().toLowerCase();
+
+        if (/^(no|cancel|stop|not now|later|reset|restart|start over)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          await sendWhatsAppText({ to: from, text: `👍 Voucher gift cancelled.` });
+          return await renderHome({ from, account });
+        }
+
+        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `I've cancelled that request. Feel free to ask me anything else!`,
+          });
+        }
+
+        const { amountCents, feeCents, recipientMsisdn, previewId: existingPreviewId } = data || {};
+
+        if (!amountCents || !recipientMsisdn) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ Something went wrong. Please start again, e.g. "send R50 to 0781234567".`,
+          });
+        }
+
+        logStructured('vas_voucher_gift_execute_initiated', {
+          from,
+          accountId: account.id,
+          recipientMasked: maskMsisdn(recipientMsisdn),
+          amountCents,
+        });
+
+        // If we already have a previewId from the confirmation step, do NOT preview again.
+        const previewId = existingPreviewId;
+        if (!previewId) {
+          // Backwards compatibility: if preview wasn't created yet, create it now.
+          await updateConversationState(from, null);
+          return await startVoucherGiftPreviewAndConfirm({ from, account, amountCents, recipientMsisdn });
+        }
+
+        await updateConversationState(from, 'VOUCHER_GIFT_PIN', {
+          previewId,
+          amountCents,
+          feeCents,
+          recipientMsisdn,
+        });
+
+        logStructured('vas_voucher_gift_pin_requested', {
+          from,
+          accountId: account.id,
+          previewId,
+          recipientMasked: maskMsisdn(recipientMsisdn),
+          amountCents,
+        });
+
+        return await sendWhatsAppText({
+          to: from,
+          text: `🔐 *Enter Your PIN*\n\nTo send the ${randsShort(amountCents)} WaPay voucher to ${maskMsisdn(recipientMsisdn)} (total ${randsShort(amountCents + (feeCents || 0))} incl. fee), please enter your WaPay PIN.`,
+        });
+      }
+
+    case 'VOUCHER_GIFT_PIN':
+      // User entering PIN to complete the voucher gift (mirrors AIRTIME_PIN)
+      {
+        const normalized = text.trim();
+
+        if (/^(cancel|stop|no|reset|restart)$/i.test(normalized.toLowerCase())) {
+          await updateConversationState(from, null);
+          await sendWhatsAppText({ to: from, text: `👍 Voucher gift cancelled.` });
+          return await renderHome({ from, account });
+        }
+
+        // PIN must be 4-6 digits (as defined in packages/auth/src/pin.ts)
+        const digitsOnly = text.replace(/[^\d]/g, '');
+        if (digitsOnly.length < 4 || digitsOnly.length > 6) {
+          if (digitsOnly.length === 0) {
+            await updateConversationState(from, null);
+            return await sendWhatsAppText({
+              to: from,
+              text: `I've cancelled the voucher gift. What else can I help you with?`,
+            });
+          }
+
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ Invalid PIN. Please enter your 4-6 digit WaPay PIN.\n\nReply "cancel" to stop.`,
+          });
+        }
+
+        const pin = digitsOnly;
+        const { previewId, amountCents, feeCents, recipientMsisdn } = data || {};
+        logStructured('vas_voucher_gift_pin_received', {
+          from,
+          accountId: account.id,
+          previewId,
+          pinMasked: `${'*'.repeat(pin.length)}`,
+        });
+
+        if (!previewId) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `❌ Session expired. Please start again, e.g. "send R50 to 0781234567".`,
+          });
+        }
+
+        await sendWhatsAppText({
+          to: from,
+          text: `⏳ Sending your WaPay voucher...`,
+        });
+
+        try {
+          const executeUrl = apiUrl('/api/vas/voucher/execute');
+          logInternalFetchCall({ url: executeUrl, path: '/api/vas/voucher/execute' });
+          const executeRes = await fetch(executeUrl, {
+            method: 'POST',
+            headers: withInternalHeaders(),
+            body: JSON.stringify({
+              previewId,
+              accountId: account.id,
+              pin: pin,
+            }),
+          });
+
+          await logInternalFetchResponse({ url: executeUrl, res: executeRes });
+
+          const executeData = executeRes.headers.get('content-type')?.includes('application/json')
+            ? await executeRes.json()
+            : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from execute' };
+
+          // Clear state
+          await updateConversationState(from, null);
+
+          if (!executeData.ok) {
+            logStructured('vas_voucher_gift_execute_failed', {
+              from,
+              accountId: account.id,
+              previewId,
+              error: executeData.error,
+              message: executeData.message,
+            });
+
+            return await sendWhatsAppErrorOnce({
+              to: from,
+              errorKey: `${previewId || 'vgift'}:${executeData.error || 'ERROR'}`,
+              text: `❌ ${executeData.message || 'Voucher gift failed.'}\n\nPlease try again later.`,
+            });
+          }
+
+          // Success! Sender receipt — never the voucher PIN (the recipient
+          // claims that separately).
+          const paidAmountCents = executeData.amountCents ?? amountCents;
+          const paidFeeCents = executeData.feeCents ?? feeCents ?? 0;
+          const finalRecipient = executeData.recipientMsisdn || recipientMsisdn;
+
+          logStructured('vas_voucher_gift_execute_success', {
+            from,
+            accountId: account.id,
+            previewId,
+            providerRef: executeData.reference,
+            amountCents: paidAmountCents,
+            feeCents: paidFeeCents,
+            recipientMasked: maskMsisdn(finalRecipient),
+          });
+
+          const receipt =
+            `✅ Voucher sent!\n\n` +
+            `🎁 Voucher: ${randsShort(paidAmountCents)}\n` +
+            `💳 Fee: ${randsShort(paidFeeCents)}\n` +
+            `📱 To: ${maskMsisdn(finalRecipient)}\n` +
+            `🧾 Reference: ${executeData.reference}\n` +
+            `📅 ${formatDateTimeZa(new Date())}\n\n` +
+            `💳 New balance: R${((executeData.newBalance || 0) / 100).toFixed(2)}\n\n` +
+            `They'll get their voucher the moment they message WaPay.`;
+          await addToConversationHistory(from, 'assistant', receipt);
+          await sendWhatsAppText({ to: from, text: receipt });
+
+          // Recipient heads-up (template-first, NO voucher PIN): best-effort
+          // and must never affect the settled purchase — same guarantees as
+          // notifyGiftRecipient, which swallows every failure internally. The
+          // PIN itself is only delivered by the claim flow when the recipient
+          // messages WaPay.
+          await notifyGiftRecipient({
+            account,
+            recipientMsisdn: finalRecipient,
+            product: 'VOUCHER',
+            amountCents: paidAmountCents,
+          });
+
+          return await sendPostTransactionCta(from);
+
+        } catch (error) {
+          console.error('Voucher gift execute API error:', error);
+          await updateConversationState(from, null);
+
+          logStructured('vas_voucher_gift_execute_error', {
+            from,
+            accountId: account.id,
+            previewId,
+            url: apiUrl('/api/vas/voucher/execute'),
+            error: error.message,
+          });
+
+          return await sendWhatsAppErrorOnce({
+            to: from,
+            errorKey: `${previewId || 'vgift'}:SERVICE_UNAVAILABLE`,
             text: `❌ Service temporarily unavailable. Please try again later.`,
           });
         }

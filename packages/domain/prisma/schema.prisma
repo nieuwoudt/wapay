@@ -304,4 +304,26 @@ model AuditLog {
   @@map("audit_log")
 }
 
+// A voucher gift bought for a phone number that may not be a WaPay user yet.
+// The rail (OTT today) has already issued the voucher; this row holds it until
+// the recipient shows up on WhatsApp and the gift is DELIVERED exactly once.
+// voucherPin is a BEARER SECRET — whoever holds it can redeem the value.
+// Never log it; mask like maskMsisdn does everywhere except delivery itself.
+model PendingGift {
+  id              String    @id @default(cuid())
+  senderAccountId String
+  recipientMsisdn String
+  amountCents     Int
+  rail            String
+  voucherPin      String // bearer secret — never log the full PIN
+  voucherSerial   String?
+  status          String    @default("ISSUED") // ISSUED | DELIVERED | CANCELLED
+  idemKey         String    @unique
+  createdAt       DateTime  @default(now())
+  deliveredAt     DateTime?
+
+  @@index([recipientMsisdn, status])
+  @@map("pending_gifts")
+}
+
 

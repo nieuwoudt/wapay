@@ -3,9 +3,9 @@
  *
  * These lock the invariants the message processor depends on:
  * - "send R50 airtime to 084..." is an AIRTIME gift, never a cash send.
- * - a bare "Send R30 to 084..." is a cash send and must be redirected to
- *   gifting with resolveGift's CASH_SEND_UNSUPPORTED copy (single source of
- *   truth for the user-facing message).
+ * - a bare "Send R30 to 084..." is a VOUCHER gift (a GOODS voucher sale),
+ *   never routed to a money-transfer path; resolveGift's copy is the single
+ *   source of truth for the user-facing asks.
  * - buyer-vs-target comparison works across waId (27...) and local (0...)
  *   formats, since Account.msisdn is stored as the 27-prefixed waId.
  */
@@ -37,24 +37,26 @@ test('routing: gifting your own number resolves to SELF (no recipient notificati
   assert.equal(r.ok, true);
 });
 
-test('routing: bare "Send R30 to <number>" is redirected, not routed to a money path', () => {
+test('routing: bare "Send R30 to <number>" becomes a VOUCHER_GIFT, never a money path', () => {
   const slots = parseSlots('Send R30 to 0840012300');
   assert.equal(slots.productHint, 'SEND_MONEY');
 
   const r = resolveGift({ slots, senderMsisdn: '27830012300' });
-  assert.equal(r.kind, 'CASH_SEND_UNSUPPORTED');
-  assert.equal(r.ok, false);
-  // The redirect must actively steer the user to gifting.
-  assert.match(r.message, /airtime/i);
-  assert.match(r.message, /can't send cash/i);
+  assert.equal(r.kind, 'VOUCHER_GIFT');
+  assert.equal(r.ok, true);
+  assert.equal(r.recipientMsisdn, '0840012300');
+  assert.equal(r.amountCents, 3000);
+  assert.equal(r.product, 'VOUCHER');
 });
 
-test('routing: "send money" with no slots still gets the cash-send redirect', () => {
+test('routing: "send money" with no slots asks for the amount with voucher copy', () => {
   const slots = parseSlots('send money');
   assert.equal(slots.productHint, 'SEND_MONEY');
 
   const r = resolveGift({ slots, senderMsisdn: '27830012300' });
-  assert.equal(r.kind, 'CASH_SEND_UNSUPPORTED');
+  assert.equal(r.kind, 'NEEDS_AMOUNT');
+  assert.equal(r.ok, false);
+  assert.match(r.message, /WaPay voucher/);
 });
 
 test('routing: waId <-> local msisdn normalisation is symmetric for buyer/target compare', () => {
