@@ -1,0 +1,34 @@
+Subject: Re: OTT integration — next steps
+
+Hi Keamo
+
+Thank you — and good news from our side: we're already integrated against
+the sandbox. Authentication, balance checks and the full voucher issuing
+flow (GetVoucher with the confirm/reject lifecycle and timeout recovery)
+are built, tested and deployed in our WhatsApp wallet.
+
+The one thing stopping a full end-to-end test is float: our reseller test
+account (WAPAYVIT) still shows R0.00. Could you load a small test float —
+even R100 — so we can issue our first vouchers? That's the most urgent
+item; the moment it lands we can demonstrate a live voucher send.
+
+A few other items, whenever convenient:
+
+1. The redemption test credentials when they're ready — we'd like voucher
+   redemption live as a deposit option too.
+2. The Reseller and Merchant agreements plus the rate card for signature —
+   happy to work through these at the commercial meet.
+3. One question we need answered in writing for our counsel: can a holder
+   of an OTT voucher redeem it for cash through OTT's own payout rails
+   (bank payout / cash at retail partners)? This determines how we
+   describe the product.
+4. What's still outstanding on your side for production credentials, so
+   we can plan the cutover.
+
+On the meeting: tomorrow (Thursday the 20th) afternoon works well for us,
+or Friday morning (the 21st). Happy to combine the portal walkthrough and
+the commercial discussion in one session — send an invite for whichever
+slot suits you.
+
+Thank you
+Niev
