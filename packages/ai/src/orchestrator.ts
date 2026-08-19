@@ -207,7 +207,7 @@ const PRODUCT_TRUTH = `WAPAY TODAY (never claim more, never deny these):
 - Add money, two ways: (1) CASH — take cash to the till at any major retailer and ask for a Blu Voucher for the amount you want to deposit; the cashier gives a voucher code; send that code to WaPay and the money loads automatically; (2) CARD / BANK — "deposit R100" (R10–R3000) gets a secure PayFast link accepting cards, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan and Zapper.
 - Buy for yourself or ANY number: airtime (R5–R1000), data bundles, prepaid electricity (R10–R5000, needs meter number).
 - Send money: "send R50 to 083…", a saved name ("send R50 to Philly"), or share a contact card — the recipient gets a WaPay voucher (R10–R1000, flat R3 fee).
-- Getting money OUT (withdrawals): the WaPay balance itself is spend-only — no direct bank withdrawal. Cash-out happens through WaPay vouchers, two ways: (1) CASH — redeem the voucher at participating retail partners; (2) BANK — have the voucher paid into a bank account via PayShap. Both run on our voucher partner's rails and are rolling out now.
+- Getting money OUT (withdrawals): NOT available — WaPay balances and WaPay vouchers are SPEND-ONLY. A WaPay voucher can be spent online at any platform that accepts OTT vouchers as payment; it CANNOT be exchanged for cash or paid into a bank account. NEVER claim cash-out, bank withdrawal, or "take it to your bank" — if asked, say withdrawals aren't available and list what the money CAN do (airtime, data, electricity, online spend, sending to others).
 - Check balance; redeem vouchers. NO betting top-ups yet, NO Netflix/DStv yet ("coming soon" is the honest answer for those).`;
 
 const MONEY_TRUTH_RULES = `MONEY TRUTH RULES (absolute):
@@ -232,7 +232,7 @@ DOMAINS:
 FAST PATH — set fastAction ONLY when the whole intent is one of these and unmistakable:
 - CHECK_BALANCE: any balance question ("balance", "balence", "how much money do I have", "imali yami")
 - DEPOSIT_STATUS: asking whether money they PAID IN has arrived ("did my payment go through", "where is my money")
-- HELP: asking what WaPay can do / how it works — but NOT withdrawal/cash-out questions ("how do I withdraw", "get cash out", "money to my bank"): those are MONEY domain with fastAction NONE, so the specialist can explain the voucher cash-out routes.
+- HELP: asking what WaPay can do / how it works — but NOT withdrawal/cash-out questions ("how do I withdraw", "get cash out", "money to my bank"): those are MONEY domain with fastAction NONE, so the specialist can explain honestly that balances are spend-only.
 - HOME: asking for the menu / home / start
 Otherwise fastAction = NONE and the domain's specialist continues.
 
@@ -267,7 +267,7 @@ SLOT RULES:
 - REDEEM_VOUCHER: user has a Blu voucher / voucher PIN to load — INCLUDING "I bought a voucher, how do I load it": when they already have one, start the flow (it explains itself) instead of describing steps.
 - DEPOSIT_STATUS: user asks whether money they paid in has arrived.
 - CHECK_BALANCE: balance questions.
-- NONE with a reply: money questions you can answer from WAPAY TODAY (fees, limits, how deposits work, how withdrawals/cash-out works — the two voucher routes).`,
+- NONE with a reply: money questions you can answer from WAPAY TODAY (fees, limits, how deposits work, and the honest withdrawals answer: spend-only, no cash-out).`,
     AIRTIME: `YOUR ACTIONS:
 - BUY_AIRTIME: buying airtime for self (self=true) or another number (msisdn set). Gifting airtime IS BUY_AIRTIME with the recipient's msisdn.
 - LIST_CATEGORY with category AIRTIME: browsing options without an amount.
@@ -280,7 +280,7 @@ SLOT RULES:
 - BUY_ELECTRICITY: prepaid electricity. meterNumber when given (digits only, typically 11–13 digits). amountCents when given.
 - NONE with a reply: electricity questions (how tokens arrive, which municipalities work).`,
     SEND: `YOUR ACTIONS:
-- SEND_VOUCHER: sending MONEY to a person/number ("send R50 to 083…", "romela R100", "pay my sister 084…"). msisdn = recipient; a named person with no number goes in recipientName ("send R50 to Philly"). NEVER treat this as a bank transfer — WaPay sends a voucher the recipient can spend or cash out; your reply may say exactly that.
+- SEND_VOUCHER: sending MONEY to a person/number ("send R50 to 083…", "romela R100", "pay my sister 084…"). msisdn = recipient; a named person with no number goes in recipientName ("send R50 to Philly"). NEVER treat this as a bank transfer — WaPay sends a voucher the recipient can spend online where OTT vouchers are accepted (no cash-out); your reply may say exactly that.
 - BUY_AIRTIME / BUY_DATA: when the user actually names airtime/data as the thing to send.
 - NONE with a reply: questions about sending money (fee R3, limits R10–R1000, how the recipient gets it).`,
     DISCOVER: `YOUR ACTIONS:

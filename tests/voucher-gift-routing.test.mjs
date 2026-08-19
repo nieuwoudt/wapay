@@ -85,10 +85,12 @@ test('claim message: contains the FULL PIN (by design), usage copy and the BALAN
   // The PIN is the gift: it MUST be present, unmasked, in this one message.
   assert.ok(msg.includes(pin), 'claim message must carry the full voucher PIN');
   assert.match(msg, /SN-001122/);
-  // Usage copy: spend online where OTT is accepted, or cash out via OTT.
+  // Usage copy: spend online where OTT is accepted. NO cash-out claim —
+  // OTT confirmed in writing (2026-08-19) the voucher cannot be exchanged
+  // for cash; promising a bank route would be a false product claim.
   assert.match(msg, /online/i);
   assert.match(msg, /OTT/);
-  assert.match(msg, /cash it out|cash out/i);
+  assert.ok(!/cash it out|cash out|take it to your bank/i.test(msg), 'no cash-out promise');
   // Conversion hook.
   assert.match(msg, /reply BALANCE/i);
 });

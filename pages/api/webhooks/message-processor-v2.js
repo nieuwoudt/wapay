@@ -287,7 +287,7 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
     `Fee: ${randsShort(feeCents)}\n` +
     `Total: ${randsShort(totalCents)}\n` +
     `To: ${normalisedRecipient}\n\n` +
-    `Please check the number carefully. They'll get a WaPay voucher they can spend online or take to their bank.\n\n` +
+    `Please check the number carefully. They'll get a WaPay voucher they can spend online at any store that accepts OTT vouchers.\n\n` +
     `Reply *YES* to confirm or *NO* to cancel.`;
 
   await addToConversationHistory(from, 'assistant', confirmMsg);
@@ -724,7 +724,7 @@ async function handleSharedContact({ from, account, sharedContact }) {
   const msg =
     `💸 *Send money to ${label}*\n\n` +
     `How much would you like to send? For example "R50".\n\n` +
-    `They'll get a WaPay voucher they can spend online or take to their bank. Reply "cancel" to stop.`;
+    `They'll get a WaPay voucher they can spend online at any store that accepts OTT vouchers. Reply "cancel" to stop.`;
   await addToConversationHistory(from, 'assistant', msg);
   return await sendWhatsAppText({ to: from, text: msg });
 }

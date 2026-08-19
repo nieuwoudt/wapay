@@ -71,7 +71,7 @@ test('resolveGift: send-money without amount asks for it with voucher-flavoured 
   assert.equal(r.ok, false);
   assert.equal(r.product, 'VOUCHER');
   assert.match(r.message, /WaPay voucher/);
-  assert.match(r.message, /spend online or take to their bank/i);
+  assert.match(r.message, /spend online at any store that accepts OTT vouchers/i);
 });
 
 test('resolveGift: send-money without recipient asks for it (keeps amount, voucher copy)', () => {
