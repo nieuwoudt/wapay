@@ -352,7 +352,14 @@ function isTimeoutError(e: any): boolean {
  * Throws on malformed input or sub-cent precision that isn't all zeros.
  */
 export function randToCents(value: string | number): number {
-  const s = String(value).trim();
+  let s = String(value).trim();
+  // OTT formats large amounts with comma thousands separators ("100,000.00",
+  // observed live the day the R100k test float landed, 2026-08-19). Accept
+  // ONLY well-formed grouping (1-3 leading digits then 3-digit groups) and
+  // strip it; any other comma pattern still fails the match below.
+  if (/^-?\d{1,3}(?:,\d{3})+(?:\.\d*)?$/.test(s)) {
+    s = s.replace(/,/g, '');
+  }
   const m = /^(-?)(\d+)(?:\.(\d*))?$/.exec(s);
   if (!m) {
     throw new Error(`Invalid rand amount from OTT: "${s}"`);
