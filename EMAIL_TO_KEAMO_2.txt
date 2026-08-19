@@ -1,0 +1,30 @@
+Subject: Re: Test funds & vouchers — ready for merchant redemption; what do we need to sign?
+
+Hi Keamo
+
+Thank you — and please pass our thanks to IT Support: the R100,000 test
+float is confirmed on our side (we've verified it live through the API),
+and voucher issuing is now fully unblocked. The redemption test vouchers
+arrived safely too.
+
+We're ready to start the merchant redemption integration next. To do
+that we need:
+
+1. The Merchant / Redemption API documentation;
+2. The redemption test credentials, when they've been created;
+3. Clarity on paperwork: is there a Merchant agreement we need to sign
+   before redemption access is granted? We have the fully signed
+   Reseller agreement on file, but no merchant-side document has
+   reached us yet — if one is needed, please send it and we'll turn it
+   around quickly;
+4. The commercial terms for redemption (any merchant fee or rate card),
+   so we can plan pricing on our side.
+
+Once the documentation and credentials are in, we expect to integrate
+and test redemption against the vouchers you sent within days.
+
+Still looking forward to the portal walkthrough and commercial meet —
+our availability from the previous mail stands.
+
+Thank you
+Niev
