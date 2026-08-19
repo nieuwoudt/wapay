@@ -96,8 +96,12 @@ test('routing: the pre-routing short-circuit and the AWAITING_VOUCHER_PIN state 
 
 test('deposit prompt: offers CASH via voucher (option 1) AND card/bank (option 2)', () => {
   assert.ok(
-    processorSource.includes('1️⃣ *Cash* — pay cash at the till of any major retailer'),
-    'cash-via-voucher stays option 1'
+    processorSource.includes('1️⃣ *Cash* — take your cash to the till at any major retailer'),
+    'cash-via-voucher stays option 1, with the full step-by-step'
+  );
+  assert.ok(
+    processorSource.includes('automatically loaded into your WaPay wallet'),
+    'the cash option promises the automatic load'
   );
   assert.ok(processorSource.includes('2️⃣ *Card / bank*'), 'card/bank is option 2');
   assert.ok(

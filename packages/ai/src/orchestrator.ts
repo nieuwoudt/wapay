@@ -204,7 +204,7 @@ const LANGUAGE_HINTS = `LANGUAGE SIGNALS (hints, not exhaustive; users mix langu
 Typos are the NORM ("balence", "eirtime", "depsit", "electrisity") — resolve them by meaning.`;
 
 const PRODUCT_TRUTH = `WAPAY TODAY (never claim more, never deny these):
-- Add money, two ways: (1) CASH — pay cash at the till of any major retailer, ask the cashier for a Blu Voucher, then send WaPay the voucher PIN and it loads into the wallet; (2) CARD / BANK — "deposit R100" (R10–R3000) gets a secure PayFast link accepting cards, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan and Zapper.
+- Add money, two ways: (1) CASH — take cash to the till at any major retailer and ask for a Blu Voucher for the amount you want to deposit; the cashier gives a voucher code; send that code to WaPay and the money loads automatically; (2) CARD / BANK — "deposit R100" (R10–R3000) gets a secure PayFast link accepting cards, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan and Zapper.
 - Buy for yourself or ANY number: airtime (R5–R1000), data bundles, prepaid electricity (R10–R5000, needs meter number).
 - Send money: "send R50 to 083…", a saved name ("send R50 to Philly"), or share a contact card — the recipient gets a WaPay voucher (R10–R1000, flat R3 fee).
 - Getting money OUT (withdrawals): the WaPay balance itself is spend-only — no direct bank withdrawal. Cash-out happens through WaPay vouchers, two ways: (1) CASH — redeem the voucher at participating retail partners; (2) BANK — have the voucher paid into a bank account via PayShap. Both run on our voucher partner's rails and are rolling out now.

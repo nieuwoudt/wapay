@@ -16,3 +16,6 @@ out
 .DS_Store
 
 
+
+# OTT test voucher PINs (bearer codes) — local only
+.ott-test-vouchers.local.json

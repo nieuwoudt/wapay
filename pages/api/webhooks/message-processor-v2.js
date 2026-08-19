@@ -1581,7 +1581,7 @@ function matchCardDepositRequest(text = '') {
 function buildDepositPrompt() {
   return (
     `💰 *Add Money to WaPay*\n\n` +
-    `1️⃣ *Cash* — pay cash at the till of any major retailer and ask for a *Blu Voucher*. The cashier gives you a voucher code — send it to me and it loads straight into your wallet.\n` +
+    `1️⃣ *Cash* — take your cash to the till at any major retailer and ask for a *Blu Voucher* for the amount you want to deposit. The cashier gives you a voucher code. Send that code to me here, and the money is automatically loaded into your WaPay wallet.\n` +
     `Example: 1234-5678-9012-3456\n\n` +
     `2️⃣ *Card / bank* — I'll send you a secure PayFast link. Pay with your card, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan or Zapper. Reply with the amount, e.g. "deposit R100"`
   );
