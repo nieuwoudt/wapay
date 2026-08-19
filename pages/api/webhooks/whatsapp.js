@@ -171,6 +171,36 @@ export default async function handler(req, res) {
                     });
                   }
 
+                  // Shared contact card — "send money to this person in my
+                  // contacts". The processor turns it into a recipient (and
+                  // remembers it as a beneficiary); previously these were
+                  // silently dropped and the user had to type the number.
+                  if (messageType === 'contacts') {
+                    const shared = message.contacts?.[0];
+                    const phone = shared?.phones?.[0] || {};
+                    const sharedContact = {
+                      // wa_id is already digits-only and country-prefixed;
+                      // fall back to the display phone string.
+                      rawNumber: phone.wa_id || phone.phone || '',
+                      name:
+                        shared?.name?.formatted_name ||
+                        shared?.name?.first_name ||
+                        null,
+                    };
+                    console.log(
+                      '👤 Contact shared:',
+                      JSON.stringify({ hasNumber: Boolean(sharedContact.rawNumber), name: sharedContact.name })
+                    );
+
+                    await processMessage({
+                      from,
+                      text: '',
+                      messageId,
+                      profile,
+                      sharedContact,
+                    });
+                  }
+
                   // Template quick-reply buttons
                   if (messageType === 'button') {
                     const buttonPayload = message.button?.payload || '';

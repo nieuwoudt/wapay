@@ -309,6 +309,20 @@ model AuditLog {
 // the recipient shows up on WhatsApp and the gift is DELIVERED exactly once.
 // voucherPin is a BEARER SECRET — whoever holds it can redeem the value.
 // Never log it; mask like maskMsisdn does everywhere except delivery itself.
+model Beneficiary {
+  id         String   @id @default(cuid())
+  accountId  String
+  msisdn     String // normalised 0XXXXXXXXX
+  name       String? // from a shared contact card; null when only a number is known
+  timesUsed  Int      @default(1)
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@unique([accountId, msisdn])
+  @@index([accountId, lastUsedAt])
+  @@map("beneficiaries")
+}
+
 model PendingGift {
   id              String    @id @default(cuid())
   senderAccountId String

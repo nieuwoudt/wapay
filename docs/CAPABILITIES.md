@@ -16,6 +16,7 @@ Deployed baseline: 2026-08-18 evening (deposit UX + deposit-status + orchestrati
 | Gifting (airtime/data to another number) | **Live** | `lib/gifting.js`; `GIFTABLE_PRODUCTS = {AIRTIME, DATA}`. Gift resolves gift/self/blocked; bare cash-send ("send R30 to 084…") is refused and redirected to gifting (regulatory guard — WaPay never does money transfer). Recipient notification: approved template first, text fallback, fire-and-forget. Caveats: notification to *new* numbers needs the `wapay_voucher_received` template approved in the WABA; DATA gifts vend but do not notify yet. |
 | Voucher redemption (load via Blu voucher) | **Live** | In `message-processor-v2.js`: PIN-hash-derived idemKey, NET amount credited, honest receipt. |
 | PIN entry | **Live, in plain chat** | Moving PIN entry to a WhatsApp Flow (secure input) is on the backlog. |
+| Contact-card sends + beneficiaries | **Live** | Sharing a WhatsApp contact starts a send-money ask (or fills the number a flow is waiting for). Every successful gift recipient / shared contact is remembered (`beneficiaries`, prod); "send R50 to Philly" resolves by name via the orchestrator's `recipientName` slot. Full number always shown at confirm. |
 
 ## 2. Money core (the ledger)
 

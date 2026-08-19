@@ -92,6 +92,7 @@ export interface OrchestratorSlots {
   meterNumber: string | null;
   category: string | null;
   productQuery: string | null;
+  recipientName: string | null;
 }
 
 export interface OrchestratorResult {
@@ -113,6 +114,7 @@ const EMPTY_SLOTS: OrchestratorSlots = {
   meterNumber: null,
   category: null,
   productQuery: null,
+  recipientName: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -142,7 +144,7 @@ const ORCHESTRATOR_SCHEMA = {
 const AGENT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['action', 'amountCents', 'msisdn', 'self', 'meterNumber', 'category', 'productQuery', 'reply'],
+  required: ['action', 'amountCents', 'msisdn', 'self', 'meterNumber', 'category', 'productQuery', 'recipientName', 'reply'],
   properties: {
     action: { type: 'string', enum: [...ORCHESTRATOR_ACTIONS] },
     amountCents: {
@@ -166,6 +168,11 @@ const AGENT_SCHEMA = {
     productQuery: {
       type: ['string', 'null'],
       description: 'Free-text product description for search ("weekly TikTok data"). English.',
+    },
+    recipientName: {
+      type: ['string', 'null'],
+      description:
+        'The recipient\'s NAME when the user names a person instead of a number ("send R50 to Philly"). Exactly as the user said it. null otherwise.',
     },
     reply: {
       type: 'string',
@@ -197,10 +204,11 @@ const LANGUAGE_HINTS = `LANGUAGE SIGNALS (hints, not exhaustive; users mix langu
 Typos are the NORM ("balence", "eirtime", "depsit", "electrisity") — resolve them by meaning.`;
 
 const PRODUCT_TRUTH = `WAPAY TODAY (never claim more, never deny these):
-- Add money: (1) Blu voucher bought with cash at a till, redeem by sending the PIN; (2) card / Instant EFT deposit R10–R3000 via a secure PayFast link.
+- Add money, two ways: (1) CASH — pay cash at the till of any major retailer, ask the cashier for a Blu Voucher, then send WaPay the voucher PIN and it loads into the wallet; (2) CARD / BANK — "deposit R100" (R10–R3000) gets a secure PayFast link accepting cards, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan and Zapper.
 - Buy for yourself or ANY number: airtime (R5–R1000), data bundles, prepaid electricity (R10–R5000, needs meter number).
-- Send money: "send R50 to 083…" issues a WaPay voucher to that number (R10–R1000, flat R3 fee). Recipient spends it online or cashes out.
-- Check balance; redeem vouchers. NO cash-out from WaPay itself, NO bank transfers, NO betting top-ups yet, NO Netflix/DStv yet ("coming soon" is the honest answer for those).`;
+- Send money: "send R50 to 083…", a saved name ("send R50 to Philly"), or share a contact card — the recipient gets a WaPay voucher (R10–R1000, flat R3 fee).
+- Getting money OUT (withdrawals): the WaPay balance itself is spend-only — no direct bank withdrawal. Cash-out happens through WaPay vouchers, two ways: (1) CASH — redeem the voucher at participating retail partners; (2) BANK — have the voucher paid into a bank account via PayShap. Both run on our voucher partner's rails and are rolling out now.
+- Check balance; redeem vouchers. NO betting top-ups yet, NO Netflix/DStv yet ("coming soon" is the honest answer for those).`;
 
 const MONEY_TRUTH_RULES = `MONEY TRUTH RULES (absolute):
 - NEVER state a balance, amount received, or payment status yourself — you do not know them. Return the matching action (CHECK_BALANCE / DEPOSIT_STATUS) and the system answers from the ledger.
@@ -224,7 +232,7 @@ DOMAINS:
 FAST PATH — set fastAction ONLY when the whole intent is one of these and unmistakable:
 - CHECK_BALANCE: any balance question ("balance", "balence", "how much money do I have", "imali yami")
 - DEPOSIT_STATUS: asking whether money they PAID IN has arrived ("did my payment go through", "where is my money")
-- HELP: asking what WaPay can do / how it works
+- HELP: asking what WaPay can do / how it works — but NOT withdrawal/cash-out questions ("how do I withdraw", "get cash out", "money to my bank"): those are MONEY domain with fastAction NONE, so the specialist can explain the voucher cash-out routes.
 - HOME: asking for the menu / home / start
 Otherwise fastAction = NONE and the domain's specialist continues.
 
@@ -248,6 +256,7 @@ ${MONEY_TRUTH_RULES}
 SLOT RULES:
 - amountCents: INTEGER CENTS. "R50" -> 5000. "50" in a money context -> 5000. null when the user gave no amount.
 - msisdn: the OTHER party's / beneficiary number exactly as typed, digits only (e.g. 0831234567). null when none. NEVER invent or complete a partial number.
+- recipientName: when the user names a PERSON instead of a number ("send R50 to Philly", "pay my sister Thandi"), put the name here exactly as said and leave msisdn null — the system looks the name up in the user's saved recipients. NEVER turn a name into a number yourself.
 - self: true when the user means their own phone ("for me", "my number", "buy myself").
 - reply: 1–3 short sentences, user's language, warm but precise. When your action starts a flow that itself replies (a preview, a menu, a prompt), return reply as "" — the flow speaks.
 - When a REQUIRED slot is missing, still return the action with the slot null — the flow asks for it. Do not interrogate in the reply.`;
@@ -258,7 +267,7 @@ SLOT RULES:
 - REDEEM_VOUCHER: user has a Blu voucher / voucher PIN to load — INCLUDING "I bought a voucher, how do I load it": when they already have one, start the flow (it explains itself) instead of describing steps.
 - DEPOSIT_STATUS: user asks whether money they paid in has arrived.
 - CHECK_BALANCE: balance questions.
-- NONE with a reply: money questions you can answer from WAPAY TODAY (fees, limits, how deposits work).`,
+- NONE with a reply: money questions you can answer from WAPAY TODAY (fees, limits, how deposits work, how withdrawals/cash-out works — the two voucher routes).`,
     AIRTIME: `YOUR ACTIONS:
 - BUY_AIRTIME: buying airtime for self (self=true) or another number (msisdn set). Gifting airtime IS BUY_AIRTIME with the recipient's msisdn.
 - LIST_CATEGORY with category AIRTIME: browsing options without an amount.
@@ -271,7 +280,7 @@ SLOT RULES:
 - BUY_ELECTRICITY: prepaid electricity. meterNumber when given (digits only, typically 11–13 digits). amountCents when given.
 - NONE with a reply: electricity questions (how tokens arrive, which municipalities work).`,
     SEND: `YOUR ACTIONS:
-- SEND_VOUCHER: sending MONEY to a person/number ("send R50 to 083…", "romela R100", "pay my sister 084…"). msisdn = recipient. NEVER treat this as a bank transfer — WaPay sends a voucher the recipient can spend or cash out; your reply may say exactly that.
+- SEND_VOUCHER: sending MONEY to a person/number ("send R50 to 083…", "romela R100", "pay my sister 084…"). msisdn = recipient; a named person with no number goes in recipientName ("send R50 to Philly"). NEVER treat this as a bank transfer — WaPay sends a voucher the recipient can spend or cash out; your reply may say exactly that.
 - BUY_AIRTIME / BUY_DATA: when the user actually names airtime/data as the thing to send.
 - NONE with a reply: questions about sending money (fee R3, limits R10–R1000, how the recipient gets it).`,
     DISCOVER: `YOUR ACTIONS:
@@ -347,6 +356,7 @@ interface AgentTierOutput {
   meterNumber: string | null;
   category: string | null;
   productQuery: string | null;
+  recipientName: string | null;
   reply: string;
 }
 
@@ -421,6 +431,7 @@ export async function orchestrate(text: string, context?: string): Promise<Orche
       meterNumber: tier2.meterNumber || null,
       category: tier2.category || null,
       productQuery: tier2.productQuery || null,
+      recipientName: tier2.recipientName || null,
     },
     reply: tier2.reply || '',
     language: tier1.language,

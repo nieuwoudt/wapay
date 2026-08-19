@@ -94,16 +94,19 @@ test('routing: the pre-routing short-circuit and the AWAITING_VOUCHER_PIN state 
 // Deposit prompt copy: BOTH options, voucher first
 // ---------------------------------------------------------------------------
 
-test('deposit prompt: offers Blu voucher (option 1) AND card/EFT link (option 2)', () => {
+test('deposit prompt: offers CASH via voucher (option 1) AND card/bank (option 2)', () => {
   assert.ok(
-    processorSource.includes('1️⃣ Blu voucher — buy at any till, send me the PIN'),
-    'voucher stays option 1'
+    processorSource.includes('1️⃣ *Cash* — pay cash at the till of any major retailer'),
+    'cash-via-voucher stays option 1'
+  );
+  assert.ok(processorSource.includes('2️⃣ *Card / bank*'), 'card/bank is option 2');
+  assert.ok(
+    processorSource.includes('Reply with the amount, e.g. "deposit R100"'),
+    'option 2 teaches the deposit R<amount> phrasing'
   );
   assert.ok(
-    processorSource.includes(
-      `2️⃣ Card / Instant EFT — I'll send you a secure payment link. Reply with the amount, e.g. "deposit R100"`
-    ),
-    'card/EFT is option 2 and teaches the deposit R<amount> phrasing'
+    processorSource.includes('Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan or Zapper'),
+    'the electronic payment options are listed'
   );
   // One prompt builder, used by BOTH entry points (intent switch + AI action).
   const uses = processorSource.split('buildDepositPrompt').length - 1;

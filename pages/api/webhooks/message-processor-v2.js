@@ -10,6 +10,11 @@ import { sendWhatsAppText, sendWhatsAppTemplate, sendWhatsAppCtaUrl } from '@wap
 import prisma from '../../../lib/prisma.js';
 import { resolveGift, buildRecipientNotification, buildVoucherClaimMessage, maskMsisdn } from '../../../lib/gifting.js';
 import { hasPendingGifts, claimPendingGifts } from '../../../lib/pending-gifts.js';
+import {
+  rememberBeneficiary,
+  findBeneficiariesByName,
+  formatBeneficiary,
+} from '../../../lib/beneficiaries.js';
 import crypto from 'crypto';
 import { BluClient, BluVasClient } from '@wapay/providers-blu';
 import { buildLoad, RAIL } from '../../../lib/ledger-core.js';
@@ -376,6 +381,11 @@ async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCe
     // Self top-up is not a gift; missing target means nothing to notify.
     if (!targetMsisdn || targetMsisdn === buyerMsisdn) return;
 
+    // This function fires exactly when a gift SUCCEEDED — the moment this
+    // recipient becomes a beneficiary ("send to Philly again"). Best-effort,
+    // like everything else in here.
+    await rememberBeneficiary({ accountId: account?.id, msisdn: targetMsisdn });
+
     const note = buildRecipientNotification({
       senderName: account?.displayName,
       senderMsisdn: account?.msisdn,
@@ -627,13 +637,14 @@ function resolveDataPurchaseSlots({ text, entities = {}, stateData = {} }) {
 /**
  * Process incoming WhatsApp message
  */
-export async function processMessage({ from, text, messageId, profile }) {
+export async function processMessage({ from, text, messageId, profile, sharedContact }) {
   // Log incoming message
   logStructured('whatsapp_inbound', {
     from,
     text,
     messageId,
     profileName: profile?.name,
+    sharedContact: sharedContact ? { name: sharedContact.name || null } : undefined,
   });
 
   console.log('🔄 Processing message:', { from, text });
@@ -666,12 +677,56 @@ export async function processMessage({ from, text, messageId, profile }) {
     });
   }
 
+  // A shared contact card is a recipient, not a text — route it before any
+  // text-based handling ("send money to this person in my contacts").
+  if (sharedContact) {
+    return await handleSharedContact({ from, account, sharedContact });
+  }
+
   // User is fully onboarded - handle normal operations
   return await handlePostOnboarding({
     account,
     from,
     text,
   });
+}
+
+/**
+ * A shared WhatsApp contact card. Whatever the conversation is doing, the
+ * card means "this person": mid-flow it fills the number the flow is
+ * waiting for; fresh, it starts a send-money ask. Every share is also
+ * remembered as a beneficiary, so next time the NAME alone works
+ * ("send R50 to Philly").
+ */
+async function handleSharedContact({ from, account, sharedContact }) {
+  const msisdn = normaliseMsisdn(String(sharedContact?.rawNumber || ''));
+  const name = sharedContact?.name || null;
+
+  if (!msisdn || !isValidSaMsisdn(msisdn)) {
+    return await sendWhatsAppText({
+      to: from,
+      text: `🤔 I couldn't read a South African cellphone number from that contact. Please reply with the number itself (e.g. 0781234567).`,
+    });
+  }
+
+  await rememberBeneficiary({ accountId: account.id, msisdn, name });
+
+  const { state, data } = await getConversationState(from);
+
+  // Mid-flow: the contact IS the number the flow is asking for.
+  if (state === 'VOUCHER_GIFT_RECIPIENT' || state === 'AIRTIME_MSISDN') {
+    return await handleConversationState({ from, text: msisdn, state, data, account });
+  }
+
+  // Fresh share: treat it as "send money to this person" and ask the amount.
+  await updateConversationState(from, 'VOUCHER_GIFT_AMOUNT', { recipientMsisdn: msisdn });
+  const label = name ? `${name} (${msisdn})` : msisdn;
+  const msg =
+    `💸 *Send money to ${label}*\n\n` +
+    `How much would you like to send? For example "R50".\n\n` +
+    `They'll get a WaPay voucher they can spend online or take to their bank. Reply "cancel" to stop.`;
+  await addToConversationHistory(from, 'assistant', msg);
+  return await sendWhatsAppText({ to: from, text: msg });
 }
 
 /**
@@ -1526,9 +1581,9 @@ function matchCardDepositRequest(text = '') {
 function buildDepositPrompt() {
   return (
     `💰 *Add Money to WaPay*\n\n` +
-    `1️⃣ Blu voucher — buy at any till, send me the PIN\n` +
+    `1️⃣ *Cash* — pay cash at the till of any major retailer and ask for a *Blu Voucher*. The cashier gives you a voucher code — send it to me and it loads straight into your wallet.\n` +
     `Example: 1234-5678-9012-3456\n\n` +
-    `2️⃣ Card / Instant EFT — I'll send you a secure payment link. Reply with the amount, e.g. "deposit R100"`
+    `2️⃣ *Card / bank* — I'll send you a secure PayFast link. Pay with your card, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan or Zapper. Reply with the amount, e.g. "deposit R100"`
   );
 }
 
@@ -1703,9 +1758,12 @@ async function handleDepositStatus({ from, account }) {
       `Want to try again? Reply "deposit ${Number.isInteger(amountCents) ? randsShort(amountCents) : 'R100'}".`;
   } else {
     // PENDING (or any non-terminal state): the ITN confirmation message is
-    // the promised follow-up — it fires the moment PayFast notifies us.
+    // the promised follow-up — it fires the moment PayFast notifies us. A
+    // payment declined ON PayFast's page never sends an ITN, so the retry
+    // line matters (observed live: FNB decline, 2026-08-19).
     text =
       `⏳ PayFast is still confirming your ${amount} — I'll message you here the moment it clears.\n\n` +
+      `If the payment didn't go through on PayFast's page (or your bank declined it), nothing left your account — just reply "deposit ${Number.isInteger(amountCents) ? randsShort(amountCents) : 'R100'}" to try again.\n\n` +
       `💰 Balance: R${balance}`;
   }
 
@@ -2817,10 +2875,30 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
 
-        // If the message doesn't look like a phone number at all, assume the
-        // user wants out (mirrors AIRTIME_MSISDN).
+        // Not a number? Try it as a BENEFICIARY NAME first ("Philly") —
+        // people the account has sent to before, or shared as a contact.
         const digitsOnly = text.replace(/[^\d]/g, '');
         if (digitsOnly.length < 8) {
+          const matches = await findBeneficiariesByName({ accountId: account.id, query: text });
+          if (matches.length === 1) {
+            return await startVoucherGiftPreviewAndConfirm({
+              from,
+              account,
+              amountCents,
+              recipientMsisdn: matches[0].msisdn,
+              intent: 'STATE_VOUCHER_GIFT_RECIPIENT_BENEFICIARY',
+              rawText: text,
+            });
+          }
+          if (matches.length > 1) {
+            return await sendWhatsAppText({
+              to: from,
+              text:
+                `I know more than one "${text.trim()}":\n\n` +
+                matches.map((b) => `• ${formatBeneficiary(b)}`).join('\n') +
+                `\n\nPlease reply with the full number.`,
+            });
+          }
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
@@ -3279,11 +3357,35 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
     }
 
     case 'SEND_VOUCHER': {
+      // A named person ("send R50 to Philly") resolves through saved
+      // beneficiaries — people this account has sent to or shared as a
+      // contact card. The full number still shows at confirm, so a
+      // mis-remembered name is caught by the same human gate.
+      let recipientMsisdn = msisdn;
+      const recipientName = result.slots?.recipientName || null;
+      if (!recipientMsisdn && recipientName) {
+        const matches = await findBeneficiariesByName({ accountId: account.id, query: recipientName });
+        if (matches.length === 1) {
+          recipientMsisdn = matches[0].msisdn;
+        } else if (matches.length > 1) {
+          const listMsg =
+            `I know more than one "${recipientName}":\n\n` +
+            matches.map((b) => `• ${formatBeneficiary(b)}`).join('\n') +
+            `\n\nPlease reply with the full number${amountCents ? '' : ' and amount, e.g. "send R50 to 0781234567"'}.`;
+          if (amountCents) {
+            await updateConversationState(from, 'VOUCHER_GIFT_RECIPIENT', { amountCents });
+          }
+          await addToConversationHistory(from, 'assistant', listMsg);
+          return await sendWhatsAppText({ to: from, text: listMsg });
+        }
+        // No match: fall through — resolveGift asks for the number.
+      }
+
       // Same resolution the keyword router uses — resolveGift owns the copy
       // and the flow it starts is preview -> YES -> PIN, identical to the
       // deterministic path.
       const gift = resolveGift({
-        slots: { amountCents, msisdn, productHint: 'SEND_MONEY' },
+        slots: { amountCents, msisdn: recipientMsisdn, productHint: 'SEND_MONEY' },
         senderMsisdn: account.msisdn,
       });
       if (gift.kind === 'VOUCHER_GIFT') {
@@ -3300,7 +3402,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
         const nextState = gift.kind === 'NEEDS_AMOUNT' ? 'VOUCHER_GIFT_AMOUNT' : 'VOUCHER_GIFT_RECIPIENT';
         await updateConversationState(from, nextState, {
           amountCents: gift.amountCents || null,
-          recipientMsisdn: gift.kind === 'NEEDS_AMOUNT' && msisdn ? msisdn : null,
+          recipientMsisdn: gift.kind === 'NEEDS_AMOUNT' && recipientMsisdn ? recipientMsisdn : null,
         });
         await addToConversationHistory(from, 'assistant', gift.message);
         return await sendWhatsAppText({ to: from, text: gift.message });
@@ -3329,7 +3431,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
     }
 
     case 'HELP': {
-      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083..."\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words — any South African language works!`;
+      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083..." — or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🏧 *Cash out* - "How do I withdraw?"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words — any South African language works!`;
       await addToConversationHistory(from, 'assistant', helpMsg);
       return await sendWhatsAppText({ to: from, text: helpMsg });
     }

@@ -116,7 +116,8 @@ test('engine: structured outputs, temperature 0, fail-fast timeout', () => {
 test('engine: prompts carry the money-truth rules and the honest product list', () => {
   assert.match(engineSource, /NEVER state a balance/i);
   assert.match(engineSource, /never invent transaction status|NEVER promise/i);
-  assert.match(engineSource, /NO cash-out from WaPay itself/);
+  assert.match(engineSource, /spend-only — no direct bank withdrawal/);
+  assert.match(engineSource, /PayShap/, 'the bank cash-out route is named');
   assert.match(engineSource, /R3 fee/, 'send-money fee is stated');
 });
 
