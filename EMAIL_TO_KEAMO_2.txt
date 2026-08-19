@@ -1,30 +1,36 @@
-Subject: Re: Test funds & vouchers — ready for merchant redemption; what do we need to sign?
+Subject: Re: Test funds & vouchers — redemption access + two documents
 
 Hi Keamo
 
 Thank you — and please pass our thanks to IT Support: the R100,000 test
-float is confirmed on our side (we've verified it live through the API),
-and voucher issuing is now fully unblocked. The redemption test vouchers
-arrived safely too.
+float is confirmed on our side and voucher issuing is now working
+end-to-end in our WhatsApp wallet.
 
-We're ready to start the merchant redemption integration next. To do
-that we need:
+Three quick follow-ups on your answers:
 
-1. The Merchant / Redemption API documentation;
-2. The redemption test credentials, when they've been created;
-3. Clarity on paperwork: is there a Merchant agreement we need to sign
-   before redemption access is granted? We have the fully signed
-   Reseller agreement on file, but no merchant-side document has
-   reached us yet — if one is needed, please send it and we'll turn it
-   around quickly;
-4. The commercial terms for redemption (any merchant fee or rate card),
-   so we can plan pricing on our side.
+1. Redemption test credentials — you noted these as sent, but we can't
+   find them on our side. Could you resend them (or point me to the
+   mail)? Together with the Merchant / Redemption API documentation,
+   that's everything we need — the test vouchers are ready and waiting,
+   and we expect to have redemption integrated within days of receiving
+   the docs and credentials.
 
-Once the documentation and credentials are in, we expect to integrate
-and test redemption against the vouchers you sent within days.
+2. Agreements — the attachment we received was the signed Reseller
+   (Issuing) agreement. If the Merchant agreement has been signed as
+   well, please send us that copy for our records; if it still needs
+   signature from our side, send it over and we'll turn it around the
+   same day.
 
-Still looking forward to the portal walkthrough and commercial meet —
-our availability from the previous mail stands.
+3. Voucher redemption for cash — understood and noted: the OTT voucher
+   is redeemable only as a payment method at accepting platforms, not
+   for cash. We've aligned our product copy accordingly. Could you
+   share the current list of platforms/merchants that accept OTT
+   vouchers? That list is what we'll show recipients so they know
+   where they can spend.
+
+1pm tomorrow works — please send the invite. We'll bring the
+commercial points (including the production credentials path) and
+would love the portal walkthrough in the same session.
 
 Thank you
 Niev
