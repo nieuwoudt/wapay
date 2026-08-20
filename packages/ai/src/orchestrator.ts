@@ -225,7 +225,7 @@ DOMAINS:
 - AIRTIME: buying/sending airtime
 - DATA: buying/sending data bundles
 - ELECTRICITY: prepaid electricity, meters, tokens
-- SEND: sending MONEY (not a named product) to another person/number — "send R50 to 083…", "pay my sister"
+- SEND: sending MONEY (not a named product) to another person/number — "send R50 to 083…", "pay my sister" — AND buying an OTT voucher for yourself ("buy an OTT voucher", "ott voucher R50")
 - DISCOVER: what can I buy, product/price browsing, searching for a specific product
 - CHAT: greetings, thanks, help, questions about WaPay, anything else
 
@@ -280,11 +280,12 @@ SLOT RULES:
 - BUY_ELECTRICITY: prepaid electricity. meterNumber when given (digits only, typically 11–13 digits). amountCents when given.
 - NONE with a reply: electricity questions (how tokens arrive, which municipalities work).`,
     SEND: `YOUR ACTIONS:
-- SEND_VOUCHER: sending MONEY to a person/number ("send R50 to 083…", "romela R100", "pay my sister 084…"). msisdn = recipient; a named person with no number goes in recipientName ("send R50 to Philly"). NEVER treat this as a bank transfer — WaPay sends a voucher the recipient can spend online where OTT vouchers are accepted (no cash-out); your reply may say exactly that.
+- SEND_VOUCHER: sending MONEY to a person/number ("send R50 to 083…", "romela R100", "pay my sister 084…"). msisdn = recipient; a named person with no number goes in recipientName ("send R50 to Philly"). BUYING AN OTT VOUCHER FOR YOURSELF ("buy an OTT voucher", "can I get an ott voucher R50") is also SEND_VOUCHER with self=true and no msisdn — the PIN is delivered in this chat, paid from the WaPay balance. NEVER treat any of this as a bank transfer — WaPay sells a voucher the recipient can spend online where OTT vouchers are accepted (no cash-out); your reply may say exactly that.
 - BUY_AIRTIME / BUY_DATA: when the user actually names airtime/data as the thing to send.
 - NONE with a reply: questions about sending money (fee R3, limits R10–R1000, how the recipient gets it).`,
     DISCOVER: `YOUR ACTIONS:
 - LIST_PRODUCTS: "what can I buy", general browsing.
+- SEND_VOUCHER with self=true: any OTT-voucher purchase ask ("can I buy an OTT voucher?") — OTT vouchers are WaPay's money voucher, NOT an entertainment product; never map them to LIFESTYLE.
 - LIST_CATEGORY: a specific category (AIRTIME/DATA/ELECTRICITY; LIFESTYLE/BILLPAY/GAMING exist but are coming soon — say so in reply and still return the action).
 - BUY_DATA with productQuery: a specific product search ("cheapest weekly TikTok data").
 - NONE with a reply: price/product questions you can answer from WAPAY TODAY.`,
@@ -369,8 +370,8 @@ function buildUserContent(text: string, context?: string): string {
  *
  * @param text    the raw WhatsApp message
  * @param context optional recent-conversation block (plain text)
- * @throws AI_UNAVAILABLE-family errors identical to chatWithAI, so the
- *         processor's existing fallback copy keeps working.
+ * @throws AI_UNAVAILABLE / AI_QUOTA_EXCEEDED / AI_CONFIG_ERROR — the names
+ *         the processor's fallback copy expects.
  */
 export async function orchestrate(text: string, context?: string): Promise<OrchestratorResult> {
   const userContent = buildUserContent(text, context);

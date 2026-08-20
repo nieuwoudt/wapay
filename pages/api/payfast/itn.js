@@ -104,12 +104,20 @@ export default async function handler(req, res) {
     return res.status(500).send('intent corrupt');
   }
 
+  // Customer pays GROSS (credit + payment fee); wallet is credited
+  // amountCents; the fee books as revenue. Intents created before the fee
+  // shipped have no feeCents — they were quoted gross == amount.
+  const feeCents = Number.isInteger(intent.metadata?.feeCents) ? intent.metadata.feeCents : 0;
+  const grossCents = Number.isInteger(intent.metadata?.grossCents)
+    ? intent.metadata.grossCents
+    : amountCents + feeCents;
+
   // Verification BEFORE any money movement: signature (over raw fields,
   // empty values included), source IP, expected amount, payment status,
   // and PayFast server confirmation all live inside verifyItn.
   const verification = await verifyItn({
     params,
-    expectedAmountCents: amountCents,
+    expectedAmountCents: grossCents,
     sourceIp,
     sandbox: process.env.PAYFAST_SANDBOX === 'true',
     // The merchant passphrase is part of the ITN signature hash. Omitting it
@@ -155,6 +163,7 @@ export default async function handler(req, res) {
         accountId,
         rail: RAIL.PAYFAST,
         faceCents: amountCents,
+        customerFeeCents: feeCents,
         idemKey: intent.idemKey,
       })
     );

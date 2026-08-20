@@ -4,6 +4,20 @@
 
 ---
 
+## 15. Voucher-execute crash stranded R36 in ACTIVE holds
+
+- **Symptom:** failed voucher sends ("An error occurred while executing purchase") left the reserved money missing from the balance — two ACTIVE holds (R23 + R13) found in prod, wallet R36 lighter than the journal (founder-reported balance confusion, 2026-08-20).
+- **Root cause:** an exception between `reserveHold` and the taxonomy failure paths (which do call `releaseHold`) fell through to the outer catch, which returned 500 without releasing the hold.
+- **Fix:** `holdIdemKey` is hoisted; the outer catch best-effort releases it (`execute_crashed:` reason). `releaseHold` is status-guarded, so the safety release is a no-op after settle/normal release. Stuck prod holds released with the library function; wallet reconciled.
+- **Guard:** `tests/voucher-execute-crash-release.test.mjs`-style static assertion lives in `tests/ott-voucher-self.test.mjs` (crash-release path present); `reconcileWallets()` detects any stored-vs-derived drift.
+
+## 16. Manual credit applied twice — R20 of unbacked balance
+
+- **Symptom:** stored wallet balance exceeded the journal-derived truth by exactly R20 ("real money vs fake money", founder, 2026-08-20).
+- **Root cause:** the 2026-08-18 manual R20 credit (PayFast IP-reject recovery) hit the wallet twice: once as a direct wallet update and once properly via `postEntry` (which also increments the wallet). The journal was correct; the stored cache wasn't.
+- **Fix:** wallet reconciled to journal truth (R50.00) after releasing the stuck holds; logged as `wallet_reconcile_fix`.
+- **Guard:** manual credits are banned as direct wallet updates — `postEntry` only (it is replay-safe by idemKey). `reconcileWallets()` catches drift; run it after any manual intervention.
+
 ## 1. Zero-cent commission line crash
 
 - **Symptom:** small vends crashed at posting time; the journal entry was rejected.

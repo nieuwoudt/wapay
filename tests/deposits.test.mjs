@@ -18,6 +18,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
+  depositFeeCents,
   createDepositIntent,
   getDepositIntent,
   markDeposit,
@@ -126,7 +127,24 @@ test('createDepositIntent creates a PENDING PAYFAST row with a derived idemKey',
   assert.equal(row.status, 'PENDING');
   assert.equal(row.idemKey, idemKey);
   assert.equal(row.accountId, ACCOUNT);
-  assert.deepEqual(row.metadata, { accountId: ACCOUNT, waId: WA_ID, amountCents: 5000 });
+  assert.deepEqual(row.metadata, {
+    accountId: ACCOUNT,
+    waId: WA_ID,
+    amountCents: 5000,
+    // R50 -> 4.2% + R2.30, rounded up to a whole rand = R5 fee, R55 gross.
+    feeCents: 500,
+    grossCents: 5500,
+  });
+});
+
+test('depositFeeCents: covers PayFast + margin, whole rands, tunable', () => {
+  // Defaults: 4.20% + R2.30, rounded UP to a rand.
+  assert.equal(depositFeeCents(1000), 300); // R10 -> R3
+  assert.equal(depositFeeCents(3000), 400); // R30 -> R4
+  assert.equal(depositFeeCents(10000), 700); // R100 -> R7
+  assert.equal(depositFeeCents(300000), 12900); // R3000 -> R129
+  assert.throws(() => depositFeeCents(0), /positive integer/);
+  assert.throws(() => depositFeeCents(10.5), /positive integer/);
 });
 
 test('the intent idemKey is accepted by buildLoad and credits full face on PAYFAST', async () => {

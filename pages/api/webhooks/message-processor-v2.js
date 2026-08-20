@@ -222,6 +222,21 @@ function randsShort(cents) {
 }
 
 /**
+ * True when an in-state message is clearly conversational free text (a
+ * question, a sentence) rather than the slot the state is waiting for.
+ * States must ESCAPE to the normal router on these — answering "Can I use
+ * my bank card?" with "Invalid Voucher PIN" reads as a broken bot
+ * (observed live, 2026-08-20). Slot-like inputs (PINs, amounts, numbers)
+ * carry at most one short word; real sentences carry two or more.
+ */
+function isConversationalEscape(text) {
+  const s = String(text || '').trim();
+  if (!s) return false;
+  const words = s.match(/[a-zA-Z]{2,}/g) || [];
+  return words.length >= 2 || /\?$/.test(s);
+}
+
+/**
  * Voucher gift ("Send R50 to 084...") — preview then confirm, mirroring
  * startAirtimePreviewAndConfirm: self-HTTP to /api/vas/voucher/preview, park
  * the previewId in VOUCHER_GIFT_CONFIRM state, and ask for YES/NO. The PIN
@@ -281,14 +296,24 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
   // one chance to catch a wrong destination before a bearer voucher goes
   // out — a number can reach here from a model slot, so a mask would hide
   // exactly the digits that need checking. Masking stays for logs.
-  const confirmMsg =
-    `🎁 *Confirm WaPay Voucher*\n\n` +
-    `Voucher: ${randsShort(amountCents)}\n` +
-    `Fee: ${randsShort(feeCents)}\n` +
-    `Total: ${randsShort(totalCents)}\n` +
-    `To: ${normalisedRecipient}\n\n` +
-    `Please check the number carefully. They'll get a WaPay voucher they can spend online at any store that accepts OTT vouchers.\n\n` +
-    `Reply *YES* to confirm or *NO* to cancel.`;
+  // A SELF-purchase ("buy an OTT voucher") skips the destination talk: the
+  // PIN lands right here.
+  const isSelfPurchase =
+    normaliseMsisdn(normalisedRecipient) === normaliseMsisdn(account.msisdn || '');
+  const confirmMsg = isSelfPurchase
+    ? `🎟️ *Confirm OTT Voucher*\n\n` +
+      `Voucher: ${randsShort(amountCents)}\n` +
+      `Fee: ${randsShort(feeCents)}\n` +
+      `Total: ${randsShort(totalCents)}\n\n` +
+      `Paid from your WaPay balance. Your voucher PIN will be delivered right here — spend it online at any store that accepts OTT vouchers.\n\n` +
+      `Reply *YES* to confirm or *NO* to cancel.`
+    : `🎁 *Confirm WaPay Voucher*\n\n` +
+      `Voucher: ${randsShort(amountCents)}\n` +
+      `Fee: ${randsShort(feeCents)}\n` +
+      `Total: ${randsShort(totalCents)}\n` +
+      `To: ${normalisedRecipient}\n\n` +
+      `Please check the number carefully. They'll get a WaPay voucher they can spend online at any store that accepts OTT vouchers.\n\n` +
+      `Reply *YES* to confirm or *NO* to cancel.`;
 
   await addToConversationHistory(from, 'assistant', confirmMsg);
   return await sendWhatsAppText({ to: from, text: confirmMsg });
@@ -448,19 +473,6 @@ async function sendPostTransactionCta(to) {
 
 async function renderHome({ from, account }) {
   const { balance, displayName } = await getUserBalance(from);
-
-  const msg1 = `👋 Hi ${displayName}!\n\n💰 Balance: ${formatMoneyZar(balance)}`;
-  const msg2 =
-    `What would you like to do today?\n\n` +
-    `🛒 Buy\n` +
-    `• Airtime\n` +
-    `• Data\n` +
-    `• Electricity\n` +
-    `• Vouchers\n\n` +
-    `💸 Send money\n` +
-    `🏪 Pay a merchant\n` +
-    `📄 View transactions\n` +
-    `⚙️ Settings`;
 
   // Quick actions (best-effort). Prefer last successful VAS if available.
   let quickActions = [
@@ -908,6 +920,37 @@ async function handlePostOnboarding({ account, from, text }) {
     return await handleCardDepositLink({ from, account, amountCents: cardDepositCents, rawText: text });
   }
 
+  // Deterministic short-circuit: "buy an OTT voucher" (no recipient) is a
+  // SELF-purchase — balance-paid, PIN delivered in this chat. Routed before
+  // the AI so the phrase can never fall into the old entertainment-voucher
+  // listing (observed live 2026-08-20). Redemption-ish phrasings ("redeem /
+  // load / I have an OTT voucher") stay out — that's the future deposit path.
+  if (matchOttVoucherSelfRequest(text, slots)) {
+    logSlotFill({
+      intent: 'OTT_VOUCHER_SELF',
+      text,
+      slots,
+      routeDecision: slots.amountCents ? 'OTT_VOUCHER_SELF_PREVIEW' : 'OTT_VOUCHER_SELF_AMOUNT',
+      missing: slots.amountCents ? [] : ['amountCents'],
+      from,
+      accountId: account.id,
+    });
+    if (slots.amountCents) {
+      return await startVoucherGiftPreviewAndConfirm({
+        from,
+        account,
+        amountCents: slots.amountCents,
+        recipientMsisdn: account.msisdn,
+        intent: 'OTT_VOUCHER_SELF',
+        rawText: text,
+      });
+    }
+    await updateConversationState(from, 'VOUCHER_GIFT_AMOUNT', { recipientMsisdn: account.msisdn });
+    const askMsg = `🎟️ *OTT Voucher*\n\nHow much would you like your voucher for? (R10–R1000)\n\nFor example "R50" — or reply "cancel" to stop.`;
+    await addToConversationHistory(from, 'assistant', askMsg);
+    return await sendWhatsAppText({ to: from, text: askMsg });
+  }
+
   // Deterministic short-circuit: deposit-status questions ("did my payment
   // go through", "where is my money") are answered from the intent table +
   // ledger, BEFORE the AI can see them — the AI must never invent
@@ -965,13 +1008,15 @@ async function handlePostOnboarding({ account, from, text }) {
       
       switch (category) {
         case 'GAMING':
-          if (amount) {
-            return await handleListGamingProducts({ from, account });
+          if (!isCategoryLive('GAMING')) {
+            return await replyCategoryUnavailable(from, 'GAMING');
           }
           return await handleListGamingProducts({ from, account });
           
         case 'LIFESTYLE':
-          // Lifestyle voucher flow
+          if (!isCategoryLive('LIFESTYLE')) {
+            return await replyCategoryUnavailable(from, 'LIFESTYLE');
+          }
           return await handleListLifestyleProducts({ from, account });
           
         case 'ELECTRICITY':
@@ -1548,6 +1593,19 @@ function detectExplicitIntent(text = '') {
 const DEPOSIT_CARD_PATTERN = /\b(?:deposit|depsit|deposite|diposit)\b(?:\s+(?:money|funds|cash))?\s*[:,-]?\s*r?\s*(\d+(?:[.,]\d{1,2})?)(?:\s*(?:rand|rande|zar))?\b/i;
 
 /**
+ * "Buy an OTT voucher" (for MYSELF — no recipient number in the message).
+ * Excludes redemption-ish phrasings ("redeem / load / I have an OTT
+ * voucher"): those belong to the future OTT-deposit path, not a purchase.
+ */
+function matchOttVoucherSelfRequest(text = '', slots = null) {
+  const s = String(text || '');
+  if (slots?.msisdn) return false;
+  if (!/\bott\s*vouchers?\b/i.test(s)) return false;
+  if (/\b(redeem\w*|load\w*|deposit\w*|have|got|received?|claim\w*)\b/i.test(s)) return false;
+  return true;
+}
+
+/**
  * Rand-string -> integer cents with string math only (no float multiplication
  * on the money path). '100' -> 10000, '100.5' -> 10050, '100,50' -> 10050.
  *
@@ -1625,9 +1683,13 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
 
   let paymentId;
   let checkoutUrl;
+  let feeCents;
+  let grossCents;
   try {
     const intent = await createDepositIntent({ accountId: account.id, waId: from, amountCents });
     paymentId = intent.paymentId;
+    feeCents = intent.feeCents;
+    grossCents = intent.grossCents;
 
     const base = String(process.env.APP_BASE_URL || '').replace(/\/+$/, '');
     checkoutUrl = buildCheckoutUrl({
@@ -1635,7 +1697,9 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
       merchantKey: process.env.PAYFAST_MERCHANT_KEY,
       passphrase: process.env.PAYFAST_PASSPHRASE || undefined,
       sandbox: process.env.PAYFAST_SANDBOX === 'true',
-      amountCents,
+      // The customer pays GROSS (credit + payment fee); the wallet is
+      // credited amountCents. Quoted before they tap — fees never hide.
+      amountCents: grossCents,
       mPaymentId: paymentId,
       itemName: 'WaPay top-up',
       // wa.me deep link reopens the WaPay chat — returning to the bare API
@@ -1674,10 +1738,12 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
   // chat after. Falls back to a plain-text link if the interactive send is
   // rejected — a payment must never be blocked by presentation.
   const bodyText =
-    `I'll take you to *PayFast*, our secure payment partner, to pay ` +
-    `${randsShort(amountCents)} by card or Instant EFT.\n\n` +
-    `When you've paid, tap *"Back to WaPay"* and you'll be brought straight ` +
-    `back to this chat. I'll confirm here the moment your money lands. 💰`;
+    `${randsShort(amountCents)} deposit + ${randsShort(feeCents)} payment fee = ` +
+    `*${randsShort(grossCents)}*\n\n` +
+    `I'll take you to *PayFast*, our secure payment partner, to pay by card ` +
+    `or Instant EFT. When you've paid, tap *"Back to WaPay"* and you'll be ` +
+    `brought straight back to this chat. I'll confirm here the moment your ` +
+    `${randsShort(amountCents)} lands. 💰`;
   await addToConversationHistory(from, 'assistant', bodyText);
 
   const interactive = await sendWhatsAppCtaUrl({
@@ -1685,7 +1751,7 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
     headerText: 'Add money to WaPay',
     bodyText,
     footerText: 'Secured by PayFast',
-    buttonText: `Pay ${randsShort(amountCents)} now`,
+    buttonText: `Pay ${randsShort(grossCents)} now`,
     url: checkoutUrl,
   });
   if (interactive?.ok) return interactive;
@@ -1699,7 +1765,8 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
   return await sendWhatsAppText({
     to: from,
     text:
-      `💳 Tap to pay ${randsShort(amountCents)} securely with PayFast: ${checkoutUrl}\n\n` +
+      `💳 ${randsShort(amountCents)} deposit + ${randsShort(feeCents)} payment fee = ${randsShort(grossCents)}.\n\n` +
+      `Tap to pay securely with PayFast: ${checkoutUrl}\n\n` +
       `Your balance updates here the moment payment clears.`,
   });
 }
@@ -1790,6 +1857,11 @@ async function handleConversationState({ from, text, state, data, account }) {
         ? depositAmountToCents(bare[1])
         : matchCardDepositRequest(text);
       if (bareAmountCents == null) {
+        // A sentence/question is not an amount — escape to the full router.
+        if (isConversationalEscape(text)) {
+          await updateConversationState(from, null);
+          return await handlePostOnboarding({ account, from, text });
+        }
         return await sendWhatsAppText({
           to: from,
           text: `Please reply with just the amount you'd like to deposit, e.g. "R100" — or "cancel" to stop.`,
@@ -1861,10 +1933,19 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
 
+        // A real question/sentence is NOT a PIN attempt — escape the state
+        // and let the full router (incl. the orchestrator) answer it.
+        // "I want to use my bank account" must get the card option, not
+        // "Invalid Voucher PIN" on loop (observed live, 2026-08-20).
+        if (isConversationalEscape(text)) {
+          await updateConversationState(from, null);
+          return await handlePostOnboarding({ account, from, text });
+        }
+
         // Otherwise treat message as PIN entry
         // Validate and normalize PIN
         const normalizedPin = text.replace(/[\s-]/g, '');
-        
+
         if (!/^\d{16}$/.test(normalizedPin)) {
           await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
           return await sendWhatsAppText({
@@ -2448,8 +2529,6 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
       }
 
-    case 'AI_AIRTIME_PURCHASE':
-    case 'AI_DATA_PURCHASE':
       await updateConversationState(from, null);
       if (state === 'AI_DATA_PURCHASE') {
         if (!isCategoryLive('DATA')) {
@@ -2998,7 +3077,10 @@ async function handleConversationState({ from, text, state, data, account }) {
 
         return await sendWhatsAppText({
           to: from,
-          text: `🔐 *Enter Your PIN*\n\nTo send the ${randsShort(amountCents)} WaPay voucher to ${recipientMsisdn} (total ${randsShort(amountCents + (feeCents || 0))} incl. fee), please enter your WaPay PIN.`,
+          text:
+            normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')
+              ? `🔐 *Enter Your PIN*\n\nTo buy your ${randsShort(amountCents)} OTT voucher (total ${randsShort(amountCents + (feeCents || 0))} incl. fee), please enter your WaPay PIN.`
+              : `🔐 *Enter Your PIN*\n\nTo send the ${randsShort(amountCents)} WaPay voucher to ${recipientMsisdn} (total ${randsShort(amountCents + (feeCents || 0))} incl. fee), please enter your WaPay PIN.`,
         });
       }
 
@@ -3083,6 +3165,23 @@ async function handleConversationState({ from, text, state, data, account }) {
               message: executeData.message,
             });
 
+            // Short balance is not an error — it's a checkout moment. Show
+            // the shortfall and both load options (founder flow, 2026-08-20).
+            if (executeData.error === 'INSUFFICIENT_FUNDS') {
+              const { balance } = await getUserBalance(from);
+              const totalCents = amountCents + (feeCents || 0);
+              const balanceCents = Math.round(parseFloat(balance) * 100) || 0;
+              const shortfallCents = Math.max(totalCents - balanceCents, MIN_DEPOSIT_CENTS);
+              return await sendWhatsAppText({
+                to: from,
+                text:
+                  `💰 You need ${randsShort(totalCents)} for this voucher but your balance is R${balance}.\n\n` +
+                  `Top up and try again:\n` +
+                  `1️⃣ *Cash* — buy a Blu Voucher at any till and send me the code\n` +
+                  `2️⃣ *Card / bank* — reply "deposit ${randsShort(shortfallCents)}" for a secure PayFast link`,
+              });
+            }
+
             return await sendWhatsAppErrorOnce({
               to: from,
               errorKey: `${previewId || 'vgift'}:${executeData.error || 'ERROR'}`,
@@ -3106,17 +3205,62 @@ async function handleConversationState({ from, text, state, data, account }) {
             recipientMasked: maskMsisdn(finalRecipient),
           });
 
-          const receipt =
-            `✅ Voucher sent!\n\n` +
-            `🎁 Voucher: ${randsShort(paidAmountCents)}\n` +
-            `💳 Fee: ${randsShort(paidFeeCents)}\n` +
-            `📱 To: ${maskMsisdn(finalRecipient)}\n` +
-            `🧾 Reference: ${executeData.reference}\n` +
-            `📅 ${formatDateTimeZa(new Date())}\n\n` +
-            `💳 New balance: R${((executeData.newBalance || 0) / 100).toFixed(2)}\n\n` +
-            `They'll get their voucher the moment they message WaPay.`;
+          // SELF-purchase ("buy an OTT voucher"): the buyer IS the recipient,
+          // so the PIN is delivered right here, immediately — the claim flow
+          // (atomic ISSUED->DELIVERED) is reused so a crash or replay can
+          // never double-deliver.
+          const isSelfPurchase =
+            normaliseMsisdn(finalRecipient) === normaliseMsisdn(account.msisdn);
+
+          const receipt = isSelfPurchase
+            ? `✅ *OTT Voucher purchased!*\n\n` +
+              `🎟️ Voucher: ${randsShort(paidAmountCents)}\n` +
+              `💳 Fee: ${randsShort(paidFeeCents)}\n` +
+              `🧾 Reference: ${executeData.reference}\n` +
+              `📅 ${formatDateTimeZa(new Date())}\n\n` +
+              `💳 New balance: R${((executeData.newBalance || 0) / 100).toFixed(2)}\n\n` +
+              `Your voucher PIN is coming right up… 🎟️`
+            : `✅ Voucher sent!\n\n` +
+              `🎁 Voucher: ${randsShort(paidAmountCents)}\n` +
+              `💳 Fee: ${randsShort(paidFeeCents)}\n` +
+              `📱 To: ${maskMsisdn(finalRecipient)}\n` +
+              `🧾 Reference: ${executeData.reference}\n` +
+              `📅 ${formatDateTimeZa(new Date())}\n\n` +
+              `💳 New balance: R${((executeData.newBalance || 0) / 100).toFixed(2)}\n\n` +
+              `They'll get their voucher the moment they message WaPay.`;
           await addToConversationHistory(from, 'assistant', receipt);
           await sendWhatsAppText({ to: from, text: receipt });
+
+          if (isSelfPurchase) {
+            try {
+              const gifts = await claimPendingGifts({ recipientMsisdn: account.msisdn });
+              for (const gift of gifts) {
+                await sendWhatsAppText({
+                  to: from,
+                  text: buildVoucherClaimMessage({
+                    senderName: null,
+                    amountCents: gift.amountCents,
+                    pin: gift.voucherPin,
+                    serial: gift.voucherSerial,
+                  }),
+                });
+              }
+              logStructured('voucher_self_purchase_delivered', {
+                from,
+                accountId: account.id,
+                count: gifts.length,
+              });
+            } catch (claimError) {
+              // The purchase is settled and the gift row exists — the claim
+              // flow will deliver the PIN on their next message.
+              logStructured('voucher_self_claim_deferred', {
+                from,
+                accountId: account.id,
+                error: claimError?.message,
+              });
+            }
+            return await sendPostTransactionCta(from);
+          }
 
           // Recipient heads-up (template-first, NO voucher PIN): best-effort
           // and must never affect the settled purchase — same guarantees as
@@ -3200,7 +3344,7 @@ async function handleAIChat({ from, text, account }) {
   // Check if OpenAI is configured
   if (!process.env.OPENAI_API_KEY) {
     console.log('⚠️ OpenAI not configured, using fallback');
-    const fallbackMsg = `👋 Hi there!\n\nI didn't quite understand that. Here's what I can help you with:\n\n💰 Check balance\n📱 Buy airtime\n📶 Buy data\n💡 Buy electricity\n🎬 Lifestyle vouchers\n🎮 Betting top-ups\n🎟️ Redeem voucher\n\nType "help" to see more options!`;
+    const fallbackMsg = `👋 Hi there!\n\nI didn't quite understand that. Here's what I can help you with:\n\n💰 Check balance\n📱 Buy airtime\n📶 Buy data\n💡 Buy electricity\n💸 Send money\n💳 Deposit\n🎟️ Redeem voucher\n\nType "help" to see more options!`;
     await addToConversationHistory(from, 'assistant', fallbackMsg);
     return await sendWhatsAppText({
       to: from,
@@ -3431,7 +3575,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
     }
 
     case 'HELP': {
-      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083..." — or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🏧 *Cash out* - "How do I withdraw?"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words — any South African language works!`;
+      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083..." — or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words — any South African language works!`;
       await addToConversationHistory(from, 'assistant', helpMsg);
       return await sendWhatsAppText({ to: from, text: helpMsg });
     }
@@ -3675,7 +3819,7 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
     }
     
     // GAMING: betting indicators
-    const gamingIndicators = ['bet', 'betting', 'hollywood', 'lottostar', 'betway', 'supabets', 'gamble'];
+    const gamingIndicators = ['betting', 'hollywoodbets', 'lottostar', 'betway', 'supabets', 'gamble'];
     const hasGamingIntent = gamingIndicators.some(k => lowerText.includes(k));
     
     if (hasGamingIntent) {
@@ -3750,10 +3894,15 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
       AIRTIME: ['airtime', 'recharge', 'top up', 'topup', 'top-up', 'phone credit'],
       DATA: ['data', 'bundle', 'bundles', 'mb', 'gb', 'gig', 'internet'],
       ELECTRICITY: ['electricity', 'prepaid', 'meter', 'token', 'units', 'power', 'elec', 'light', 'eskom'],
-      LIFESTYLE: ['voucher', 'gift card', 'ott', 'streaming'],
-      BILLPAY: ['tv', 'subscription', 'bill'],
-      GAMING: ['bet', 'betting', 'gamble', 'gambling', 'casino', 'lotto'],
-      REMITTANCE: ['send money', 'transfer', 'remit', 'remittance'],
+      // 'voucher'/'ott' are RESERVED for the money rail (Blu deposit voucher,
+      // OTT money voucher) — mapping them here sent "can I buy an OTT
+      // voucher?" to a Netflix menu (live sighting 2026-08-20). 'send money'
+      // is WaPay's own feature, never REMITTANCE. Bare 'bet' substring-matched
+      // inside 'better' — betting words must never surface in chat anyway.
+      LIFESTYLE: ['gift card', 'streaming'],
+      BILLPAY: ['subscription', 'dstv', 'gotv'],
+      GAMING: ['gambling', 'casino'],
+      REMITTANCE: ['remittance', 'mukuru', 'hello paisa'],
     };
     
     // Add operators to their category keywords
@@ -3840,6 +3989,11 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
  * Show products for a specific category
  */
 async function showCategoryProducts({ from, account, category, text }) {
+  // Coming-soon categories never render a product menu — every route into
+  // this function (keyword map, operator names) inherits the gate.
+  if (!isCategoryLive(category)) {
+    return await replyCategoryUnavailable(from, category);
+  }
   const lowerText = text?.toLowerCase() || '';
   
   logStructured('show_category_products', {
@@ -3914,7 +4068,7 @@ async function showCategoryProducts({ from, account, category, text }) {
       },
       LIFESTYLE: {
         emoji: '🎮',
-        title: 'Lifestyle & OTT Vouchers',
+        title: 'Entertainment Vouchers',
         formatProduct: (p) => {
           const price = ((p.fixedPriceCents || p.priceCents) / 100).toFixed(0);
           return `${p.label.split(' ')[0]} R${price}`;
@@ -3931,13 +4085,13 @@ async function showCategoryProducts({ from, account, category, text }) {
         helpText: 'Reply: *"Pay my DStv"*',
       },
       GAMING: {
-        emoji: '🎰',
-        title: 'Betting & Gaming',
+        emoji: '🎮',
+        title: 'Gaming Top-ups',
         formatProduct: (p) => {
           const price = ((p.fixedPriceCents || p.priceCents) / 100).toFixed(0);
           return `${p.label.split(' ')[0]} R${price}`;
         },
-        helpText: 'Reply: *"Top up Hollywoodbets R50"*',
+        helpText: 'Reply with the operator and amount to top up.',
       },
       REMITTANCE: {
         emoji: '💸',
@@ -4379,7 +4533,7 @@ async function handleListLifestyleProducts({ from, account }) {
       byOperator[op].push(p);
     }
 
-    let message = `🎮 *Lifestyle & OTT Vouchers*\n\nAvailable vouchers:\n\n`;
+    let message = `🎮 *Entertainment Vouchers*\n\nAvailable vouchers:\n\n`;
     
     for (const [operator, operatorProducts] of Object.entries(byOperator)) {
       const first = operatorProducts[0];
@@ -4490,7 +4644,7 @@ async function handleListGamingProducts({ from, account }) {
     if (products.length === 0) {
       return await sendWhatsAppText({
         to: from,
-        text: `🎰 I couldn't find any betting operators in our catalogue right now.\n\nPlease try again later.`,
+        text: `🎮 I couldn't find any gaming operators in our catalogue right now.\n\nPlease try again later.`,
       });
     }
 
@@ -4502,7 +4656,7 @@ async function handleListGamingProducts({ from, account }) {
       byOperator[op].push(p);
     }
 
-    let message = `🎰 *Betting & Gaming Top-ups*\n\nAvailable operators:\n\n`;
+    let message = `🎮 *Gaming Top-ups*\n\nAvailable operators:\n\n`;
     
     for (const [operator, operatorProducts] of Object.entries(byOperator)) {
       const first = operatorProducts[0];
@@ -4515,7 +4669,7 @@ async function handleListGamingProducts({ from, account }) {
       message += '\n';
     }
     
-    message += `Reply: *"Top up Hollywoodbets R50"* and I'll help you.`;
+    message += `Reply with the operator and amount to top up.`;
 
     // Set active category so follow-up messages are interpreted correctly
     await setActiveCategory(from, 'GAMING', Object.keys(byOperator));
@@ -4529,7 +4683,7 @@ async function handleListGamingProducts({ from, account }) {
     console.error('List gaming error:', error);
     return await sendWhatsAppText({
       to: from,
-      text: `❌ Sorry, I couldn't fetch the betting operators right now. Please try again later.`,
+      text: `❌ Sorry, I couldn't fetch the gaming operators right now. Please try again later.`,
     });
   }
 }
@@ -4614,20 +4768,18 @@ async function handleListVasProducts({ from, account }) {
       });
     }
 
-    // Build friendly category list
+    // Build friendly category list — LIVE categories only. Off categories
+    // are not advertised at all (and betting words never appear in chat).
     const categoryNames = {
       AIRTIME: { name: '📱 Mobile Airtime', desc: 'Vodacom, MTN, Cell C, Telkom' },
       DATA: { name: '📶 Data Bundles', desc: 'Daily, Weekly, Monthly bundles' },
       ELECTRICITY: { name: '💡 Prepaid Electricity', desc: 'Eskom, City Power, and more' },
-      BILLPAY: { name: '📺 Bill Payments', desc: 'DStv, GOtv subscriptions' },
-      LIFESTYLE: { name: '🎮 Lifestyle & OTT', desc: 'Netflix, Uber, Google Play, Steam' },
-      GAMING: { name: '🎰 Betting & Gaming', desc: 'Hollywoodbets, Lottostar, Betway' },
-      REMITTANCE: { name: '💸 Money Transfers', desc: 'Mukuru, Hello Paisa, Mama Money' },
     };
 
     let message = `🛒 *WaPay VAS Products*\n\nHere's what you can buy on WaPay:\n\n`;
     
     for (const cat of categoryCounts) {
+      if (!isCategoryLive(cat.category)) continue;
       const info = categoryNames[cat.category];
       if (info) {
         message += `${info.name}\n   _${info.desc}_\n\n`;

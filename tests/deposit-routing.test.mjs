@@ -140,7 +140,7 @@ test('static: checkout honours the ITN contract (m_payment_id = intent id, notif
   assert.match(body, /mPaymentId: paymentId/, "PayFast's m_payment_id must be the deposit intent id");
   assert.match(body, /itemName: 'WaPay top-up'/);
   assert.match(body, /\/api\/payfast\/itn/, 'notify_url must point at the ITN webhook');
-  assert.match(body, /amountCents,\s*\n\s*mPaymentId/, 'checkout amount comes from the same intent amount');
+  assert.match(body, /amountCents: grossCents,/, 'checkout charges GROSS (credit + payment fee) from the same intent');
 });
 
 test('static: NO wallet-PIN gate guards deposit-link creation (money coming IN)', () => {

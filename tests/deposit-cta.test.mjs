@@ -109,13 +109,13 @@ test('static: the CTA button carries the checkout URL', () => {
   const body = cardDepositHandlerSource();
   assert.match(body, /sendWhatsAppCtaUrl\(\{/);
   assert.match(body, /url: checkoutUrl/, 'the button must open the PayFast checkout');
-  assert.match(body, /buttonText: `Pay \$\{randsShort\(amountCents\)\} now`/);
+  assert.match(body, /buttonText: `Pay \$\{randsShort\(grossCents\)\} now`/, 'button quotes the GROSS (credit + fee)');
 });
 
 test('static: preamble explains the PayFast round trip (there AND back)', () => {
   const body = cardDepositHandlerSource();
   assert.match(body, /PayFast/, 'names the payment partner');
-  assert.match(body, /card or Instant EFT/i, 'names both payment methods');
+  assert.match(body, /card[\s\S]{0,12}or Instant EFT/i, 'names both payment methods');
   assert.match(body, /back to WaPay/i, 'tells the user they will return');
   assert.match(body, /to this chat/, 'promises the return to the chat');
 });

@@ -84,6 +84,12 @@ export default async function handler(req, res) {
 
   const { previewId, pin, accountId } = req.body;
 
+  // Set the moment a hold is reserved; the outer catch releases it on any
+  // crash. R36 was found stranded in ACTIVE holds in prod (2026-08-20)
+  // because a crash between reserveHold and settle/release skipped the
+  // taxonomy paths' releaseHold calls.
+  let holdIdemKey = null;
+
   logStructured('vas_voucher_execute_call', {
     previewId,
     accountId,
@@ -236,6 +242,7 @@ export default async function handler(req, res) {
         balanceType: BALANCE.SPEND,
         reason: `voucher gift ${recipientMsisdn}`,
       });
+      holdIdemKey = idemKey;
     } catch (error) {
       if (error.code === 'INSUFFICIENT_FUNDS') {
         logStructured('vas_voucher_execute_result', {
@@ -436,6 +443,25 @@ export default async function handler(req, res) {
       newBalance: updatedWallet.availableCents,
     });
   } catch (error) {
+    // NEVER strand the customer's money: if a hold was reserved and this
+    // crash skipped the taxonomy paths, give the money back now. releaseHold
+    // is status-guarded (no-op on SETTLED/RELEASED), so this is safe even
+    // when the crash happened after a successful settle.
+    if (holdIdemKey) {
+      try {
+        await releaseHold({
+          idemKey: holdIdemKey,
+          reason: `execute_crashed:${String(error?.message || error).slice(0, 80)}`,
+        });
+      } catch (releaseError) {
+        logStructured('vas_voucher_crash_release_failed', {
+          previewId,
+          idemKey: holdIdemKey,
+          error: releaseError?.message,
+        });
+      }
+    }
+
     captureError(error, {
       handler: 'vas/voucher/execute',
       body: { ...req.body, pin: '[REDACTED]' },

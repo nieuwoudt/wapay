@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-08-20 — Deposit fee, OTT self-purchase, state escapes, policy sweep, ledger repair
+
+Founder live-testing batch (first fully auto-credited deposit confirmed: R30 → "✅ Deposit received", closing the deposit E2E objective):
+
+- **Deposit payment fee**: card/EFT deposits now charge gross = credit + fee (`depositFeeCents`: 4.2% + R2.30 rounded up to a rand — env-tunable `WAPAY_DEPOSIT_FEE_BPS`/`_FIXED_CENTS` until PayFast's real rate card is read). Quoted before the tap ("R30 deposit + R4 payment fee = *R34*", button pays gross); ITN verifies gross, credits face, books the fee to `REVENUE:FEE:DEPOSIT` (`buildLoad` gained `customerFeeCents`). Deposits are no longer loss-making.
+- **OTT voucher self-purchase**: "buy an OTT voucher" (any phrasing/language — deterministic short-circuit + orchestrator `self=true`) → confirm (amount+fee) → wallet PIN → OTT issue → **PIN delivered in-session immediately** via the atomic claim flow. Insufficient balance becomes a checkout moment (shortfall + both load options). The stale "🎮 Lifestyle & OTT Vouchers" (Netflix/Uber) menu can no longer swallow OTT-voucher asks.
+- **Trap-state escapes**: real sentences/questions inside `AWAITING_VOUCHER_PIN` and `DEPOSIT_CARD_AMOUNT` now escape to the full router (orchestrator included) instead of looping "Invalid Voucher PIN" (live sighting: "I want to use my bank account").
+- **Policy/stale-content sweep (3-agent workflow, all fix-now findings applied)**: `showCategoryProducts` + context-aware follow-ups now coming-soon gated; "what can I buy" advertises live categories only; **every betting word scrubbed from WhatsApp-facing copy** (menus, gates, errors, keyword maps — Meta policy); 'ott'/'voucher'/'send money' keywords reserved for the money rail; no-API-key fallback menu cleaned; orchestrator HELP no longer teases cash-out. Dead code deleted: legacy `message-processor.js` (V1), `chat.ts`/`chatWithAI`, orphan AI states, `renderHome` dead vars.
+- **Ledger repair + crash-proof holds** (BUGLOG #15/#16): R36 of stuck ACTIVE holds released, R20 unbacked double-credit removed — founder balance now R50.00 = exactly the journal. Voucher execute releases its hold in the outer catch on any crash.
+- Suite 247/247.
+
 ## 2026-08-19 — 🎉 OTT float landed (R100k) + comma-amount parser fix — send-money UNBLOCKED
 
 OTT IT Support loaded the R100,000 test float — and the very first balance check found a real bug: OTT formats large amounts with comma thousands separators (`"100,000.00"`) and `randToCents` rejected them, failing GetBalance. Fixed: well-formed comma grouping (and only that) is stripped before exact string-math parsing; malformed comma patterns still throw. This also protects voucher issuing at the R1000 cap (`"1,000.00"`). Live-verified: balance R100,000.00. New `tests/ott-rand-parsing.test.mjs`; suite 238/238. **The voucher-gift ("send money") live test is now unblocked.** Test vouchers for merchant redemption received from OTT (stored locally, gitignored — redemption client still needs OTT's Merchant API docs + credentials). Deposit cash-in copy expanded to the founder's step-by-step wording.
