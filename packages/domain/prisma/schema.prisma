@@ -18,6 +18,7 @@ model Account {
   onboardingStatus   String?  @default("NEW")
   conversationState  String?
   conversationData   Json?
+  profile            Json? // user memory: language, deposit method, last meter, interests — see lib/user-profile.js
   createdAt          DateTime @default(now())
   wallets            Wallet[]
   sessions           AuthSession[]

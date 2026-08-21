@@ -79,10 +79,10 @@ test('static: self-purchase delivers the PIN in-session via the atomic claim flo
   assert.match(processorSource, /voucher_self_claim_deferred/, 'claim failure defers, never loses the PIN');
 });
 
-test('static: INSUFFICIENT_FUNDS is a checkout moment with both load options', () => {
+test('static: INSUFFICIENT_FUNDS is a checkout moment — direct link + resume', () => {
   assert.match(processorSource, /executeData\.error === 'INSUFFICIENT_FUNDS'/);
-  assert.match(processorSource, /Top up and try again/);
-  assert.match(processorSource, /shortfallCents/);
+  assert.match(processorSource, /Pay the \$\{randsShort\(shortfallCents\)\} difference/);
+  assert.match(processorSource, /'RESUME_VOUCHER_PURCHASE'/);
 });
 
 // ---------------------------------------------------------------------------

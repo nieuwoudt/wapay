@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-08-20 (2) — User memory, GPT-5.5 brain, fee-free self vouchers, voucher history
+
+- **Root cause of every live voucher failure found: `OTT_BASE_URL` (and the OTT credentials) were never set in Vercel** — the OTT client crashes at construction in production. USER ACTION: copy the four `OTT_*` vars from local `.env` into Vercel and redeploy. (The crash-release guard worked: the stranded hold auto-released with `execute_crashed:Missing env OTT_BASE_URL` — that log line was the diagnosis.)
+- **User memory system** (`Account.profile` JSONB, prod-applied; `lib/user-profile.js`): language (evidence-counted — one foreign test line can't flip it), preferred deposit method (written by ITN success=CARD, redemption success=VOUCHER), last electricity meter, product interests. Injected into the orchestrator every turn as `KNOWN USER PROFILE`; deposit-with-amount offers BOTH load methods until the preference is known (then straight to their rail).
+- **Language bug fixed** (bot answered "Okay" in isiZulu after one zu test line): reply language = the CURRENT message's language, history is context only, neutral messages fall back to the profile language. Live-verified.
+- **Model upgrade: gpt-5.5 orchestrator + gpt-5.4-mini agents** (probed live; GPT-5-family params adapted — `max_completion_tokens`, `reasoning_effort: none`, no temperature). **Golden eval: 132/132 = 100%** across all 11 languages (up from 99.2% on gpt-4o), ~1s per call. Env-tunable as before.
+- **Self OTT vouchers are fee-free** (fees belong on money-IN and on sending to others; WaPay still earns the OTT issuing commission). Copy: "⏳ Generating your OTT voucher..." for self ("sending" is reserved for sending to people).
+- **Broke checkout**: insufficient balance for a voucher now quotes the shortfall, sends a PayFast button for exactly that top-up, and **resumes the purchase automatically** on the next message after the money lands (`RESUME_VOUCHER_PURCHASE`).
+- **Voucher history + retrieval**: "my vouchers" lists date/value/serial/status from `pending_gifts`; "voucher pin <serial tail>" re-sends a PIN **behind the wallet PIN** (verifyPIN with lockout).
+- Suite 258/258.
+
 ## 2026-08-20 — Deposit fee, OTT self-purchase, state escapes, policy sweep, ledger repair
 
 Founder live-testing batch (first fully auto-credited deposit confirmed: R30 → "✅ Deposit received", closing the deposit E2E objective):

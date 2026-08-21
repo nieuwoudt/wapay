@@ -107,7 +107,8 @@ test('dispatch contains no direct money movement', () => {
 test('engine: structured outputs, temperature 0, fail-fast timeout', () => {
   assert.match(engineSource, /type: 'json_schema'/);
   assert.match(engineSource, /strict: true/);
-  assert.match(engineSource, /temperature: 0/);
+  assert.match(engineSource, /temperature: 0/, 'legacy gpt-4 branch stays deterministic');
+  assert.match(engineSource, /CURRENT message only/, 'the language rule pins the reply language');
   assert.match(engineSource, /timeout: 10_000/);
   assert.match(engineSource, /maxRetries: 0/, 'no provider retries inside the webhook budget');
   assert.ok(!/JSON\.parse\((?!content)/.test(engineSource), 'only the schema-guaranteed content is parsed');
@@ -134,8 +135,10 @@ test('engine: all 11 official languages are declared', () => {
 test('engine: model tiers are env-tunable (Claude migration path)', () => {
   assert.match(engineSource, /WAPAY_ORCHESTRATOR_MODEL/);
   assert.match(engineSource, /WAPAY_CATEGORY_AGENT_MODEL/);
-  assert.match(engineSource, /gpt-4o/);
-  assert.match(engineSource, /gpt-4o-mini/);
+  assert.match(engineSource, /gpt-5\.5/, 'latest mainline orchestrator (132/132 eval 2026-08-20)');
+  assert.match(engineSource, /gpt-5\.4-mini/, 'latest mini for category agents');
+  assert.match(engineSource, /reasoning_effort/, 'GPT-5 family params adapted');
+  assert.match(engineSource, /max_completion_tokens/, 'GPT-5 family params adapted');
 });
 
 // ---------------------------------------------------------------------------

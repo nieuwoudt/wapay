@@ -15,6 +15,14 @@ import {
   findBeneficiariesByName,
   formatBeneficiary,
 } from '../../../lib/beneficiaries.js';
+import {
+  getProfile,
+  noteLanguage,
+  noteDepositMethod,
+  noteMeterNumber,
+  noteInterest,
+  formatProfileContext,
+} from '../../../lib/user-profile.js';
 import crypto from 'crypto';
 import { BluClient, BluVasClient } from '@wapay/providers-blu';
 import { buildLoad, RAIL } from '../../../lib/ledger-core.js';
@@ -35,6 +43,7 @@ import { parseSlots } from '../../../lib/slot-parser.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
 import { searchProducts } from '../../../lib/vas-search.js';
 import {
+  verifyPIN,
   getOnboardingState,
   handleS0Initial,
   handleS1WelcomeSent,
@@ -303,9 +312,9 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
   const confirmMsg = isSelfPurchase
     ? `🎟️ *Confirm OTT Voucher*\n\n` +
       `Voucher: ${randsShort(amountCents)}\n` +
-      `Fee: ${randsShort(feeCents)}\n` +
-      `Total: ${randsShort(totalCents)}\n\n` +
-      `Paid from your WaPay balance. Your voucher PIN will be delivered right here — spend it online at any store that accepts OTT vouchers.\n\n` +
+      (feeCents > 0 ? `Fee: ${randsShort(feeCents)}\nTotal: ${randsShort(totalCents)}\n` : `No fee — paid from your balance.\n`) +
+      `\n` +
+      `Your voucher PIN will be delivered right here — spend it online at any store that accepts OTT vouchers.\n\n` +
       `Reply *YES* to confirm or *NO* to cancel.`
     : `🎁 *Confirm WaPay Voucher*\n\n` +
       `Voucher: ${randsShort(amountCents)}\n` +
@@ -908,6 +917,20 @@ async function handlePostOnboarding({ account, from, text }) {
   // R100 airtime). No PIN gate: the money is coming IN, not out.
   const cardDepositCents = matchCardDepositRequest(text);
   if (cardDepositCents) {
+    // Memory-aware (founder, 2026-08-20): offer BOTH load methods unless we
+    // know how this customer pays. A successful card deposit or voucher
+    // redemption records the preference; after that, straight to their rail.
+    const depositProfile = await getProfile({ accountId: account.id });
+    if (!depositProfile.preferredDepositMethod) {
+      await updateConversationState(from, 'AWAITING_DEPOSIT_METHOD', { amountCents: cardDepositCents });
+      return await sendWhatsAppText({
+        to: from,
+        text:
+          `💰 Adding ${randsShort(cardDepositCents)} to WaPay — how would you like to pay?\n\n` +
+          `1️⃣ *Cash* — Blu Voucher at any till (send me the code)\n` +
+          `2️⃣ *Card / bank* — secure PayFast link\n\nReply *1* or *2*.`,
+      });
+    }
     logSlotFill({
       intent: 'DEPOSIT_CARD',
       text,
@@ -918,6 +941,19 @@ async function handlePostOnboarding({ account, from, text }) {
       accountId: account.id,
     });
     return await handleCardDepositLink({ from, account, amountCents: cardDepositCents, rawText: text });
+  }
+
+  // Deterministic short-circuit: voucher HISTORY ("my vouchers") and
+  // PIN-gated PIN resend ("voucher pin <serial tail>") — the founder's
+  // voucher-storage ask (2026-08-20): every bought voucher is queryable.
+  if (/(?:\b(?:my|show|list)\b[^\n]{0,20}\bvouchers?\b)|voucher history/i.test(text) && !/\d{6,}/.test(text)) {
+    return await handleVoucherHistory({ from, account });
+  }
+  {
+    const resendMatch = text.trim().match(/^voucher\s+pin\s+(\d{4,20})$/i);
+    if (resendMatch) {
+      return await startVoucherPinResend({ from, account, serialTail: resendMatch[1] });
+    }
   }
 
   // Deterministic short-circuit: "buy an OTT voucher" (no recipient) is a
@@ -1601,7 +1637,7 @@ function matchOttVoucherSelfRequest(text = '', slots = null) {
   const s = String(text || '');
   if (slots?.msisdn) return false;
   if (!/\bott\s*vouchers?\b/i.test(s)) return false;
-  if (/\b(redeem\w*|load\w*|deposit\w*|have|got|received?|claim\w*)\b/i.test(s)) return false;
+  if (/\b(redeem\w*|load\w*|deposit\w*|have|got|received?|claim\w*|my|show|list|history|bought)\b/i.test(s)) return false;
   return true;
 }
 
@@ -1836,6 +1872,78 @@ async function handleDepositStatus({ from, account }) {
 
   await addToConversationHistory(from, 'assistant', text);
   return await sendWhatsAppText({ to: from, text });
+}
+
+/**
+ * Voucher history — every voucher this account bought (self or sent), from
+ * pending_gifts: date, value, serial, delivery status. PINs never appear
+ * here; retrieval is wallet-PIN-gated via startVoucherPinResend.
+ */
+async function handleVoucherHistory({ from, account }) {
+  let gifts = [];
+  try {
+    gifts = await prisma.pendingGift.findMany({
+      where: { senderAccountId: account.id },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+  } catch (error) {
+    logStructured('voucher_history_error', { from, accountId: account.id, error: error?.message });
+  }
+
+  if (!gifts.length) {
+    return await sendWhatsAppText({
+      to: from,
+      text: `🎟️ You haven't bought any vouchers yet.\n\nTry "buy an OTT voucher R50" — paid from your balance, PIN delivered right here.`,
+    });
+  }
+
+  const own = normaliseMsisdn(account.msisdn || '');
+  const lines = gifts.map((g) => {
+    const when = g.createdAt.toISOString().slice(0, 10);
+    const who = normaliseMsisdn(g.recipientMsisdn) === own ? 'for you' : `to ${maskMsisdn(g.recipientMsisdn)}`;
+    const status =
+      g.status === 'DELIVERED' ? '✅ PIN delivered' : g.status === 'CANCELLED' ? '❌ cancelled' : '⏳ awaiting claim';
+    return `• ${when} — ${randsShort(g.amountCents)} ${who}\n   SN ${g.voucherSerial || '—'} · ${status}`;
+  });
+
+  const msg =
+    `🎟️ *Your vouchers* (latest ${gifts.length})\n\n` +
+    lines.join('\n') +
+    `\n\nTo get a voucher PIN again, reply:\n*voucher pin <last 6 digits of its SN>*`;
+  await addToConversationHistory(from, 'assistant', msg);
+  return await sendWhatsAppText({ to: from, text: msg });
+}
+
+/**
+ * PIN resend, step 1: find the voucher by serial tail, then demand the
+ * WALLET PIN before the bearer voucher PIN is re-shown (it IS money).
+ */
+async function startVoucherPinResend({ from, account, serialTail }) {
+  let gift = null;
+  try {
+    const candidates = await prisma.pendingGift.findMany({
+      where: { senderAccountId: account.id, voucherSerial: { endsWith: serialTail } },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+    });
+    gift = candidates[0] || null;
+  } catch (error) {
+    logStructured('voucher_resend_lookup_error', { from, accountId: account.id, error: error?.message });
+  }
+
+  if (!gift) {
+    return await sendWhatsAppText({
+      to: from,
+      text: `🤔 I couldn't find a voucher of yours ending in "${serialTail}". Reply "my vouchers" to see the list.`,
+    });
+  }
+
+  await updateConversationState(from, 'VOUCHER_PIN_RESEND_AUTH', { giftId: gift.id });
+  return await sendWhatsAppText({
+    to: from,
+    text: `🔐 To re-send the PIN for your ${randsShort(gift.amountCents)} voucher (SN ${gift.voucherSerial}), please enter your WaPay PIN.`,
+  });
 }
 
 /**
@@ -2841,6 +2949,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             amountCents,
             meterNumber,
           });
+          noteMeterNumber({ accountId: account.id, meterNumber }).catch(() => {});
           
           // Format token for display (add spaces every 4 digits for readability)
           const token = executeData.transaction?.token || 'N/A';
@@ -2888,6 +2997,120 @@ async function handleConversationState({ from, text, state, data, account }) {
     // VOUCHER GIFT FLOW ("Send R50 to 084...") — a GOODS voucher sale,
     // never a money transfer. Mirrors the airtime confirm/PIN machine.
     // =================================================================
+    case 'AWAITING_DEPOSIT_METHOD': {
+      const normalized = text.trim().toLowerCase();
+      if (/^(cancel|stop|no|home|menu|back|exit)$/i.test(normalized)) {
+        await updateConversationState(from, null);
+        return await renderHome({ from, account });
+      }
+      const methodAmount = data?.amountCents;
+      if (/^(2|card|bank|payfast|eft)\b/i.test(normalized) && Number.isInteger(methodAmount)) {
+        await updateConversationState(from, null);
+        return await handleCardDepositLink({ from, account, amountCents: methodAmount, rawText: text });
+      }
+      if (/^(1|cash|voucher)\b/i.test(normalized)) {
+        await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+        return await sendWhatsAppText({
+          to: from,
+          text: `Great! Pay cash at any major till, ask for a *Blu Voucher*, then send me the 16-digit PIN.\nExample: 1234567890123456\n\nReply "cancel" to stop.`,
+        });
+      }
+      if (isConversationalEscape(text)) {
+        await updateConversationState(from, null);
+        return await handlePostOnboarding({ account, from, text });
+      }
+      return await sendWhatsAppText({ to: from, text: `Please reply *1* for cash or *2* for card — or "cancel" to stop.` });
+    }
+
+    case 'VOUCHER_PIN_RESEND_AUTH': {
+      // Wallet PIN gate before re-showing a bearer voucher PIN.
+      const normalized = text.trim().toLowerCase();
+      if (/^(cancel|stop|no|home|menu|back|exit)$/i.test(normalized)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: `👍 Cancelled.` });
+      }
+      const pinAttempt = text.replace(/\D/g, '');
+      if (pinAttempt.length < 4) {
+        if (isConversationalEscape(text)) {
+          await updateConversationState(from, null);
+          return await handlePostOnboarding({ account, from, text });
+        }
+        return await sendWhatsAppText({ to: from, text: `Please enter your WaPay PIN, or "cancel" to stop.` });
+      }
+
+      const check = await verifyPIN({ accountId: account.id, pin: pinAttempt });
+      if (!check.ok) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({
+          to: from,
+          text: check.lockedUntil
+            ? `🔒 Too many attempts — PIN entry is locked for a while. Please try again later.`
+            : `❌ That PIN doesn't match. For safety I've cancelled — reply "my vouchers" to start again.`,
+        });
+      }
+
+      const gift = await prisma.pendingGift.findUnique({ where: { id: data?.giftId || '' } });
+      await updateConversationState(from, null);
+      if (!gift || gift.senderAccountId !== account.id) {
+        return await sendWhatsAppText({ to: from, text: `🤔 That voucher isn't available any more.` });
+      }
+      logStructured('voucher_pin_resend', { from, accountId: account.id, giftId: gift.id });
+      return await sendWhatsAppText({
+        to: from,
+        text: buildVoucherClaimMessage({
+          senderName: null,
+          amountCents: gift.amountCents,
+          pin: gift.voucherPin,
+          serial: gift.voucherSerial,
+        }),
+      });
+    }
+
+    case 'RESUME_VOUCHER_PURCHASE': {
+      // Parked mid-checkout: the customer went to PayFast to top up the
+      // shortfall. ANY next message re-checks the balance and finishes the
+      // voucher purchase the moment the money is there.
+      const normalized = text.trim().toLowerCase();
+      if (/^(cancel|stop|no|not now|later|quit|exit)$/i.test(normalized)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: `👍 No problem — your money stays in your WaPay balance.` });
+      }
+
+      const resumeAmountCents = data?.amountCents;
+      if (!Number.isInteger(resumeAmountCents) || resumeAmountCents <= 0) {
+        await updateConversationState(from, null);
+        return await handlePostOnboarding({ account, from, text });
+      }
+
+      const { balance } = await getUserBalance(from);
+      const balanceCents = Math.round(parseFloat(balance) * 100) || 0;
+      const resumeRecipient = data?.recipientMsisdn || account.msisdn;
+      const resumeIsSelf = normaliseMsisdn(resumeRecipient) === normaliseMsisdn(account.msisdn || '');
+      const resumeNeededCents = resumeAmountCents + (resumeIsSelf ? 0 : 300);
+
+      if (balanceCents >= resumeNeededCents) {
+        await updateConversationState(from, null);
+        return await startVoucherGiftPreviewAndConfirm({
+          from,
+          account,
+          amountCents: resumeAmountCents,
+          recipientMsisdn: resumeRecipient,
+          intent: 'RESUME_VOUCHER_PURCHASE',
+          rawText: text,
+        });
+      }
+
+      // Not landed yet: real questions escape; otherwise report and wait.
+      if (isConversationalEscape(text)) {
+        await updateConversationState(from, null);
+        return await handlePostOnboarding({ account, from, text });
+      }
+      return await sendWhatsAppText({
+        to: from,
+        text: `⏳ Your top-up hasn't landed yet — the moment it does, message me anything and I'll finish your ${randsShort(resumeAmountCents)} voucher. Reply "cancel" to stop.`,
+      });
+    }
+
     case 'VOUCHER_GIFT_AMOUNT':
       // User is entering the voucher amount
       {
@@ -3079,7 +3302,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           to: from,
           text:
             normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')
-              ? `🔐 *Enter Your PIN*\n\nTo buy your ${randsShort(amountCents)} OTT voucher (total ${randsShort(amountCents + (feeCents || 0))} incl. fee), please enter your WaPay PIN.`
+              ? `🔐 *Enter Your PIN*\n\nTo buy your ${randsShort(amountCents)} OTT voucher${feeCents > 0 ? ` (total ${randsShort(amountCents + feeCents)} incl. fee)` : ''}, please enter your WaPay PIN.`
               : `🔐 *Enter Your PIN*\n\nTo send the ${randsShort(amountCents)} WaPay voucher to ${recipientMsisdn} (total ${randsShort(amountCents + (feeCents || 0))} incl. fee), please enter your WaPay PIN.`,
         });
       }
@@ -3131,7 +3354,10 @@ async function handleConversationState({ from, text, state, data, account }) {
 
         await sendWhatsAppText({
           to: from,
-          text: `⏳ Sending your WaPay voucher...`,
+          text:
+            normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')
+              ? `⏳ Generating your OTT voucher...`
+              : `⏳ Sending your WaPay voucher...`,
         });
 
         try {
@@ -3165,21 +3391,35 @@ async function handleConversationState({ from, text, state, data, account }) {
               message: executeData.message,
             });
 
-            // Short balance is not an error — it's a checkout moment. Show
-            // the shortfall and both load options (founder flow, 2026-08-20).
+            // Short balance is not an error — it's a CHECKOUT moment
+            // (founder flow, 2026-08-20): quote the shortfall, hand over a
+            // PayFast link for exactly that top-up, and resume the purchase
+            // the moment the money lands.
             if (executeData.error === 'INSUFFICIENT_FUNDS') {
               const { balance } = await getUserBalance(from);
               const totalCents = amountCents + (feeCents || 0);
               const balanceCents = Math.round(parseFloat(balance) * 100) || 0;
               const shortfallCents = Math.max(totalCents - balanceCents, MIN_DEPOSIT_CENTS);
-              return await sendWhatsAppText({
+              await sendWhatsAppText({
                 to: from,
                 text:
                   `💰 You need ${randsShort(totalCents)} for this voucher but your balance is R${balance}.\n\n` +
-                  `Top up and try again:\n` +
-                  `1️⃣ *Cash* — buy a Blu Voucher at any till and send me the code\n` +
-                  `2️⃣ *Card / bank* — reply "deposit ${randsShort(shortfallCents)}" for a secure PayFast link`,
+                  `Pay the ${randsShort(shortfallCents)} difference with the button below — the moment it lands, I'll finish your voucher. 🎟️\n\n` +
+                  `(Prefer cash? Buy a Blu Voucher at any till and send me the code.)`,
               });
+              const linkResult = await handleCardDepositLink({
+                from,
+                account,
+                amountCents: shortfallCents,
+                rawText: text,
+              });
+              // handleCardDepositLink clears state; the resume marker goes in
+              // AFTER so the next message (post-payment) picks the purchase up.
+              await updateConversationState(from, 'RESUME_VOUCHER_PURCHASE', {
+                amountCents,
+                recipientMsisdn,
+              });
+              return linkResult;
             }
 
             return await sendWhatsAppErrorOnce({
@@ -3353,13 +3593,26 @@ async function handleAIChat({ from, text, account }) {
   }
 
   try {
-    // Get conversation history for context
+    // Get conversation history + the user's PROFILE (memory) for context
     const history = await getConversationHistory(from, 5);
-    const contextString = history.length > 0 
-      ? `RECENT CONVERSATION:\n${history.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n')}\n\nNow respond to the latest message.`
+    const profile = await getProfile({ accountId: account.id });
+    const profileBlock = formatProfileContext(profile);
+    const historyBlock = history.length > 0
+      ? `RECENT CONVERSATION (context only — the CURRENT message decides the reply language):\n${history.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`).join('\n')}`
       : '';
+    const contextString = [profileBlock, historyBlock, historyBlock || profileBlock ? 'Now respond to the latest message.' : '']
+      .filter(Boolean)
+      .join('\n\n');
 
     const result = await orchestrate(text, contextString);
+
+    // Memory writes: deterministic, best-effort, never blocking the reply.
+    noteLanguage({ accountId: account.id, language: result.language }).catch(() => {});
+    if (result.slots?.productQuery) {
+      noteInterest({ accountId: account.id, topic: result.slots.productQuery }).catch(() => {});
+    } else if (result.action === 'LIST_CATEGORY' && result.slots?.category) {
+      noteInterest({ accountId: account.id, topic: result.slots.category.toLowerCase() }).catch(() => {});
+    }
 
     logStructured('orchestrator_result', {
       from,
@@ -4920,6 +5173,9 @@ async function handleVoucherRedemption({ from, pin, account }) {
     // Format amounts: show the voucher's face value and what actually landed.
     const faceRands = (result.amount_cents / 100).toFixed(2);
     const creditedRands = (creditedCents / 100).toFixed(2);
+
+    // Memory: this customer loads with cash vouchers.
+    noteDepositMethod({ accountId: account.id, method: 'VOUCHER' }).catch(() => {});
 
     // Send success message
     await sendWhatsAppText({

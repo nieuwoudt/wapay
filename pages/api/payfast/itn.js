@@ -38,6 +38,7 @@ import {
   recordItnDebug,
   centsToRandString,
 } from '../../../lib/deposits.js';
+import { noteDepositMethod } from '../../../lib/user-profile.js';
 import { postEntry, ensureWallet } from '../../../lib/ledger-post.js';
 import { buildLoad, RAIL, BALANCE } from '../../../lib/ledger-core.js';
 
@@ -169,6 +170,8 @@ export default async function handler(req, res) {
     );
 
     await markDeposit({ paymentId, status: 'SUCCESS', providerRef: params.pf_payment_id });
+    // Memory: this customer loads by card (best-effort, never blocks the ITN).
+    noteDepositMethod({ accountId, method: 'CARD' }).catch(() => {});
   } catch (error) {
     // Nothing (or only part) landed — tell PayFast to redeliver; the idemKey
     // makes the retry post exactly the same entry.

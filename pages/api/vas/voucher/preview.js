@@ -129,11 +129,17 @@ export default async function handler(req, res) {
       });
     }
 
-    const feeCents = flatFeeCents;
-    const totalCents = amountCents + feeCents;
-
     // Get account and SPEND wallet (gifts always draw the no-KYC SPEND balance)
     const account = await prisma.account.findUnique({ where: { id: accountId } });
+
+    // SELF-purchase ("buy an OTT voucher") carries NO facilitation fee —
+    // fees sit on money-IN (deposit payment fee) and on sending to OTHERS
+    // (flat R3), never on converting your own balance to a voucher (founder
+    // decision 2026-08-20; WaPay still earns the OTT issuing commission).
+    const isSelfPurchase =
+      account && normaliseMsisdn(account.msisdn || '') === normaliseMsisdn(recipientMsisdn);
+    const feeCents = isSelfPurchase ? 0 : flatFeeCents;
+    const totalCents = amountCents + feeCents;
     if (!account) {
       logStructured('vas_voucher_preview_result', {
         accountId,

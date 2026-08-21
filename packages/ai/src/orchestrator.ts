@@ -46,8 +46,15 @@ function getOpenAI(): OpenAI {
   return openaiInstance;
 }
 
-const ORCHESTRATOR_MODEL = () => process.env.WAPAY_ORCHESTRATOR_MODEL || 'gpt-4o';
-const CATEGORY_AGENT_MODEL = () => process.env.WAPAY_CATEGORY_AGENT_MODEL || 'gpt-4o-mini';
+// Latest OpenAI mainline (probed + evaled 2026-08-20): gpt-5.5 orchestrates,
+// gpt-5.4-mini runs the category agents. GPT-5-family calls use
+// max_completion_tokens + reasoning_effort (default 'none' — the webhook
+// budget wants sharp-and-fast, not thinking time) and no temperature.
+const ORCHESTRATOR_MODEL = () => process.env.WAPAY_ORCHESTRATOR_MODEL || 'gpt-5.5';
+const CATEGORY_AGENT_MODEL = () => process.env.WAPAY_CATEGORY_AGENT_MODEL || 'gpt-5.4-mini';
+const REASONING_EFFORT = () => process.env.WAPAY_REASONING_EFFORT || 'none';
+
+const isGpt5Family = (model: string) => /^(gpt-5|o\d)/.test(model);
 
 // ---------------------------------------------------------------------------
 // Contract
@@ -220,6 +227,8 @@ const ORCHESTRATOR_PROMPT = `You are the routing brain of WaPay, a WhatsApp wall
 
 ${LANGUAGE_HINTS}
 
+LANGUAGE: the "language" field is the language of the CURRENT message only — earlier conversation lines never override it. For language-neutral messages ("Okay", "yes", a number), use the KNOWN USER PROFILE's preferred language when the context provides one, else 'en'.
+
 DOMAINS:
 - MONEY: balance, deposits (making one, or asking whether one arrived), redeeming a Blu voucher PIN
 - AIRTIME: buying/sending airtime
@@ -252,6 +261,8 @@ ${LANGUAGE_HINTS}
 ${PRODUCT_TRUTH}
 
 ${MONEY_TRUTH_RULES}
+
+LANGUAGE RULE (absolute): reply in the language of the user's CURRENT message. Recent conversation and profile are context only — an old message in another language must NEVER change the reply language. When the current message is language-neutral ("Okay", "yes", a number), use the KNOWN USER PROFILE's preferred language if given, otherwise English.
 
 SLOT RULES:
 - amountCents: INTEGER CENTS. "R50" -> 5000. "50" in a money context -> 5000. null when the user gave no amount.
@@ -312,14 +323,19 @@ async function callStructured<T>(args: {
   maxTokens: number;
 }): Promise<T> {
   const openai = getOpenAI();
+  // GPT-5-family models reject `temperature`/`max_tokens` and take
+  // `max_completion_tokens` + `reasoning_effort` instead (probed live
+  // 2026-08-20). GPT-4-family keeps the legacy params.
+  const modelParams: Record<string, unknown> = isGpt5Family(args.model)
+    ? { max_completion_tokens: Math.max(args.maxTokens, 400), reasoning_effort: REASONING_EFFORT() }
+    : { max_tokens: args.maxTokens, temperature: 0 };
   const completion = await openai.chat.completions.create({
     model: args.model,
     messages: [
       { role: 'system', content: args.system },
       { role: 'user', content: args.user },
     ],
-    max_tokens: args.maxTokens,
-    temperature: 0,
+    ...(modelParams as any),
     response_format: {
       type: 'json_schema',
       json_schema: { name: args.schemaName, strict: true, schema: args.schema as any },
