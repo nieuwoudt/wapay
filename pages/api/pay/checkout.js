@@ -10,23 +10,11 @@
  * 7-day expiry, single-use PENDING->PAID). No auth, no PII in the redirect.
  */
 
-import crypto from 'crypto';
-
 import { buildCheckoutUrl } from '@wapay/providers-payfast';
 
 import prisma from '../../../lib/prisma.js';
 import { getPaymentRequest } from '../../../lib/payment-requests.js';
 import { depositFeeCents } from '../../../lib/deposits.js';
-
-// Same guard as lib/deposits.js newIntentId: ledger-core rejects idemKeys
-// with epoch-lookalike digit runs, so ids are redrawn until clean.
-const TIMESTAMP_LOOKALIKE = /(?<!\d)1\d{12}(?!\d)|(?<!\d)1[6-9]\d{8}(?!\d)/;
-function newIntentId() {
-  for (;;) {
-    const id = crypto.randomUUID();
-    if (!TIMESTAMP_LOOKALIKE.test(id)) return id;
-  }
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -51,26 +39,43 @@ export default async function handler(req, res) {
   const feeCents = depositFeeCents(amountCents);
   const grossCents = amountCents + feeCents;
 
-  const id = newIntentId();
-  const idemKey = `wapay-pfreq-${id}`;
-  await prisma.providerRequest.create({
-    data: {
-      id,
-      provider: 'PAYFAST',
-      route: 'payrequest',
-      idemKey,
-      status: 'PENDING',
-      accountId: request.accountId,
-      metadata: {
-        accountId: request.accountId,
-        waId: requester.waId,
-        amountCents,
-        feeCents,
-        grossCents,
-        requestCode: code,
-      },
-    },
-  });
+  // ONE intent per request code, and ONE idemKey shared with the balance
+  // leg (`wapay-payreq-<code>`): however many times checkout is clicked and
+  // whichever rail settles first, postEntry can only ever credit ONCE — the
+  // loser replays the winner's entry (QA 2026-08-21: fresh-intent-per-click
+  // enabled double card charges + double credits).
+  const idemKey = `wapay-payreq-${code}`;
+  let intent = await prisma.providerRequest.findUnique({ where: { idemKey } });
+  if (intent?.status === 'SUCCESS') {
+    return res.redirect(302, `/pay/${code}`);
+  }
+  if (!intent) {
+    try {
+      intent = await prisma.providerRequest.create({
+        data: {
+          id: `pfreq-${code}`,
+          provider: 'PAYFAST',
+          route: 'payrequest',
+          idemKey,
+          status: 'PENDING',
+          accountId: request.accountId,
+          metadata: {
+            accountId: request.accountId,
+            waId: requester.waId,
+            amountCents,
+            feeCents,
+            grossCents,
+            requestCode: code,
+          },
+        },
+      });
+    } catch (err) {
+      if (err?.code !== 'P2002') throw err;
+      intent = await prisma.providerRequest.findUnique({ where: { idemKey } });
+      if (!intent) throw err;
+    }
+  }
+  const id = intent.id;
 
   console.log(
     JSON.stringify({

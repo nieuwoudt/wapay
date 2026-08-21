@@ -212,7 +212,7 @@ export default async function handler(req, res) {
     // Create preview record
     const preview = await prisma.providerRequest.create({
       data: {
-        id: `elec_prev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `elec_prev_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 9)}`,
         provider: 'BLU',
         type: 'ELECTRICITY_PREVIEW',
         status: 'PENDING',

@@ -171,8 +171,12 @@ export default async function handler(req, res) {
     );
 
     await markDeposit({ paymentId, status: 'SUCCESS', providerRef: params.pf_payment_id });
-    // Memory: this customer loads by card (best-effort, never blocks the ITN).
-    noteDepositMethod({ accountId, method: 'CARD' }).catch(() => {});
+    // Memory: this customer loads by card — but only for their OWN deposits.
+    // On a payment request the card belongs to a THIRD PARTY, not the
+    // requester being credited (QA 2026-08-21).
+    if (intent.route === 'deposit') {
+      noteDepositMethod({ accountId, method: 'CARD' }).catch(() => {});
+    }
   } catch (error) {
     // Nothing (or only part) landed — tell PayFast to redeliver; the idemKey
     // makes the retry post exactly the same entry.
@@ -199,24 +203,52 @@ export default async function handler(req, res) {
     })
   );
 
-  // A payment-request intent also flips the request PENDING->PAID (atomic;
-  // a redelivered ITN can't double-mark). Best effort AFTER the credit —
-  // the money is safe either way, and "did they pay?" reads the ledger.
+  // A payment-request intent also flips the request PENDING->PAID. Runs on
+  // EVERY delivery, replayed or not — markRequestPaid is an atomic
+  // PENDING->PAID check-and-set, so redeliveries are no-ops, and a crash
+  // that earlier 500'd between credit and mark is repaired by the retry
+  // (QA 2026-08-21: the old !replayed guard stranded credited requests
+  // PENDING forever, leaving them re-payable).
   const requestCode = intent.metadata?.requestCode || null;
-  if (requestCode && !posted.replayed) {
+  let wonRequestTransition = false;
+  if (requestCode) {
     try {
-      await markRequestPaid({ code: requestCode, payerRef: `PAYFAST:${params.pf_payment_id}` });
+      wonRequestTransition = await markRequestPaid({
+        code: requestCode,
+        payerRef: `PAYFAST:${params.pf_payment_id}`,
+      });
     } catch (error) {
       console.error(
         JSON.stringify({ type: 'payrequest_mark_paid_error', paymentId, requestCode, error: error?.message })
       );
     }
+
+    // A replayed entry with a DIFFERENT PayFast reference means the payer's
+    // card was charged a SECOND time for the same request (double-click, or
+    // card after an in-chat payment). The credit stayed exactly-once — but
+    // that second charge needs a manual refund. Scream.
+    if (posted.replayed && intent.providerRef && intent.providerRef !== params.pf_payment_id) {
+      console.error(
+        JSON.stringify({
+          type: 'payfast_overpayment_detected',
+          severity: 'CRITICAL_REFUND_NEEDED',
+          paymentId,
+          requestCode,
+          creditedRef: intent.providerRef,
+          duplicateRef: params.pf_payment_id,
+          amountGross: params.amount_gross,
+        })
+      );
+    }
   }
 
-  // Confirmation message — best effort only. A send failure must NOT fail the
-  // ITN response, and a redelivered ITN (replayed entry) must not message the
-  // customer twice.
-  if (waId && !posted.replayed) {
+  // Confirmation message — best effort only. A send failure must NOT fail
+  // the ITN response. Deposits confirm on the first (non-replayed) credit;
+  // payment requests confirm when THIS delivery won the PENDING->PAID
+  // transition (so a repair-retry still notifies, and a losing rail never
+  // double-notifies).
+  const shouldConfirm = requestCode ? wonRequestTransition : !posted.replayed;
+  if (waId && shouldConfirm) {
     try {
       const wallet = await prisma.wallet.findFirst({
         where: { accountId, balanceType: BALANCE.SPEND },

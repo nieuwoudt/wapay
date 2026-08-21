@@ -4,6 +4,48 @@
 
 ---
 
+## 17. Every VAS settle idemKey was timestamp-poisoned — vend delivered, customer never charged
+
+- **Symptom:** (latent, would hit every airtime/data/electricity purchase on the new ledger) the provider vends, then `settleHold(buildSpend(...))` throws — the customer keeps the product AND the money.
+- **Root cause:** preview ids embedded raw `Date.now()` (`preview-air-1787…`); the derived settle idemKey then trips ledger-core's own timestamp-lookalike guard. Blu voucher redemption had the same class of bug: the SHA-256 PIN-hash prefix looks like an epoch for ~1 in 481 vouchers — after Blu consumed the voucher, stranding the cash.
+- **Fix:** preview stamps are base36 (`Date.now().toString(36)`), the redemption idemKey interleaves `x` every 8 hex chars — both provably immune to the guard.
+- **Guard:** the guard itself still rejects any regression; found by the 45-agent QA audit 2026-08-21.
+
+## 18. Payment-request card leg was not exactly-once
+
+- **Symptom:** double card charges and double credits were possible (fresh intent + fresh idemKey per checkout click; ITN credited without consulting the request; a crash between credit and mark-paid stranded the request PENDING-and-repayable forever).
+- **Root cause:** the two rails used different idemKeys, and mark-paid was gated on `!posted.replayed` and swallowed errors.
+- **Fix:** ONE idemKey per request code shared by BOTH rails (`wapay-payreq-<code>`) with one reusable intent — postEntry can only ever credit once across all rails and clicks; mark-paid runs on every delivery (atomic PENDING→PAID); confirmations gate on winning the transition; a replayed entry with a different PayFast ref logs `payfast_overpayment_detected` (CRITICAL_REFUND_NEEDED).
+- **Guard:** `tests/payment-requests.test.mjs` locks the unified key, the intent reuse, the absence of the replay gate, and the overpayment scream.
+
+## 19. PAYREQ_PIN burned wallet-PIN attempts on chatty replies
+
+- **Symptom:** five conversational replies at the PIN prompt soft-locked the wallet PIN; ten hard-locked it.
+- **Root cause:** every non-cancel message was fed to `verifyPIN`.
+- **Fix:** only `\d{4,6}` reaches verifyPIN; sentences escape to the router; anything else re-prompts without burning attempts.
+- **Guard:** QA audit finding; PIN-shape gate now mirrors VOUCHER_GIFT_PIN.
+
+## 20. Fee-free self voucher was quoted free but booked the R3 fee
+
+- **Symptom:** self OTT-voucher purchases were silently overcharged R3 (or failed at settle on an exact balance) — the preview quoted 0, `buildVoucherGift` hardcoded the flat fee.
+- **Fix:** `buildVoucherGift` takes `flatFeeCentsOverride`; execute passes the preview's quoted fee — the preview is the quote of record.
+
+## 21. Broke-checkout resume was unreachable
+
+- **Symptom:** the pay-the-difference + auto-resume flow never triggered — the processor matched `INSUFFICIENT_FUNDS` but execute returned `USER_INPUT`, and the preview blocked short balances with a generic error first.
+- **Fix:** preview and execute both return a distinct `INSUFFICIENT_FUNDS`; the preview path now ALSO enters the checkout flow (shortfall + PayFast link + `RESUME_VOUCHER_PURCHASE`).
+
+## 22. Claiming marked gifts DELIVERED before the send
+
+- **Symptom:** one failed WhatsApp send permanently stranded the recipient's bearer voucher PIN (row DELIVERED, PIN never received).
+- **Fix:** `revertGiftDelivery` flips DELIVERED→ISSUED when the send definitively fails (`ok:false`) so the next inbound message retries; applied to the claim flow AND self-purchase delivery.
+
+## 23. Routing/state batch (QA audit 2026-08-21)
+
+One sweep, all fixed: phone-number replies re-parsed as rand amounts in AIRTIME_MSISDN (R7.8m airtime "amounts"); "me" cancelling despite the prompt offering it; "Yebo/Ewe/Ja/Ee" cancelling every confirm state (7 regexes extended); deposit-status questions with amounts minting fresh payment links (status now checked first); a dashed 16-digit voucher PIN minting a R1,234 card checkout; "pay request <word>" matching ordinary words (codes now strictly `PR[A-Z]{6}`); "send an OTT voucher to <name>" hijacked into self-purchase; contact cards shared mid-flow hijacking into send-money; 9+ digit context follow-ups read as rands; "cancel … request" creating a NEW request (cancel now wired: "cancel request PRXXXXXX"); BUY_DATA discarding the agent's English productQuery.
+
+**Known-open (logged, deliberate):** profile write races (last-write-wins acceptable at current volume); language-evidence echo on neutral turns; voucher-history intercept answers recipients with sender-only history; a crash between settleHold and createPendingGift (idempotent retry design exists, no caller retries yet); redemption replay tells the losing account in a same-PIN race "Redeemed Successfully".
+
 ## 15. Voucher-execute crash stranded R36 in ACTIVE holds
 
 - **Symptom:** failed voucher sends ("An error occurred while executing purchase") left the reserved money missing from the balance — two ACTIVE holds (R23 + R13) found in prod, wallet R36 lighter than the journal (founder-reported balance confusion, 2026-08-20).

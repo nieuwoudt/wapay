@@ -164,7 +164,7 @@ export default async function handler(req, res) {
     }
 
     // Create preview
-    const previewId = `preview-data-${Date.now()}-${accountId}`;
+    const previewId = `preview-data-${Date.now().toString(36)}-${accountId}`;
 
     // Store preview in database (expires in 5 minutes)
     await prisma.providerRequest.create({

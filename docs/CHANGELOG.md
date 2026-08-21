@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-08-21 (2) — Full QA audit: 45-agent sweep, 38 confirmed findings, all money/critical/major fixed
+
+Six-dimension adversarial audit over everything shipped this week (payment requests, deposit fee + ITN, voucher flows, routing/states, orchestrator contract, ledger invariants) + live SSR smoke of the public pay page against prod. Money-severity: timestamp-poisoned VAS settle idemKeys (every vend would deliver-but-not-charge — BUGLOG #17), payment-request card leg not exactly-once (#18), fee-free self voucher booking the R3 anyway (#20), Blu redemption 1-in-481 cash-strand (#17). Critical/major: PIN-attempt burning (#19), unreachable broke-checkout resume (#21), bearer-PIN strand on failed claim send (#22), and an 11-item routing/state batch (#23) incl. multilingual YES words, phone-as-amount, deposit-status vs deposit-link, contact-share hijack. Suite 269/269, build green. Known-open minors logged in BUGLOG #23.
+
 ## 2026-08-21 — 🙏 Payment requests ("please pay me") — shareable links, two payment legs
 
 "Please pay me R150" / "payme link" (any language — REQUEST_MONEY orchestrator action, live-verified incl. isiZulu) creates a shareable request (`payment_requests`, prod-applied: PR-prefixed letters-only codes, R5–R3000, 7-day lazy expiry, PENDING→PAID exactly once). The user gets a forwardable message + `wapay.co.za/pay/<code>`. The public page (`pages/pay/[code].js`) offers both legs:

@@ -158,6 +158,10 @@ test('get-paid asks match; paying-someone and deposits do not', () => {
   ]) {
     assert.ok(!m(text), `must NOT match: "${text}"`);
   }
+  // A named product wins — these are purchases/gifts, not payment requests.
+  assert.ok(!m('request R100 airtime', { productHint: 'AIRTIME' }));
+  assert.ok(!m('please pay me R50 airtime', { productHint: 'AIRTIME' }));
+  assert.ok(m('request R100', { productHint: null }), 'bare request still matches');
 });
 
 // ---------------------------------------------------------------------------
@@ -183,12 +187,18 @@ test('static: the in-chat pay leg is PIN-gated buildSend, code = idemKey', () =>
   assert.match(body, /Your payment request was PAID/, 'the requester gets notified');
 });
 
-test('static: card leg — checkout charges GROSS, ITN marks the request paid once', () => {
+test('static: card leg — one intent per code, unified idemKey, unconditional mark-paid', () => {
   assert.match(checkoutSource, /route: 'payrequest'/);
   assert.match(checkoutSource, /amountCents: grossCents/);
-  assert.match(checkoutSource, /mPaymentId: id/);
-  assert.match(itnSource, /requestCode && !posted\.replayed/);
-  assert.match(itnSource, /markRequestPaid\(\{ code: requestCode, payerRef: `PAYFAST:/);
+  // ONE idemKey shared with the balance leg: exactly-once across BOTH rails.
+  assert.match(checkoutSource, /const idemKey = `wapay-payreq-\$\{code\}`/);
+  assert.match(checkoutSource, /findUnique\(\{ where: \{ idemKey \} \}\)/, 'checkout reuses the existing intent');
+  // The QA bug: mark-paid must NOT be gated on !replayed — redeliveries
+  // repair a crash-stranded PENDING (markRequestPaid is atomic anyway).
+  assert.ok(!/requestCode && !posted\.replayed/.test(itnSource), 'no replay gate on mark-paid');
+  assert.match(itnSource, /wonRequestTransition = await markRequestPaid/);
+  assert.match(itnSource, /requestCode \? wonRequestTransition : !posted\.replayed/, 'confirmation gated on winning the transition');
+  assert.match(itnSource, /payfast_overpayment_detected/, 'a second card charge screams for a refund');
 });
 
 test('static: the public page exists and offers both legs', () => {

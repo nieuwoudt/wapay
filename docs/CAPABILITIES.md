@@ -17,6 +17,10 @@ Deployed baseline: 2026-08-18 evening (deposit UX + deposit-status + orchestrati
 | Voucher redemption (load via Blu voucher) | **Live** | In `message-processor-v2.js`: PIN-hash-derived idemKey, NET amount credited, honest receipt. |
 | PIN entry | **Live, in plain chat** | Moving PIN entry to a WhatsApp Flow (secure input) is on the backlog. |
 | Contact-card sends + beneficiaries | **Live** | Sharing a WhatsApp contact starts a send-money ask (or fills the number a flow is waiting for). Every successful gift recipient / shared contact is remembered (`beneficiaries`, prod); "send R50 to Philly" resolves by name via the orchestrator's `recipientName` slot. Full number always shown at confirm. |
+| Payment requests ("please pay me") | **Live** | "please pay me R150" → shareable `wapay.co.za/pay/<code>` (R5–R3000, 7-day expiry, PAID exactly once). Payer pays free from a WaPay balance (deep-link → confirm → PIN → `buildSend`, request code = idemKey) or by card via PayFast (payer covers the banded fee, requester credited FACE, ITN marks PAID). Requester notified instantly on both legs. |
+| OTT voucher self-purchase | **Live** | "buy an OTT voucher" (any language) → confirm → wallet PIN → OTT issues → PIN delivered in-session via the atomic claim flow. Fee-free (founder decision). Insufficient balance → pay-the-difference PayFast link + auto-resume (`RESUME_VOUCHER_PURCHASE`). |
+| User memory (profile) | **Live** | `Account.profile` (prod): preferred language by evidence (one foreign message can't flip the bot), preferred deposit method (skips the options menu for known card users), last electricity meter, product interests. Injected into the orchestrator each turn as KNOWN USER PROFILE; written deterministically at success points only. |
+| Voucher history | **Live** | "show my vouchers" — bought vouchers with values, dates, active/used status. |
 
 ## 2. Money core (the ledger)
 

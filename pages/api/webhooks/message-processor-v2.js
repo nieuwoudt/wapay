@@ -9,9 +9,10 @@ import { getOrCreateUser, getUserBalance, updateConversationState, getConversati
 import { sendWhatsAppText, sendWhatsAppTemplate, sendWhatsAppCtaUrl } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
 import { resolveGift, buildRecipientNotification, buildVoucherClaimMessage, maskMsisdn } from '../../../lib/gifting.js';
-import { hasPendingGifts, claimPendingGifts } from '../../../lib/pending-gifts.js';
+import { hasPendingGifts, claimPendingGifts, revertGiftDelivery } from '../../../lib/pending-gifts.js';
 import {
   createPaymentRequest,
+  cancelPaymentRequest,
   getPaymentRequest,
   markRequestPaid,
   paymentRequestUrl,
@@ -280,6 +281,37 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
     : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
 
   if (!previewData.ok) {
+    // Short balance is a CHECKOUT moment, not an error — quote the
+    // shortfall, hand over the PayFast link, resume when the money lands
+    // (QA 2026-08-21: this path previously dead-ended with a generic error).
+    if (previewData.error === 'INSUFFICIENT_FUNDS') {
+      const totalCents = Number.isInteger(previewData.totalCents)
+        ? previewData.totalCents
+        : amountCents;
+      const availableCents = Number.isInteger(previewData.availableBalance)
+        ? previewData.availableBalance
+        : 0;
+      const shortfallCents = Math.max(totalCents - availableCents, MIN_DEPOSIT_CENTS);
+      await sendWhatsAppText({
+        to: from,
+        text:
+          `💰 You need ${randsShort(totalCents)} for this voucher but your balance is ${randsShort(availableCents)}.\n\n` +
+          `Pay the ${randsShort(shortfallCents)} difference with the button below — the moment it lands, I'll finish your voucher. 🎟️\n\n` +
+          `(Prefer cash? Buy a Blu Voucher at any till and send me the code.)`,
+      });
+      const linkResult = await handleCardDepositLink({
+        from,
+        account,
+        amountCents: shortfallCents,
+        rawText,
+      });
+      await updateConversationState(from, 'RESUME_VOUCHER_PURCHASE', {
+        amountCents,
+        recipientMsisdn,
+      });
+      return linkResult;
+    }
+
     await updateConversationState(from, null);
     return await sendWhatsAppText({
       to: from,
@@ -747,6 +779,17 @@ async function handleSharedContact({ from, account, sharedContact }) {
     return await handleConversationState({ from, text: msisdn, state, data, account });
   }
 
+  // Any OTHER active flow (electricity, deposit amount, a pending confirm…)
+  // must not be silently hijacked into send-money (QA 2026-08-21). The
+  // contact is saved; the user decides what happens next.
+  if (state) {
+    const name2 = name ? ` (${name})` : '';
+    return await sendWhatsAppText({
+      to: from,
+      text: `👤 Contact saved${name2}. You're busy with another step — finish it or reply "cancel" first, then say "send R50 to ${name || msisdn}" whenever you're ready.`,
+    });
+  }
+
   // Fresh share: treat it as "send money to this person" and ask the amount.
   await updateConversationState(from, 'VOUCHER_GIFT_AMOUNT', { recipientMsisdn: msisdn });
   const label = name ? `${name} (${msisdn})` : msisdn;
@@ -852,7 +895,7 @@ async function handlePostOnboarding({ account, from, text }) {
           // Name is cosmetic; the gift still gets delivered.
         }
 
-        await sendWhatsAppText({
+        const claimSend = await sendWhatsAppText({
           to: from,
           text: buildVoucherClaimMessage({
             senderName,
@@ -861,6 +904,17 @@ async function handlePostOnboarding({ account, from, text }) {
             serial: gift.voucherSerial,
           }),
         });
+        if (claimSend?.ok === false) {
+          // The PIN definitively did not reach the recipient — put the gift
+          // back so the next message retries (bearer PIN must never strand).
+          await revertGiftDelivery({ giftId: gift.id }).catch(() => {});
+          logStructured('voucher_gift_claim_send_failed_reverted', {
+            from,
+            giftId: gift.id,
+            error: claimSend?.error,
+          });
+          continue;
+        }
 
         logStructured('voucher_gift_claim_delivered', {
           from,
@@ -923,7 +977,7 @@ async function handlePostOnboarding({ account, from, text }) {
   // ("deposit R100") must never be hijacked by an active browse category —
   // its bare amount would otherwise read as a category follow-up (e.g.
   // R100 airtime). No PIN gate: the money is coming IN, not out.
-  const cardDepositCents = matchCardDepositRequest(text);
+  const cardDepositCents = !matchDepositStatusRequest(text) && matchCardDepositRequest(text);
   if (cardDepositCents) {
     // Memory-aware (founder, 2026-08-20): offer BOTH load methods unless we
     // know how this customer pays. A successful card deposit or voucher
@@ -982,8 +1036,25 @@ async function handlePostOnboarding({ account, from, text }) {
     }
   }
 
+  // Deterministic short-circuit: "cancel request PRXXXXXX".
+  {
+    const cancelMatch = text.match(/\bcancel\w*\s+(?:my\s+)?request\s+(PR[A-Z]{6})\b/i);
+    if (cancelMatch) {
+      const cancelled = await cancelPaymentRequest({
+        code: cancelMatch[1].toUpperCase(),
+        accountId: account.id,
+      });
+      return await sendWhatsAppText({
+        to: from,
+        text: cancelled
+          ? `👍 Payment request ${cancelMatch[1].toUpperCase()} cancelled — the link no longer works.`
+          : `🤔 I couldn't cancel that request — it may already be paid, cancelled, or not yours.`,
+      });
+    }
+  }
+
   // Deterministic short-circuit: "please pay me" — create a payment request.
-  if (matchRequestMoneyAsk(text)) {
+  if (matchRequestMoneyAsk(text, slots)) {
     logSlotFill({
       intent: 'REQUEST_MONEY',
       text,
@@ -1054,7 +1125,8 @@ async function handlePostOnboarding({ account, from, text }) {
   
   if (categoryContext.isValid && categoryContext.category) {
     const category = categoryContext.category;
-    const amountMatch = text.match(/r?\s?(\d+)/i);
+    // 9+ digits is a phone or meter number, never a rand amount.
+    const amountMatch = text.match(/r?\s?(\d{1,6})(?!\d)/i);
     
     // Check if this looks like a follow-up to the category they were browsing
     const isFollowUp = amountMatch || 
@@ -1669,16 +1741,20 @@ function detectExplicitIntent(text = '') {
 const DEPOSIT_CARD_PATTERN = /\b(?:deposit|depsit|deposite|diposit)\b(?:\s+(?:money|funds|cash))?\s*[:,-]?\s*r?\s*(\d+(?:[.,]\d{1,2})?)(?:\s*(?:rand|rande|zar))?\b/i;
 
 /** "Pay request PRXXXXXX" — the wa.me deep link from a payment-request page. */
-const PAY_REQUEST_CODE_PATTERN = /\bpay\s+request\s+([A-Z]{6,12})\b/i;
+const PAY_REQUEST_CODE_PATTERN = /\bpay\s+request\s+(PR[A-Z]{6})\b/i;
 
 /**
  * "Please pay me" — the user wants to GET PAID (create a payment request).
  * Deliberately excludes "pay request <code>" (that's PAYING one) and
  * paying-someone phrasings ("pay my sister").
  */
-function matchRequestMoneyAsk(text = '') {
+function matchRequestMoneyAsk(text = '', slots = null) {
   const s = String(text || '');
   if (PAY_REQUEST_CODE_PATTERN.test(s)) return false;
+  if (/\bcancel\w*\b/i.test(s)) return false;
+  // A named product wins: "request R100 airtime" / "pay me R50 airtime"
+  // is a purchase/gift ask, never a payment request (found in QA 2026-08-21).
+  if (slots?.productHint && slots.productHint !== 'SEND_MONEY') return false;
   return (
     /\b(please\s+)?pay\s?-?\s?me\b/i.test(s) ||
     /\bget\s+paid\b/i.test(s) ||
@@ -1777,6 +1853,8 @@ async function handlePayRequestStart({ from, account, code, rawText = '' }) {
 function matchOttVoucherSelfRequest(text = '', slots = null) {
   const s = String(text || '');
   if (slots?.msisdn) return false;
+  // "send an OTT voucher to <someone>" is a gift, even without a number yet.
+  if (/\bsend\b[\s\S]{0,40}\bto\b/i.test(s)) return false;
   if (!/\bott\s*vouchers?\b/i.test(s)) return false;
   if (/\b(redeem\w*|load\w*|deposit\w*|have|got|received?|claim\w*|my|show|list|history|bought)\b/i.test(s)) return false;
   return true;
@@ -1803,6 +1881,9 @@ function depositAmountToCents(raw) {
  * @returns {number|null} requested amount in integer cents, or null
  */
 function matchCardDepositRequest(text = '') {
+  // "deposit 1234-5678-9012-3456" is a VOUCHER being redeemed, not a card
+  // amount — a 16-digit PIN must never mint a R1,234 checkout.
+  if (/\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}/.test(String(text || ''))) return null;
   const m = String(text || '').match(DEPOSIT_CARD_PATTERN);
   if (!m) return null;
   return depositAmountToCents(m[1]);
@@ -2116,7 +2197,7 @@ async function handleConversationState({ from, text, state, data, account }) {
 
     case 'PAYREQ_CONFIRM': {
       const normalized = text.trim().toLowerCase();
-      if (/^(yes|yep|yeah|y|sure|ok|okay|confirm)$/i.test(normalized)) {
+      if (/^(yes|yep|yeah|y|sure|ok|okay|confirm|yebo|ewe|ja|ee|eya)$/i.test(normalized)) {
         await updateConversationState(from, 'PAYREQ_PIN', data);
         const pinMsg = `🔐 *Enter Your PIN*\n\nTo pay ${randsShort(data.amountCents)} to ${data.requesterLabel}, please enter your WaPay PIN.`;
         await addToConversationHistory(from, 'assistant', pinMsg);
@@ -2138,6 +2219,20 @@ async function handleConversationState({ from, text, state, data, account }) {
       if (/^(cancel|stop|no|exit|back)$/i.test(normalized)) {
         await updateConversationState(from, null);
         return await sendWhatsAppText({ to: from, text: `👍 Cancelled — nothing was paid.` });
+      }
+
+      // Only something PIN-shaped reaches verifyPIN — a question or
+      // sentence must never burn attempts toward the wallet-PIN lockout
+      // (QA 2026-08-21: five chatty replies soft-locked the PIN).
+      if (!/^\d{4,6}$/.test(text.trim())) {
+        if (isConversationalEscape(text)) {
+          await updateConversationState(from, null);
+          return await handlePostOnboarding({ account, from, text });
+        }
+        return await sendWhatsAppText({
+          to: from,
+          text: `Please enter your 4-digit WaPay PIN — or reply "cancel" to stop.`,
+        });
       }
 
       const pinResult = await verifyPIN({ accountId: account.id, pin: text.trim() });
@@ -2200,13 +2295,25 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
       if (posted.replayed) {
+        // Another rail/payer won with the SAME idemKey — this payer's debit
+        // never posted. Repair the status if a crash left it PENDING.
+        markRequestPaid({ code: request.id, payerRef: 'REPAIR:replayed' }).catch(() => {});
         return await sendWhatsAppText({
           to: from,
           text: `⏳ That request was already paid — nothing was charged to you.`,
         });
       }
 
-      await markRequestPaid({ code: request.id, payerRef: `WAPAY:${account.id}` });
+      const wonTransition = await markRequestPaid({ code: request.id, payerRef: `WAPAY:${account.id}` });
+      if (!wonTransition) {
+        // Should be impossible with the unified idemKey (a fresh post means
+        // we won the money race) — if it ever happens, make it loud.
+        logStructured('payrequest_mark_paid_lost_after_post', {
+          from,
+          accountId: account.id,
+          code: request.id,
+        });
+      }
 
       logStructured('payrequest_paid_balance', {
         from,
@@ -2327,7 +2434,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
 
-        if (/^(yes|yep|yeah|y|sure|ok|okay|alright|please|confirm)$/i.test(normalized)) {
+        if (/^(yes|yep|yeah|y|sure|ok|okay|alright|please|confirm|yebo|ewe|ja|ee|eya)$/i.test(normalized)) {
           await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
           return await sendWhatsAppText({
             to: from,
@@ -2426,7 +2533,14 @@ async function handleConversationState({ from, text, state, data, account }) {
 
         // Slot-fill inside state: if user provides MSISDN (and maybe amount) in one message, skip.
         const filledSlots = parseSlots(text, { waId: from, accountId: account.id });
-        const amountCents = filledSlots.amountCents || data?.amountCents;
+        // The chosen amount survives: when the reply IS the phone number,
+        // its digits must never be re-parsed as a rand amount (QA
+        // 2026-08-21: '0781234567' overrode a R20 choice as R7,815,234.56).
+        const amountCents =
+          filledSlots.msisdn && String(filledSlots.amountCents || '').replace(/\D/g, '') ===
+            String(filledSlots.msisdn || '').replace(/\D/g, '').slice(0, String(filledSlots.amountCents || '').length)
+            ? data?.amountCents
+            : filledSlots.amountCents || data?.amountCents;
         if (amountCents && filledSlots.msisdn) {
           logSlotFill({
             intent: 'STATE_AIRTIME_MSISDN',
@@ -2447,6 +2561,21 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
+        // "me" buys for your own number — the prompt offers exactly that.
+        if (/^me\.?$/i.test(text.trim()) && account.msisdn) {
+          const ownAmount = data?.amountCents;
+          if (ownAmount) {
+            return await startAirtimePreviewAndConfirm({
+              from,
+              account,
+              amountCents: ownAmount,
+              msisdn: account.msisdn,
+              intent: 'STATE_AIRTIME_MSISDN_SELF',
+              rawText: text,
+            });
+          }
+        }
+
         // If message doesn't look like a phone number at all, assume user wants to cancel
         const digitsOnly = text.replace(/[^\d]/g, '');
         if (digitsOnly.length < 8) {
@@ -2527,7 +2656,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         
         // If user says something that's not yes/no, clear state and let them try again
-        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
+        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm|yebo|ewe|ja|ee|eya)$/i.test(normalized)) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
@@ -2535,7 +2664,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
-        if (/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
+        if (/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm|yebo|ewe|ja|ee|eya)$/i.test(normalized)) {
           const { amountCents, msisdn, vendorLabel: stateVendorLabel, previewId: existingPreviewId } = data || {};
           const vendorLabel = stateVendorLabel || detectVendorLabel(msisdn || '');
           
@@ -2673,7 +2802,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({ to: from, text: `👍 Data purchase cancelled.` });
         }
-        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
+        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm|yebo|ewe|ja|ee|eya)$/i.test(normalized)) {
           return await sendWhatsAppText({ to: from, text: `Please reply *YES* to confirm or *NO* to cancel.` });
         }
 
@@ -3087,7 +3216,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         });
       }
 
-      if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
+      if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm|yebo|ewe|ja|ee|eya)$/i.test(normalized)) {
         await updateConversationState(from, null);
         return await sendWhatsAppText({
           to: from,
@@ -3544,7 +3673,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           return await renderHome({ from, account });
         }
 
-        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm)$/i.test(normalized)) {
+        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm|yebo|ewe|ja|ee|eya)$/i.test(normalized)) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
@@ -3769,7 +3898,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             try {
               const gifts = await claimPendingGifts({ recipientMsisdn: account.msisdn });
               for (const gift of gifts) {
-                await sendWhatsAppText({
+                const selfSend = await sendWhatsAppText({
                   to: from,
                   text: buildVoucherClaimMessage({
                     senderName: null,
@@ -3778,6 +3907,10 @@ async function handleConversationState({ from, text, state, data, account }) {
                     serial: gift.voucherSerial,
                   }),
                 });
+                if (selfSend?.ok === false) {
+                  await revertGiftDelivery({ giftId: gift.id });
+                  logStructured('voucher_self_claim_send_failed_reverted', { from, giftId: gift.id });
+                }
               }
               logStructured('voucher_self_purchase_delivered', {
                 from,
@@ -4027,7 +4160,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
       // smart product query pipeline — the generic bundle list would silently
       // discard what the user asked for.
       if (result.slots?.productQuery) {
-        return await handleSmartProductQuery({ from, account, text, entities: {} });
+        return await handleSmartProductQuery({ from, account, text: result.slots.productQuery, entities: {} });
       }
       return await handleListDataBundles({ from, account, entities: {} });
     }
@@ -5393,7 +5526,10 @@ async function handleVoucherRedemption({ from, pin, account }) {
     // bearer instrument, so the same PIN must never be credited twice —
     // not on a webhook retry, and not to a different account either.
     const pinHash = crypto.createHash('sha256').update(String(pin)).digest('hex');
-    const idemKey = `wapay-redeem-${pinHash.slice(0, 32)}`;
+    // 'x' every 8 hex chars: a 13-digit run in the hash prefix trips the
+    // ledger's timestamp guard (~1 in 481 vouchers) AFTER Blu consumed
+    // the voucher — stranding the customer's cash (QA 2026-08-21).
+    const idemKey = `wapay-redeem-${pinHash.slice(0, 32).replace(/(.{8})/g, '$1x')}`;
 
     // Check voucher status first to get amount and validate state
     let statusInfo;

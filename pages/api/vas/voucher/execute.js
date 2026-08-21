@@ -249,7 +249,7 @@ export default async function handler(req, res) {
           previewId, accountId, success: false, error: 'INSUFFICIENT_BALANCE',
           required: totalCents, available: error.availableCents,
         });
-        return res.status(400).json({ error: 'USER_INPUT', message: 'Insufficient balance' });
+        return res.status(400).json({ error: 'INSUFFICIENT_FUNDS', message: 'Insufficient balance' });
       }
       throw error;
     }
@@ -374,14 +374,16 @@ export default async function handler(req, res) {
     // CLEARING:OTT (supplier cost), Cr fee revenue. settleHold clears the hold
     // and posts the entry in one transaction — the customer is debited exactly
     // once.
-    // buildVoucherGift derives the fee from FEES.voucherGift itself; the
-    // preview's feeCents is display-only and must match by construction.
+    // The preview's feeCents is the QUOTE OF RECORD and is passed through —
+    // self-purchases are fee-free, gifts carry the flat fee.
     const giftEntry = buildVoucherGift({
       senderAccountId: accountId,
       amountCents,
       idemKey: `wapay-vgift-spend-${previewId}`,
       rail: RAIL.OTT,
       recipientMsisdn,
+      // The fee the customer was QUOTED at preview (0 for self-purchases).
+      flatFeeCentsOverride: feeCents,
     });
     await settleHold({ idemKey, entry: giftEntry });
 

@@ -251,7 +251,10 @@ export default async function handler(req, res) {
     }
 
     // Create preview
-    const previewId = `preview-air-${Date.now()}-${accountId}`;
+    // Base36 stamp: an epoch in DIGITS here poisons the derived settle
+    // idemKey (ledger-core timestamp guard) — every vend then crashes
+    // AFTER the provider delivers (QA audit 2026-08-21, BUGLOG #17).
+    const previewId = `preview-air-${Date.now().toString(36)}-${accountId}`;
     const feeCents = 0; // No fee for now
     const totalCents = amountCents + feeCents;
     step = 'db_create';
