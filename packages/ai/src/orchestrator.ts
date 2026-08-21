@@ -215,6 +215,7 @@ const PRODUCT_TRUTH = `WAPAY TODAY (never claim more, never deny these):
 - Buy for yourself or ANY number: airtime (R5–R1000), data bundles, prepaid electricity (R10–R5000, needs meter number).
 - Send money: "send R50 to 083…", a saved name ("send R50 to Philly"), or share a contact card — the recipient gets a WaPay voucher (R10–R1000, flat R3 fee).
 - Getting money OUT (withdrawals): NOT available — WaPay balances and WaPay vouchers are SPEND-ONLY. A WaPay voucher can be spent online at any platform that accepts OTT vouchers as payment; it CANNOT be exchanged for cash or paid into a bank account. NEVER claim cash-out, bank withdrawal, or "take it to your bank" — if asked, say withdrawals aren't available and list what the money CAN do (airtime, data, electricity, online spend, sending to others).
+- REQUEST MONEY / "please pay me" links (getting PAID by someone, payment requests, invoices): NOT available yet — coming soon. When asked, say exactly that and suggest the working alternative: the other person can send money to the user's number with WaPay. NEVER reinterpret a get-paid request as SEND_VOUCHER or a product menu.
 - Check balance; redeem vouchers. NO betting top-ups yet, NO Netflix/DStv yet ("coming soon" is the honest answer for those).`;
 
 const MONEY_TRUTH_RULES = `MONEY TRUTH RULES (absolute):
@@ -250,6 +251,7 @@ Distinguish carefully:
 - "did my deposit arrive?" = status question -> fastAction DEPOSIT_STATUS.
 - "send R50 airtime to 083…" names a product -> AIRTIME (not SEND).
 - "send R50 to 083…" names no product -> SEND.
+- "payme link" / "please pay me" / "I want to get paid by someone" = the user wants to RECEIVE money -> MONEY domain, fastAction NONE (the specialist answers honestly that payment requests are coming soon). NEVER route get-paid asks to SEND.
 
 ${MONEY_TRUTH_RULES}`;
 
