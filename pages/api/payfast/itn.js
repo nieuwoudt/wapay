@@ -38,6 +38,7 @@ import {
   recordItnDebug,
   centsToRandString,
 } from '../../../lib/deposits.js';
+import { markRequestPaid } from '../../../lib/payment-requests.js';
 import { noteDepositMethod } from '../../../lib/user-profile.js';
 import { postEntry, ensureWallet } from '../../../lib/ledger-post.js';
 import { buildLoad, RAIL, BALANCE } from '../../../lib/ledger-core.js';
@@ -198,6 +199,20 @@ export default async function handler(req, res) {
     })
   );
 
+  // A payment-request intent also flips the request PENDING->PAID (atomic;
+  // a redelivered ITN can't double-mark). Best effort AFTER the credit —
+  // the money is safe either way, and "did they pay?" reads the ledger.
+  const requestCode = intent.metadata?.requestCode || null;
+  if (requestCode && !posted.replayed) {
+    try {
+      await markRequestPaid({ code: requestCode, payerRef: `PAYFAST:${params.pf_payment_id}` });
+    } catch (error) {
+      console.error(
+        JSON.stringify({ type: 'payrequest_mark_paid_error', paymentId, requestCode, error: error?.message })
+      );
+    }
+  }
+
   // Confirmation message — best effort only. A send failure must NOT fail the
   // ITN response, and a redelivered ITN (replayed entry) must not message the
   // customer twice.
@@ -206,7 +221,9 @@ export default async function handler(req, res) {
       const wallet = await prisma.wallet.findFirst({
         where: { accountId, balanceType: BALANCE.SPEND },
       });
-      const lines = [`✅ Deposit received: R${centsToRandString(amountCents)}`];
+      const lines = requestCode
+        ? [`💸 Your payment request was PAID: R${centsToRandString(amountCents)} received!`]
+        : [`✅ Deposit received: R${centsToRandString(amountCents)}`];
       if (wallet) {
         lines.push(`New balance: R${centsToRandString(wallet.availableCents)}`);
       }

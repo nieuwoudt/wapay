@@ -11,6 +11,14 @@ import prisma from '../../../lib/prisma.js';
 import { resolveGift, buildRecipientNotification, buildVoucherClaimMessage, maskMsisdn } from '../../../lib/gifting.js';
 import { hasPendingGifts, claimPendingGifts } from '../../../lib/pending-gifts.js';
 import {
+  createPaymentRequest,
+  getPaymentRequest,
+  markRequestPaid,
+  paymentRequestUrl,
+  MIN_REQUEST_CENTS,
+  MAX_REQUEST_CENTS,
+} from '../../../lib/payment-requests.js';
+import {
   rememberBeneficiary,
   findBeneficiariesByName,
   formatBeneficiary,
@@ -25,7 +33,7 @@ import {
 } from '../../../lib/user-profile.js';
 import crypto from 'crypto';
 import { BluClient, BluVasClient } from '@wapay/providers-blu';
-import { buildLoad, RAIL } from '../../../lib/ledger-core.js';
+import { buildLoad, buildSend, RAIL } from '../../../lib/ledger-core.js';
 import { postEntry, ensureWallet } from '../../../lib/ledger-post.js';
 import { buildCheckoutUrl } from '@wapay/providers-payfast';
 import {
@@ -956,6 +964,38 @@ async function handlePostOnboarding({ account, from, text }) {
     }
   }
 
+  // Deterministic short-circuit: "Pay request PRXXXXXX" (the deep link from
+  // a payment-request page) starts the free balance-pay confirm flow.
+  {
+    const payReqMatch = text.match(PAY_REQUEST_CODE_PATTERN);
+    if (payReqMatch) {
+      logSlotFill({
+        intent: 'PAY_REQUEST',
+        text,
+        slots,
+        routeDecision: 'PAY_REQUEST_CONFIRM',
+        missing: [],
+        from,
+        accountId: account.id,
+      });
+      return await handlePayRequestStart({ from, account, code: payReqMatch[1].toUpperCase(), rawText: text });
+    }
+  }
+
+  // Deterministic short-circuit: "please pay me" — create a payment request.
+  if (matchRequestMoneyAsk(text)) {
+    logSlotFill({
+      intent: 'REQUEST_MONEY',
+      text,
+      slots,
+      routeDecision: slots.amountCents ? 'REQUEST_MONEY_CREATE' : 'REQUEST_MONEY_AMOUNT',
+      missing: slots.amountCents ? [] : ['amountCents'],
+      from,
+      accountId: account.id,
+    });
+    return await handleCreatePaymentRequest({ from, account, amountCents: slots.amountCents, rawText: text });
+  }
+
   // Deterministic short-circuit: "buy an OTT voucher" (no recipient) is a
   // SELF-purchase — balance-paid, PIN delivered in this chat. Routed before
   // the AI so the phrase can never fall into the old entertainment-voucher
@@ -1628,6 +1668,107 @@ function detectExplicitIntent(text = '') {
  */
 const DEPOSIT_CARD_PATTERN = /\b(?:deposit|depsit|deposite|diposit)\b(?:\s+(?:money|funds|cash))?\s*[:,-]?\s*r?\s*(\d+(?:[.,]\d{1,2})?)(?:\s*(?:rand|rande|zar))?\b/i;
 
+/** "Pay request PRXXXXXX" — the wa.me deep link from a payment-request page. */
+const PAY_REQUEST_CODE_PATTERN = /\bpay\s+request\s+([A-Z]{6,12})\b/i;
+
+/**
+ * "Please pay me" — the user wants to GET PAID (create a payment request).
+ * Deliberately excludes "pay request <code>" (that's PAYING one) and
+ * paying-someone phrasings ("pay my sister").
+ */
+function matchRequestMoneyAsk(text = '') {
+  const s = String(text || '');
+  if (PAY_REQUEST_CODE_PATTERN.test(s)) return false;
+  return (
+    /\b(please\s+)?pay\s?-?\s?me\b/i.test(s) ||
+    /\bget\s+paid\b/i.test(s) ||
+    /\bpayment\s+request\b/i.test(s) ||
+    /\brequest\s+(money|payment|r\s?\d)/i.test(s)
+  );
+}
+
+/**
+ * Create a payment request and hand back a forwardable message + link.
+ * The link page offers BOTH legs: pay from a WaPay balance (free, deep
+ * links back into chat) or card/EFT via PayFast (payer covers the fee).
+ */
+async function handleCreatePaymentRequest({ from, account, amountCents, rawText = '' }) {
+  if (!Number.isInteger(amountCents) || amountCents < MIN_REQUEST_CENTS || amountCents > MAX_REQUEST_CENTS) {
+    await updateConversationState(from, 'REQUEST_MONEY_AMOUNT');
+    const askMsg = `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5–R3000)\n\nFor example "R150" — or reply "cancel" to stop.`;
+    await addToConversationHistory(from, 'assistant', askMsg);
+    return await sendWhatsAppText({ to: from, text: askMsg });
+  }
+
+  let request;
+  try {
+    request = await createPaymentRequest({ accountId: account.id, amountCents });
+  } catch (error) {
+    logStructured('payrequest_create_error', { from, accountId: account.id, amountCents, error: error?.message });
+    return await sendWhatsAppText({
+      to: from,
+      text: `❌ Sorry, I couldn't create your payment request. Please try again in a moment.`,
+    });
+  }
+
+  await updateConversationState(from, null);
+  const url = paymentRequestUrl(request.id);
+  const who = account.displayName || maskMsisdn(account.msisdn) || 'A WaPay user';
+
+  logStructured('payrequest_created', { from, accountId: account.id, code: request.id, amountCents });
+
+  const intro = `🙏 *Payment request created!*\n\nForward the next message to whoever owes you — I'll tell you the moment it's paid.`;
+  await addToConversationHistory(from, 'assistant', intro);
+  await sendWhatsAppText({ to: from, text: intro });
+
+  const forwardable =
+    `🙏 ${who} is requesting *${randsShort(amountCents)}* on WaPay.\n\n` +
+    `Tap to pay — from a WaPay balance (free) or by card:\n${url}`;
+  await addToConversationHistory(from, 'assistant', forwardable);
+  return await sendWhatsAppText({ to: from, text: forwardable });
+}
+
+/**
+ * Start the in-chat leg of paying a request: look the code up, show the
+ * confirm, then PIN — the send is a free spend->spend buildSend, posted
+ * with the request code as idemKey so exactly ONE payer can ever pay it.
+ */
+async function handlePayRequestStart({ from, account, code, rawText = '' }) {
+  const request = await getPaymentRequest({ code });
+  if (!request) {
+    return await sendWhatsAppText({
+      to: from,
+      text: `🤔 I can't find that payment request. Please check the link and try again.`,
+    });
+  }
+  if (request.accountId === account.id) {
+    return await sendWhatsAppText({
+      to: from,
+      text: `🙂 That's your own payment request — forward the link to the person who owes you.`,
+    });
+  }
+  if (request.status !== 'PENDING') {
+    const why = request.status === 'PAID' ? 'has already been paid' : 'is no longer active';
+    return await sendWhatsAppText({ to: from, text: `⏳ That payment request ${why}.` });
+  }
+
+  let requesterLabel = 'a WaPay user';
+  try {
+    const requester = await prisma.account.findUnique({ where: { id: request.accountId } });
+    requesterLabel = requester?.displayName || maskMsisdn(requester?.msisdn) || requesterLabel;
+  } catch {
+    // Cosmetic only.
+  }
+
+  await updateConversationState(from, 'PAYREQ_CONFIRM', { code: request.id, amountCents: request.amountCents, requesterLabel });
+  const confirmMsg =
+    `💸 *Pay ${randsShort(request.amountCents)} to ${requesterLabel}?*\n\n` +
+    `Paid from your WaPay balance — no fees.\n\n` +
+    `Reply *YES* to confirm or *NO* to cancel.`;
+  await addToConversationHistory(from, 'assistant', confirmMsg);
+  return await sendWhatsAppText({ to: from, text: confirmMsg });
+}
+
 /**
  * "Buy an OTT voucher" (for MYSELF — no recipient number in the message).
  * Excludes redemption-ish phrasings ("redeem / load / I have an OTT
@@ -1953,6 +2094,159 @@ async function handleConversationState({ from, text, state, data, account }) {
   console.log('💬 Handling conversation state:', { state, text, data });
 
   switch (state) {
+    case 'REQUEST_MONEY_AMOUNT': {
+      const trimmed = text.trim().toLowerCase();
+      if (/^(cancel|stop|no|home|menu|back|exit)$/i.test(trimmed)) {
+        await updateConversationState(from, null);
+        return await renderHome({ from, account });
+      }
+      const filled = parseSlots(text, { waId: from, accountId: account.id });
+      if (!filled.amountCents) {
+        if (isConversationalEscape(text)) {
+          await updateConversationState(from, null);
+          return await handlePostOnboarding({ account, from, text });
+        }
+        return await sendWhatsAppText({
+          to: from,
+          text: `Please reply with the amount you'd like to request, e.g. "R150" — or "cancel" to stop.`,
+        });
+      }
+      return await handleCreatePaymentRequest({ from, account, amountCents: filled.amountCents, rawText: text });
+    }
+
+    case 'PAYREQ_CONFIRM': {
+      const normalized = text.trim().toLowerCase();
+      if (/^(yes|yep|yeah|y|sure|ok|okay|confirm)$/i.test(normalized)) {
+        await updateConversationState(from, 'PAYREQ_PIN', data);
+        const pinMsg = `🔐 *Enter Your PIN*\n\nTo pay ${randsShort(data.amountCents)} to ${data.requesterLabel}, please enter your WaPay PIN.`;
+        await addToConversationHistory(from, 'assistant', pinMsg);
+        return await sendWhatsAppText({ to: from, text: pinMsg });
+      }
+      if (/^(no|nope|n|cancel|stop)$/i.test(normalized)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: `👍 Cancelled — nothing was paid.` });
+      }
+      if (isConversationalEscape(text)) {
+        await updateConversationState(from, null);
+        return await handlePostOnboarding({ account, from, text });
+      }
+      return await sendWhatsAppText({ to: from, text: `Please reply *YES* to pay or *NO* to cancel.` });
+    }
+
+    case 'PAYREQ_PIN': {
+      const normalized = text.trim().toLowerCase();
+      if (/^(cancel|stop|no|exit|back)$/i.test(normalized)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: `👍 Cancelled — nothing was paid.` });
+      }
+
+      const pinResult = await verifyPIN({ accountId: account.id, pin: text.trim() });
+      if (!pinResult.ok) {
+        if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: `🔒 Too many incorrect PIN attempts. Please try again later.`,
+          });
+        }
+        return await sendWhatsAppText({
+          to: from,
+          text: `❌ Incorrect PIN. Please try again, or reply "cancel" to stop.`,
+        });
+      }
+
+      await updateConversationState(from, null);
+      const request = await getPaymentRequest({ code: data.code });
+      if (!request || request.status !== 'PENDING') {
+        return await sendWhatsAppText({
+          to: from,
+          text: `⏳ That payment request is no longer open — nothing was paid.`,
+        });
+      }
+
+      // The request code IS the idempotency key: exactly one payer's debit
+      // can ever post; a racing payer replays the winner's entry harmlessly.
+      let posted;
+      try {
+        await ensureWallet({ accountId: account.id });
+        await ensureWallet({ accountId: request.accountId });
+        posted = await postEntry(
+          buildSend({
+            fromAccountId: account.id,
+            toAccountId: request.accountId,
+            amountCents: request.amountCents,
+            idemKey: `wapay-payreq-${request.id}`,
+          })
+        );
+      } catch (error) {
+        if (error?.code === 'INSUFFICIENT_FUNDS') {
+          const { balance } = await getUserBalance(from);
+          const balanceCents = Math.round(parseFloat(balance) * 100) || 0;
+          const shortfallCents = Math.max(request.amountCents - balanceCents, MIN_DEPOSIT_CENTS);
+          return await sendWhatsAppText({
+            to: from,
+            text:
+              `💰 You need ${randsShort(request.amountCents)} but your balance is R${balance}.\n\n` +
+              `Top up and try again:\n` +
+              `1️⃣ *Cash* — buy a Blu Voucher at any till and send me the code\n` +
+              `2️⃣ *Card / bank* — reply "deposit ${randsShort(shortfallCents)}" for a secure PayFast link`,
+          });
+        }
+        logStructured('payrequest_pay_error', { from, accountId: account.id, code: data.code, error: error?.message });
+        return await sendWhatsAppText({
+          to: from,
+          text: `❌ Sorry, the payment couldn't be completed. Nothing was charged — please try again.`,
+        });
+      }
+
+      if (posted.replayed) {
+        return await sendWhatsAppText({
+          to: from,
+          text: `⏳ That request was already paid — nothing was charged to you.`,
+        });
+      }
+
+      await markRequestPaid({ code: request.id, payerRef: `WAPAY:${account.id}` });
+
+      logStructured('payrequest_paid_balance', {
+        from,
+        accountId: account.id,
+        code: request.id,
+        amountCents: request.amountCents,
+      });
+
+      const { balance } = await getUserBalance(from);
+      const receipt =
+        `✅ *Paid!*\n\n` +
+        `💸 ${randsShort(request.amountCents)} to ${data.requesterLabel}\n` +
+        `📅 ${formatDateTimeZa(new Date())}\n\n` +
+        `💳 New balance: R${balance}`;
+      await addToConversationHistory(from, 'assistant', receipt);
+      await sendWhatsAppText({ to: from, text: receipt });
+
+      // Tell the requester their money arrived (best effort, never blocks).
+      try {
+        const requester = await prisma.account.findUnique({ where: { id: request.accountId } });
+        if (requester?.waId) {
+          const payerLabel = account.displayName || maskMsisdn(account.msisdn) || 'Someone';
+          const rw = await prisma.wallet.findFirst({
+            where: { accountId: request.accountId, balanceType: 'SPEND' },
+          });
+          await sendWhatsAppText({
+            to: requester.waId,
+            text:
+              `💸 *Your payment request was PAID!*\n\n` +
+              `${payerLabel} paid your ${randsShort(request.amountCents)} request.` +
+              (rw ? `\n\n💳 New balance: R${(rw.availableCents / 100).toFixed(2)}` : ''),
+          });
+        }
+      } catch (notifyError) {
+        logStructured('payrequest_notify_error', { code: request.id, error: notifyError?.message });
+      }
+
+      return await sendPostTransactionCta(from);
+    }
+
     case 'DEPOSIT_CARD_AMOUNT': {
       const trimmed = text.trim().toLowerCase();
       if (/^(cancel|stop|no|home|menu|back|exit)$/i.test(trimmed)) {
@@ -3807,6 +4101,9 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
       // Any other kind: fall through to the agent's reply.
       break;
     }
+
+    case 'REQUEST_MONEY':
+      return await handleCreatePaymentRequest({ from, account, amountCents, rawText: text });
 
     case 'LIST_PRODUCTS':
       return await handleListAllProducts({ from, account });

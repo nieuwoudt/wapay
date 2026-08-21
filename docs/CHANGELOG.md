@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-08-21 — 🙏 Payment requests ("please pay me") — shareable links, two payment legs
+
+"Please pay me R150" / "payme link" (any language — REQUEST_MONEY orchestrator action, live-verified incl. isiZulu) creates a shareable request (`payment_requests`, prod-applied: PR-prefixed letters-only codes, R5–R3000, 7-day lazy expiry, PENDING→PAID exactly once). The user gets a forwardable message + `wapay.co.za/pay/<code>`. The public page (`pages/pay/[code].js`) offers both legs:
+
+- **Pay from a WaPay balance — free**: deep-links back into WhatsApp ("Pay request <code>") → confirm → wallet PIN → `buildSend` (free spend→spend) posted with the request code as idemKey, so exactly ONE payer can ever pay it (a racing payer replays harmlessly and is told). Both sides get instant receipts; the requester is notified with their new balance.
+- **Pay by card/EFT — no WaPay account needed**: `/api/pay/checkout` mints a PayFast intent (route `payrequest`, payer covers the banded payment fee, requester credited FACE) and the ITN marks the request PAID atomically. Every non-WaPay payer sees the get-your-own-WaPay hook.
+
+Insufficient balance on the in-chat leg becomes the standard top-up checkout moment. `tests/payment-requests.test.mjs` (+11, suite 269/269). Also: OTT negotiation email drafted (`EMAIL_TO_OTT_NEGOTIATION.txt` — Payout asymmetries, Merchant 6% fee, ops annexure, Collect parked).
+
 ## 2026-08-20 (2) — User memory, GPT-5.5 brain, fee-free self vouchers, voucher history
 
 - **Root cause of every live voucher failure found: `OTT_BASE_URL` (and the OTT credentials) were never set in Vercel** — the OTT client crashes at construction in production. USER ACTION: copy the four `OTT_*` vars from local `.env` into Vercel and redeploy. (The crash-release guard worked: the stranded hold auto-released with `execute_crashed:Missing env OTT_BASE_URL` — that log line was the diagnosis.)

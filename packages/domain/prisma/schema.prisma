@@ -310,6 +310,21 @@ model AuditLog {
 // the recipient shows up on WhatsApp and the gift is DELIVERED exactly once.
 // voucherPin is a BEARER SECRET — whoever holds it can redeem the value.
 // Never log it; mask like maskMsisdn does everywhere except delivery itself.
+model PaymentRequest {
+  id          String    @id // short shareable code, e.g. "PR7K2FQ4"
+  accountId   String // the REQUESTER — who gets credited
+  amountCents Int
+  note        String?
+  status      String    @default("PENDING") // PENDING | PAID | CANCELLED | EXPIRED
+  payerRef    String? // how it was paid: WAPAY:<accountId> or PAYFAST:<pf id>
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+
+  @@index([accountId, createdAt])
+  @@map("payment_requests")
+}
+
 model Beneficiary {
   id         String   @id @default(cuid())
   accountId  String

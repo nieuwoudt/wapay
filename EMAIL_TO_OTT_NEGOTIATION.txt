@@ -1,0 +1,56 @@
+To: Riaan Peens <riaan@ott-mobile.com>; Keamo Modikwe <keamo@ott-mobile.com>
+Subject: Payout + Merchant agreements — ready to proceed, a few points to close
+
+Hi Riaan, Keamo
+
+Thank you for the Payout and Collect documents and the portal access —
+we've reviewed everything, we're excited about Payout in particular, and
+we'd like to move quickly. To get there, a short list of points per
+document:
+
+PAYOUT AGREEMENT + 2026 ADDENDUM — we want to sign. Four items first:
+
+1. Termination balance: as drafted the Recipient needs 12 months' notice
+   while OTT needs 30 days (cl 4.3/4.4). We'd propose 90 days for both
+   sides.
+2. Pricing changes (cl 5.5): we accept a 30-day repricing notice, but we
+   need an express right to terminate without penalty within that notice
+   window if we don't accept the new pricing — and the addendum's
+   termination cross-reference is currently blank; please complete it.
+3. The 0.3% monthly switching fee: please confirm in writing that it
+   applies to the CashSend/VAS value only (not total payout value), and
+   we'd welcome a conversation about it — at our flat consumer pricing
+   it makes larger CashSend transactions loss-making.
+4. Operational annexure: per-rail transaction and daily limits, float
+   top-up mechanics and settlement timing, the webhook/status-callback
+   spec (including reversals), and SMS resend for cardless withdrawals.
+   The deck references these capabilities — we'd like them in writing.
+
+Two housekeeping items on the addendum: the base agreement date is
+blank, and OTT's registration number differs between header and body.
+
+MERCHANT (REDEMPTION) AGREEMENT — we want this live too, with three
+changes before we countersign:
+
+1. Commission: 6% + VAT makes redemption uneconomic for us as a deposit
+   method (we're charged more accepting a voucher than we earn selling
+   one). We'd propose 2.5–3.5%, or at minimum a preferential rate for
+   vouchers originally issued through our own reseller channel.
+2. Scope: our redemption use case credits a customer's WaPay wallet.
+   Please confirm by side letter that redemption "in exchange for goods
+   and/or services" covers wallet credit on our platform.
+3. Settlement: weekly-in-arrears means we fund customer credits for up
+   to a week. We'd propose daily T+1, or netting redemptions against our
+   prepaid reseller float — either solves it.
+
+COLLECT — thank you for including it; the physical cash-payout model
+doesn't fit our current operation, so we'll park this one for now and
+revisit if a wallet-settlement variant becomes possible.
+
+None of these points are deal-breakers on our side — they're the gap
+between signing this week and signing after a round of redlines. Happy
+to work through them on a call; we can also send a marked-up copy if
+that's easier.
+
+Thank you
+Niev

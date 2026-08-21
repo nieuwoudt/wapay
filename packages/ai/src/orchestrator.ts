@@ -70,6 +70,7 @@ export const ORCHESTRATOR_ACTIONS = [
   'BUY_DATA',
   'BUY_ELECTRICITY',
   'SEND_VOUCHER',
+  'REQUEST_MONEY',
   'LIST_PRODUCTS',
   'LIST_CATEGORY',
   'HELP',
@@ -215,7 +216,7 @@ const PRODUCT_TRUTH = `WAPAY TODAY (never claim more, never deny these):
 - Buy for yourself or ANY number: airtime (R5–R1000), data bundles, prepaid electricity (R10–R5000, needs meter number).
 - Send money: "send R50 to 083…", a saved name ("send R50 to Philly"), or share a contact card — the recipient gets a WaPay voucher (R10–R1000, flat R3 fee).
 - Getting money OUT (withdrawals): NOT available — WaPay balances and WaPay vouchers are SPEND-ONLY. A WaPay voucher can be spent online at any platform that accepts OTT vouchers as payment; it CANNOT be exchanged for cash or paid into a bank account. NEVER claim cash-out, bank withdrawal, or "take it to your bank" — if asked, say withdrawals aren't available and list what the money CAN do (airtime, data, electricity, online spend, sending to others).
-- REQUEST MONEY / "please pay me" links (getting PAID by someone, payment requests, invoices): NOT available yet — coming soon. When asked, say exactly that and suggest the working alternative: the other person can send money to the user's number with WaPay. NEVER reinterpret a get-paid request as SEND_VOUCHER or a product menu.
+- REQUEST MONEY / "please pay me": LIVE. "request R150" creates a shareable payment link (R5–R3000, 7-day expiry) the user forwards to anyone; the payer pays free from a WaPay balance or by card via PayFast (payer covers the payment fee); the requester is notified the moment it's paid.
 - Check balance; redeem vouchers. NO betting top-ups yet, NO Netflix/DStv yet ("coming soon" is the honest answer for those).`;
 
 const MONEY_TRUTH_RULES = `MONEY TRUTH RULES (absolute):
@@ -251,7 +252,7 @@ Distinguish carefully:
 - "did my deposit arrive?" = status question -> fastAction DEPOSIT_STATUS.
 - "send R50 airtime to 083…" names a product -> AIRTIME (not SEND).
 - "send R50 to 083…" names no product -> SEND.
-- "payme link" / "please pay me" / "I want to get paid by someone" = the user wants to RECEIVE money -> MONEY domain, fastAction NONE (the specialist answers honestly that payment requests are coming soon). NEVER route get-paid asks to SEND.
+- "payme link" / "please pay me" / "I want to get paid by someone" = the user wants to RECEIVE money -> MONEY domain, fastAction NONE (the specialist returns REQUEST_MONEY). NEVER route get-paid asks to SEND.
 
 ${MONEY_TRUTH_RULES}`;
 
@@ -277,6 +278,7 @@ SLOT RULES:
   const perDomain: Record<OrchestratorDomain, string> = {
     MONEY: `YOUR ACTIONS:
 - DEPOSIT_START: user wants to ADD money by card/EFT ("deposit R100", "laai R50", "put money in"). amountCents null when unspecified.
+- REQUEST_MONEY: user wants to GET PAID ("please pay me R150", "payme link", "request money from Thabo"). amountCents when given. The system creates a shareable payment link.
 - REDEEM_VOUCHER: user has a Blu voucher / voucher PIN to load — INCLUDING "I bought a voucher, how do I load it": when they already have one, start the flow (it explains itself) instead of describing steps.
 - DEPOSIT_STATUS: user asks whether money they paid in has arrived.
 - CHECK_BALANCE: balance questions.
