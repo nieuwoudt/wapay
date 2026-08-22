@@ -5,9 +5,10 @@
  * non-secret public URLs only, never values — so "are the OTT vars live in
  * Vercel?" is answerable without dashboard screenshots.
  *
- * Access mirrors lib/internal-auth.js's explicit fail-open design: while
- * WAPAY_INTERNAL_API_KEY is unset the block is open (and says so); once the
- * secret is set, the x-internal-api-key header is required.
+ * FAIL CLOSED: the block exists only when WAPAY_INTERNAL_API_KEY is set AND
+ * the x-internal-api-key header matches. (internal-auth's fail-open exists
+ * so money routes keep working before the secret lands; nothing depends on
+ * this block, so it gets the strict default — QA 2026-08-22.)
  */
 
 import crypto from 'crypto';
@@ -31,17 +32,15 @@ export default function handler(req, res) {
   if (req.query?.config === '1') {
     const secret = process.env.WAPAY_INTERNAL_API_KEY || '';
     const presented = req.headers['x-internal-api-key'];
-    const authorized = secret
-      ? typeof presented === 'string' && timingSafeEqualStr(presented, secret)
-      : true; // fail-open until the secret exists — same contract as internal-auth
+    const authorized =
+      Boolean(secret) && typeof presented === 'string' && timingSafeEqualStr(presented, secret);
 
     if (authorized) {
       const has = (name) => Boolean(process.env[name]);
       body.config = {
-        guarded: Boolean(secret),
         // OTT voucher issuing (all four required; vendor code defaults to 11).
         ott: has('OTT_BASE_URL') && has('OTT_API_USERNAME') && has('OTT_API_KEY') && has('OTT_API_PASSWORD'),
-        ottVendorCode: process.env.OTT_VENDOR_CODE || '(default 11)',
+        ottVendorCode: has('OTT_VENDOR_CODE'),
         // PayFast deposits + payment-request card leg.
         payfast: has('PAYFAST_MERCHANT_ID') && has('PAYFAST_MERCHANT_KEY') && has('PAYFAST_PASSPHRASE'),
         // Orchestrator.
@@ -52,7 +51,7 @@ export default function handler(req, res) {
         // Link bases are public-facing URLs, not secrets.
         appBaseUrl: process.env.APP_BASE_URL || null,
         paylinkBaseUrl: process.env.PAYLINK_BASE_URL || null,
-        payerReceiptTemplate: process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT || null,
+        payerReceiptTemplate: has('WAPAY_TEMPLATE_PAYMENT_RECEIPT'),
       };
     }
   }

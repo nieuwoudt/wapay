@@ -247,7 +247,7 @@ Payment confirmed: you paid {{1}} to {{2}} via WaPay.
 
 Payment reference: {{3}}.
 
-This message is your receipt. Reply here any time for your own free WaPay wallet.
+This message is your receipt.
 ```
 
 **Variables**:
@@ -255,7 +255,8 @@ This message is your receipt. Reply here any time for your own free WaPay wallet
 2. `{{2}}` - masked requester label, e.g. "076•••567" or a display name
 3. `{{3}}` - payment reference (PayFast id or request code)
 
-**Buttons**: Quick Reply — `Get my WaPay`
+**Buttons**: none — purely transactional, or Meta reclassifies it as Marketing
+(recategorization risk + per-message cost + opt-out rules; QA 2026-08-22)
 
 **Sample**:
 ```
@@ -263,7 +264,7 @@ Payment confirmed: you paid R150.00 to 076•••567 via WaPay.
 
 Payment reference: 2412345.
 
-This message is your receipt. Reply here any time for your own free WaPay wallet.
+This message is your receipt.
 ```
 
 **Notes**:

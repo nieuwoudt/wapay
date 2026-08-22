@@ -1777,11 +1777,22 @@ function detectExplicitIntent(text = '') {
  */
 const DEPOSIT_CARD_PATTERN = /\b(?:deposit|depsit|deposite|diposit)\b(?:\s+(?:money|funds|cash))?\s*[:,-]?\s*r?\s*(\d+(?:[.,]\d{1,2})?)(?:\s*(?:rand|rande|zar))?\b/i;
 
-/** "Pay request PRXXXXXX" — the wa.me deep link from a payment-request page. */
-const PAY_REQUEST_CODE_PATTERN = /\bpay\s+request\s+(PR[A-Z]{6})\b/i;
+/**
+ * "Pay request PRXXXXXX" — the wa.me deep link from a payment-request page.
+ * The capture class is the CODE ALPHABET (no I/L/O — lib/payment-requests),
+ * which alone kills most English-word lookalikes ("pay request PROBLEMS").
+ */
+const PAY_REQUEST_CODE_PATTERN = /\bpay\s+request\s+(PR[A-HJKMNP-Z]{6})\b/i;
 
-/** "Receipt PRXXXXXX" — the wa.me deep link a card payer taps on the pay page. */
-const RECEIPT_CODE_PATTERN = /\breceipt\s+(PR[A-Z]{6})\b/i;
+/**
+ * "Receipt PRXXXXXX" — the wa.me deep link a card payer taps on the pay
+ * page, which sends EXACTLY this text as the whole message — so the
+ * intercept is anchored to the full message AND restricted to the code
+ * alphabet. Un-anchored /i matching hijacked ordinary sentences ("I have
+ * receipt problems" captured PROBLEMS, "is my receipt prepared" captured
+ * PREPARED — QA 2026-08-22).
+ */
+const RECEIPT_CODE_PATTERN = /^\s*receipt\s+(PR[A-HJKMNP-Z]{6})\s*[.!]?\s*$/i;
 
 /**
  * "Change my amount to R1000" — swap the newest PENDING request for a new
@@ -1953,6 +1964,22 @@ async function handlePaymentReceiptAsk({ from, code }) {
     });
   }
   if (request.status !== 'PAID') {
+    // CANCELLED/EXPIRED — but a card payment can land AFTER the requester
+    // cancels (the credit posts; only the PENDING->PAID mark loses). Never
+    // tell a charged payer "no payment was taken": check the intent.
+    let intentSucceeded = false;
+    try {
+      const intent = await prisma.providerRequest.findUnique({ where: { idemKey: `wapay-payreq-${code}` } });
+      intentSucceeded = intent?.status === 'SUCCESS' || Boolean(intent?.providerRef);
+    } catch {
+      // Fall through to the generic message.
+    }
+    if (intentSucceeded) {
+      return await sendWhatsAppText({
+        to: from,
+        text: `🧾 That request was closed by the requester, but a card payment WAS received on it. If that payment was yours, the money reached ${requesterLabel} — please contact them (or reply "help") if anything looks wrong.`,
+      });
+    }
     return await sendWhatsAppText({
       to: from,
       text: `⏳ That payment request is no longer active — no payment was taken on it.`,

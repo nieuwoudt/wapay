@@ -4,6 +4,20 @@
 
 ---
 
+## 25. Parallel-session rsync swept another thread's PRE-review code into a push
+
+- **Symptom:** commit `619a285` (amount-change swap) also shipped the in-flight payer-registration feature BEFORE its adversarial-review fixes — prod briefly ran a GET form (payer msisdn into query-string request logs), a hijackable last-click-wins receipt destination, a dead-code template fallback, and a fail-open health config block.
+- **Root cause:** two sessions share one git-less fast copy; rsync is tree-wide, so "commit my work" swept every mid-flight file the other session had touched — the commit message described none of it.
+- **Fix:** the review-fixed versions pushed the same evening (this commit); window ≈ one deploy cycle.
+- **Guard:** process rule — before rsync+commit, run `rsync -rcn --itemize-changes` and inventory every differing path against the tracker; a file you didn't author in THIS session either ships with its author's sign-off visible in the tracker or stays out of the commit (`git add` is selective even when rsync isn't).
+
+## 24. Payer-registration review batch (41-agent adversarial review, 2026-08-22)
+
+- **Symptom (batch, all fixed pre-launch bar the #25 window):** (a) `@wapay/whatsapp` send functions RESOLVE `{ok:false}` — never throw — so a catch-based template fallback was dead code and out-of-window payers silently got no receipt, with zero log evidence; (b) the receipt destination was last-click-wins metadata — anyone holding the link could redirect a paying payer's receipt + PayFast reference to their own number during the whole card-entry + ITN-latency window; (c) the payer's msisdn rode a GET query string into platform request logs; (d) `RECEIPT_CODE_PATTERN` un-anchored under `/i` matched ordinary sentences ("receipt problems" → PROBLEMS, "is my receipt prepared" → PREPARED); (e) `/api/health?config=1` was world-readable until the key existed and leaked two env VALUES its own doc called presence-only; (f) a payer whose card payment landed after the requester cancelled was told "no payment was taken on it".
+- **Root cause:** single-session blind spots — assumed exceptions on send failure, trusted mutable shared metadata for a money-adjacent artifact, defaulted fail-open by analogy with internal-auth, pattern-matched user text too loosely.
+- **Fix:** branch on the resolved `.ok` with an env-gated template fallback; receipt destination bound to signed `custom_str1` (the ITN persists the true payer back into metadata for the in-chat ref gate); number travels in the POST body only; patterns anchored + restricted to the code alphabet (PAY_REQUEST tightened too); health fails closed with presence-booleans only; intent-status consulted before ever denying a payment.
+- **Guard:** `tests/payer-registration.test.mjs` (26 tests) pins every fix: `.ok` branches, `custom_str1` wiring, POST-only payer, the false-positive corpus, fail-closed health, metadata MERGE spreads (mutation-tested), gross-cents receipts, upsell-free push receipts, and the betting/cash-out word ban.
+
 ## 17. Every VAS settle idemKey was timestamp-poisoned — vend delivered, customer never charged
 
 - **Symptom:** (latent, would hit every airtime/data/electricity purchase on the new ledger) the provider vends, then `settleHold(buildSpend(...))` throws — the customer keeps the product AND the money.

@@ -259,7 +259,13 @@ export default async function handler(req, res) {
       if (wallet) {
         lines.push(`New balance: R${centsToRandString(wallet.availableCents)}`);
       }
-      await sendWhatsAppText({ to: waId, text: lines.join('\n') });
+      const confirmSent = await sendWhatsAppText({ to: waId, text: lines.join('\n') });
+      if (!confirmSent?.ok) {
+        // send functions resolve {ok:false} on failure — they never throw.
+        console.error(
+          JSON.stringify({ type: 'payfast_itn_confirm_send_error', paymentId, error: confirmSent?.error })
+        );
+      }
     } catch (error) {
       console.error(
         JSON.stringify({ type: 'payfast_itn_confirm_send_error', paymentId, error: error?.message })
@@ -269,39 +275,61 @@ export default async function handler(req, res) {
 
   // The PAYER's receipt (card leg of a payment request only — founder ask
   // 2026-08-22: every payer becomes a user). Best effort, never fails the
-  // ITN. Free-form text works whenever the payer opened the wa.me receipt
-  // link (that inbound message opens Meta's 24h service window); outside
-  // the window Meta rejects it, and we fall back to the approved receipt
-  // template when WAPAY_TEMPLATE_PAYMENT_RECEIPT names one.
-  const payerMsisdn = intent.metadata?.payerMsisdn || null;
-  if (requestCode && wonRequestTransition && typeof payerMsisdn === 'string' && /^0\d{9}$/.test(payerMsisdn)) {
-    const payerWaId = `27${payerMsisdn.slice(1)}`;
-    let requesterLabel = 'the requester';
-    try {
-      const requester = await prisma.account.findUnique({ where: { id: accountId } });
-      requesterLabel = maskedRequesterLabel(requester);
-    } catch {
-      // Label is cosmetic; the receipt still stands without it.
-    }
-    const paidRands = centsToRandString(grossCents);
-    const refLine = params.pf_payment_id ? `Ref: PF ${params.pf_payment_id} · ${requestCode}` : `Ref: ${requestCode}`;
-    try {
-      await sendWhatsAppText({
+  // ITN. The destination comes from the SIGNED payload (custom_str1 rode
+  // the checkout session that actually paid — a later checkout click can't
+  // redirect it); metadata.payerMsisdn is only the fallback for intents
+  // created before custom_str1 shipped. Free-form text lands whenever the
+  // payer has messaged us (the wa.me receipt button); Meta REJECTS it for a
+  // never-messaged number — sendWhatsAppText/Template NEVER throw, they
+  // return {ok:false} (QA 2026-08-22: a catch here is dead code), so we
+  // branch on the result and fall back to the approved template when
+  // WAPAY_TEMPLATE_PAYMENT_RECEIPT names one.
+  try {
+    const custom = String(params.custom_str1 || '');
+    const payerMsisdn = /^0\d{9}$/.test(custom)
+      ? custom
+      : /^0\d{9}$/.test(String(intent.metadata?.payerMsisdn || ''))
+        ? intent.metadata.payerMsisdn
+        : null;
+    if (requestCode && wonRequestTransition && payerMsisdn) {
+      // Persist the number that actually paid, so the in-chat receipt ask
+      // reveals the PayFast reference to the true payer only.
+      if (intent.metadata?.payerMsisdn !== payerMsisdn) {
+        await prisma.providerRequest
+          .update({ where: { idemKey: intent.idemKey }, data: { metadata: { ...intent.metadata, payerMsisdn } } })
+          .catch(() => {});
+      }
+
+      const payerWaId = `27${payerMsisdn.slice(1)}`;
+      let requesterLabel = 'the requester';
+      try {
+        const requester = await prisma.account.findUnique({ where: { id: accountId } });
+        requesterLabel = maskedRequesterLabel(requester);
+      } catch {
+        // Label is cosmetic; the receipt still stands without it.
+      }
+      const paidRands = centsToRandString(grossCents);
+      const refLine = params.pf_payment_id
+        ? `Ref: PF ${params.pf_payment_id} · ${requestCode}`
+        : `Ref: ${requestCode}`;
+
+      // Purely transactional — no upsell in a receipt (POPIA: the form said
+      // the number is for the receipt; the onboarding offer lives in the
+      // user-initiated wa.me path instead).
+      const sent = await sendWhatsAppText({
         to: payerWaId,
         text:
           `🧾 Payment confirmed: R${paidRands} to ${requesterLabel} ✅\n` +
           `${refLine}\n` +
-          `This message is your receipt.\n\n` +
-          `Want your own WaPay? It's free — just reply "hi" 🚀`,
+          `This message is your receipt.`,
       });
-    } catch (error) {
-      console.error(
-        JSON.stringify({ type: 'payfast_itn_payer_receipt_error', paymentId, error: error?.message })
-      );
-      const templateName = process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT || '';
-      if (templateName) {
-        try {
-          await sendWhatsAppTemplate({
+      if (!sent?.ok) {
+        console.error(
+          JSON.stringify({ type: 'payfast_itn_payer_receipt_error', paymentId, error: sent?.error })
+        );
+        const templateName = process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT || '';
+        if (templateName) {
+          const tpl = await sendWhatsAppTemplate({
             to: payerWaId,
             templateName,
             language: 'en',
@@ -316,17 +344,23 @@ export default async function handler(req, res) {
               },
             ],
           });
-        } catch (templateError) {
-          console.error(
-            JSON.stringify({
-              type: 'payfast_itn_payer_receipt_template_error',
-              paymentId,
-              error: templateError?.message,
-            })
-          );
+          if (!tpl?.ok) {
+            console.error(
+              JSON.stringify({
+                type: 'payfast_itn_payer_receipt_template_error',
+                paymentId,
+                error: tpl?.error,
+              })
+            );
+          }
         }
       }
     }
+  } catch (error) {
+    // Belt and braces: the payer receipt must never threaten the 200.
+    console.error(
+      JSON.stringify({ type: 'payfast_itn_payer_receipt_error', paymentId, error: error?.message })
+    );
   }
 
   return res.status(200).send('OK');

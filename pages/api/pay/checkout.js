@@ -1,10 +1,19 @@
 /**
- * GET /api/pay/checkout?code=PRXXXXXX — card leg of a payment request.
+ * POST /api/pay/checkout — card leg of a payment request (the pay-page
+ * form; `code` + optional `payer` travel in the body so the payer's number
+ * never rides a query string into request logs). GET with just ?code= is
+ * kept for legacy bare links and never reads a payer number.
  *
- * Creates the PayFast intent for the request and 302-redirects the payer to
+ * Creates the PayFast intent for the request and redirects the payer to
  * checkout. The payer pays GROSS (request amount + banded payment fee); the
  * ITN webhook credits the REQUESTER face value with the intent's idemKey
  * (redeliveries credit once) and marks the request PAID.
+ *
+ * The payer's number ALSO rides the PayFast session as custom_str1 — the
+ * ITN reads it from the SIGNED payload, so the receipt goes to whoever was
+ * on the checkout session that actually paid, not to whoever loaded this
+ * endpoint last (QA 2026-08-22: last-click-wins let any link holder
+ * redirect the receipt).
  *
  * Public by design — the code IS the capability (unguessable, letters-only,
  * 7-day expiry, single-use PENDING->PAID). No auth, no PII in the redirect.
@@ -18,20 +27,23 @@ import { depositFeeCents } from '../../../lib/deposits.js';
 import { normaliseMsisdn, isValidSaMsisdn } from '../../../lib/msisdn.js';
 
 export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', ['GET']);
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    res.setHeader('Allow', ['POST', 'GET']);
     return res.status(405).send('method not allowed');
   }
 
-  const code = String(req.query.code || '').toUpperCase();
+  const code = String((req.method === 'POST' ? req.body?.code : req.query.code) || '').toUpperCase();
   if (!/^[A-Z]{6,12}$/.test(code)) return res.status(400).send('bad code');
 
   // The payer's WhatsApp number from the pay-page form (founder ask
-  // 2026-08-22: every card payer becomes a user). Capture is best-effort
-  // BY DESIGN: an invalid or missing number must never block the payment —
-  // the requester getting paid always outranks the growth hook.
+  // 2026-08-22: every card payer becomes a user). POST body ONLY — a number
+  // in a query string would land in platform request logs. Capture is
+  // best-effort BY DESIGN: an invalid or missing number must never block
+  // the payment — the requester getting paid always outranks the growth
+  // hook.
   const payerMsisdn = (() => {
-    const raw = String(req.query.payer || '');
+    if (req.method !== 'POST') return null;
+    const raw = String(req.body?.payer || '');
     if (!raw) return null;
     return isValidSaMsisdn(raw) ? normaliseMsisdn(raw) : null;
   })();
@@ -93,10 +105,11 @@ export default async function handler(req, res) {
       if (!intent) throw err;
     }
   } else if (payerMsisdn && intent.metadata?.payerMsisdn !== payerMsisdn) {
-    // The intent is reused across checkout clicks — remember whoever clicked
-    // LAST (only one person can ever complete the single-use payment, and
-    // the ITN reads the metadata after they have). Best effort: a stale
-    // number on the receipt is not worth blocking checkout for.
+    // The intent is reused across checkout clicks. This metadata copy is
+    // LEAD CAPTURE ONLY — the receipt destination is bound to the PayFast
+    // session via custom_str1 (signed, echoed in the ITN), so a later click
+    // can never redirect a paying payer's receipt. Best effort: not worth
+    // blocking checkout for.
     try {
       intent = await prisma.providerRequest.update({
         where: { idemKey },
@@ -131,6 +144,9 @@ export default async function handler(req, res) {
     amountCents,
     mPaymentId: id,
     itemName: 'WaPay payment request',
+    // The paying session carries its OWN receipt number — the ITN reads it
+    // back from the signed payload, immune to later checkout clicks.
+    customStr1: payerMsisdn || '',
     // ?r=1 = "back from PayFast": the page shows a confirming state with no
     // pay buttons while the ITN is in flight (double-charge guard). The
     // cancel URL stays bare so a cancelled payer gets the buttons back.
@@ -139,5 +155,7 @@ export default async function handler(req, res) {
     notifyUrl: `${base}/api/payfast/itn`,
   });
 
-  return res.redirect(302, checkoutUrl);
+  // 303 turns the form POST into a clean GET at PayFast; plain GET links
+  // follow it identically.
+  return res.redirect(303, checkoutUrl);
 }
