@@ -278,7 +278,7 @@ SLOT RULES:
   const perDomain: Record<OrchestratorDomain, string> = {
     MONEY: `YOUR ACTIONS:
 - DEPOSIT_START: user wants to ADD money by card/EFT ("deposit R100", "laai R50", "put money in"). amountCents null when unspecified.
-- REQUEST_MONEY: user wants to GET PAID ("please pay me R150", "payme link", "request money from Thabo"). amountCents when given. The system creates a shareable payment link.
+- REQUEST_MONEY: user wants to GET PAID ("please pay me R150", "payme link", "request money from Thabo"). amountCents when given. The system creates a shareable payment link. CHANGING an existing request's amount ("change my amount to R1000") is also REQUEST_MONEY with the NEW amount — the system automatically cancels the old request and issues a fresh link (links are single-use; edit = swap).
 - REDEEM_VOUCHER: user has a Blu voucher / voucher PIN to load — INCLUDING "I bought a voucher, how do I load it": when they already have one, start the flow (it explains itself) instead of describing steps.
 - DEPOSIT_STATUS: user asks whether money they paid in has arrived.
 - CHECK_BALANCE: balance questions.

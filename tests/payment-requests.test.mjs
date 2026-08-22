@@ -210,8 +210,35 @@ test('static: the public page exists and offers both legs', () => {
   assert.ok(existsSync(pagePath));
   const page = readFileSync(pagePath, 'utf8');
   assert.match(page, /Pay from my WaPay — free/);
-  assert.match(page, /api\/pay\/checkout\?code=/);
+  // The card leg became a payer-number form (auto-registration,
+  // 2026-08-22) — same endpoint, GET form instead of a bare link.
+  assert.match(page, /action="\/api\/pay\/checkout"/);
   assert.match(page, /wa\.me/);
+});
+
+test('amount-change swap: change-phrasings match, product words and no-amount do not', () => {
+  const start = processorSource.indexOf('function matchChangeRequestAmount(');
+  const end = processorSource.indexOf('\n}', start);
+  // eslint-disable-next-line no-new-func
+  const m = new Function(`${processorSource.slice(start, end + 2)}; return matchChangeRequestAmount;`)();
+  assert.ok(m('Can I change my amount to 1000', { amountCents: 100000 }));
+  assert.ok(m('change my request to R500', { amountCents: 50000 }));
+  assert.ok(m('make it R200', { amountCents: 20000 }));
+  assert.ok(!m('change my amount', { amountCents: null }), 'no amount, no swap');
+  assert.ok(!m('change it to R50 airtime', { amountCents: 5000, productHint: 'AIRTIME' }), 'product wins');
+  assert.ok(!m('please pay me R100', { amountCents: 10000 }), 'plain create is not a change');
+});
+
+test('static: the swap cancels the newest PENDING request then creates fresh', () => {
+  const start = processorSource.indexOf('async function handleChangeRequestAmount');
+  const body = processorSource.slice(start, processorSource.indexOf('\n}', start) + 2);
+  assert.match(body, /getLatestPendingRequest\(\{ accountId: account\.id \}\)/);
+  assert.match(body, /cancelPaymentRequest\(\{ code: latest\.id, accountId: account\.id \}\)/);
+  assert.match(body, /that link no longer works/i, 'old link death is announced');
+  assert.match(body, /handleCreatePaymentRequest\(\{ from, account, amountCents, rawText \}\)/);
+  const sc = processorSource.indexOf("intent: 'REQUEST_MONEY_CHANGE'");
+  const create = processorSource.indexOf("intent: 'REQUEST_MONEY'");
+  assert.ok(sc > -1 && sc < create, 'change short-circuit runs before plain create');
 });
 
 test('static: dispatch handles REQUEST_MONEY', () => {

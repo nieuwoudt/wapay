@@ -1,0 +1,44 @@
+Subject: Redemption API — base URL + docs are the last blockers (creds in hand)
+
+Hi Keamo
+
+Voucher issuing is fully built into our WhatsApp wallet and goes live to
+customers this week — thank you again for the float and the quick turnarounds.
+
+Redemption is built-ready on our side too, but we're stuck on plumbing, not
+product. Five specifics:
+
+1. Merchant / Redemption API — base URL + documentation. We received the
+   WAPAYVMT merchant credentials (thank you), but the Merchant API itself
+   isn't where we expected it: the merchant endpoints return "not found" on
+   test-api.ott-mobile.com, and merchant-api.ott-mobile.com refuses all our
+   requests outright (403) — which makes us suspect it's IP-allowlisted.
+   Could you send:
+     a) the correct Merchant API base URL (test + production),
+     b) the Merchant/Redemption API documentation, and
+     c) if there's an IP allowlist, the process for registering our egress IPs?
+   We're days from redemption go-live once we have these — the test vouchers
+   you sent are ready and waiting.
+
+2. Merchant Portal access — we found the portal at merchant.ott-mobile.com.
+   Should we have a login there? If the API settings page shows our base URL
+   and keys, that alone may answer point 1.
+
+3. Payout API credentials — we currently hold only the documentation-portal
+   password. Please send the actual API credentials (and base URL) so
+   integration can start the moment the commercial points are settled.
+
+4. Accepting platforms list — could you share the current list of platforms
+   and merchants that accept OTT vouchers? It's what we show recipients so
+   they know where to spend, so it directly drives our issuing volumes.
+
+5. Two loose ends from before: the countersigned Merchant agreement copy for
+   our records, and an ETA on the Hollywoodbets redemption issue you
+   mentioned was being looked at.
+
+For production issuing, we've confirmed api.ott-mobile.com responds on the
+reseller endpoints — is that the correct production base URL for when you
+issue our production credentials?
+
+Thank you
+Niev

@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-08-22 (2) — Amount-change swap for payment requests
+
+"Change my amount to R1000" now swaps in one step: the newest PENDING request is cancelled (old link announced dead), a fresh request is created at the new amount, and the forwardable message follows — links are single-use, so edit = cancel + recreate, standing behavior (deterministic matcher + orchestrator knowledge). PayFast real rate confirmed from stored ITN: 3.2% + R2.00 excl VAT — depositFeeCents defaults are correct, margin-positive on every card transaction. Suite 290/290.
+
 ## 2026-08-22 — Fee flip, question-answering, short domain prep, project constitution
 
 - **Payment-request fee direction flipped (founder decision)**: the PAYER pays exactly the request amount (no fees, and the page says so); the card fee is deducted from what the REQUESTER receives. Creation copy quotes both outcomes upfront. Balance payments remain fully free.

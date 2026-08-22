@@ -28,7 +28,7 @@
  */
 
 import { verifyItn } from '@wapay/providers-payfast';
-import { sendWhatsAppText } from '@wapay/whatsapp';
+import { sendWhatsAppText, sendWhatsAppTemplate } from '@wapay/whatsapp';
 
 import prisma from '../../../lib/prisma.js';
 import { readRawBody } from '../../../lib/webhook-security.js';
@@ -38,7 +38,7 @@ import {
   recordItnDebug,
   centsToRandString,
 } from '../../../lib/deposits.js';
-import { markRequestPaid } from '../../../lib/payment-requests.js';
+import { markRequestPaid, maskedRequesterLabel } from '../../../lib/payment-requests.js';
 import { noteDepositMethod } from '../../../lib/user-profile.js';
 import { postEntry, ensureWallet } from '../../../lib/ledger-post.js';
 import { buildLoad, RAIL, BALANCE } from '../../../lib/ledger-core.js';
@@ -264,6 +264,68 @@ export default async function handler(req, res) {
       console.error(
         JSON.stringify({ type: 'payfast_itn_confirm_send_error', paymentId, error: error?.message })
       );
+    }
+  }
+
+  // The PAYER's receipt (card leg of a payment request only — founder ask
+  // 2026-08-22: every payer becomes a user). Best effort, never fails the
+  // ITN. Free-form text works whenever the payer opened the wa.me receipt
+  // link (that inbound message opens Meta's 24h service window); outside
+  // the window Meta rejects it, and we fall back to the approved receipt
+  // template when WAPAY_TEMPLATE_PAYMENT_RECEIPT names one.
+  const payerMsisdn = intent.metadata?.payerMsisdn || null;
+  if (requestCode && wonRequestTransition && typeof payerMsisdn === 'string' && /^0\d{9}$/.test(payerMsisdn)) {
+    const payerWaId = `27${payerMsisdn.slice(1)}`;
+    let requesterLabel = 'the requester';
+    try {
+      const requester = await prisma.account.findUnique({ where: { id: accountId } });
+      requesterLabel = maskedRequesterLabel(requester);
+    } catch {
+      // Label is cosmetic; the receipt still stands without it.
+    }
+    const paidRands = centsToRandString(grossCents);
+    const refLine = params.pf_payment_id ? `Ref: PF ${params.pf_payment_id} · ${requestCode}` : `Ref: ${requestCode}`;
+    try {
+      await sendWhatsAppText({
+        to: payerWaId,
+        text:
+          `🧾 Payment confirmed: R${paidRands} to ${requesterLabel} ✅\n` +
+          `${refLine}\n` +
+          `This message is your receipt.\n\n` +
+          `Want your own WaPay? It's free — just reply "hi" 🚀`,
+      });
+    } catch (error) {
+      console.error(
+        JSON.stringify({ type: 'payfast_itn_payer_receipt_error', paymentId, error: error?.message })
+      );
+      const templateName = process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT || '';
+      if (templateName) {
+        try {
+          await sendWhatsAppTemplate({
+            to: payerWaId,
+            templateName,
+            language: 'en',
+            components: [
+              {
+                type: 'body',
+                parameters: [
+                  { type: 'text', text: `R${paidRands}` },
+                  { type: 'text', text: requesterLabel },
+                  { type: 'text', text: String(params.pf_payment_id || requestCode) },
+                ],
+              },
+            ],
+          });
+        } catch (templateError) {
+          console.error(
+            JSON.stringify({
+              type: 'payfast_itn_payer_receipt_template_error',
+              paymentId,
+              error: templateError?.message,
+            })
+          );
+        }
+      }
     }
   }
 

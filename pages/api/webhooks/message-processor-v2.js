@@ -14,8 +14,10 @@ import {
   createPaymentRequest,
   cancelPaymentRequest,
   getPaymentRequest,
+  getLatestPendingRequest,
   markRequestPaid,
   paymentRequestUrl,
+  maskedRequesterLabel,
   MIN_REQUEST_CENTS,
   MAX_REQUEST_CENTS,
 } from '../../../lib/payment-requests.js';
@@ -725,8 +727,25 @@ export async function processMessage({ from, text, messageId, profile, sharedCon
 
   // Get onboarding state
   const onboardingState = await getOnboardingState(account.id);
-  
+
   console.log(`📊 Account state: ${onboardingState} (new: ${isNewUser})`);
+
+  // "Receipt PRXXXXXX" — the wa.me deep link from the pay page. Answered
+  // for EVERY sender BEFORE the onboarding gate: a card payer's first-ever
+  // message is this ask, and the receipt must never be swallowed by the
+  // welcome flow. A brand-new number then falls through into onboarding —
+  // the payer-becomes-a-user hook (founder ask 2026-08-22). Everyone else
+  // (established users, and mid-onboarding states whose OTP/PIN prompts
+  // must not eat the code) gets the receipt and stops.
+  {
+    const receiptMatch = String(text || '').match(RECEIPT_CODE_PATTERN);
+    if (receiptMatch) {
+      await handlePaymentReceiptAsk({ from, code: receiptMatch[1].toUpperCase() });
+      if (onboardingState !== 'S0_INITIAL') {
+        return { ok: true, receipt: true };
+      }
+    }
+  }
 
   // Handle onboarding flow
   if (onboardingState !== 'S5_COMPLETED') {
@@ -1052,6 +1071,21 @@ async function handlePostOnboarding({ account, from, text }) {
           : `🤔 I couldn't cancel that request — it may already be paid, cancelled, or not yours.`,
       });
     }
+  }
+
+  // Deterministic short-circuit: "change my amount to R1000" — swap the
+  // newest pending request in one step (cancel + recreate).
+  if (matchChangeRequestAmount(text, slots)) {
+    logSlotFill({
+      intent: 'REQUEST_MONEY_CHANGE',
+      text,
+      slots,
+      routeDecision: 'REQUEST_MONEY_SWAP',
+      missing: [],
+      from,
+      accountId: account.id,
+    });
+    return await handleChangeRequestAmount({ from, account, amountCents: slots.amountCents, rawText: text });
   }
 
   // Deterministic short-circuit: "please pay me" — create a payment request.
@@ -1744,6 +1778,33 @@ const DEPOSIT_CARD_PATTERN = /\b(?:deposit|depsit|deposite|diposit)\b(?:\s+(?:mo
 /** "Pay request PRXXXXXX" — the wa.me deep link from a payment-request page. */
 const PAY_REQUEST_CODE_PATTERN = /\bpay\s+request\s+(PR[A-Z]{6})\b/i;
 
+/** "Receipt PRXXXXXX" — the wa.me deep link a card payer taps on the pay page. */
+const RECEIPT_CODE_PATTERN = /\breceipt\s+(PR[A-Z]{6})\b/i;
+
+/**
+ * "Change my amount to R1000" — swap the newest PENDING request for a new
+ * one at the new amount (links are single-use, so edit = cancel + recreate,
+ * done in ONE step; founder flow, 2026-08-22).
+ */
+function matchChangeRequestAmount(text = '', slots = null) {
+  const s = String(text || '');
+  if (slots?.productHint && slots.productHint !== 'SEND_MONEY') return false;
+  if (!slots?.amountCents) return false;
+  return /\b(change|update|edit|make)\b[\s\S]{0,30}\b(amount|request|it)\b/i.test(s);
+}
+
+async function handleChangeRequestAmount({ from, account, amountCents, rawText = '' }) {
+  const latest = await getLatestPendingRequest({ accountId: account.id });
+  if (latest) {
+    await cancelPaymentRequest({ code: latest.id, accountId: account.id });
+    await sendWhatsAppText({
+      to: from,
+      text: `🔁 Cancelled your ${randsShort(latest.amountCents)} request (${latest.id}) — that link no longer works. Here's the new one:`,
+    });
+  }
+  return await handleCreatePaymentRequest({ from, account, amountCents, rawText });
+}
+
 /**
  * "Please pay me" — the user wants to GET PAID (create a payment request).
  * Deliberately excludes "pay request <code>" (that's PAYING one) and
@@ -1856,6 +1917,70 @@ async function handlePayRequestStart({ from, account, code, rawText = '' }) {
     `Reply *YES* to confirm or *NO* to cancel.`;
   await addToConversationHistory(from, 'assistant', confirmMsg);
   return await sendWhatsAppText({ to: from, text: confirmMsg });
+}
+
+/**
+ * "Receipt PRXXXXXX" — a card payer asking for their payment receipt
+ * (the wa.me deep link on the pay page; auto-registration hook, founder
+ * ask 2026-08-22). Answers ANY sender with the same information the public
+ * pay page already shows (the code IS the capability); the PayFast
+ * reference is added only for the number that actually paid. Touches no
+ * conversation state, so a mid-flow ask never traps or derails a flow.
+ */
+async function handlePaymentReceiptAsk({ from, code }) {
+  const request = await getPaymentRequest({ code });
+  if (!request) {
+    return await sendWhatsAppText({
+      to: from,
+      text: `🤔 I can't find that payment reference. Please check the link on the payment page and try again.`,
+    });
+  }
+
+  let requesterLabel = 'a WaPay user';
+  try {
+    const requester = await prisma.account.findUnique({ where: { id: request.accountId } });
+    requesterLabel = maskedRequesterLabel(requester);
+  } catch {
+    // Cosmetic only — the receipt stands without it.
+  }
+
+  if (request.status === 'PENDING') {
+    return await sendWhatsAppText({
+      to: from,
+      text: `⏳ That payment to ${requesterLabel} hasn't been confirmed yet. The moment PayFast confirms it, your receipt arrives right here.`,
+    });
+  }
+  if (request.status !== 'PAID') {
+    return await sendWhatsAppText({
+      to: from,
+      text: `⏳ That payment request is no longer active — no payment was taken on it.`,
+    });
+  }
+
+  const lines = [`🧾 *Payment receipt*`, `${randsShort(request.amountCents)} to ${requesterLabel} ✅`];
+  if (request.paidAt) {
+    lines.push(`Paid: ${new Date(request.paidAt).toISOString().slice(0, 10)}`);
+  }
+  // The PayFast reference is the payer's alone — everyone else gets the code.
+  let refLine = `Ref: ${code}`;
+  try {
+    const intent = await prisma.providerRequest.findUnique({ where: { idemKey: `wapay-payreq-${code}` } });
+    const payerMsisdn = intent?.metadata?.payerMsisdn;
+    if (
+      typeof payerMsisdn === 'string' &&
+      payerMsisdn &&
+      normaliseMsisdn(from) === payerMsisdn &&
+      typeof request.payerRef === 'string' &&
+      request.payerRef.startsWith('PAYFAST:')
+    ) {
+      refLine = `Ref: PF ${request.payerRef.slice('PAYFAST:'.length)} · ${code}`;
+    }
+  } catch {
+    // Fall back to the code-only reference.
+  }
+  lines.push(refLine);
+
+  return await sendWhatsAppText({ to: from, text: lines.join('\n') });
 }
 
 /**

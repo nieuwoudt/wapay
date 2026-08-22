@@ -227,3 +227,47 @@ This way you can:
 **Sound good?** 🎯
 
 
+
+---
+
+## wapay_payment_receipt (added 2026-08-22 — card-payer auto-registration)
+
+**Purpose**: deliver a payment receipt to a CARD payer of a payment request whose
+24h service window is closed (they paid on the web page but never messaged us).
+The in-window path uses free-form text; this template is the out-of-window
+fallback, env-gated in `pages/api/payfast/itn.js`.
+
+**Category**: Utility
+**Name**: `wapay_payment_receipt`
+**Language**: English
+
+**Body**:
+```
+Payment confirmed: you paid {{1}} to {{2}} via WaPay.
+
+Payment reference: {{3}}.
+
+This message is your receipt. Reply here any time for your own free WaPay wallet.
+```
+
+**Variables**:
+1. `{{1}}` - amount paid, e.g. "R150.00"
+2. `{{2}}` - masked requester label, e.g. "076•••567" or a display name
+3. `{{3}}` - payment reference (PayFast id or request code)
+
+**Buttons**: Quick Reply — `Get my WaPay`
+
+**Sample**:
+```
+Payment confirmed: you paid R150.00 to 076•••567 via WaPay.
+
+Payment reference: 2412345.
+
+This message is your receipt. Reply here any time for your own free WaPay wallet.
+```
+
+**Notes**:
+- Utility (transactional receipt), NOT Marketing — cheaper + faster approval
+- No emojis in body; body neither starts nor ends with a variable
+- AFTER Meta approval: set Vercel env `WAPAY_TEMPLATE_PAYMENT_RECEIPT=wapay_payment_receipt`
+  and redeploy — the ITN fallback activates itself, no code change needed
