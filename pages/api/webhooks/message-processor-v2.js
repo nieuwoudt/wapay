@@ -38,6 +38,7 @@ import { buildLoad, buildSend, RAIL } from '../../../lib/ledger-core.js';
 import { postEntry, ensureWallet } from '../../../lib/ledger-post.js';
 import { buildCheckoutUrl } from '@wapay/providers-payfast';
 import {
+  depositFeeCents,
   createDepositIntent,
   getLatestDepositIntent,
   matchDepositStatusRequest,
@@ -1752,6 +1753,13 @@ function matchRequestMoneyAsk(text = '', slots = null) {
   const s = String(text || '');
   if (PAY_REQUEST_CODE_PATTERN.test(s)) return false;
   if (/\bcancel\w*\b/i.test(s)) return false;
+  // Informational QUESTIONS about the feature must be ANSWERED, not turned
+  // into a create flow ("Where does the money go when they pay me?" — live
+  // sighting 2026-08-21). Interrogatives only create when they carry a
+  // create-verb or an amount ("can you create a payme link of R100").
+  if (/^\s*(where|why|what|when|who|how)\b/i.test(s) && !/\b(create|make|generate|give|need|want|link)\b/i.test(s)) {
+    return false;
+  }
   // A named product wins: "request R100 airtime" / "pay me R50 airtime"
   // is a purchase/gift ask, never a payment request (found in QA 2026-08-21).
   if (slots?.productHint && slots.productHint !== 'SEND_MONEY') return false;
@@ -1793,7 +1801,12 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
 
   logStructured('payrequest_created', { from, accountId: account.id, code: request.id, amountCents });
 
-  const intro = `🙏 *Payment request created!*\n\nForward the next message to whoever owes you — I'll tell you the moment it's paid.`;
+  const cardFeeCents = depositFeeCents(amountCents);
+  const intro =
+    `🙏 *Payment request created!*\n\n` +
+    `Forward the next message to whoever owes you — I'll tell you the moment it's paid.\n\n` +
+    `You'll receive the full ${randsShort(amountCents)} if they pay from a WaPay balance, ` +
+    `or ${randsShort(amountCents - cardFeeCents)} if they pay by card (${randsShort(cardFeeCents)} card fee — they pay no fees).`;
   await addToConversationHistory(from, 'assistant', intro);
   await sendWhatsAppText({ to: from, text: intro });
 

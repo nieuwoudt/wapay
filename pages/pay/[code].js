@@ -3,8 +3,9 @@
  *
  * Whoever opens the link sees who is asking, for how much, and two ways to
  * pay: their own WaPay balance (deep-links back into WhatsApp) or card/EFT
- * via PayFast (the payer covers the banded payment fee; the requester is
- * credited face value by the ITN webhook).
+ * via PayFast. The PAYER pays exactly the request amount — the card fee is
+ * deducted from what the REQUESTER receives (founder decision 2026-08-22:
+ * whoever sends the link carries the cost).
  *
  * Server-rendered; shows honest terminal states for PAID/EXPIRED/CANCELLED.
  * No customer PII beyond a masked requester name/number is ever rendered.
@@ -109,13 +110,13 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
               Pay from my WaPay — free
             </a>
             <a style={{ ...styles.btn, ...styles.secondary }} href={`/api/pay/checkout?code=${code}`}>
-              Pay {rands(amountCents + feeCents)} by card / EFT
+              Pay {rands(amountCents)} by card / EFT
             </a>
 
             <div style={styles.fine}>
-              Card payments include a {rands(feeCents)} payment fee and are processed securely by
-              PayFast. No WaPay account needed. Paying from a WaPay balance is free — reply in
-              WhatsApp to confirm with your PIN.
+              No fees for you — you pay exactly {rands(amountCents)}. Card payments are processed
+              securely by PayFast, no WaPay account needed. Paying from a WaPay balance is free —
+              reply in WhatsApp to confirm with your PIN.
             </div>
           </>
         ) : status === 'PAID' ? (

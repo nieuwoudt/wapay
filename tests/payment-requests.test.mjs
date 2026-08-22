@@ -189,7 +189,11 @@ test('static: the in-chat pay leg is PIN-gated buildSend, code = idemKey', () =>
 
 test('static: card leg — one intent per code, unified idemKey, unconditional mark-paid', () => {
   assert.match(checkoutSource, /route: 'payrequest'/);
-  assert.match(checkoutSource, /amountCents: grossCents/);
+  // Fee direction (2026-08-22): the PAYER pays exactly the request amount;
+  // the fee comes out of the REQUESTER's credit.
+  assert.match(checkoutSource, /const creditCents = amountCents - feeCents/);
+  assert.match(checkoutSource, /amountCents: creditCents/, 'requester is credited amount minus fee');
+  assert.ok(!/amountCents: grossCents/.test(checkoutSource), 'payer is never charged a fee on top');
   // ONE idemKey shared with the balance leg: exactly-once across BOTH rails.
   assert.match(checkoutSource, /const idemKey = `wapay-payreq-\$\{code\}`/);
   assert.match(checkoutSource, /findUnique\(\{ where: \{ idemKey \} \}\)/, 'checkout reuses the existing intent');

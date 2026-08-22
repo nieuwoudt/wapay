@@ -35,9 +35,12 @@ export default async function handler(req, res) {
   const requester = await prisma.account.findUnique({ where: { id: request.accountId } });
   if (!requester) return res.status(410).send('requester unavailable');
 
+  // FEE DIRECTION (founder decision 2026-08-22): the PAYER pays exactly
+  // the request amount — the card fee is deducted from what the REQUESTER
+  // receives. Whoever sends the link carries the cost.
   const amountCents = request.amountCents;
   const feeCents = depositFeeCents(amountCents);
-  const grossCents = amountCents + feeCents;
+  const creditCents = amountCents - feeCents;
 
   // ONE intent per request code, and ONE idemKey shared with the balance
   // leg (`wapay-payreq-<code>`): however many times checkout is clicked and
@@ -62,9 +65,11 @@ export default async function handler(req, res) {
           metadata: {
             accountId: request.accountId,
             waId: requester.waId,
-            amountCents,
+            // amountCents = what the PAYER pays; creditCents = what the
+            // REQUESTER receives (amount - card fee).
+            amountCents: creditCents,
             feeCents,
-            grossCents,
+            grossCents: amountCents,
             requestCode: code,
           },
         },
@@ -94,7 +99,7 @@ export default async function handler(req, res) {
     merchantKey: process.env.PAYFAST_MERCHANT_KEY,
     passphrase: process.env.PAYFAST_PASSPHRASE || undefined,
     sandbox: process.env.PAYFAST_SANDBOX === 'true',
-    amountCents: grossCents,
+    amountCents,
     mPaymentId: id,
     itemName: 'WaPay payment request',
     returnUrl: `${base}/pay/${code}`,

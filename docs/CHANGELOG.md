@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-08-22 — Fee flip, question-answering, short domain prep, project constitution
+
+- **Payment-request fee direction flipped (founder decision)**: the PAYER pays exactly the request amount (no fees, and the page says so); the card fee is deducted from what the REQUESTER receives. Creation copy quotes both outcomes upfront. Balance payments remain fully free.
+- **Questions no longer trigger flows**: "Where does the money go when they pay me?" was hijacked into the create-request flow (live sighting) — interrogatives without create-verbs now escape to the AI, whose request-money knowledge is dialed in (mechanics, fee direction, instant balance landing).
+- **Short pay-link domains prepped**: host rewrite for pleasepayme.co.za / pleasepayme.io → /pay/:code; PAYLINK_BASE_URL env switches generated links to the short domain the moment DNS is attached.
+- **CLAUDE.md project constitution added**: money-safety + policy invariants, engineering discipline, parallel-session rules, and the context-handover policy — every Claude thread reads it automatically at session start.
+- Verified: the emailed OTT issuer credentials are STALE (401) — the live key is the rotated one in local .env (GetBalance R100k confirmed). 269/269 tests.
+
 ## 2026-08-21 (2) — Full QA audit: 45-agent sweep, 38 confirmed findings, all money/critical/major fixed
 
 Six-dimension adversarial audit over everything shipped this week (payment requests, deposit fee + ITN, voucher flows, routing/states, orchestrator contract, ledger invariants) + live SSR smoke of the public pay page against prod. Money-severity: timestamp-poisoned VAS settle idemKeys (every vend would deliver-but-not-charge — BUGLOG #17), payment-request card leg not exactly-once (#18), fee-free self voucher booking the R3 anyway (#20), Blu redemption 1-in-481 cash-strand (#17). Critical/major: PIN-attempt burning (#19), unreachable broke-checkout resume (#21), bearer-PIN strand on failed claim send (#22), and an 11-item routing/state batch (#23) incl. multilingual YES words, phone-as-amount, deposit-status vs deposit-link, contact-share hijack. Suite 269/269, build green. Known-open minors logged in BUGLOG #23.

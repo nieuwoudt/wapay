@@ -3,6 +3,20 @@ const nextConfig = {
   reactStrictMode: true,
   // Ensure Next.js can find pages in the root
   pageExtensions: ['js', 'jsx', 'ts', 'tsx'],
+
+  // Short pay-link domains: pleasepayme.co.za/PRXXXXXX (and .io) serve the
+  // pay page directly — attach the domains to this Vercel project and the
+  // rewrite does the rest. Codes are strictly PR + 6 letters, so nothing
+  // else can collide with the root path.
+  async rewrites() {
+    return [
+      {
+        source: '/:code(PR[A-Za-z]{6})',
+        has: [{ type: 'host', value: '(^|\\.)pleasepayme\\.(co\\.za|io)$' }],
+        destination: '/pay/:code',
+      },
+    ];
+  },
   
   // Transpile workspace packages
   transpilePackages: [
