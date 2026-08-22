@@ -4,17 +4,18 @@ const nextConfig = {
   // Ensure Next.js can find pages in the root
   pageExtensions: ['js', 'jsx', 'ts', 'tsx'],
 
-  // Short pay-link domain: wa-pay.me/PRXXXXXX serves the pay page directly —
-  // attach the domain to this Vercel project and the rewrite does the rest.
+  // Short pay-link domains: pleasepayme.co.za/PRXXXXXX and wa-pay.me/PRXXXXXX
+  // serve the pay page directly once attached to this Vercel project.
   // Codes are strictly PR + 6 letters, so nothing else collides at the root.
-  // NAMING NOTE (research 2026-08-22): "Please Pay Me" is Capitec's live
-  // payment-request product (since 2022, national ads) — do NOT brand or
-  // register pleasepayme.* for this feature; the WaPay brand carries it.
+  // NAMING NOTE (2026-08-22): "Please Pay Me" is also Capitec's product name
+  // — founder decision to run the domain anyway; the PRODUCT stays branded
+  // WaPay everywhere (domain = link only), and a CIPC trademark search is on
+  // the counsel list. Founder owns both domains (GoDaddy).
   async rewrites() {
     return [
       {
         source: '/:code(PR[A-Za-z]{6})',
-        has: [{ type: 'host', value: '(^|\\.)wa-pay\\.me$' }],
+        has: [{ type: 'host', value: '(^|\\.)(pleasepayme\\.co\\.za|wa-pay\\.me)$' }],
         destination: '/pay/:code',
       },
     ];
