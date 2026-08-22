@@ -564,7 +564,9 @@ async function renderHome({ from, account }) {
     `━━━━━━━━━━━━━━━\n\n` +
     `🛒 *Buy* — airtime, data, electricity\n` +
     `💸 *Send* — "send R10 airtime to 083..."\n` +
+    `🙏 *Get Paid* — "please pay me R50" → share your link\n` +
     `💳 *Deposit* — "deposit R100" or a Blu voucher\n` +
+    `🏧 *Withdraw* — coming soon\n` +
     `📄 *Transactions* · ⚙️ *Settings*\n\n` +
     `⚡ Quick: ${quickActions[0]} · ${quickActions[1]} · ${quickActions[2]}\n\n` +
     `Just tell me what you need — in any language.`;
