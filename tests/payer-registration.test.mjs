@@ -39,6 +39,7 @@ const checkoutSource = read('../pages/api/pay/checkout.js');
 const itnSource = read('../pages/api/payfast/itn.js');
 const payPageSource = read('../pages/pay/[code].js');
 const healthSource = read('../pages/api/health.js');
+const notifySource = read('../lib/request-notify.js');
 
 // ---------------------------------------------------------------------------
 // maskedRequesterLabel
@@ -131,49 +132,121 @@ test('checkout: return URL is ?r=1, cancel URL stays bare, redirect is 303', () 
 });
 
 // ---------------------------------------------------------------------------
-// ITN payer receipt (static)
+// Durable notifications (lib/request-notify.js) + ITN wiring
 // ---------------------------------------------------------------------------
 
-test('ITN: receipt destination prefers signed custom_str1, strict shape, metadata fallback', () => {
-  assert.match(itnSource, /params\.custom_str1/);
-  const block = itnSource.slice(itnSource.indexOf('params.custom_str1') - 400, itnSource.indexOf('return res.status(200)'));
-  assert.match(block, /\/\^0\\d\{9\}\$\//, 'destination is shape-checked');
-  assert.match(itnSource, /requestCode && wonRequestTransition && payerMsisdn/, 'fires only when THIS delivery won the PAID transition');
+test('ITN: notifications run on EVERY delivery, never gated on the one-shot transition', () => {
+  // 2026-08-25 (PRMDCUQA): gating sends on wonRequestTransition lost them
+  // forever when the invocation died mid-send. Redeliveries must repair.
+  assert.match(itnSource, /if \(requestCode\) \{[\s\S]{0,900}deliverRequestPaidNotifications\(\{ code: requestCode \}\)/);
+  assert.ok(!/wonRequestTransition &&[^\n]*deliverRequestPaidNotifications/.test(itnSource));
 });
 
-test('ITN: the true payer is persisted back into metadata for the in-chat ref gate', () => {
-  assert.match(itnSource, /metadata: \{ \.\.\.intent\.metadata, payerMsisdn \}/, 'persist merges, never replaces');
+test('ITN: signed custom_str1 payer number is persisted before notifying', () => {
+  const idx = itnSource.indexOf('custom_str1');
+  const around = itnSource.slice(idx - 200, idx + 700);
+  assert.match(around, /test\(custom\)/, 'destination is shape-checked before persisting');
+  assert.match(around, /0\\d\{9\}/, 'strict SA 0-form shape');
+  assert.match(around, /\.\.\.intent\.metadata, payerMsisdn: custom/, 'persist merges, never replaces');
+  assert.ok(idx < itnSource.indexOf('deliverRequestPaidNotifications({ code'), 'persist happens before the notify CALL');
 });
 
-test('ITN: send outcomes are read from the RESOLVED result — the send functions never throw', () => {
-  assert.match(itnSource, /const sent = await sendWhatsAppText\(/);
-  assert.match(itnSource, /if \(!sent\?\.ok\)/, 'free-form failure detected via .ok, not catch (dead-code fallback, QA 2026-08-22)');
-  assert.match(itnSource, /const tpl = await sendWhatsAppTemplate\(/);
-  assert.match(itnSource, /if \(!tpl\?\.ok\)/, 'template failure is observable');
-  assert.match(itnSource, /const confirmSent = await sendWhatsAppText\(/, 'requester confirm outcome is observable too');
+test('ITN: deposit confirm stays inline and deposits-only', () => {
+  assert.match(itnSource, /waId && !requestCode && !posted\.replayed/);
 });
 
-test('ITN: payer receipt is best-effort and can never fail the ITN', () => {
-  const receiptIdx = itnSource.indexOf('payfast_itn_payer_receipt_error');
-  const okIdx = itnSource.indexOf("res.status(200).send('OK')");
-  assert.ok(receiptIdx > -1 && okIdx > receiptIdx, 'receipt block sits before the 200, wrapped in try/catch');
-  assert.match(itnSource, /payfast_itn_payer_receipt_template_error/);
+test('notify: flags are set ONLY after a send succeeds — exactly-once with repair', () => {
+  assert.match(notifySource, /meta\.requesterNotifiedAt/);
+  assert.match(notifySource, /meta\.payerNotifiedAt/);
+  // delivered flips only on ok; persistFlag only under delivered.
+  const flips = [...notifySource.matchAll(/if \(sent\?\.ok\) delivered = true/g)].length
+              + [...notifySource.matchAll(/if \(tpl\?\.ok\) delivered = true/g)].length;
+  assert.ok(flips >= 4, 'both legs flip delivered only on a successful send');
+  const persists = [...notifySource.matchAll(/if \(delivered\) \{/g)].length;
+  assert.ok(persists >= 2, 'flags persist only when delivered');
+  assert.match(notifySource, /\.\.\.intent\.metadata, \.\.\.patch/, 'flag persist merges metadata (BUGLOG #24)');
 });
 
-test('ITN: template fallback is env-gated and parameterised, never hardcoded', () => {
-  assert.match(itnSource, /WAPAY_TEMPLATE_PAYMENT_RECEIPT/);
-  assert.match(itnSource, /if \(templateName\)/);
+test('notify: send outcomes read from the RESOLVED result — send fns never throw', () => {
+  assert.match(notifySource, /const sent = await send\.text\(/);
+  assert.match(notifySource, /sent\?\.ok/);
+  assert.match(notifySource, /tpl\?\.ok/);
 });
 
-test('ITN: payer receipt quotes the GROSS charge and stays purely transactional', () => {
-  assert.match(itnSource, /const paidRands = centsToRandString\(grossCents\)/, 'receipt states what the card was charged — metadata.amountCents is the NET credit on payrequest intents');
-  assert.match(itnSource, /This message is your receipt\.`/, 'receipt copy ends transactionally');
-  assert.ok(!/Want your own WaPay/.test(itnSource), 'no upsell inside a push receipt (POPIA purpose limitation) — the offer lives in the user-initiated wa.me path');
+test('notify: template fallbacks are env-gated and parameterised', () => {
+  assert.match(notifySource, /WAPAY_TEMPLATE_REQUEST_PAID/);
+  assert.match(notifySource, /WAPAY_TEMPLATE_PAYMENT_RECEIPT/);
+  assert.match(notifySource, /if \(tplName\)/);
 });
 
-test('ITN: payer waId derives from the stored 0-form number', () => {
-  assert.match(itnSource, /`27\$\{payerMsisdn\.slice\(1\)\}`/);
+test('notify: payer receipt quotes GROSS, stays transactional, derives waId from 0-form', () => {
+  assert.match(notifySource, /const paidRands = centsToRandString\(grossCents\)/);
+  assert.match(notifySource, /This message is your receipt\./);
+  assert.ok(!/Want your own WaPay/.test(notifySource), 'no upsell in a push receipt (POPIA)');
+  assert.match(notifySource, /`27\$\{payerMsisdn\.slice\(1\)\}`/);
 });
+
+test('notify: never throws — the ITN 200 must not depend on messaging', () => {
+  assert.match(notifySource, /catch \(error\) \{[\s\S]{0,200}request_notify_error/);
+});
+
+test('repair route: guarded by the internal key, strict code shape, idempotent by design', () => {
+  const repairSource = read('../pages/api/admin/notify-request.js');
+  assert.match(repairSource, /requireInternalAuth\(req, res\)/);
+  assert.match(repairSource, /\^PR\[A-Z\]\{6\}\$/);
+  assert.match(repairSource, /deliverRequestPaidNotifications\(\{ code \}\)/);
+});
+
+test('notify (behavioral): repairs a lost send, then never double-sends', async () => {
+  const { deliverRequestPaidNotifications } = await import('../lib/request-notify.js');
+  const meta = { waId: '27787051175', accountId: 'acc1', amountCents: 1600, grossCents: 2000, payerMsisdn: '0726252243', requestCode: 'PRTESTAB' };
+  const intentRow = { idemKey: 'wapay-payreq-PRTESTAB', providerRef: '323310823', metadata: { ...meta } };
+  const prisma = {
+    paymentRequest: { findUnique: async () => ({ id: 'PRTESTAB', status: 'PAID', amountCents: 2000, accountId: 'acc1' }) },
+    providerRequest: {
+      findUnique: async () => ({ ...intentRow, metadata: { ...intentRow.metadata } }),
+      update: async ({ data }) => { intentRow.metadata = data.metadata; return intentRow; },
+    },
+    wallet: { findFirst: async () => ({ availableCents: 8500 }) },
+    account: { findUnique: async () => ({ displayName: 'Nieuwoudt', msisdn: '27787051175' }) },
+  };
+  const sends = [];
+  const send = { text: async (a) => { sends.push(['text', a.to]); return { ok: true }; }, template: async (a) => { sends.push(['tpl', a.to]); return { ok: true }; } };
+
+  const first = await deliverRequestPaidNotifications({ code: 'PRTESTAB', prisma, send });
+  assert.deepEqual(first, { requester: 'sent', payer: 'sent' });
+  assert.deepEqual(sends.map((s) => s[0]), ['text', 'text'], 'free-form suffices when it lands');
+  assert.ok(intentRow.metadata.requesterNotifiedAt && intentRow.metadata.payerNotifiedAt, 'flags persisted');
+  assert.equal(intentRow.metadata.payerMsisdn, '0726252243', 'flag persist preserved the rest of the metadata');
+
+  const second = await deliverRequestPaidNotifications({ code: 'PRTESTAB', prisma, send });
+  assert.deepEqual(second, { requester: 'already', payer: 'already' });
+  assert.equal(sends.length, 2, 'a redelivery never double-sends');
+});
+
+test('notify (behavioral): out-of-window payer falls back to the approved template', async () => {
+  const { deliverRequestPaidNotifications } = await import('../lib/request-notify.js');
+  process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT = 'wapay_payment_receipt';
+  const intentRow = { idemKey: 'wapay-payreq-PRTESTAC', providerRef: 'pf1', metadata: { waId: '27787051175', accountId: 'acc1', amountCents: 900, grossCents: 1000, payerMsisdn: '0726252243', requesterNotifiedAt: '2026-08-25' } };
+  const prisma = {
+    paymentRequest: { findUnique: async () => ({ id: 'PRTESTAC', status: 'PAID', amountCents: 1000, accountId: 'acc1' }) },
+    providerRequest: { findUnique: async () => ({ ...intentRow, metadata: { ...intentRow.metadata } }), update: async ({ data }) => { intentRow.metadata = data.metadata; return intentRow; } },
+    wallet: { findFirst: async () => null },
+    account: { findUnique: async () => ({ msisdn: '27787051175' }) },
+  };
+  const sends = [];
+  const send = {
+    text: async () => { sends.push('text'); return { ok: false, error: 're-engagement rejected (131047)' }; },
+    template: async (a) => { sends.push('tpl:' + a.templateName); return { ok: true }; },
+  };
+  const out = await deliverRequestPaidNotifications({ code: 'PRTESTAC', prisma, send });
+  assert.equal(out.requester, 'already');
+  assert.equal(out.payer, 'sent');
+  assert.deepEqual(sends, ['text', 'tpl:wapay_payment_receipt'], 'template rescues the closed window');
+  assert.ok(intentRow.metadata.payerNotifiedAt);
+  delete process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT;
+});
+
 
 // ---------------------------------------------------------------------------
 // Processor receipt intercept (static + extracted pattern)

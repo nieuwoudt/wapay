@@ -4,6 +4,13 @@
 
 ---
 
+## 26. Paid-request notifications were one-shot — a lost invocation lost them forever
+
+- **Symptom (founder live test `PRMDCUQA`, R20 card payment, 2026-08-25):** the payment was captured perfectly — payer number stored, request marked PAID, requester credited — but NEITHER the requester's "you've been paid" nor the payer's receipt ever arrived on WhatsApp.
+- **Root cause:** both sends were gated on `wonRequestTransition` — winning the atomic PENDING→PAID check-and-set, which by design succeeds exactly once. The ITN route had no `maxDuration` (Vercel default cap) while doing a PayFast server-verify POST-back, ledger posting, and two WhatsApp sends; when the invocation died mid-sends, PayFast's redelivery could not win the transition again, so the notification branch never re-ran. Exactly-once *notification* was implemented as exactly-once *attempt*.
+- **Fix:** notifications moved to `lib/request-notify.js` — durable and idempotent: `requesterNotifiedAt`/`payerNotifiedAt` flags in the intent metadata, set ONLY after a send resolves ok; the ITN now runs the helper on EVERY delivery (replayed or not), so redeliveries repair lost sends; `POST /api/admin/notify-request` (internal-key-guarded) repairs manually; `vercel.json` gives the ITN 30s and the WhatsApp webhook 60s.
+- **Guard:** behavioral tests drive the helper through send-fails-then-template-rescues and redelivery-never-double-sends paths; statics pin every-delivery invocation (never transition-gated), flags-only-on-ok, and metadata MERGE on flag persist.
+
 ## 25. Parallel-session rsync swept another thread's PRE-review code into a push
 
 - **Symptom:** commit `619a285` (amount-change swap) also shipped the in-flight payer-registration feature BEFORE its adversarial-review fixes — prod briefly ran a GET form (payer msisdn into query-string request logs), a hijackable last-click-wins receipt destination, a dead-code template fallback, and a fail-open health config block.

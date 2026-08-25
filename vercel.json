@@ -11,6 +11,14 @@
     "pages/api/admin/**/*.js": {
       "maxDuration": 60,
       "memory": 1024
+    },
+    "pages/api/payfast/itn.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
+    "pages/api/webhooks/whatsapp.js": {
+      "maxDuration": 60,
+      "memory": 1024
     }
   },
   "crons": [

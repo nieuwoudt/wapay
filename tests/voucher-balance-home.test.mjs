@@ -85,13 +85,17 @@ test('pay-link: the forwardable message keeps the visible URL', () => {
 // ITN requester-notify template fallback
 // ---------------------------------------------------------------------------
 
-test('ITN: request-paid template fallback is env-gated and fires only on free-form failure', () => {
-  assert.match(itnSource, /WAPAY_TEMPLATE_REQUEST_PAID/);
-  const idx = itnSource.indexOf('WAPAY_TEMPLATE_REQUEST_PAID');
-  const around = itnSource.slice(idx - 700, idx + 900);
-  assert.match(around, /if \(!confirmSent\?\.ok\)/, 'the fallback lives inside the failed-send branch');
-  assert.match(around, /requestCode && paidTemplate/, 'deposits never use it; unset env is silent');
-  assert.match(around, /payfast_itn_confirm_template_error/, 'template failure is observable');
+test('request-paid template fallback is env-gated and fires only on free-form failure', () => {
+  // Moved to lib/request-notify.js (durable notifications, 2026-08-25).
+  const notifySource = readFileSync(
+    fileURLToPath(new URL('../lib/request-notify.js', import.meta.url)),
+    'utf8'
+  );
+  assert.match(notifySource, /WAPAY_TEMPLATE_REQUEST_PAID/);
+  const idx = notifySource.indexOf('WAPAY_TEMPLATE_REQUEST_PAID');
+  const around = notifySource.slice(idx - 900, idx + 900);
+  assert.match(around, /request_notify_requester_text_failed/, 'fallback fires only after the free-form failure is logged');
+  assert.match(around, /if \(tplName\)/, 'unset env is silent');
 });
 
 // ---------------------------------------------------------------------------

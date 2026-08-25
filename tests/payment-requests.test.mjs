@@ -199,9 +199,12 @@ test('static: card leg — one intent per code, unified idemKey, unconditional m
   assert.match(checkoutSource, /findUnique\(\{ where: \{ idemKey \} \}\)/, 'checkout reuses the existing intent');
   // The QA bug: mark-paid must NOT be gated on !replayed — redeliveries
   // repair a crash-stranded PENDING (markRequestPaid is atomic anyway).
-  assert.ok(!/requestCode && !posted\.replayed/.test(itnSource), 'no replay gate on mark-paid');
   assert.match(itnSource, /wonRequestTransition = await markRequestPaid/);
-  assert.match(itnSource, /requestCode \? wonRequestTransition : !posted\.replayed/, 'confirmation gated on winning the transition');
+  // 2026-08-25 (PRMDCUQA): notifications must NOT be gated on winning the
+  // transition — a lost invocation would lose them forever. Every delivery
+  // runs the durable helper; its metadata flags provide exactly-once.
+  assert.ok(!/wonRequestTransition &&[^\n]*deliverRequestPaidNotifications/.test(itnSource), 'notify never gated on the one-shot transition');
+  assert.match(itnSource, /if \(requestCode\) \{[\s\S]{0,900}deliverRequestPaidNotifications\(\{ code: requestCode \}\)/, 'every request delivery attempts (idempotent) notification');
   assert.match(itnSource, /payfast_overpayment_detected/, 'a second card charge screams for a refund');
 });
 

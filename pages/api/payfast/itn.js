@@ -38,7 +38,8 @@ import {
   recordItnDebug,
   centsToRandString,
 } from '../../../lib/deposits.js';
-import { markRequestPaid, maskedRequesterLabel } from '../../../lib/payment-requests.js';
+import { markRequestPaid } from '../../../lib/payment-requests.js';
+import { deliverRequestPaidNotifications } from '../../../lib/request-notify.js';
 import { noteDepositMethod } from '../../../lib/user-profile.js';
 import { postEntry, ensureWallet } from '../../../lib/ledger-post.js';
 import { buildLoad, RAIL, BALANCE } from '../../../lib/ledger-core.js';
@@ -242,54 +243,25 @@ export default async function handler(req, res) {
     }
   }
 
-  // Confirmation message — best effort only. A send failure must NOT fail
-  // the ITN response. Deposits confirm on the first (non-replayed) credit;
-  // payment requests confirm when THIS delivery won the PENDING->PAID
-  // transition (so a repair-retry still notifies, and a losing rail never
-  // double-notifies).
-  const shouldConfirm = requestCode ? wonRequestTransition : !posted.replayed;
-  if (waId && shouldConfirm) {
+  // DEPOSIT confirmation — best effort, deposits only. A payment REQUEST's
+  // notifications (requester + payer) go through the durable, idempotent
+  // helper below instead: metadata flags make redeliveries repair missed
+  // sends (the old won-the-transition gate LOST both notifications when the
+  // invocation died mid-send — founder live test PRMDCUQA, 2026-08-25).
+  if (waId && !requestCode && !posted.replayed) {
     try {
       const wallet = await prisma.wallet.findFirst({
         where: { accountId, balanceType: BALANCE.SPEND },
       });
-      const lines = requestCode
-        ? [`💸 Your payment request was PAID: R${centsToRandString(amountCents)} received!`]
-        : [`✅ Deposit received: R${centsToRandString(amountCents)}`];
+      const lines = [`✅ Deposit received: R${centsToRandString(amountCents)}`];
       if (wallet) {
         lines.push(`New balance: R${centsToRandString(wallet.availableCents)}`);
       }
       const confirmSent = await sendWhatsAppText({ to: waId, text: lines.join('\n') });
       if (!confirmSent?.ok) {
-        // send functions resolve {ok:false} on failure — they never throw.
         console.error(
           JSON.stringify({ type: 'payfast_itn_confirm_send_error', paymentId, error: confirmSent?.error })
         );
-        // A payment request can be paid days after creation — outside the
-        // requester's 24h service window, where free-form is rejected. The
-        // approved template (env-gated) is the only rail that still lands.
-        const paidTemplate = process.env.WAPAY_TEMPLATE_REQUEST_PAID || '';
-        if (requestCode && paidTemplate) {
-          const tpl = await sendWhatsAppTemplate({
-            to: waId,
-            templateName: paidTemplate,
-            language: 'en',
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  { type: 'text', text: `R${centsToRandString(amountCents)}` },
-                  { type: 'text', text: requestCode },
-                ],
-              },
-            ],
-          });
-          if (!tpl?.ok) {
-            console.error(
-              JSON.stringify({ type: 'payfast_itn_confirm_template_error', paymentId, error: tpl?.error })
-            );
-          }
-        }
       }
     } catch (error) {
       console.error(
@@ -298,94 +270,29 @@ export default async function handler(req, res) {
     }
   }
 
-  // The PAYER's receipt (card leg of a payment request only — founder ask
-  // 2026-08-22: every payer becomes a user). Best effort, never fails the
-  // ITN. The destination comes from the SIGNED payload (custom_str1 rode
-  // the checkout session that actually paid — a later checkout click can't
-  // redirect it); metadata.payerMsisdn is only the fallback for intents
-  // created before custom_str1 shipped. Free-form text lands whenever the
-  // payer has messaged us (the wa.me receipt button); Meta REJECTS it for a
-  // never-messaged number — sendWhatsAppText/Template NEVER throw, they
-  // return {ok:false} (QA 2026-08-22: a catch here is dead code), so we
-  // branch on the result and fall back to the approved template when
-  // WAPAY_TEMPLATE_PAYMENT_RECEIPT names one.
-  try {
-    const custom = String(params.custom_str1 || '');
-    const payerMsisdn = /^0\d{9}$/.test(custom)
-      ? custom
-      : /^0\d{9}$/.test(String(intent.metadata?.payerMsisdn || ''))
-        ? intent.metadata.payerMsisdn
-        : null;
-    if (requestCode && wonRequestTransition && payerMsisdn) {
-      // Persist the number that actually paid, so the in-chat receipt ask
-      // reveals the PayFast reference to the true payer only.
-      if (intent.metadata?.payerMsisdn !== payerMsisdn) {
+  // Request notifications — EVERY delivery, replayed or not: the metadata
+  // flags (requesterNotifiedAt / payerNotifiedAt) provide exactly-once, and
+  // running unconditionally is what lets a PayFast redelivery repair a
+  // notification the first invocation lost.
+  if (requestCode) {
+    try {
+      // Persist the SIGNED payer number first so the notify helper (and the
+      // in-chat receipt ask) see the number that actually paid.
+      const custom = String(params.custom_str1 || '');
+      if (/^0\d{9}$/.test(custom) && intent.metadata?.payerMsisdn !== custom) {
         await prisma.providerRequest
-          .update({ where: { idemKey: intent.idemKey }, data: { metadata: { ...intent.metadata, payerMsisdn } } })
+          .update({ where: { idemKey: intent.idemKey }, data: { metadata: { ...intent.metadata, payerMsisdn: custom } } })
           .catch(() => {});
       }
-
-      const payerWaId = `27${payerMsisdn.slice(1)}`;
-      let requesterLabel = 'the requester';
-      try {
-        const requester = await prisma.account.findUnique({ where: { id: accountId } });
-        requesterLabel = maskedRequesterLabel(requester);
-      } catch {
-        // Label is cosmetic; the receipt still stands without it.
-      }
-      const paidRands = centsToRandString(grossCents);
-      const refLine = params.pf_payment_id
-        ? `Ref: PF ${params.pf_payment_id} · ${requestCode}`
-        : `Ref: ${requestCode}`;
-
-      // Purely transactional — no upsell in a receipt (POPIA: the form said
-      // the number is for the receipt; the onboarding offer lives in the
-      // user-initiated wa.me path instead).
-      const sent = await sendWhatsAppText({
-        to: payerWaId,
-        text:
-          `🧾 Payment confirmed: R${paidRands} to ${requesterLabel} ✅\n` +
-          `${refLine}\n` +
-          `This message is your receipt.`,
-      });
-      if (!sent?.ok) {
-        console.error(
-          JSON.stringify({ type: 'payfast_itn_payer_receipt_error', paymentId, error: sent?.error })
-        );
-        const templateName = process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT || '';
-        if (templateName) {
-          const tpl = await sendWhatsAppTemplate({
-            to: payerWaId,
-            templateName,
-            language: 'en',
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  { type: 'text', text: `R${paidRands}` },
-                  { type: 'text', text: requesterLabel },
-                  { type: 'text', text: String(params.pf_payment_id || requestCode) },
-                ],
-              },
-            ],
-          });
-          if (!tpl?.ok) {
-            console.error(
-              JSON.stringify({
-                type: 'payfast_itn_payer_receipt_template_error',
-                paymentId,
-                error: tpl?.error,
-              })
-            );
-          }
-        }
-      }
+      const outcome = await deliverRequestPaidNotifications({ code: requestCode });
+      console.log(
+        JSON.stringify({ type: 'payfast_itn_request_notify', paymentId, requestCode, ...outcome })
+      );
+    } catch (error) {
+      console.error(
+        JSON.stringify({ type: 'payfast_itn_request_notify_error', paymentId, error: error?.message })
+      );
     }
-  } catch (error) {
-    // Belt and braces: the payer receipt must never threaten the 200.
-    console.error(
-      JSON.stringify({ type: 'payfast_itn_payer_receipt_error', paymentId, error: error?.message })
-    );
   }
 
   return res.status(200).send('OK');

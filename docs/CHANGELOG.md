@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-08-25 (3) — Durable paid-request notifications (BUGLOG #26)
+
+Founder's live R20 test paid perfectly but notified nobody: sends were gated on the
+one-shot PENDING→PAID transition, and a mid-send invocation death (ITN had no
+maxDuration) lost them permanently. Notifications now live in `lib/request-notify.js`
+— idempotent flags in intent metadata, set only on a successful send; the ITN runs it
+on EVERY delivery so redeliveries repair; `POST /api/admin/notify-request` repairs on
+demand; ITN gets 30s, the WhatsApp webhook 60s. 317/317, build green.
+
 ## 2026-08-25 — Voucher balance on home, pay-link CTA button, request-paid template fallback, BSUID banked
 
 - **Voucher balance (founder ask)**: the home screen and the deterministic balance answer now show `🎟️ Vouchers bought: R120 (3) — reply "my vouchers"` — SELF-bought vouchers only (gifts to others were given away), CANCELLED excluded, best-effort (a balance surface can never fail on the voucher query). Copy says **bought**, never "unspent": OTT gives us no redemption visibility yet — that ask is now item 3 in `EMAIL_TO_KEAMO_3.txt`; when OTT exposes voucher status we upgrade the line to true "active".
