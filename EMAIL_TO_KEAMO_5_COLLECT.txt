@@ -1,0 +1,57 @@
+Subject: Collect — one question that decides it for us
+
+Hi Keamo
+
+Coming back to you on Collect as promised.
+
+Having gone through the agreement carefully, Collect as drafted doesn't fit
+WaPay. It's built around a physical footprint: a terminal base of vendors,
+cash floats at each point of sale, branding erected at premises, and a
+Consumer who walks up to a counter. Clause 16.3 puts it beyond doubt — "the
+Consumer may only be paid out in cash and in South African Currency."
+
+WaPay is digital-only. We have no branches, no vendors, no cash. We couldn't
+perform that contract on day one, so signing it wouldn't be honest.
+
+But there's a version of this we'd sign immediately.
+
+Our customers hold WaPay wallets on WhatsApp. If someone receives a Standard
+Bank Instant Money, Nedbank or VodaPay voucher, the valuable thing for them
+is not cash in hand — it's the value landing straight in their WaPay wallet,
+in seconds, without travelling to a till. Same redemption on your platform,
+same voucher, same validation; only the settlement leg differs: instead of a
+vendor handing over banknotes, we credit the Consumer's wallet with the full
+face value.
+
+Your own clause 9.6 is already a pure system-to-system handshake — your
+platform validates the voucher and notifies our system. And clause 16.16
+contemplates the Instant Money option being presented on materials "digital
+or physical". So the platform doesn't appear to be the obstacle; the cash
+wording is.
+
+So, three questions:
+
+1. Do you have a digital variant of Collect, where a wallet operator settles
+   the Consumer by crediting their wallet instead of paying cash? If that
+   paper exists, please send it and we'll review it straight away.
+
+2. If not, would OTT consider a variation permitting wallet-credit
+   settlement for a digital Representative?
+
+3. Most important: is the "cash only" requirement OTT's own, or does it come
+   down from Standard Bank, Nedbank and Vodacom as a scheme rule? If it's a
+   bank requirement, a variation between us doesn't solve it and we'd need
+   their consent — worth knowing before either of us spends time on it.
+
+To be direct about why this matters to us: this would be one of the most
+valuable things we could offer our customers, and it would send meaningful
+redemption volume your way. Cash-in for unbanked customers is the hardest
+problem we have, and Instant Money is how millions of South Africans already
+move money. We're not asking for a discount — we're asking whether the
+product can settle digitally.
+
+If the answer is no, no hard feelings at all. We'll focus on Payout and
+Redemption and leave Collect there.
+
+Regards
+Niev

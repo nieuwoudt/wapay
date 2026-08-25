@@ -13,6 +13,26 @@
 - **WhatsApp usernames/BSUID banked** (`docs/whatsapp-bsuid-usernames.md`): BSUIDs already in webhooks; username adopters lose visible phone numbers — adoption plan queued (capture `user_id` now, resolution by msisdn-or-bsuid, REQUEST_CONTACT_INFO onboarding leg July 2026+); reserve the `wapay` business username (claimable since June 29). Merchant "pay me" card concept noted — printable TODAY with wa-pay.me/PR-links.
 - Suite 304/304, build green.
 
+## 2026-08-25 (2) — Payout agreement SIGNED; Collect analysed and deferred
+
+- **Founder signed the OTT Payout Agreement.** `EMAIL_TO_KEAMO_4.txt` returns it and
+  asks for the blockers: API credentials + base URL (sandbox/prod), documentation in a
+  usable form, webhook spec, IP-allowlist process, and the activation checklist (KYC
+  list, Annexure A settlement details, minimum pre-funding).
+- **Collect: DEFER, do not sign** (`docs/WAPAY_OTT_COLLECT_ANALYSIS_2026-08-25.md`,
+  40-agent adversarial review of the contract text). The wallet-credit inversion —
+  redeeming Standard Bank Instant Money / Nedbank / VodaPay vouchers straight into a
+  WaPay balance — is **expressly forbidden** by clause 16.3 ("the Consumer may only be
+  paid out in cash"), reinforced by definition 1.9 read with 2.1.12. Collect as drafted
+  needs premises, vendors and cash floats WaPay does not have (11.1 is literally
+  unperformable). ⚠️ Signing it as a dormant contract is dangerous: warranty 17.4 plus
+  24.2.4/25.2.4 turn it into a live misrepresentation claim.
+- **But the prize is real**, which is why one email is worth sending: Reading B replaces
+  a ~R20.70 PayFast cost per R500 loaded with ~R1.19 EARNED, and inverts the float
+  direction. `EMAIL_TO_KEAMO_5_COLLECT.txt` asks the two decisive questions: does a
+  digital-settlement variant exist, and is "cash only" OTT's rule or a bank scheme rule
+  (if the latter, an OTT side letter protects us against nobody).
+
 ## 2026-08-25 — Payout commercials: VAT-true rail costs + banded CashSend fees
 
 Read the signed-ready **OTT Payout Agreement** (Annexure A) and corrected two margin

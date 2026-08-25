@@ -1,0 +1,44 @@
+Subject: Signed Payout Agreement attached — API credentials & documentation please
+
+Hi Keamo
+
+Please find the signed Payout Agreement attached.
+
+We're keen to move quickly on integration. Could you please send:
+
+1. Payout API credentials — sandbox and production (API username, key and
+   password, plus the API base URL for each environment). You sent us the
+   documentation portal link, but not the credentials themselves, so we
+   can't call the API yet.
+
+2. The API documentation in a form we can work from directly — a PDF, or a
+   Postman collection if you have one. We have the portal link and password,
+   but our engineers would rather work from the spec offline.
+
+3. Webhook specification — you mentioned webhooks for completed and reversed
+   transactions, which is exactly what we need. Please include the payload
+   format and how we register our endpoint with you.
+
+4. IP allowlisting — if the Payout API is IP-restricted, please let us know
+   the process for registering our egress IPs so we can arrange that on our
+   side in advance.
+
+And so we can plan the go-live date, the activation requirements:
+
+5. The KYC and due-diligence document list you need from us.
+6. The settlement bank details to be completed in Annexure A.
+7. The minimum pre-funding amount for the Recipient Wallet, and the process
+   and timeline for funding it.
+
+We'll come back to you separately on Collect.
+
+One item still outstanding from before: the Merchant / Redemption API base
+URL and documentation. We've confirmed our WAPAYVMT merchant key validates
+in the portal, but there's no API documentation or base URL on the dashboard
+and the endpoints we've tried aren't reachable. Your test vouchers are ready
+on our side whenever that spec arrives.
+
+Thank you — looking forward to getting Payout live.
+
+Regards
+Niev
