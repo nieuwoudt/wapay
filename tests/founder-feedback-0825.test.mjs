@@ -155,23 +155,33 @@ test('escape: wired at the single state-dispatch site, clearing state first', ()
 // Directed WaPay-to-WaPay requests — SAFE design (abuse review 2026-08-25)
 // ---------------------------------------------------------------------------
 
-test('directed requests: reachable ONLY through the requester\'s saved beneficiaries', () => {
+test('directed requests: reachable ONLY where a real prior MONEY send exists (both branches)', () => {
   const fn = processorSource.indexOf('async function resolveDirectedRequestTarget(');
   const body = processorSource.slice(fn, processorSource.indexOf('\n}', fn));
-  // The phone-number branch must gate on isSavedBeneficiary — no raw-number
-  // targeting (that was a phishing + customer-enumeration vector).
-  assert.match(body, /isSavedBeneficiary\(\{ accountId: account\.id, msisdn: digits \}\)/);
+  // A bare saved beneficiary is self-populatable via a contact-card share
+  // (re-review 2026-08-25) — the gate is a PendingGift (money actually sent).
+  const priorSendChecks = [...body.matchAll(/hasPriorSendTo\(\{ senderAccountId: account\.id, recipientMsisdn:/g)].length;
+  assert.ok(priorSendChecks >= 2, `both the number AND name branches must require a prior send (got ${priorSendChecks})`);
+  assert.ok(!/isSavedBeneficiary/.test(body), 'the weaker saved-beneficiary gate is gone from the resolver');
   assert.match(body, /S5_COMPLETED'\) return null/, 'only fully-onboarded payers');
   assert.match(body, /label: maskMsisdn\(msisdn\)/, 'label is a masked number, never the payer\'s profile name');
 });
 
-test('directed requests: delivery is INFORMATIONAL — never writes the payer\'s state', () => {
+test('directed requests: delivery is INFORMATIONAL — no state, no history, no money', () => {
   const fn = processorSource.indexOf('async function deliverDirectedRequest(');
   const body = processorSource.slice(fn, processorSource.indexOf('\n}', fn));
-  assert.ok(!body.includes('updateConversationState'), 'a directed send must NEVER set another user\'s conversation state');
+  assert.ok(!body.includes('updateConversationState'), 'never sets another user\'s conversation state');
+  assert.ok(!body.includes('addToConversationHistory'), 'never writes the payer\'s AI-context history (unsolicited)');
   assert.match(body, /pay request \$\{request\.id\}/, 'the payer opts in by typing the code — their own explicit action');
   assert.match(body, /safeRequesterLabel\(requesterLabel\)/, 'the requester label is sanitised (spoofable profile name)');
   assert.ok(!body.includes('buildSend'), 'delivery moves NO money');
+});
+
+test('directed requests: label denylist blocks system/authority impersonation', () => {
+  const fn = processorSource.indexOf('function safeRequesterLabel(');
+  const body = processorSource.slice(fn, processorSource.indexOf('\n}', fn));
+  assert.match(body, /wapay\|wa-pay\|support\|admin\|system\|official\|helpdesk\|service/);
+  assert.match(body, /return 'A WaPay user'/, 'an authority-looking name falls back to the neutral label');
 });
 
 test('directed requests: the requester label is stripped of markdown/control chars', () => {

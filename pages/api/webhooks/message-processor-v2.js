@@ -9,7 +9,7 @@ import { getOrCreateUser, getUserBalance, updateConversationState, getConversati
 import { sendWhatsAppText, sendWhatsAppTemplate, sendWhatsAppCtaUrl } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
 import { resolveGift, buildRecipientNotification, buildVoucherClaimMessage, maskMsisdn } from '../../../lib/gifting.js';
-import { hasPendingGifts, claimPendingGifts, revertGiftDelivery } from '../../../lib/pending-gifts.js';
+import { hasPendingGifts, hasPriorSendTo, claimPendingGifts, revertGiftDelivery } from '../../../lib/pending-gifts.js';
 import {
   createPaymentRequest,
   cancelPaymentRequest,
@@ -2072,22 +2072,25 @@ async function resolveDirectedRequestTarget({ account, rawText }) {
   if (!m) return null;
   const raw = m[1].trim();
 
-  // RELATIONSHIP GATE (abuse review 2026-08-25): a directed in-chat request
-  // can ONLY reach someone the requester has ALREADY saved as a beneficiary
-  // (sent to, or shared as a contact). Arbitrary numbers are never targeted
-  // — that was a phishing + customer-enumeration vector. Everyone else falls
+  // RELATIONSHIP GATE (abuse review 2026-08-25, hardened after re-review): a
+  // directed in-chat request can ONLY reach someone the requester has
+  // actually SENT MONEY to before (a PendingGift exists). A bare saved
+  // beneficiary is NOT enough — it is attacker-self-populatable via a shared
+  // contact card, which reopened the phishing + enumeration vector. A prior
+  // send is money-backed and cannot be forged for free. Everyone else falls
   // through to the shareable link, which requires the payer's own action.
   let msisdn = null;
   if (/\d{4}/.test(raw)) {
     const digits = normaliseMsisdn(raw);
     if (!isValidSaMsisdn(digits)) return null;
-    if (!(await isSavedBeneficiary({ accountId: account.id, msisdn: digits }))) return null;
+    if (!(await hasPriorSendTo({ senderAccountId: account.id, recipientMsisdn: digits }))) return null;
     msisdn = digits;
   } else {
     if (/^(me|my|phone|work|home|bank|card|wallet|app|whatsapp)$/i.test(raw)) return null;
     const matches = await findBeneficiariesByName({ accountId: account.id, query: raw }).catch(() => []);
     if (matches.length !== 1) return null;
     msisdn = normaliseMsisdn(matches[0].msisdn);
+    if (!(await hasPriorSendTo({ senderAccountId: account.id, recipientMsisdn: msisdn }))) return null;
   }
   if (!msisdn) return null;
 
@@ -2117,7 +2120,12 @@ function safeRequesterLabel(name) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 24);
-  return cleaned || 'A WaPay user';
+  // A name that reads as WaPay/authority is impersonation even without
+  // markdown ("WaPay Support", "Admin") — fall back to the neutral label.
+  if (!cleaned || /\b(wapay|wa-pay|support|admin|system|official|helpdesk|service)\b/i.test(cleaned)) {
+    return 'A WaPay user';
+  }
+  return cleaned;
 }
 
 /**
@@ -2135,7 +2143,9 @@ async function deliverDirectedRequest({ payerWaId, request, requesterLabel }) {
       `🙏 *${label}* is asking you to pay *${randsShort(request.amountCents)}* on WaPay.\n\n` +
       `If you'd like to pay, reply:\n*pay request ${request.id}*\n\n` +
       `Paid from your WaPay balance — no fees. Ignore this message if it wasn't expected.`;
-    await addToConversationHistory(payerWaId, 'assistant', text);
+    // Deliberately NOT added to the payer's conversation history: this is an
+    // unsolicited informational nudge, and it must not enter their AI context
+    // window or influence their next turn (abuse review 2026-08-25).
     const sent = await sendWhatsAppText({ to: payerWaId, text });
     return Boolean(sent?.ok);
   } catch {

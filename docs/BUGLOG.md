@@ -4,6 +4,12 @@
 
 ---
 
+## 27. Directed-request relationship gate was self-populatable (phishing surface)
+
+- **Symptom (re-review 2026-08-25, pre-deploy):** the rebuilt directed-request gate ("please pay me R50 from <name/number>") required the target to be the requester's saved beneficiary — but a beneficiary is created UNCONDITIONALLY by sharing a WhatsApp contact card (`rememberBeneficiary`, no money, no target consent). So an attacker could save any victim's number via a contact-card share, then push an unsolicited (label-spoofable) "pay request" nudge into that stranger's WaPay chat and read the requester-side response as a membership-enumeration oracle. The CORE harm (cross-user state plant / auto-pay) was already closed; this was the residual delivery+oracle surface.
+- **Fix:** the gate is now a real PRIOR MONEY MOVEMENT — `hasPriorSendTo` (a `PendingGift` from the requester to that recipient exists), applied on BOTH the number and name branches. A prior send is money-backed and cannot be forged for free, and the recipient already received value from the sender (benign). Plus: `safeRequesterLabel` gained a system/authority denylist (wapay/support/admin/…→ neutral label), and the informational nudge is no longer written into the payer's conversation history (kept out of their AI-context window).
+- **Guard:** `tests/founder-feedback-0825.test.mjs` requires ≥2 `hasPriorSendTo` gates in the resolver, asserts `isSavedBeneficiary` is gone from it, and locks the denylist + no-history + no-state + no-money properties of delivery.
+
 ## 26. Paid-request notifications were one-shot — a lost invocation lost them forever
 
 - **Symptom (founder live test `PRMDCUQA`, R20 card payment, 2026-08-25):** the payment was captured perfectly — payer number stored, request marked PAID, requester credited — but NEITHER the requester's "you've been paid" nor the payer's receipt ever arrived on WhatsApp.
