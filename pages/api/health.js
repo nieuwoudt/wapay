@@ -56,6 +56,7 @@ export default function handler(req, res) {
         appBaseUrl: process.env.APP_BASE_URL || null,
         paylinkBaseUrl: process.env.PAYLINK_BASE_URL || null,
         payerReceiptTemplate: has('WAPAY_TEMPLATE_PAYMENT_RECEIPT'),
+        requestPaidTemplate: has('WAPAY_TEMPLATE_REQUEST_PAID'),
       };
     }
   }
