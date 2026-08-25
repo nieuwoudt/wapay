@@ -1,44 +1,53 @@
-Subject: Redemption API — base URL + docs are the last blockers (creds in hand)
+Subject: Ready to sign Payout — need credentials, docs & the agreement
 
 Hi Keamo
 
-Voucher issuing is fully built into our WhatsApp wallet and goes live to
-customers this week — thank you again for the float and the quick turnarounds.
+Voucher issuing is fully built into our WhatsApp wallet and is now in live
+customer testing — thank you again for the float and the quick turnarounds.
 
-Redemption is built-ready on our side too, but we're stuck on plumbing, not
-product. Five specifics:
+We're ready to move on two things. Payouts is our priority.
 
-1. Merchant / Redemption API — base URL + documentation. We received the
-   WAPAYVMT merchant credentials (thank you), but the Merchant API itself
-   isn't where we expected it: the merchant endpoints return "not found" on
-   test-api.ott-mobile.com, and merchant-api.ott-mobile.com refuses all our
-   requests outright (403) — which makes us suspect it's IP-allowlisted.
-   Could you send:
-     a) the correct Merchant API base URL (test + production),
-     b) the Merchant/Redemption API documentation, and
-     c) if there's an IP allowlist, the process for registering our egress IPs?
-   We're days from redemption go-live once we have these — the test vouchers
-   you sent are ready and waiting.
+PAYOUT (our priority — we want to go live)
 
-2. Merchant Portal access — we found the portal at merchant.ott-mobile.com.
-   Should we have a login there? If the API settings page shows our base URL
-   and keys, that alone may answer point 1.
+1. We're ready to sign the Payout agreement. Please send the version ready
+   for signature and we'll turn it around quickly.
 
-3. Payout API credentials — we currently hold only the documentation-portal
-   password. Please send the actual API credentials (and base URL) so
-   integration can start the moment the commercial points are settled.
+2. Payout API credentials + documentation — we currently hold only the
+   documentation-portal password. Please send the actual API credentials and
+   base URL so our engineers can start integrating in the sandbox now, in
+   parallel with signing.
 
-4. Accepting platforms list — could you share the current list of platforms
-   and merchants that accept OTT vouchers? It's what we show recipients so
-   they know where to spend, so it directly drives our issuing volumes.
+3. Payout activation checklist — once the agreement is signed, what remains
+   to switch production on? (Float/prefunding amount, IP allowlisting,
+   compliance/FICA checks, and expected timelines — whatever your standard
+   onboarding path is.) We'd like to plan the go-live date.
 
-5. Two loose ends from before: the countersigned Merchant agreement copy for
-   our records, and an ETA on the Hollywoodbets redemption issue you
-   mentioned was being looked at.
+REDEMPTION (merchant credentials confirmed working — just need the spec)
 
-For production issuing, we've confirmed api.ott-mobile.com responds on the
-reseller endpoints — is that the correct production base URL for when you
-issue our production credentials?
+4. Merchant / Redemption API base URL + documentation. We've verified our
+   WAPAYVMT merchant API key in the portal (it validates green), but there's
+   no API documentation or base URL anywhere on the dashboard, and the
+   merchant endpoints we tried aren't where we expected them (test-api
+   returns "not found"; merchant-api refuses our requests with a 403, which
+   looks like IP allowlisting). Please send:
+     a) the correct Merchant/Redemption API base URL (test + production),
+     b) the API documentation, and
+     c) if there's an IP allowlist, how we register our egress IPs.
+   The test vouchers you sent are ready and waiting — we can integrate
+   redemption within days of receiving this.
+
+5. Voucher status via API — the portal's "Lookup a Voucher" shows redemption
+   status by serial number. Is that same status available through the API on
+   vouchers we've issued? We want to show our customers which of their
+   vouchers are still unspent, which drives repeat purchases.
+
+LOOSE ENDS
+
+6. The countersigned Merchant agreement copy for our records, and an ETA on
+   the Hollywoodbets redemption issue you mentioned was being looked at.
+
+7. The current list of platforms and merchants that accept OTT vouchers —
+   it's what we show recipients so they know where to spend.
 
 Thank you
 Niev

@@ -272,3 +272,46 @@ This message is your receipt.
 - No emojis in body; body neither starts nor ends with a variable
 - AFTER Meta approval: set Vercel env `WAPAY_TEMPLATE_PAYMENT_RECEIPT=wapay_payment_receipt`
   and redeploy — the ITN fallback activates itself, no code change needed
+
+---
+
+## ⚠️ Meta editor rule that bit us (2026-08-24)
+
+**"Leading or trailing params not allowed — Variables can't be at the start or
+end of the template."** The FIRST and LAST characters of the body must be
+static text. `Payment reference: {{3}}` as the final line FAILS (ends on the
+variable); keep a static sentence after the last variable. Both bodies below
+are paste-ready and satisfy the rule. If the generic red toast ("An error
+occurred while creating your template") persists after fixing the body, wait a
+minute and retry — a failed create can briefly hold the name.
+
+## wapay_request_paid (added 2026-08-24 — requester notify fallback)
+
+**Purpose**: tell a REQUESTER their payment request was paid when the ITN
+lands outside their 24h service window (a request lives 7 days; free-form is
+rejected out-of-window). Env-gated in `pages/api/payfast/itn.js` via
+`WAPAY_TEMPLATE_REQUEST_PAID`.
+
+**Category**: Utility
+**Name**: `wapay_request_paid`
+**Language**: English
+
+**Body**:
+```
+Good news: your WaPay payment request {{2}} has been paid. {{1}} is reflected in your WaPay balance. Open this chat and say "balance" to see it.
+```
+
+**Variables**:
+1. `{{1}}` - amount received, e.g. "R150.00"
+2. `{{2}}` - request code, e.g. "PRKWXQZM"
+
+**Buttons**: none
+
+**Sample**:
+```
+Good news: your WaPay payment request PRKWXQZM has been paid. R150.00 is reflected in your WaPay balance. Open this chat and say "balance" to see it.
+```
+
+**Notes**:
+- Body starts and ends with static text (Meta rule above)
+- AFTER approval: set Vercel env `WAPAY_TEMPLATE_REQUEST_PAID=wapay_request_paid`

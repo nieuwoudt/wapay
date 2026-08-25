@@ -265,6 +265,31 @@ export default async function handler(req, res) {
         console.error(
           JSON.stringify({ type: 'payfast_itn_confirm_send_error', paymentId, error: confirmSent?.error })
         );
+        // A payment request can be paid days after creation — outside the
+        // requester's 24h service window, where free-form is rejected. The
+        // approved template (env-gated) is the only rail that still lands.
+        const paidTemplate = process.env.WAPAY_TEMPLATE_REQUEST_PAID || '';
+        if (requestCode && paidTemplate) {
+          const tpl = await sendWhatsAppTemplate({
+            to: waId,
+            templateName: paidTemplate,
+            language: 'en',
+            components: [
+              {
+                type: 'body',
+                parameters: [
+                  { type: 'text', text: `R${centsToRandString(amountCents)}` },
+                  { type: 'text', text: requestCode },
+                ],
+              },
+            ],
+          });
+          if (!tpl?.ok) {
+            console.error(
+              JSON.stringify({ type: 'payfast_itn_confirm_template_error', paymentId, error: tpl?.error })
+            );
+          }
+        }
       }
     } catch (error) {
       console.error(

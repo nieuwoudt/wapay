@@ -523,8 +523,40 @@ async function sendPostTransactionCta(to) {
   return await sendWhatsAppText({ to, text: cta });
 }
 
+/**
+ * "🎟️ Vouchers: R120 (3)" — the face value of vouchers this account bought
+ * FOR ITSELF that our records still hold as live (ISSUED or DELIVERED —
+ * founder ask 2026-08-24: the customer must see voucher value alongside
+ * cash on the home screen).
+ *
+ * HONESTY: OTT does not yet tell us when an issued voucher is redeemed at
+ * an accepting platform (that visibility is on the Keamo ask list), so
+ * every surface says "vouchers bought" — never a promise of unspent value.
+ * Gifts to OTHERS are excluded (that money was given away); the full
+ * purchase list stays under "my vouchers". Best-effort: any error returns
+ * null and the surface renders without the line — a balance screen must
+ * never fail on the voucher query.
+ */
+async function voucherBalanceSummary(account) {
+  try {
+    const own = normaliseMsisdn(account?.msisdn || '');
+    if (!own) return null;
+    const rows = await prisma.pendingGift.findMany({
+      where: { senderAccountId: account.id, status: { not: 'CANCELLED' } },
+      select: { amountCents: true, recipientMsisdn: true },
+    });
+    const mine = rows.filter((r) => normaliseMsisdn(r.recipientMsisdn) === own);
+    if (!mine.length) return null;
+    return { totalCents: mine.reduce((s, r) => s + r.amountCents, 0), count: mine.length };
+  } catch (error) {
+    logStructured('voucher_balance_error', { accountId: account?.id, error: error?.message });
+    return null;
+  }
+}
+
 async function renderHome({ from, account }) {
   const { balance, displayName } = await getUserBalance(from);
+  const vouchers = await voucherBalanceSummary(account);
 
   // Quick actions (best-effort). Prefer last successful VAS if available.
   let quickActions = [
@@ -561,6 +593,9 @@ async function renderHome({ from, account }) {
   const home =
     `👋 *Hi ${displayName}!*\n` +
     `💰 Balance: *${formatMoneyZar(balance)}*\n` +
+    (vouchers
+      ? `🎟️ Vouchers bought: *${randsShort(vouchers.totalCents)}* (${vouchers.count}) — reply "my vouchers"\n`
+      : '') +
     `━━━━━━━━━━━━━━━\n\n` +
     `🛒 *Buy* — airtime, data, electricity\n` +
     `💸 *Send* — "send R10 airtime to 083..."\n` +
@@ -1876,14 +1911,32 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
   logStructured('payrequest_created', { from, accountId: account.id, code: request.id, amountCents });
 
   const cardFeeCents = depositFeeCents(amountCents);
-  const intro =
-    `🙏 *Payment request created!*\n\n` +
+  const introBody =
     `Forward the next message to whoever owes you — I'll tell you the moment it's paid.\n\n` +
     `You'll receive the full ${randsShort(amountCents)} if they pay from a WaPay balance, ` +
     `or ${randsShort(amountCents - cardFeeCents)} if they pay by card (${randsShort(cardFeeCents)} card fee — they pay no fees).`;
-  await addToConversationHistory(from, 'assistant', intro);
-  await sendWhatsAppText({ to: from, text: intro });
+  await addToConversationHistory(from, 'assistant', introBody);
 
+  // The requester's own copy shows a BUTTON, not a raw URL (founder ask
+  // 2026-08-24). Interactive falls back to plain text — a request must
+  // never fail on presentation.
+  const interactive = await sendWhatsAppCtaUrl({
+    to: from,
+    headerText: 'Payment request created',
+    bodyText: `🙏 *${randsShort(amountCents)} requested*\n\n${introBody}`,
+    footerText: `Code ${request.id}`,
+    buttonText: 'View my payment page',
+    url,
+  });
+  if (!interactive?.ok) {
+    await sendWhatsAppText({ to: from, text: `🙏 *Payment request created!*\n\n${introBody}` });
+  }
+
+  // The FORWARDABLE message must keep the visible link: WhatsApp strips
+  // interactive buttons when a message is forwarded, and the forwarded
+  // message is the payer's ONLY road to the page. The short domain
+  // (PAYLINK_BASE_URL, e.g. wa-pay.me/PRXXXXXX) keeps it clean and
+  // tappable as plain text.
   const forwardable =
     `🙏 ${who} is requesting *${randsShort(amountCents)}* on WaPay.\n\n` +
     `Tap to pay — from a WaPay balance (free) or by card:\n${url}`;
@@ -4270,7 +4323,11 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
   switch (result.action) {
     case 'CHECK_BALANCE': {
       const { balance, displayName } = await getUserBalance(from);
-      const balanceMsg = `💰 *Your WaPay Balance*\n\nHi ${displayName}!\nYour current balance is R ${balance}\n\nWhat would you like to do next?`;
+      const vouchers = await voucherBalanceSummary(account);
+      const voucherLine = vouchers
+        ? `\n🎟️ Vouchers you've bought: *${randsShort(vouchers.totalCents)}* (${vouchers.count}) — reply "my vouchers" to see them.\n`
+        : '';
+      const balanceMsg = `💰 *Your WaPay Balance*\n\nHi ${displayName}!\nYour current balance is R ${balance}\n${voucherLine}\nWhat would you like to do next?`;
       await addToConversationHistory(from, 'assistant', balanceMsg);
       return await sendWhatsAppText({ to: from, text: balanceMsg });
     }

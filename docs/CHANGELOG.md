@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-08-25 — Voucher balance on home, pay-link CTA button, request-paid template fallback, BSUID banked
+
+- **Voucher balance (founder ask)**: the home screen and the deterministic balance answer now show `🎟️ Vouchers bought: R120 (3) — reply "my vouchers"` — SELF-bought vouchers only (gifts to others were given away), CANCELLED excluded, best-effort (a balance surface can never fail on the voucher query). Copy says **bought**, never "unspent": OTT gives us no redemption visibility yet — that ask is now item 3 in `EMAIL_TO_KEAMO_3.txt`; when OTT exposes voucher status we upgrade the line to true "active".
+- **Pay-link presentation (founder ask)**: the requester's own copy is now a tappable CTA button ("View my payment page", plain-text fallback). The FORWARDABLE message keeps the visible short link deliberately — WhatsApp strips interactive buttons on forward, and the forwarded message is the payer's only road in.
+- **Requester-notify template fallback**: a request paid on day 6 lands outside the requester's 24h service window, where free-form is rejected — the ITN now falls back to the env-gated `wapay_request_paid` template (spec in `docs/whatsapp-new-templates.md`; set `WAPAY_TEMPLATE_REQUEST_PAID` after Meta approval).
+- **Meta template rule documented** (bit the founder live): body text may not start or end with a variable — paste-ready bodies for `wapay_payment_receipt` + `wapay_request_paid` in the templates doc.
+- **WhatsApp usernames/BSUID banked** (`docs/whatsapp-bsuid-usernames.md`): BSUIDs already in webhooks; username adopters lose visible phone numbers — adoption plan queued (capture `user_id` now, resolution by msisdn-or-bsuid, REQUEST_CONTACT_INFO onboarding leg July 2026+); reserve the `wapay` business username (claimable since June 29). Merchant "pay me" card concept noted — printable TODAY with wa-pay.me/PR-links.
+- Suite 304/304, build green.
+
+## 2026-08-25 — Payout commercials: VAT-true rail costs + banded CashSend fees
+
+Read the signed-ready **OTT Payout Agreement** (Annexure A) and corrected two margin
+errors baked into the fee model:
+
+- **VAT was being ignored.** Supplier rates are quoted EXCL VAT and WaPay is not
+  VAT-registered, so that VAT is an unrecoverable real cost. `cashoutRailCostCents`
+  now grosses every rail cost up (`VAT_BPS`, `inclVatCents`): Pay@ R8.65→R9.95,
+  PayShap R2.50→R2.88, RTC R4.50→R5.18, CashSend R9.96→R11.46. Margin was
+  previously overstated by ~15% on every withdrawal.
+- **A flat R14 CashSend fee went underwater above ~R738 face** (the 0.3% switching
+  fee rises with the amount). Customer fees stay FLAT but are now **banded** —
+  the shape already approved for deposits: R50–R700 = R16, R701–R1500 = R21,
+  R1501–R3000 = R28. Every rail is now margin-positive at every cent from R50 to
+  R3000, asserted exhaustively in `tests/payout-fees.test.mjs`.
+- **The 0.3% is CashSend/VAS only** (Annexure A 3.2), NOT PayShap/RTC (3.3, "Bank
+  EFT Products") — locked by test, because a stray percentage on PayShap would
+  erode the one rail the withdrawal margin rests on. PayShap earns a constant
+  **R3.12** at any ticket size and is the rail to steer customers to.
+
+Suite 313/313, build green. Payout code itself is still unbuilt — blocked on OTT
+Payout API credentials + base URL (Keamo). Collect agreement reviewed: it makes
+WaPay a PHYSICAL cash-out agent with a vendor terminal base holding float —
+wrong shape for a WhatsApp wallet, formally declined.
+
 ## 2026-08-22 (3) — Card payers auto-register + 41-agent adversarial-review hardening
 
 **Every card payer becomes a WaPay lead (founder ask)**: the pay page card leg is a POST form capturing the payer's WhatsApp number (required client-side; the API never blocks a payment on a bad/missing number — the requester getting paid outranks the growth hook). The number rides the SIGNED PayFast session (`custom_str1`), so the ITN sends the receipt to whoever actually paid — a later checkout click can never redirect it. Back from PayFast, `?r=1` renders a confirming state with NO pay buttons (double-charge guard) plus a "Get my receipt + my own WaPay" wa.me button (prefilled `Receipt PRXXXXXX`). The processor answers that ask for ANY sender BEFORE the onboarding gate — a brand-new payer gets their receipt, then falls straight into onboarding. The ITN pushes a purely-transactional receipt (free-form when the payer's service window is open; env-gated template fallback `wapay_payment_receipt` — spec in `docs/whatsapp-new-templates.md`, awaiting Meta creation + `WAPAY_TEMPLATE_PAYMENT_RECEIPT`).

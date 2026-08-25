@@ -189,7 +189,9 @@ test('Flow C: load, send, cash out LOSES money unless fees are charged', () => {
 
   // Fees earned must cover the payout rail's charge.
   const margin = netMarginCents(all);
-  assert.equal(margin, 250 + 1200 - 865, 'send R2.50 + cashout R12.00 - Pay@ R8.65');
+  // Pay@ costs R8.65 EXCL VAT; WaPay cannot reclaim VAT, so the real cost
+  // booked is R9.95 incl (see cashoutRailCostCents).
+  assert.equal(margin, 250 + 1200 - 995, 'send R2.50 + cashout R12.00 - Pay@ R9.95 incl VAT');
   assert.ok(margin > 0, 'the send+cashout path must not run at a loss');
 });
 
@@ -257,7 +259,9 @@ test('CashSend switching fee scales with amount', () => {
   const small = buildCashoutRailCost({ amountCents: 10000, idemKey: 'cs-small', method: 'CASHSEND' });
   const large = buildCashoutRailCost({ amountCents: 100000, idemKey: 'cs-large', method: 'CASHSEND' });
   assert.ok(large.meta.railCostCents > small.meta.railCostCents, '0.3% switching fee must scale');
-  assert.equal(small.meta.railCostCents, 996 + 30, 'R9.96 + 0.3% of R100');
+  // Both components are grossed up by VAT — WaPay cannot reclaim it, so the
+  // ex-VAT rate card is never the real cost (agreement read 2026-08-25).
+  assert.equal(small.meta.railCostCents, 1146 + 35, 'R9.96 + 0.3% of R100, both incl VAT');
 });
 
 // ---------------------------------------------------------------------------

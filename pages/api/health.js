@@ -41,6 +41,10 @@ export default function handler(req, res) {
         // OTT voucher issuing (all four required; vendor code defaults to 11).
         ott: has('OTT_BASE_URL') && has('OTT_API_USERNAME') && has('OTT_API_KEY') && has('OTT_API_PASSWORD'),
         ottVendorCode: has('OTT_VENDOR_CODE'),
+        // OTT merchant/redemption creds (portal-verified 2026-08-25; the
+        // base URL + docs are still with OTT, so no code consumes these yet).
+        ottMerchant:
+          has('OTT_MERCHANT_API_USERNAME') && has('OTT_MERCHANT_API_KEY') && has('OTT_MERCHANT_API_PASSWORD'),
         // PayFast deposits + payment-request card leg.
         payfast: has('PAYFAST_MERCHANT_ID') && has('PAYFAST_MERCHANT_KEY') && has('PAYFAST_PASSPHRASE'),
         // Orchestrator.
