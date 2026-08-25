@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-08-25 (4) — Founder live-test batch: localization, flow-escape, safe directed requests
+
+Acting on the founder's real-account test feedback, with a 15-agent adversarial review that
+caught (and forced the rewrite of) a critical abuse vector before ship:
+
+- **Deterministic surfaces now speak the user's language** (`lib/localize.js`): home/help/get-paid/
+  airtime prompts translated via gpt-4o-mini into the profile language. Money, PR-codes, links and
+  phone numbers are FROZEN as placeholders and the model output is rejected unless every placeholder
+  returns in EXACT order and count (a reorder could invert "R5–R3000" → "R3000–R5"); fail-open to
+  English; cached; 2.5s abort. "Speak Xhosa" now sets the language permanently (locked — rolling
+  evidence only yields to a clear, sustained switch) and confirms natively in all 11 languages. The
+  matcher was hardened so object phrasings ("reply to my sister in Xhosa", "change my Zulu voucher")
+  never swallow the real message.
+- **Universal intent-switch escape**: a clearly-stated NEW intent breaks out of ANY waiting state
+  (family-aware — an in-flow answer never escapes, PIN digits never look like an intent), fixing the
+  founder's stuck data/voucher loops.
+- **WaPay-to-WaPay directed requests — SHIPPED SAFE.** "please pay me R50 from <name/number>" now
+  delivers ONLY to someone the requester has already saved as a beneficiary, as a PURELY
+  INFORMATIONAL nudge the payer opts into by typing "pay request <code>" — it never writes another
+  user's conversation state, never renders their spoofable profile name as authority, and returns a
+  neutral response so arbitrary numbers can't be probed for WaPay membership. (The first cut planted
+  a "reply YES to pay" confirm in any stranger's chat with a spoofable sender — a phishing vector the
+  review flagged critical; rebuilt before it ever deployed.)
+- **"Buy 100 minutes"** clarifies rand-vs-minutes instead of silently equating.
+- **Pay links are now `pleasepayme.co.za/<code>`** and the pay page greets "🙏 Please pay me / with
+  WaPay" (founder decision; product stays WaPay-branded; old wa-pay.me links keep working).
+
+337 tests, build green.
+
 ## 2026-08-25 (3) — Durable paid-request notifications (BUGLOG #26)
 
 Founder's live R20 test paid perfectly but notified nobody: sends were gated on the

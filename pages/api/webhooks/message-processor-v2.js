@@ -25,9 +25,11 @@ import {
   rememberBeneficiary,
   findBeneficiariesByName,
   formatBeneficiary,
+  isSavedBeneficiary,
 } from '../../../lib/beneficiaries.js';
 import {
   getProfile,
+  setLanguage,
   noteLanguage,
   noteDepositMethod,
   noteMeterNumber,
@@ -49,6 +51,7 @@ import {
 } from '../../../lib/deposits.js';
 import { orchestrate } from '@wapay/ai';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
+import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '../../../lib/localize.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
@@ -608,8 +611,9 @@ async function renderHome({ from, account }) {
 
   logStructured('home_render', { from, accountId: account.id });
 
-  await addToConversationHistory(from, 'assistant', home);
-  await sendWhatsAppText({ to: from, text: home });
+  const localizedHome = await localizeOutbound(home, await userLang(account));
+  await addToConversationHistory(from, 'assistant', localizedHome);
+  await sendWhatsAppText({ to: from, text: localizedHome });
 
   return { ok: true };
 }
@@ -735,6 +739,16 @@ function resolveDataPurchaseSlots({ text, entities = {}, stateData = {} }) {
   return { msisdn, dataMb, periodType, networkCode };
 }
 
+/** The user's preferred reply language ('en' when unknown). */
+async function userLang(account) {
+  try {
+    const p = await getProfile({ accountId: account.id });
+    return p?.language || 'en';
+  } catch {
+    return 'en';
+  }
+}
+
 /**
  * Process incoming WhatsApp message
  */
@@ -781,6 +795,24 @@ export async function processMessage({ from, text, messageId, profile, sharedCon
       if (onboardingState !== 'S0_INITIAL') {
         return { ok: true, receipt: true };
       }
+    }
+  }
+
+  // Explicit language choice ("speak Xhosa" / "praat Afrikaans") — set it
+  // permanently and confirm IN that language, whatever state the user is in
+  // (founder feedback 2026-08-25: this ask got the English help menu).
+  {
+    // inFlow: don't let a bare language word (a surname like "Zulu") captured
+    // as a flow answer be read as a switch and swallow the message.
+    const { state: activeState } = await getConversationState(from);
+    const langAsk = matchLanguageSwitch(text, { inFlow: Boolean(activeState) });
+    if (langAsk) {
+      await setLanguage({ accountId: account.id, language: langAsk }).catch(() => {});
+      await sendWhatsAppText({
+        to: from,
+        text: LANGUAGE_CONFIRMATIONS[langAsk] || LANGUAGE_CONFIRMATIONS.en,
+      });
+      return { ok: true, languageSet: langAsk };
     }
   }
 
@@ -995,8 +1027,19 @@ async function handlePostOnboarding({ account, from, text }) {
   const { state, data } = await getConversationState(from);
 
   if (state) {
-    console.log('💬 User in conversation state:', state);
-    return await handleConversationState({ from, text, state, data, account });
+    // Universal intent-switch escape (founder feedback 2026-08-25): a
+    // clearly-stated NEW intent always beats a waiting state — flows must
+    // never trap. Same-family messages ("R50" while airtime asks for an
+    // amount) stay in the flow; PIN digits never look like intents.
+    const switched = detectStrongIntentSwitch(text, state);
+    if (switched) {
+      logStructured('state_escape_intent_switch', { from, state, to: switched });
+      await updateConversationState(from, null);
+      // fall through to fresh routing below
+    } else {
+      console.log('💬 User in conversation state:', state);
+      return await handleConversationState({ from, text, state, data, account });
+    }
   }
 
   // Home triggers (never interrupt active flows; we already returned above if state exists)
@@ -1060,6 +1103,19 @@ async function handlePostOnboarding({ account, from, text }) {
       accountId: account.id,
     });
     return await handleCardDepositLink({ from, account, amountCents: cardDepositCents, rawText: text });
+  }
+
+  // "Buy 100 minutes" — minutes are not rand (100 MTN minutes is not R100).
+  // Clarify instead of silently equating (founder screenshot 2026-08-25).
+  {
+    const mins = /\b(?:buy|get|want|need|koop|thenga)\b[^\n]{0,30}?\b(\d{1,4})\s*min(?:ute)?s?\b/i.exec(text);
+    if (mins && !/\b(data|bundle)\b/i.test(text)) {
+      const msg =
+        `📱 Airtime is sold in *rand*, not minutes — call minutes depend on your network's rates.\n\n` +
+        `How many rand of airtime would you like? For example *R50 airtime*.`;
+      await addToConversationHistory(from, 'assistant', msg);
+      return await sendWhatsAppText({ to: from, text: await localizeOutbound(msg, await userLang(account)) });
+    }
   }
 
   // Deterministic short-circuit: voucher HISTORY ("my vouchers") and
@@ -1277,7 +1333,7 @@ async function handlePostOnboarding({ account, from, text }) {
             await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents: amount * 100 });
             return await sendWhatsAppText({
               to: from,
-              text: `📱 *Buy R${amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`,
+              text: await localizeOutbound(`📱 *Buy R${amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`, await userLang(account)),
             });
           }
           return await handleListAirtimeBundles({ from, account, networkCode: null });
@@ -1479,7 +1535,7 @@ async function handlePostOnboarding({ account, from, text }) {
           await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents: airtimeSlots.amountCents });
           return await sendWhatsAppText({
             to: from,
-            text: `📱 *Buy R${airtimeSlots.amountCents / 100} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`,
+            text: await localizeOutbound(`📱 *Buy R${airtimeSlots.amountCents / 100} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`, await userLang(account)),
           });
         }
         
@@ -1820,6 +1876,42 @@ const DEPOSIT_CARD_PATTERN = /\b(?:deposit|depsit|deposite|diposit)\b(?:\s+(?:mo
 const PAY_REQUEST_CODE_PATTERN = /\bpay\s+request\s+(PR[A-HJKMNP-Z]{6})\b/i;
 
 /**
+ * A clearly-stated NEW intent while a flow is waiting for input. Family-
+ * aware: an answer that belongs to the CURRENT flow ("R50" at the airtime
+ * amount ask, a code in the request flow) never escapes; a different
+ * product/intent always does. Deterministic regex only — never the AI.
+ */
+function detectStrongIntentSwitch(text, state) {
+  const t = String(text || '');
+  if (!t || /^\s*\d{4,6}\s*$/.test(t)) return null; // PIN-shaped: never an intent
+  const family =
+    state.startsWith('AIRTIME') ? 'AIRTIME'
+    : state.startsWith('DATA') ? 'DATA'
+    : state.startsWith('ELECTRICITY') ? 'ELECTRICITY'
+    : state.startsWith('PAYREQ') || state.startsWith('REQUEST_MONEY') ? 'REQUEST_MONEY'
+    : state.includes('DEPOSIT') ? 'DEPOSIT'
+    : state.includes('VOUCHER') || state.includes('GIFT') ? 'VOUCHER'
+    : 'OTHER';
+  const candidates = [
+    ['DEPOSIT', DEPOSIT_CARD_PATTERN.test(t)],
+    ['REQUEST_MONEY', PAY_REQUEST_CODE_PATTERN.test(t) || matchRequestMoneyAsk(t, null)],
+    ['RECEIPT', RECEIPT_CODE_PATTERN.test(t)],
+    ['VOUCHER', matchOttVoucherSelfRequest(t, null)],
+    ['AIRTIME', /\bairtime\b/i.test(t) && /\b(buy|send|want|need|get|koop|thenga)\b/i.test(t)],
+    ['DATA', /\b(data|bundle)\b/i.test(t) && /\b(buy|send|want|need|get|koop|thenga)\b/i.test(t)],
+    ['ELECTRICITY', /\b(electricity|elektrisiteit|umbane|mohlagase)\b/i.test(t) && /\b(buy|want|need|get|koop|thenga|R?\s?\d)/i.test(t)],
+    ['BALANCE', /\b(balance|balans|imali|chelete)\b/i.test(t) && /\b(my|check|what|wat|yami|malini)\b/i.test(t)],
+    ['HISTORY', /\b(my|show|list)\b[^\n]{0,20}\bvouchers?\b/i.test(t) && !/\d{6,}/.test(t)],
+  ];
+  for (const [fam, hit] of candidates) {
+    if (!hit) continue;
+    if (fam === family) continue;
+    return fam;
+  }
+  return null;
+}
+
+/**
  * "Receipt PRXXXXXX" — the wa.me deep link a card payer taps on the pay
  * page, which sends EXACTLY this text as the whole message — so the
  * intercept is anchored to the full message AND restricted to the code
@@ -1888,7 +1980,10 @@ function matchRequestMoneyAsk(text = '', slots = null) {
 async function handleCreatePaymentRequest({ from, account, amountCents, rawText = '' }) {
   if (!Number.isInteger(amountCents) || amountCents < MIN_REQUEST_CENTS || amountCents > MAX_REQUEST_CENTS) {
     await updateConversationState(from, 'REQUEST_MONEY_AMOUNT');
-    const askMsg = `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5–R3000)\n\nFor example "R150" — or reply "cancel" to stop.`;
+    const askMsg = await localizeOutbound(
+      `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5–R3000)\n\nFor example "R150" — or reply "cancel" to stop.`,
+      await userLang(account)
+    );
     await addToConversationHistory(from, 'assistant', askMsg);
     return await sendWhatsAppText({ to: from, text: askMsg });
   }
@@ -1932,16 +2027,120 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
     await sendWhatsAppText({ to: from, text: `🙏 *Payment request created!*\n\n${introBody}` });
   }
 
+  // WaPay-to-WaPay: "please pay me R50 from Philly / 083..." delivers the
+  // request STRAIGHT into the payer's chat as an authorize flow (founder
+  // ask 2026-08-25) — no web page needed between two WaPay users.
+  const target = await resolveDirectedRequestTarget({ account, rawText });
+  if (target?.waId) {
+    const delivered = await deliverDirectedRequest({
+      payerWaId: target.waId,
+      request,
+      requesterLabel: who,
+    });
+    // Neutral response either way (no membership-enumeration signal): the
+    // requester always gets the shareable link too.
+    const note = delivered
+      ? `📨 I've let ${target.label} know on WaPay — they can pay you from their balance. ` +
+        `I'll tell you the moment it's paid.\n\nHere's the link too, to share however you like:\n${url}`
+      : `🙏 *Payment request created!*\n\n${introBody}`;
+    await addToConversationHistory(from, 'assistant', note);
+    await sendWhatsAppText({ to: from, text: note });
+    return { ok: true };
+  }
+
   // The FORWARDABLE message must keep the visible link: WhatsApp strips
   // interactive buttons when a message is forwarded, and the forwarded
   // message is the payer's ONLY road to the page. The short domain
-  // (PAYLINK_BASE_URL, e.g. wa-pay.me/PRXXXXXX) keeps it clean and
-  // tappable as plain text.
+  // (pleasepayme.co.za/PRXXXXXX) keeps it clean and tappable as plain text.
   const forwardable =
     `🙏 ${who} is requesting *${randsShort(amountCents)}* on WaPay.\n\n` +
     `Tap to pay — from a WaPay balance (free) or by card:\n${url}`;
   await addToConversationHistory(from, 'assistant', forwardable);
   return await sendWhatsAppText({ to: from, text: forwardable });
+}
+
+/**
+ * "... from 083 555 1234" / "... from Philly" at the tail of a get-paid ask.
+ * A name resolves through the requester's saved beneficiaries; exactly one
+ * match counts. Returns { waId, label } when the target is an ONBOARDED
+ * WaPay account, else null (the link flow covers everyone else).
+ */
+async function resolveDirectedRequestTarget({ account, rawText }) {
+  const m = String(rawText || '').match(
+    /\bfrom\s+(?:my\s+)?(\+?27\d{9}|0\d{9}|0[\d\s-]{8,12}\d|[A-Za-z][A-Za-z'’-]{1,20})\s*$/i
+  );
+  if (!m) return null;
+  const raw = m[1].trim();
+
+  // RELATIONSHIP GATE (abuse review 2026-08-25): a directed in-chat request
+  // can ONLY reach someone the requester has ALREADY saved as a beneficiary
+  // (sent to, or shared as a contact). Arbitrary numbers are never targeted
+  // — that was a phishing + customer-enumeration vector. Everyone else falls
+  // through to the shareable link, which requires the payer's own action.
+  let msisdn = null;
+  if (/\d{4}/.test(raw)) {
+    const digits = normaliseMsisdn(raw);
+    if (!isValidSaMsisdn(digits)) return null;
+    if (!(await isSavedBeneficiary({ accountId: account.id, msisdn: digits }))) return null;
+    msisdn = digits;
+  } else {
+    if (/^(me|my|phone|work|home|bank|card|wallet|app|whatsapp)$/i.test(raw)) return null;
+    const matches = await findBeneficiariesByName({ accountId: account.id, query: raw }).catch(() => []);
+    if (matches.length !== 1) return null;
+    msisdn = normaliseMsisdn(matches[0].msisdn);
+  }
+  if (!msisdn) return null;
+
+  const waId = `27${msisdn.slice(1)}`;
+  try {
+    const payer = await prisma.account.findFirst({ where: { msisdn: { in: [msisdn, waId] } } });
+    if (!payer) return null;
+    const state = await getOnboardingState(payer.id);
+    if (state !== 'S5_COMPLETED') return null;
+    // Label = how the REQUESTER saved them (their own beneficiary name) or a
+    // masked number — never rendered from the payer's own profile.
+    return { waId: payer.waId || waId, label: maskMsisdn(msisdn) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Strip anything that could let a spoofable display name impersonate a
+ * system message: WhatsApp markdown, control chars, newlines; hard length
+ * cap. The requester's WhatsApp profile name is UNTRUSTED (abuse review
+ * 2026-08-25 — "Eskom"/"SARS" display names).
+ */
+function safeRequesterLabel(name) {
+  const cleaned = String(name || '')
+    .replace(/[*_~`>\n\r]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 24);
+  return cleaned || 'A WaPay user';
+}
+
+/**
+ * Notify a saved-beneficiary payer that a request is waiting — INFORMATIONAL
+ * ONLY. It never writes the payer's conversation state (abuse review
+ * 2026-08-25: a cross-user state plant was a TOCTOU + stale-"yes"-pays-a-
+ * stranger risk). The payer opts in by typing "pay request <code>", which
+ * routes through the existing deterministic PAY_REQUEST intercept → confirm
+ * → PIN. So the paying decision is always the payer's own explicit action.
+ */
+async function deliverDirectedRequest({ payerWaId, request, requesterLabel }) {
+  try {
+    const label = safeRequesterLabel(requesterLabel);
+    const text =
+      `🙏 *${label}* is asking you to pay *${randsShort(request.amountCents)}* on WaPay.\n\n` +
+      `If you'd like to pay, reply:\n*pay request ${request.id}*\n\n` +
+      `Paid from your WaPay balance — no fees. Ignore this message if it wasn't expected.`;
+    await addToConversationHistory(payerWaId, 'assistant', text);
+    const sent = await sendWhatsAppText({ to: payerWaId, text });
+    return Boolean(sent?.ok);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -2735,7 +2934,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents });
         return await sendWhatsAppText({
           to: from,
-          text: `📱 *R${amountCents / 100} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`,
+          text: await localizeOutbound(`📱 *R${amountCents / 100} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`, await userLang(account)),
         });
       }
 
@@ -4483,8 +4682,9 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
 
     case 'HELP': {
       const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083..." — or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words — any South African language works!`;
-      await addToConversationHistory(from, 'assistant', helpMsg);
-      return await sendWhatsAppText({ to: from, text: helpMsg });
+      const localizedHelp = await localizeOutbound(helpMsg, await userLang(account));
+      await addToConversationHistory(from, 'assistant', localizedHelp);
+      return await sendWhatsAppText({ to: from, text: localizedHelp });
     }
 
     case 'HOME':

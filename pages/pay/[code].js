@@ -126,7 +126,11 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <div style={styles.logo}>WaPay</div>
+        {/* "Please pay me" hero — the phrase the market responds to (founder
+            2026-08-25). The PRODUCT stays WaPay-branded (naming decision
+            2026-08-22: domain and phrase, never the brand). */}
+        <div style={styles.logo}>🙏 Please pay me</div>
+        <div style={{ ...styles.fine, marginTop: -14, marginBottom: 14 }}>with WaPay</div>
 
         {status === 'PENDING' && returned ? (
           <>
