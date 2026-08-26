@@ -4,6 +4,13 @@
 
 ---
 
+## 28. OTT Payout client: amount hash/wire mismatch + two double-spend paths (caught pre-launch)
+
+- **Symptom (adversarial review 2026-08-26, before any live credential existed):** three defects in the new payout client. (a) **BLOCKER** — the hash was computed over the 2dp string `"50.00"` but the body sent `Number("50.00")` → `50`, so OTT would recompute its hash over `"50"` and **every round-rand withdrawal** would fail with status 2 Invalid Hash. My own test asserted `amount === 50`, i.e. it *locked the bug in* and made a green suite meaningless. (b) a transport failure/timeout **threw**, giving the caller no settlement class — if a caller treated "threw" as failure and released the hold, the customer could respend money OTT had already paid. (c) status `3` (duplicate reference) mapped to RELEASE, but with our deterministic epoch-free reference a duplicate means an **earlier attempt already reached OTT and may have succeeded** — releasing double-spends.
+- **Root cause:** (a) serialising the amount twice, once for the hash and once for the wire, in different types; (b)/(c) treating "no/negative answer" as "nothing happened" — the classic indeterminate-payment fallacy.
+- **Fix:** the wire amount is now the exact hashed 2dp string; transport failures RETURN `{outcome:'TRANSPORT_INDETERMINATE', settlement:'PENDING', reconcileRequired:true}` instead of throwing; status `3` is PENDING+reconcile. The caller contract ("never release on PENDING; after reconcileRequired call getPaymentStatus, never re-issue performPayout") is documented in the module header and `docs/OTT_PAYOUT_API.md`.
+- **Guard:** `tests/ott-payout.test.mjs` asserts the wire amount equals the hashed amount as a STRING across 5 amount shapes incl. round rands, drives a real transport error to prove the PENDING outcome, and pins `3` → reconcile. The two OTT golden vectors remain pinned so the crypto can't drift.
+
 ## 27. Directed-request relationship gate was self-populatable (phishing surface)
 
 - **Symptom (re-review 2026-08-25, pre-deploy):** the rebuilt directed-request gate ("please pay me R50 from <name/number>") required the target to be the requester's saved beneficiary — but a beneficiary is created UNCONDITIONALLY by sharing a WhatsApp contact card (`rememberBeneficiary`, no money, no target consent). So an attacker could save any victim's number via a contact-card share, then push an unsolicited (label-spoofable) "pay request" nudge into that stranger's WaPay chat and read the requester-side response as a membership-enumeration oracle. The CORE harm (cross-user state plant / auto-pay) was already closed; this was the residual delivery+oracle surface.

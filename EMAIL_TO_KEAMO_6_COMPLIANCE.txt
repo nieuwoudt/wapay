@@ -1,0 +1,65 @@
+Subject: Re: Compliance clarification — services, funds flow & website
+
+Hi Keamo
+
+Thank you — happy to clarify for compliance. Their three points below.
+
+1. SERVICES AND ACTIVITIES PROVIDED AND ACCEPTED
+
+WaPay is a South African, WhatsApp-based consumer wallet. In relation to
+the OTT voucher, WaPay:
+
+  - Sells OTT vouchers to its users through the WaPay platform (as an OTT
+    reseller, at face value — any WaPay service fee is itemised separately
+    from the voucher value, never a markup on the voucher).
+
+  - Lets users send or gift vouchers to one another as a store of value —
+    for example, buying a voucher to send to a student or a family member —
+    the same way airtime is gifted.
+
+  - Accepts the voucher as a payment method on the WaPay platform, where the
+    holder redeems its value for airtime, data, prepaid electricity, fuel
+    (through our UniFuel integration on the YoYo application) and other
+    products and services offered on WaPay, including at selected retailers.
+
+  - Recipients can also spend the voucher across OTT's accepting merchant
+    network, under the standard OTT voucher terms.
+
+In short, the voucher is used exactly as OTT defines it: sold, gifted, and
+redeemed as a payment method on accepting platforms — WaPay being one — and
+across OTT's merchant network. It is a goods-and-services voucher on our
+side, not a cash instrument, and is never exchanged for cash.
+
+On the money-in side, customers load their own funds only through PayFast,
+our regulated South African payment provider (card and EFT) — for example,
+to buy a voucher or airtime on WaPay — so deposits ride licensed payment
+rails and WaPay never handles card or bank-account details itself.
+
+On withdrawals, for completeness: where a WaPay user has loaded their own
+funds (by card or EFT) and wishes to move that balance to their South African
+bank account, this is handled through OTT's Payout product (PayShap / RTC),
+under the Payout agreement already in place with you — in other words,
+through a service OTT itself provides. Two points compliance will want to be
+clear on: (a) this is a bank payout of the customer's OWN loaded funds, and
+(b) it is kept entirely separate from the voucher. The OTT voucher is not
+cashable and is never converted into a withdrawable balance; voucher value is
+only ever redeemed for goods and services. So the payout rail and the voucher
+sit in two separate lanes and never cross.
+
+2. CROSS-BORDER MOVEMENT OF FUNDS
+
+None. WaPay operates solely within South Africa: users onboard with South
+African cellphone numbers, every transaction is denominated in Rand, and all
+settlement is to South African bank accounts. There is no cross-border
+movement of funds of any kind.
+
+3. LOCAL WEBSITE ADDRESS
+
+wapay.co.za (the service itself runs through WhatsApp, with payment pages on
+pleasepayme.co.za).
+
+Happy to jump on a quick call if compliance would like to walk through any
+of it.
+
+Thanks
+Niev

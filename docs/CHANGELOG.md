@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-08-26 — OTT Payout API: client + documentation (money-out rail groundwork)
+
+OTT sent the Payout API spec — the last thing blocking the payout BUILD. Shipped the client and
+project docs (customer-facing withdrawals stay counsel-gated; live calls await generated test creds
++ IP allowlisting):
+
+- **`lib/ott-payout.js`** — full client for all 9 endpoints (PerformPayout, GetBalance,
+  GetActiveProviders(+Limits), GetBranchCodes, GetCountryCodes, GetPaymentStatus, ResendSMS,
+  VerifyWH) + inbound webhook verification. HTTP Basic auth + SHA-256 request hash, both proven
+  **byte-identical to OTT's two published golden vectors** (`Aladdin:OpenSesame`→base64,
+  `11`+`123456789012`+apiKey→sha256). Integer-cents money-safety throughout; the OTT-VOUCHER payout
+  PIN and recipient PII are never logged.
+- **`classifyPayoutStatus`** — the money-safe status→settlement map: SETTLE only on 100; 98/99 and
+  any UNKNOWN status stay PENDING (never release a hold we may have paid); explicit failures release.
+- **`docs/OTT_PAYOUT_API.md`** — integration guide with the exact per-endpoint hash orders, the
+  ledger mapping (reserveHold→payout→settle/hold/release, deterministic epoch-free reference), the
+  two sandbox questions the spec leaves open (body encoding JSON-vs-form; amount/empty-optional hash
+  formatting), and the launch gates.
+- **Adversarial review caught three defects before any live call** (BUGLOG #28): the wire amount was serialised as a JS number while the hash used the 2dp string (every round-rand payout would have failed Invalid Hash — and my test had locked the bug in); transport failures threw instead of returning an indeterminate PENDING; status 3 released a hold that may already have been paid. All fixed, with the caller contract documented.
+- `tests/ott-payout.test.mjs` (16 tests) pin the golden vectors, the PerformPayout hash field order,
+  webhook verification, the settlement map, and secret hygiene. Suite 354/354, build green.
+
+Next: generate test credentials in the payout portal → sandbox-verify the two open questions →
+build the withdraw flow (ledger holds + KYC capture) behind the counsel gate → webhook route.
+
 ## 2026-08-25 (4) — Founder live-test batch: localization, flow-escape, safe directed requests
 
 Acting on the founder's real-account test feedback, with a 15-agent adversarial review that
