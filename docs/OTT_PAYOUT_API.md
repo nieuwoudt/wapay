@@ -127,7 +127,6 @@ PerformPayout body from that, don't hardcode.
 | `12` | Max payout / birthdate | 400 | RELEASE / contact OTT |
 | `97` | Failed at provider | 400 | RELEASE |
 | _other_ | unknown | — | **PENDING** (safe default — we may have paid) |
-
 | _transport failure / timeout_ | request may be in flight | — | **PENDING + reconcile** |
 
 `classifyPayoutStatus(status)` returns `{ outcome, settlement, retriable, reconcileRequired? }`
