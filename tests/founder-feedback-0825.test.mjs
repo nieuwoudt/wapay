@@ -236,3 +236,27 @@ test('thaw: a reordered placeholder sequence is rejected (never inverts R5–R30
   assert.match(localizeSource, /if \(seq\.length !== frozen\.length\) return null/);
   assert.match(localizeSource, /if \(seq\[i\] !== i\) return null/, 'exact order enforced');
 });
+
+// ---------------------------------------------------------------------------
+// Softer payment-request fee rounding (founder feedback 2026-08-26)
+// ---------------------------------------------------------------------------
+
+test('paymentRequestFeeCents: rounds up to 10c, always ≤ the whole-rand deposit fee, never below PayFast cost', async () => {
+  const { paymentRequestFeeCents, depositFeeCents } = await import('../lib/deposits.js');
+  const pfCostInclVat = (c) => Math.round((0.032 * c + 200) * 1.15); // confirmed from a real ITN
+  for (let cents = 500; cents <= 300000; cents += 100) {
+    const fee = paymentRequestFeeCents(cents);
+    assert.equal(fee % 10, 0, `fee must be a multiple of 10c at ${cents}`);
+    assert.ok(fee <= depositFeeCents(cents), `request fee must never exceed the whole-rand fee at ${cents}`);
+    assert.ok(fee - pfCostInclVat(cents) >= 0, `must still cover PayFast cost at ${cents}`);
+  }
+  // The headline case: R50 request is no longer an ugly flat 10%.
+  assert.equal(paymentRequestFeeCents(5000), 440); // R4.40, was R5.00
+});
+
+test('the payment-request card sites use the softer fee, deposits keep whole-rand', () => {
+  const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+  assert.match(read('../pages/api/pay/checkout.js'), /paymentRequestFeeCents\(amountCents\)/);
+  assert.match(read('../pages/pay/[code].js'), /paymentRequestFeeCents\(request\.amountCents\)/);
+  assert.match(read('../lib/deposits.js'), /const feeCents = depositFeeCents\(amountCents\);/, 'deposits still whole-rand');
+});

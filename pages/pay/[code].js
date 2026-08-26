@@ -22,7 +22,7 @@
  */
 
 import { getPaymentRequest, maskedRequesterLabel } from '../../lib/payment-requests.js';
-import { depositFeeCents } from '../../lib/deposits.js';
+import { paymentRequestFeeCents } from '../../lib/deposits.js';
 import prisma from '../../lib/prisma.js';
 
 const WA_NUMBER = '27760497624';
@@ -51,7 +51,7 @@ export async function getServerSideProps({ params, query }) {
       code,
       status: request.status,
       amountCents: request.amountCents,
-      feeCents: depositFeeCents(request.amountCents),
+      feeCents: paymentRequestFeeCents(request.amountCents),
       note: request.note ?? null,
       requesterLabel,
       // Back from PayFast's return URL: the ITN may still be in flight.

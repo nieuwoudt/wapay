@@ -23,7 +23,7 @@ import { buildCheckoutUrl } from '@wapay/providers-payfast';
 
 import prisma from '../../../lib/prisma.js';
 import { getPaymentRequest } from '../../../lib/payment-requests.js';
-import { depositFeeCents } from '../../../lib/deposits.js';
+import { paymentRequestFeeCents } from '../../../lib/deposits.js';
 import { normaliseMsisdn, isValidSaMsisdn } from '../../../lib/msisdn.js';
 
 export default async function handler(req, res) {
@@ -62,7 +62,7 @@ export default async function handler(req, res) {
   // the request amount — the card fee is deducted from what the REQUESTER
   // receives. Whoever sends the link carries the cost.
   const amountCents = request.amountCents;
-  const feeCents = depositFeeCents(amountCents);
+  const feeCents = paymentRequestFeeCents(amountCents);
   const creditCents = amountCents - feeCents;
 
   // ONE intent per request code, and ONE idemKey shared with the balance

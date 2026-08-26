@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-08-26 (2) — Softer payment-request card fee (founder feedback)
+
+The card fee deducted from the person GETTING PAID was rounded up to a whole rand,
+landing R50 requests on an ugly flat 10% (R5.00) — most of which was PayFast, not us.
+New `paymentRequestFeeCents` rounds up to the nearest **10 cents** instead (deposits keep
+whole-rand — the depositor chooses the amount and a clean number reads better). Confirmed
+against a real PayFast ITN (R3.18 on R24.00 = 3.2%+R2 excl VAT): every amount R5–R3000
+stays margin-positive and never costs the requester MORE than before. R50 fee: R5.00 →
+R4.40. WaPay-to-WaPay balance pay remains **free** (buildSend spend→spend, already in
+code). Fee still quoted transparently at request creation. `tests/founder-feedback-0825`
+pins the ≤-whole-rand and ≥-PayFast-cost invariants across the range. 354/354, build green.
+
 ## 2026-08-26 — OTT Payout API: client + documentation (money-out rail groundwork)
 
 OTT sent the Payout API spec — the last thing blocking the payout BUILD. Shipped the client and

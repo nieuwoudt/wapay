@@ -43,6 +43,7 @@ import { postEntry, ensureWallet } from '../../../lib/ledger-post.js';
 import { buildCheckoutUrl } from '@wapay/providers-payfast';
 import {
   depositFeeCents,
+  paymentRequestFeeCents,
   createDepositIntent,
   getLatestDepositIntent,
   matchDepositStatusRequest,
@@ -2005,7 +2006,7 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
 
   logStructured('payrequest_created', { from, accountId: account.id, code: request.id, amountCents });
 
-  const cardFeeCents = depositFeeCents(amountCents);
+  const cardFeeCents = paymentRequestFeeCents(amountCents);
   const introBody =
     `Forward the next message to whoever owes you — I'll tell you the moment it's paid.\n\n` +
     `You'll receive the full ${randsShort(amountCents)} if they pay from a WaPay balance, ` +
