@@ -21,6 +21,8 @@
  * No customer PII beyond a masked requester name/number is ever rendered.
  */
 
+import Head from 'next/head';
+
 import { getPaymentRequest, maskedRequesterLabel } from '../../lib/payment-requests.js';
 import { paymentRequestFeeCents } from '../../lib/deposits.js';
 import prisma from '../../lib/prisma.js';
@@ -80,7 +82,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
       width: '100%',
       textAlign: 'center',
     },
-    logo: { color: '#1d7a3f', fontSize: 28, fontWeight: 800, marginBottom: 20 },
+    logo: { color: '#1d7a3f', fontSize: 15, fontWeight: 500, marginBottom: 16 },
     amount: { fontSize: 44, fontWeight: 800, color: '#111', margin: '8px 0' },
     sub: { color: '#555', fontSize: 15, marginBottom: 4 },
     note: { color: '#333', fontStyle: 'italic', margin: '12px 0' },
@@ -123,14 +125,28 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
   const waLink = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(`Pay request ${code}`)}`;
   const receiptLink = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(`Receipt ${code}`)}`;
 
+  const ogTitle = status === 'PENDING'
+    ? `Please pay ${requesterLabel} · ${rands(amountCents)}`
+    : `Please Pay Me™ with WaPay`;
+
   return (
     <div style={styles.page}>
+      <Head>
+        <title>{ogTitle}</title>
+        <meta property="og:title" content={ogTitle} />
+        <meta
+          property="og:description"
+          content="Tap to pay on WaPay. Free from a WaPay balance, or pay securely by card."
+        />
+        <meta property="og:site_name" content="Please Pay Me™ with WaPay" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary" />
+      </Head>
       <div style={styles.card}>
         {/* "Please pay me" hero — the phrase the market responds to (founder
             2026-08-25). The PRODUCT stays WaPay-branded (naming decision
             2026-08-22: domain and phrase, never the brand). */}
-        <div style={styles.logo}>🙏 Please Pay Me™</div>
-        <div style={{ ...styles.fine, marginTop: -14, marginBottom: 14 }}>with WaPay</div>
+        <div style={styles.logo}>🙏 Please Pay Me™ with WaPay</div>
 
         {status === 'PENDING' && returned ? (
           <>
@@ -153,12 +169,18 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
             {note ? <div style={styles.note}>“{note}”</div> : null}
 
             <a style={{ ...styles.btn, ...styles.primary }} href={waLink}>
-              Pay from my WaPay (free)
+              Pay from my WaPay account (free)
             </a>
 
-            {/* POST: the number must never ride a query string into logs. */}
+            {/* POST: the number must never ride a query string into logs.
+                Both payment options sit adjacent (founder 2026-08-27); the
+                required number field follows the card button, and the
+                browser walks the payer to it on submit. */}
             <form method="POST" action="/api/pay/checkout">
               <input type="hidden" name="code" value={code} />
+              <button type="submit" style={{ ...styles.btn, ...styles.secondary }}>
+                Pay {rands(amountCents)} by card / EFT
+              </button>
               <label style={styles.label} htmlFor="payer">
                 Your WhatsApp number, for your receipt
               </label>
@@ -174,9 +196,6 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
                 pattern="[0-9+ ]{10,15}"
                 title="South African cellphone number, e.g. 0731234567"
               />
-              <button type="submit" style={{ ...styles.btn, ...styles.secondary }}>
-                Pay {rands(amountCents)} by card / EFT
-              </button>
             </form>
 
             <div style={styles.fine}>

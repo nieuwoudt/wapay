@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-08-27 (7) — Pay-page quiet hero + adjacent pay options + rich link previews
+
+Founder screenshot feedback, round two:
+
+- **Hero calmed down**: "Please Pay Me™ with WaPay" is now one small normal-weight line
+  (15px/500, was 28px/800) — the amount is the loudest thing on the page again.
+- **Both payment options sit adjacent**: balance button (renamed "Pay from my WaPay account
+  (free)") directly above the card button; the required WhatsApp-number field moved below the
+  card button inside the form — the browser walks the payer to it on submit, so capture is
+  unchanged.
+- **Forwardable message reads "🙏 Pay Niev now · R100 on WaPay"** instead of leading with the
+  raw URL. The URL itself must stay (WhatsApp strips CTA buttons from forwarded messages and
+  has no text-anchored hyperlinks — a forwarded message's only tappable path IS the URL), but
+  the page now ships **OG meta tags**, so a shared link renders a rich preview card
+  ("Please pay Niev · R100") that acts as the visual button above the URL.
+- Localization marker for the forwardable surface updated in tests/localize-coverage.test.mjs
+  (coordination note from the parallel session applied as instructed).
+
+366/366, build green. Commit via the session holding iCloud access (TCC still blocks this one).
+
 ## 2026-08-27 (6) — Em dashes out of chat copy (founder style rule, chat sweep)
 
 Completes the sweep the pay-page batch started: all ~55 em dashes in customer-facing chat

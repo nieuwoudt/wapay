@@ -288,7 +288,7 @@ test('static: the public page exists and offers both legs', () => {
   const pagePath = fileURLToPath(new URL('../pages/pay/[code].js', import.meta.url));
   assert.ok(existsSync(pagePath));
   const page = readFileSync(pagePath, 'utf8');
-  assert.match(page, /Pay from my WaPay \(free\)/);
+  assert.match(page, /Pay from my WaPay account \(free\)/);
   // The card leg became a payer-number form (auto-registration,
   // 2026-08-22) — same endpoint, GET form instead of a bare link.
   assert.match(page, /action="\/api\/pay\/checkout"/);

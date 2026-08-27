@@ -2127,8 +2127,8 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
   // message is the payer's ONLY road to the page. The short domain
   // (pleasepayme.co.za/PRXXXXXX) keeps it clean and tappable as plain text.
   const forwardable = await localizeOutbound(
-    `🙏 ${who} is requesting *${randsShort(amountCents)}* on WaPay.\n\n` +
-    `Tap to pay, from a WaPay balance (free) or by card:\n${url}`,
+    `🙏 *Pay ${who} now* · ${randsShort(amountCents)} on WaPay\n\n` +
+    `Tap the link to pay. Free from a WaPay balance, or pay by card:\n${url}`,
     await userLang(account)
   );
   await addToConversationHistory(from, 'assistant', forwardable);

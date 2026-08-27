@@ -42,7 +42,7 @@ test('key money surfaces are localized', () => {
     'Confirm Electricity', // electricity confirm preview
     'Confirm OTT Voucher', // voucher self-purchase confirm
     'Voucher Redeemed Successfully', // Blu redemption receipt
-    'is requesting *', // the forwardable pay-request message
+    'Tap the link to pay', // the forwardable pay-request message (copy rewritten 2026-08-27: Pay-name-now style)
   ];
   for (const marker of surfaces) {
     const idx = src.indexOf(marker);
