@@ -44,6 +44,7 @@ import { buildCheckoutUrl } from '@wapay/providers-payfast';
 import {
   depositFeeCents,
   paymentRequestFeeCents,
+  grossedUpRequestCents,
   createDepositIntent,
   getLatestDepositIntent,
   matchDepositStatusRequest,
@@ -2006,11 +2007,28 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
 
   logStructured('payrequest_created', { from, accountId: account.id, code: request.id, amountCents });
 
+  // COMPOSE-TIME QUOTE (founder feedback 2026-08-27). The requester typed the
+  // amount, so it is their anchor — landing under it later reads as a loss.
+  // Tell them what they NET before the link goes out, and offer the ask that
+  // nets exactly what they wanted. They choose the displayed price; the PAYER
+  // always pays exactly what is displayed (never a card surcharge — that is
+  // prohibited in SA: PayFast T&Cs cl. 5.3, SARB/PASA, Visa/Mastercard).
   const cardFeeCents = paymentRequestFeeCents(amountCents);
-  const introBody =
-    `Forward the next message to whoever owes you — I'll tell you the moment it's paid.\n\n` +
-    `You'll receive the full ${randsShort(amountCents)} if they pay from a WaPay balance, ` +
-    `or ${randsShort(amountCents - cardFeeCents)} if they pay by card (${randsShort(cardFeeCents)} card fee — they pay no fees).`;
+  let introBody;
+  if (cardFeeCents === 0) {
+    introBody =
+      `Forward the next message to whoever owes you — I'll tell you the moment it's paid.\n\n` +
+      `You'll receive the full *${randsShort(amountCents)}* — however they pay. No fees on this one. 🎉`;
+  } else {
+    const askInstead = grossedUpRequestCents(amountCents);
+    introBody =
+      `Forward the next message to whoever owes you — I'll tell you the moment it's paid.\n\n` +
+      `You'll get the full *${randsShort(amountCents)}* if they pay from their WaPay — free.\n` +
+      `If they pay by card, a ${randsShort(cardFeeCents)} card cost comes off, so you'd get ` +
+      `${randsShort(amountCents - cardFeeCents)}.\n\n` +
+      `Want the full ${randsShort(amountCents)} either way? Reply ` +
+      `*"make it ${randsShort(askInstead)}"* and I'll swap in a new link for that.`;
+  }
   await addToConversationHistory(from, 'assistant', introBody);
 
   // The requester's own copy shows a BUTTON, not a raw URL (founder ask

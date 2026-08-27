@@ -241,17 +241,43 @@ test('thaw: a reordered placeholder sequence is rejected (never inverts R5–R30
 // Softer payment-request fee rounding (founder feedback 2026-08-26)
 // ---------------------------------------------------------------------------
 
-test('paymentRequestFeeCents: rounds up to 10c, always ≤ the whole-rand deposit fee, never below PayFast cost', async () => {
-  const { paymentRequestFeeCents, depositFeeCents } = await import('../lib/deposits.js');
+test('paymentRequestFeeCents: free below the threshold, margin-positive above it, NET always monotonic', async () => {
+  const { paymentRequestFeeCents, grossedUpRequestCents, PAYREQ_FREE_BELOW_CENTS } = await import('../lib/deposits.js');
   const pfCostInclVat = (c) => Math.round((0.032 * c + 200) * 1.15); // confirmed from a real ITN
-  for (let cents = 500; cents <= 300000; cents += 100) {
-    const fee = paymentRequestFeeCents(cents);
-    assert.equal(fee % 10, 0, `fee must be a multiple of 10c at ${cents}`);
-    assert.ok(fee <= depositFeeCents(cents), `request fee must never exceed the whole-rand fee at ${cents}`);
-    assert.ok(fee - pfCostInclVat(cents) >= 0, `must still cover PayFast cost at ${cents}`);
+
+  // 1. Small amounts are FREE — a deliberate, bounded subsidy. PayFast's
+  //    fixed R2.30 floor makes any margin-positive fee on R20 exceed 15%.
+  assert.equal(paymentRequestFeeCents(2000), 0);
+  assert.equal(paymentRequestFeeCents(PAYREQ_FREE_BELOW_CENTS - 100), 0);
+
+  // 2. The subsidy is BOUNDED — it can never exceed the PayFast cost at the
+  //    threshold, so the worst case per absorbed payment is knowable.
+  const worstSubsidy = pfCostInclVat(PAYREQ_FREE_BELOW_CENTS - 100);
+  assert.ok(worstSubsidy < 500, `subsidy per absorbed payment must stay under R5, got ${worstSubsidy}`);
+
+  // 3. NET IS MONOTONIC — asking for more must never pay you less. (Without
+  //    the taper, R49 netted R49 while R50 netted R45.60.)
+  let prevNet = -1;
+  for (let cents = 100; cents <= 300000; cents += 100) {
+    const net = cents - paymentRequestFeeCents(cents);
+    assert.ok(net >= prevNet, `net went DOWN at ${cents}c: ${net} < ${prevNet}`);
+    prevNet = net;
   }
-  // The headline case: R50 request is no longer an ugly flat 10%.
-  assert.equal(paymentRequestFeeCents(5000), 440); // R4.40, was R5.00
+
+  // 4. Above the taper zone we are margin-positive on every amount.
+  for (let cents = 10000; cents <= 300000; cents += 100) {
+    assert.ok(
+      paymentRequestFeeCents(cents) - pfCostInclVat(cents) > 0,
+      `must cover PayFast cost at ${cents}c`
+    );
+  }
+
+  // 5. Gross-up: whole rands, and always nets AT LEAST what was wanted.
+  for (const want of [5000, 10000, 15000, 30000, 100000]) {
+    const ask = grossedUpRequestCents(want);
+    assert.equal(ask % 100, 0, 'the suggested ask must be a whole rand (people type whole rands)');
+    assert.ok(ask - paymentRequestFeeCents(ask) >= want, `ask ${ask} must net >= ${want}`);
+  }
 });
 
 test('the payment-request card sites use the softer fee, deposits keep whole-rand', () => {

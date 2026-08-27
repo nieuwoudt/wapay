@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-08-27 — Small requests are FREE + compose-time quoting (fee incidence resolved)
+
+The founder asked whether the pay-link fee should move to the PAYER ("if I ask for R20 I should
+get R20"). Researched: **it cannot** — charging the payer more for card is a surcharge, prohibited
+by **PayFast's own merchant T&Cs cl. 5.3** ("same price regardless of whether the payment is by
+Card or cash"), SARB/PASA, and Visa/Mastercard scheme rules (SA is not on the permitted list; no
+"convenience fee" carve-out). Breach lets PayFast terminate our only card rail. Receiver-pays is
+the only compliant model — and the SA category norm. Recorded in the `no-card-surcharging-sa`
+memory; flagged for the NPS counsel brief.
+
+The instinct was right about the *problem* though (the requester's own typed amount is their
+anchor; landing under it reads as a loss), so both halves are fixed without touching the payer:
+
+- **Requests under R50 are FREE** — a deliberate, bounded subsidy. PayFast's fixed R2.30 floor
+  makes ANY margin-positive fee on R20 exceed 15%, and a flat fee is *worse* at the bottom than
+  the percentage — so the only real fix is to absorb it. Costs ~R2.50–R4.10 per absorbed payment
+  and buys a card payer whose number we capture: a lead at roughly a tenth of the R35–R60 CAC of
+  a Meta ad. Tunable via `WAPAY_PAYREQ_FREE_BELOW_CENTS` (0 disables).
+- **Taper across the threshold** — without it the schedule was non-monotonic (ask R49 → net R49;
+  ask R50 → net R45.60, i.e. *asking for more paid you less*). The fee is now capped so NET is
+  strictly non-decreasing across R1–R3000, asserted exhaustively.
+- **Compose-time quote** — the creation message now states what you'll NET before the link goes
+  out, and offers the whole-rand ask that nets exactly what you wanted ("make it R55"), which
+  routes through the existing, tested amount-change swap. The requester picks the displayed
+  price; the payer always pays exactly what is displayed.
+
+356/356, build green.
+
 ## 2026-08-26 (2) — Softer payment-request card fee (founder feedback)
 
 The card fee deducted from the person GETTING PAID was rounded up to a whole rand,
