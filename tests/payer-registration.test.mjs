@@ -58,7 +58,7 @@ test('maskedRequesterLabel: name wins, msisdn masks, junk falls back', () => {
 // ---------------------------------------------------------------------------
 
 test('pay page: card leg is a POST form that requires the payer number', () => {
-  assert.match(payPageSource, /<form method="POST" action="\/api\/pay\/checkout">/);
+  assert.match(payPageSource, /<form[\s\S]{0,120}method="POST"[\s\S]{0,120}action="\/api\/pay\/checkout"/);
   assert.ok(!/method="GET" action="\/api\/pay\/checkout"/.test(payPageSource), 'GET would put the number in the URL');
   assert.match(payPageSource, /name="payer"/);
   assert.match(payPageSource, /type="tel"/);

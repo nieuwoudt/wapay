@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-08-27 (10) — Pay page round 4: big hero restored, card button state-aware (founder screenshots)
+
+`pages/pay/[code].js`; guards in the new `tests/pay-page-round4.test.mjs`
+(378/378 green, build green, both interactions verified live in a browser
+against the founder's real PENDING R20 request).
+
+- **Hero back to the pre-round-2 design** — the quiet one-liner was a misread
+  of round 2. "🙏 Please Pay Me" is 28px/800 green again with the small
+  "with WaPay" line under it (exactly 325587b's hero); the ONLY change kept
+  from round 2's intent is the ™, now its own 13px/400 superscript span.
+- **Card/EFT button is state-aware**: pale until a plausible number
+  (`[0-9+ ]{10,15}`) is typed, then solid brand green with a soft shadow —
+  the "cool, you can pay now via card" signal. Tapping it WITHOUT a number
+  pops an amber nudge ("📱 Enter your WhatsApp number first."), blocks the
+  submit, and focuses the field; the nudge hides itself the moment the
+  number is in.
+- The form is `noValidate` (our popup replaces the browser's), and the
+  submit gate reads the DOM value rather than React state, so iOS autofill
+  that skips onChange can never block a visibly-filled field. A no-JS post
+  still goes through untouched — checkout stays lenient on the number by
+  design (payment always outranks the growth hook).
+- `tests/payer-registration.test.mjs`: the form-tag assertion now matches
+  the multi-line form while still pinning POST-not-GET.
+
 ## 2026-08-27 (9) — Mid-flow intent switch: detect, acknowledge, re-route (founder live test, BUGLOG #29)
 
 All in `pages/api/webhooks/message-processor-v2.js`; guards in the new

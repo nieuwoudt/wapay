@@ -22,12 +22,16 @@
  */
 
 import Head from 'next/head';
+import { useRef, useState } from 'react';
 
 import { getPaymentRequest, maskedRequesterLabel } from '../../lib/payment-requests.js';
 import { paymentRequestFeeCents } from '../../lib/deposits.js';
 import prisma from '../../lib/prisma.js';
 
 const WA_NUMBER = '27760497624';
+
+// Same shape the payer input's pattern attribute declares.
+const PAYER_NUMBER_SHAPE = /^[0-9+ ]{10,15}$/;
 
 function rands(cents) {
   return `R${(cents / 100).toFixed(2).replace(/\.00$/, '')}`;
@@ -63,6 +67,15 @@ export async function getServerSideProps({ params, query }) {
 }
 
 export default function PayRequestPage({ code, status, amountCents, feeCents, note, requesterLabel, returned }) {
+  // Card button lights up the moment a plausible number is typed, and a tap
+  // WITHOUT one answers with our own popup instead of a silent browser
+  // bounce (founder feedback 2026-08-27). Same shape the input's pattern
+  // attribute declares; the checkout API stays lenient regardless.
+  const [payerNumber, setPayerNumber] = useState('');
+  const [numberNudge, setNumberNudge] = useState(false);
+  const payerInputRef = useRef(null);
+  const numberLooksOk = PAYER_NUMBER_SHAPE.test(payerNumber.trim());
+
   const styles = {
     page: {
       minHeight: '100vh',
@@ -82,7 +95,8 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
       width: '100%',
       textAlign: 'center',
     },
-    logo: { color: '#1d7a3f', fontSize: 15, fontWeight: 500, marginBottom: 16 },
+    logo: { color: '#1d7a3f', fontSize: 28, fontWeight: 800, marginBottom: 20 },
+    tm: { fontSize: 13, fontWeight: 400, verticalAlign: 'super' },
     amount: { fontSize: 44, fontWeight: 800, color: '#111', margin: '8px 0' },
     sub: { color: '#555', fontSize: 15, marginBottom: 4 },
     note: { color: '#333', fontStyle: 'italic', margin: '12px 0' },
@@ -101,6 +115,23 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
     },
     primary: { background: '#1d7a3f', color: '#fff' },
     secondary: { background: '#eef3ef', color: '#1d7a3f', border: '1px solid #cfe3d6' },
+    cardReady: {
+      background: '#1d7a3f',
+      color: '#fff',
+      border: '1px solid #1d7a3f',
+      boxShadow: '0 3px 12px rgba(29,122,63,0.35)',
+    },
+    nudge: {
+      background: '#fff4e5',
+      border: '1px solid #f0c36d',
+      color: '#8a5a00',
+      borderRadius: 10,
+      padding: '10px 12px',
+      fontSize: 14,
+      fontWeight: 600,
+      marginTop: 10,
+      textAlign: 'left',
+    },
     fine: { color: '#888', fontSize: 12, marginTop: 16 },
     done: { fontSize: 40, margin: '10px 0' },
     label: {
@@ -146,7 +177,11 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
         {/* "Please pay me" hero — the phrase the market responds to (founder
             2026-08-25). The PRODUCT stays WaPay-branded (naming decision
             2026-08-22: domain and phrase, never the brand). */}
-        <div style={styles.logo}>🙏 Please Pay Me™ with WaPay</div>
+        <div style={styles.logo}>
+          🙏 Please Pay Me
+          <span style={styles.tm}>™</span>
+        </div>
+        <div style={{ ...styles.fine, marginTop: -14, marginBottom: 14 }}>with WaPay</div>
 
         {status === 'PENDING' && returned ? (
           <>
@@ -176,15 +211,37 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
                 Both payment options sit adjacent (founder 2026-08-27); the
                 required number field follows the card button, and the
                 browser walks the payer to it on submit. */}
-            <form method="POST" action="/api/pay/checkout">
+            <form
+              method="POST"
+              action="/api/pay/checkout"
+              noValidate
+              onSubmit={(e) => {
+                // Autofill can set the field without firing onChange (iOS
+                // Safari) — the gate trusts the DOM value at submit time,
+                // never the mirrored state.
+                const domValue = String(payerInputRef.current?.value ?? payerNumber);
+                if (!PAYER_NUMBER_SHAPE.test(domValue.trim())) {
+                  e.preventDefault();
+                  setNumberNudge(true);
+                  payerInputRef.current?.focus();
+                }
+              }}
+            >
               <input type="hidden" name="code" value={code} />
-              <button type="submit" style={{ ...styles.btn, ...styles.secondary }}>
+              <button
+                type="submit"
+                style={{ ...styles.btn, ...(numberLooksOk ? styles.cardReady : styles.secondary) }}
+              >
                 Pay {rands(amountCents)} by card / EFT
               </button>
+              {numberNudge && !numberLooksOk ? (
+                <div style={styles.nudge}>📱 Enter your WhatsApp number first.</div>
+              ) : null}
               <label style={styles.label} htmlFor="payer">
                 Your WhatsApp number, for your receipt
               </label>
               <input
+                ref={payerInputRef}
                 style={styles.input}
                 id="payer"
                 name="payer"
@@ -192,6 +249,8 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
                 inputMode="tel"
                 autoComplete="tel"
                 placeholder="073 123 4567"
+                value={payerNumber}
+                onChange={(e) => setPayerNumber(e.target.value)}
                 required
                 pattern="[0-9+ ]{10,15}"
                 title="South African cellphone number, e.g. 0731234567"
