@@ -44,3 +44,45 @@ test('mergeConversationData: keeps sentErrorKeys when state unchanged', () => {
 });
 
 
+
+test('mergeConversationData: HISTORY survives every state transition (BUGLOG #30)', () => {
+  const history = [
+    { role: 'user', text: 'my name is Thabo', timestamp: 't1' },
+    { role: 'assistant', text: 'Nice to meet you Thabo', timestamp: 't2' },
+  ];
+  // entering a flow
+  const enter = mergeConversationData({
+    prevState: null,
+    prevData: { history, processedMessageIds: ['m1'] },
+    nextState: 'ELECTRICITY_AMOUNT',
+    nextData: { amountCents: 5000 },
+  });
+  assert.deepEqual(enter.history, history, 'starting a flow must not drop history');
+  assert.equal(enter.amountCents, 5000);
+  // leaving a flow (state cleared)
+  const leave = mergeConversationData({
+    prevState: 'ELECTRICITY_AMOUNT',
+    prevData: { history, amountCents: 5000 },
+    nextState: null,
+    nextData: null,
+  });
+  assert.deepEqual(leave.history, history, 'ending a flow must not drop history');
+  assert.equal(leave.amountCents, undefined, 'state slots still reset');
+  // an explicit next.history always wins
+  const explicit = mergeConversationData({
+    prevState: 'A',
+    prevData: { history },
+    nextState: 'B',
+    nextData: { history: [{ role: 'user', text: 'newer', timestamp: 't3' }] },
+  });
+  assert.equal(explicit.history.length, 1);
+  assert.equal(explicit.history[0].text, 'newer');
+  // junk prev.history is ignored, not resurrected
+  const junk = mergeConversationData({
+    prevState: 'A',
+    prevData: { history: 'not-an-array' },
+    nextState: 'B',
+    nextData: {},
+  });
+  assert.equal(junk.history, undefined);
+});

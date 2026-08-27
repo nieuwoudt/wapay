@@ -4,6 +4,20 @@
 
 ---
 
+## 31. Every "what ..." question answered with the products menu
+
+- **Symptom (chat QA harness, first run 2026-08-27):** "What did I tell you my name was?" and "What is my favourite colour?" both got the 🛒 VAS products menu. The third product-query indicator was `/\b(show|list|what|which)\s+(me\s+)?(your\s+)?(the\s+)?/i` — every group after the first word optional, so ANY sentence containing "what " (or which/show/list) read as a product ask at 0.8 confidence and never reached the AI.
+- **Root cause:** an intent indicator with no required object — it encoded "starts like a browse ask" instead of "asks about something buyable".
+- **Fix:** the indicator now requires a commerce noun within 40 chars: `(airtime|data|bundles?|electricity|vouchers?|products?|deals?|prices?|buy|sell|top up)`. "what can I buy" and "show me Vodacom bundles" still route to products; personal and general questions fall through to the AI (which, with #30 fixed, actually remembers).
+- **Guard:** `tests/chat-qa-findings.test.mjs` extracts the REAL indicator array and drives 5 personal questions (must not match) and 7 commerce asks (must match); a second test pins that the bare pattern never returns. The conversational proof lives in `pnpm qa:chat` (memory scenarios).
+
+## 30. Conversation history amnesia on every flow transition
+
+- **Symptom (spotted in code review while building the chat QA harness, confirmed live by its first run 2026-08-27):** tell the bot "my favourite colour is green", start ANY flow ("buy electricity"), cancel it, ask "what is my favourite colour?" — the AI had no idea. `mergeConversationData` rebuilds `conversationData` from `{}` whenever the conversation state changes and re-attached only `processedMessageIds` and `sentErrorKeys` — `history` (the AI's 10-message context window) silently died on every flow entry, exit, and step.
+- **Root cause:** history is cross-cutting like the idempotency keys, but the merge treated it as a state slot.
+- **Fix:** `lib/conversation-data.js` now carries `history` across state transitions (an explicit `nextData.history` still wins; junk non-array values are dropped, not resurrected).
+- **Guard:** `tests/conversation-data.test.mjs` pins history through flow entry, flow exit, explicit override, and junk input; `pnpm qa:chat` scenario "a flow in between does not amnesia the AI" proves it against the live brain and DB.
+
 ## 29. "Payment link" ask was invisible to intent detection — meter state ate it
 
 - **Symptom (founder live test 2026-08-27):** mid-electricity-flow (waiting for a meter number), the founder typed "Please create a payment link for R20" and got "❌ That doesn't look like a valid meter number." The universal intent-switch escape (BUGLOG-era fix, founder feedback 2026-08-25) WAS wired globally, but it saw no intent: `matchRequestMoneyAsk` knew "pay me / get paid / payment request / request money" and not the **payment LINK** phrasing customers actually use. With no strong intent detected, the meter state's validator answered — and ELECTRICITY_METER (unlike the request/deposit/voucher states) had no conversational-sentence backstop either. Founder had flagged flow-trapping before; this was the residual phrasing gap.

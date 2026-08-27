@@ -90,7 +90,10 @@ function sanitizeUserText(text) {
   const trimmed = text.trim();
   if (!trimmed) return null;
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) return null;
-  return text;
+  // Model-authored replies must obey the same copy rules as our canned
+  // text: no em/en dashes in anything a customer reads (founder decree
+  // 2026-08-25; chat QA caught the model emitting them, 2026-08-27).
+  return text.replace(/\s*[\u2014\u2013]\s*/g, ', ');
 }
 
 function missingFromSlots(slots, requiredKeys = []) {
@@ -1798,7 +1801,11 @@ function detectExplicitIntent(text = '') {
   const productQueryIndicators = [
     /\b(can\s+i|do\s+you|where\s+can\s+i|how\s+do\s+i)\s+(buy|get|purchase|pay|top\s*up)/i,
     /\b(buy|get|purchase|pay|top\s*up)\s+/i,
-    /\b(show|list|what|which)\s+(me\s+)?(your\s+)?(the\s+)?/i,
+    // Requires a commerce noun: the old bare /\b(show|list|what|which)\s+/
+    // matched EVERY "what ..." sentence, so "What did I tell you my name
+    // was?" answered with the products menu (chat QA harness 2026-08-27,
+    // BUGLOG #31). Personal/general questions now fall through to the AI.
+    /\b(show|list|what|which)\b[^\n]{0,40}\b(airtime|data|bundles?|electricity|vouchers?|products?|deals?|prices?|buy|sell|top\s*up)\b/i,
   ];
   
   const looksLikeProductQuery = productQueryIndicators.some(p => p.test(squashed));

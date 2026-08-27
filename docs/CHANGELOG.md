@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-08-27 (11) — Conversational QA harness + the three bugs its first run caught
+
+New end-to-end "bug reporter" (founder ask 2026-08-27): `pnpm qa:chat` drives
+the REAL `processMessage` — live DB, live OpenAI orchestrator + localizer —
+with the outbound WhatsApp transport mock-captured (`mock.module`, covers
+every importer incl. `@wapay/auth`), against a run-scoped QA account
+(`27600000901`, seeded at S5 with a ZERO-cent wallet, torn down in a
+`finally`, links cancelled; no PIN is ever sent, no purchase completes, no
+real message can leak). Report per run: `docs/testing/chat-qa-report-<date>.md`.
+
+- `tests/e2e/chat-harness.mjs` (capture + session + seed/teardown),
+  `tests/e2e/chat-qa.mjs` (6 scenarios: the founder's meter-state repro,
+  electricity→airtime→home→get-paid fluidity, messageId dedupe, AI recall,
+  recall ACROSS flows, isiZulu switch + live-localized balance + Afrikaans
+  inbound), `package.json` script `qa:chat`.
+- **BUGLOG #30 fixed**: `mergeConversationData` dropped `history` on every
+  state change — the AI amnesia'd whenever a flow started or ended. History
+  now rides across transitions like the idempotency keys.
+- **BUGLOG #31 fixed**: the bare `what|which|show|list` product-query
+  indicator hijacked every question into the products menu; it now requires
+  a commerce noun.
+- **Em-dash leaks closed**: all 11 `LANGUAGE_CONFIRMATIONS` de-dashed, and
+  `sanitizeUserText` now normalizes em/en dashes out of MODEL-authored
+  replies (the copy rule applies to the AI too).
+- First harness run: 2 pass / 4 fail → fixes → second run **6/6 pass**
+  (recall works across flows; Zulu localization live-verified with money
+  figures frozen). Unit suite 383/383, build green.
+
 ## 2026-08-27 (10) — Pay page round 4: big hero restored, card button state-aware (founder screenshots)
 
 `pages/pay/[code].js`; guards in the new `tests/pay-page-round4.test.mjs`
