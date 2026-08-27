@@ -286,3 +286,33 @@ test('the payment-request card sites use the softer fee, deposits keep whole-ran
   assert.match(read('../pages/pay/[code].js'), /paymentRequestFeeCents\(request\.amountCents\)/);
   assert.match(read('../lib/deposits.js'), /const feeCents = depositFeeCents\(amountCents\);/, 'deposits still whole-rand');
 });
+
+// ---------------------------------------------------------------------------
+// Confirm-before-create (founder 2026-08-27): one link, ever
+// ---------------------------------------------------------------------------
+
+test('request flow: a fee-bearing request is NEVER created before the requester picks an amount', () => {
+  const src = readFileSync(fileURLToPath(new URL('../pages/api/webhooks/message-processor-v2.js', import.meta.url)), 'utf8');
+  const fn = src.indexOf('async function handleCreatePaymentRequest(');
+  const body = src.slice(fn, src.indexOf('\nasync function', fn + 10));
+  // The confirm gate must sit BEFORE the createPaymentRequest call.
+  const gate = body.indexOf('!confirmed && quoteFeeCents > 0');
+  const create = body.indexOf('createPaymentRequest({ accountId');
+  assert.ok(gate > -1, 'the confirm gate exists');
+  assert.ok(gate < create, 'the gate runs before any link is minted');
+  // The choice state hands back with confirmed: true — the only path in.
+  assert.match(src, /case 'REQUEST_MONEY_CONFIRM':/);
+  assert.match(src, /confirmed: true,/);
+  // Free band (no fee) still creates in one step: the gate requires a fee.
+  assert.match(body, /quoteFeeCents > 0/);
+  // The old duplicate-generating offer is gone from the post-create copy.
+  assert.ok(!body.includes('and I\'ll swap in a new link'), 'no post-create swap offer = no duplicate links');
+});
+
+test('client-facing pay-page copy carries no em dashes; hero is Please Pay Me™', () => {
+  const page = readFileSync(fileURLToPath(new URL('../pages/pay/[code].js', import.meta.url)), 'utf8');
+  assert.match(page, /Please Pay Me™/);
+  assert.ok(!page.includes('Please Pay Me®'), '® must wait for the granted registration (founder 2026-08-27: use ™)');
+  const clientLines = page.split('\n').filter((l) => l.includes('—') && !l.trim().startsWith('*') && !l.trim().startsWith('//') && !l.trim().startsWith('{/*'));
+  assert.deepEqual(clientLines, [], 'no em dashes in client-facing page copy');
+});

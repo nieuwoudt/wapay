@@ -56,6 +56,12 @@ export interface PayfastCheckoutParams {
   notifyUrl: string;
   /** Optional pass-through (UniFuel used it for the order id); echoed in the ITN. */
   customStr1?: string;
+  /**
+   * Payer's cellphone, pre-filled on the PayFast "how can we get hold of
+   * you" step so the payer never re-types the number our pay page already
+   * captured (founder feedback 2026-08-27). PayFast expects local 0-form.
+   */
+  cellNumber?: string;
 }
 
 /** Hosted-form output: POST `fields` to `url` (auto-submitting form). */
@@ -135,6 +141,7 @@ function buildSignedFields(params: PayfastCheckoutParams): {
     return_url: params.returnUrl,
     cancel_url: params.cancelUrl,
     notify_url: params.notifyUrl,
+    cell_number: params.cellNumber ?? '',
     m_payment_id: params.mPaymentId,
     amount: amountInRands,
     item_name: params.itemName,

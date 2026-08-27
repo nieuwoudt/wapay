@@ -4,6 +4,42 @@
 
 ---
 
+## 2026-08-27 (4) — Confirm-before-create + Please Pay Me™
+
+- **One link, ever** (founder): a fee-bearing "please pay me R380" now explains the two
+  outcomes FIRST and asks the requester to pick — 1️⃣ link for R380 (nets R371.40 by card)
+  or 2️⃣ link for R390 (nets at least R380 however they pay) — and only then mints exactly
+  one link. The old flow created immediately and offered "make it R390", which cancelled +
+  recreated (two links, two codes). Free-band requests (< R50, no fee) still create in one
+  step: there is nothing to choose. New `REQUEST_MONEY_CONFIRM` state (cancel/escape-safe,
+  amount echoes accepted as picks); post-create copy simplified and em-dash-free.
+- **Please Pay Me™** on the pay-page hero (founder: registration in progress; ™ per the
+  pending-application convention, flips to ® at grant — one character).
+- Static guards: the confirm gate provably precedes createPaymentRequest; the swap offer is
+  gone from post-create copy; ™-not-® and the no-em-dash rule are pinned.
+
+365/365, build green. ⚠️ Ships via the NEXT thread's commit — iCloud still TCC-blocked here.
+
+## 2026-08-27 (3) — Pay-page polish + PayFast contact prefill (founder screenshots)
+
+- **"Please Pay Me"** title-cased everywhere on the pay page. Deliberately NO (R) symbol:
+  claiming a registered mark we do not own is false marking, and "Please Pay Me" is Capitec's
+  live product name with our CIPC search still on the counsel brief. Revisit after counsel.
+- **Em dashes stripped from all client-facing pay-page copy** (founder style rule for client
+  interfaces); code comments untouched. Chat-message copy sweep handed to the next thread.
+- **PayFast never asks for the number twice**: the pay page's captured number now rides the
+  signed checkout as `cell_number`, pre-filling PayFast's "how can we get hold of you" step.
+  New `cellNumber` param in @wapay/providers-payfast (canonical field order, omitted when
+  absent, dist rebuilt). PayFast's own email/cell field cannot be REMOVED (their page, their
+  KYC rule) but arrives pre-filled so the payer just taps Continue.
+- Sender-pays re-raised (domestic-worker use case) and re-confirmed NOT available as a card
+  differential (PayFast T&C 5.3 / SARB / PASA). The compliant equivalent already shipped:
+  compose-time gross-up ("make it R390") = one displayed price every payer pays. Making that
+  flow more prominent = next-thread item.
+
+359/359, build green. ⚠️ Committed by the NEXT thread — iCloud repo unreachable (TCC) when
+this shipped; all changes complete + tested in the fast copy.
+
 ## 2026-08-27 — Payment-request creation caps (abuse guard on the free-band subsidy)
 
 The build-queue hardening item, made more urgent by free-under-R50: request creation now has two

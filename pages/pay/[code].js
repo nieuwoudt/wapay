@@ -129,7 +129,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
         {/* "Please pay me" hero — the phrase the market responds to (founder
             2026-08-25). The PRODUCT stays WaPay-branded (naming decision
             2026-08-22: domain and phrase, never the brand). */}
-        <div style={styles.logo}>🙏 Please pay me</div>
+        <div style={styles.logo}>🙏 Please Pay Me™</div>
         <div style={{ ...styles.fine, marginTop: -14, marginBottom: 14 }}>with WaPay</div>
 
         {status === 'PENDING' && returned ? (
@@ -141,7 +141,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
               📲 Get my receipt + my own WaPay
             </a>
             <div style={styles.fine}>
-              Tap the button above — your receipt lands on WhatsApp as soon as the payment
+              Tap the button above. Your receipt lands on WhatsApp as soon as the payment
               clears, usually within a minute. If you cancelled the payment, reopen the link to
               try again.
             </div>
@@ -153,14 +153,14 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
             {note ? <div style={styles.note}>“{note}”</div> : null}
 
             <a style={{ ...styles.btn, ...styles.primary }} href={waLink}>
-              Pay from my WaPay — free
+              Pay from my WaPay (free)
             </a>
 
             {/* POST: the number must never ride a query string into logs. */}
             <form method="POST" action="/api/pay/checkout">
               <input type="hidden" name="code" value={code} />
               <label style={styles.label} htmlFor="payer">
-                Your WhatsApp number — your receipt goes there
+                Your WhatsApp number, for your receipt
               </label>
               <input
                 style={styles.input}
@@ -180,10 +180,10 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
             </form>
 
             <div style={styles.fine}>
-              No fees for you — you pay exactly {rands(amountCents)}. Card payments are processed
+              No fees for you. You pay exactly {rands(amountCents)}. Card payments are processed
               securely by PayFast, no WaPay account needed. Your number is used to send your
-              receipt on WhatsApp — and to offer you your own free WaPay, which you're welcome to
-              ignore. Paying from a WaPay balance is free — reply in WhatsApp to confirm with
+              receipt on WhatsApp and to offer you your own free WaPay, which you're welcome to
+              ignore. Paying from a WaPay balance is free: reply in WhatsApp to confirm with
               your PIN.
             </div>
           </>
@@ -196,7 +196,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
               📲 Get my receipt + my own WaPay
             </a>
             <div style={styles.fine}>
-              Paid it by card? Tap the button — your receipt is on WhatsApp, and your own free
+              Paid it by card? Tap the button. Your receipt is on WhatsApp, and your own free
               WaPay takes a minute to set up.
             </div>
           </>

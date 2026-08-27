@@ -84,7 +84,7 @@ test('pay page: PAID state carries the receipt + onboarding deep link', () => {
 });
 
 test('pay page: fine print honestly discloses BOTH uses of the number', () => {
-  assert.match(payPageSource, /number is used to send your\s+receipt on WhatsApp — and to offer you your own free WaPay/);
+  assert.match(payPageSource, /number is used to send your\s+receipt on WhatsApp and to offer you your own free WaPay/);
 });
 
 // ---------------------------------------------------------------------------

@@ -147,6 +147,9 @@ export default async function handler(req, res) {
     // The paying session carries its OWN receipt number — the ITN reads it
     // back from the signed payload, immune to later checkout clicks.
     customStr1: payerMsisdn || '',
+    // Pre-fill PayFast's contact step with the number we already captured,
+    // so the payer is never asked twice (founder feedback 2026-08-27).
+    cellNumber: payerMsisdn || '',
     // ?r=1 = "back from PayFast": the page shows a confirming state with no
     // pay buttons while the ITN is in flight (double-charge guard). The
     // cancel URL stays bare so a cancelled payer gets the buttons back.
