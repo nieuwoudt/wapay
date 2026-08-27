@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-08-27 (8) — Voucher display honesty (founder screenshots round 3)
+
+- **Home line renamed**: "Balance" then "🎟️ Voucher Balance: R10 (1 OTT voucher)" — the
+  founder's naming, and the product is named.
+- **"my vouchers" split into Yours vs Sent to others (no longer yours)**: a gifted voucher
+  visibly leaves the account (the balance maths already excluded it — voucherBalanceSummary
+  counts only self-directed, non-cancelled vouchers; now the display says so). Sent rows show
+  the masked recipient and never the serial. The list closes with the same Voucher Balance
+  line as home.
+- **Footer swapped**: the "voucher pin <last 6…>" resend hint is gone from this surface
+  (the keyword still works, wallet-PIN-gated); replaced with "Want another? Reply 'buy a
+  voucher R50'."
+- Honesty boundary kept: no "unspent/used" claim anywhere — redemption visibility needs
+  OTT's voucher-status API (asked; the portal's Lookup-a-Voucher proves the data exists).
+
+Guards pin the split, the no-SN rule on sent rows, the missing resend hint, and the
+Balance→Voucher Balance ordering. 368/368, build green. Commit via the iCloud-holding session.
+
 ## 2026-08-27 (7) — Pay-page quiet hero + adjacent pay options + rich link previews
 
 Founder screenshot feedback, round two:

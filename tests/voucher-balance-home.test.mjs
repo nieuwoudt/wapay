@@ -50,7 +50,7 @@ test('home screen: voucher line only when there is something to show', () => {
   const start = processorSource.indexOf('async function renderHome(');
   const body = processorSource.slice(start, processorSource.indexOf('logStructured(\'home_render\'', start));
   assert.match(body, /await voucherBalanceSummary\(account\)/);
-  assert.match(body, /vouchers\s*\n?\s*\? `🎟️ Vouchers bought:/, 'gated on presence');
+  assert.match(body, /vouchers\s*\n?\s*\? `🎟️ Voucher Balance:/, 'gated on presence');
   assert.match(body, /: ''/, 'voucher-less users see the home screen unchanged');
   assert.match(body, /[Rr]eply "my vouchers"/, 'the line routes to the detailed list');
 });
@@ -107,4 +107,33 @@ test('new copy: no betting words, no cash-out promises', () => {
     assert.ok(!/\bbet(s|ting|tor|ted)?\b|\bgambl|\bwager|\bcasino|\bbookmak/i.test(body));
     assert.ok(!/cash\s*-?\s*out|withdraw/i.test(body));
   }
+});
+
+// ---------------------------------------------------------------------------
+// Voucher display honesty (founder 2026-08-27)
+// ---------------------------------------------------------------------------
+
+test('voucher history: yours vs sent-away split, balance line, buy-another footer, no resend hint', () => {
+  const src = readFileSync(fileURLToPath(new URL('../pages/api/webhooks/message-processor-v2.js', import.meta.url)), 'utf8');
+  const fn = src.indexOf('async function handleVoucherHistory(');
+  const body = src.slice(fn, src.indexOf('\n}\n', fn));
+  assert.match(body, /Your OTT vouchers/, 'the product is named');
+  assert.match(body, /Sent to others \(no longer yours\)/, 'gifted vouchers are visibly not yours');
+  assert.match(body, /mineActive\.filter|mine\.filter\(\(g\) => g\.status !== 'CANCELLED'\)/, 'balance excludes cancelled');
+  assert.match(body, /Voucher Balance:/, 'the same label as the home screen');
+  assert.match(body, /Want another\? Reply "buy a voucher/, 'buy-another CTA');
+  assert.ok(!body.includes('voucher pin <last'), 'the resend hint is gone from this surface (keyword still works)');
+  // The sent-away section must never print a serial: the SN belongs to the
+  // recipient now, and the sender re-fetching PINs for gifted vouchers is
+  // exactly what the wallet-PIN gate on resend exists to prevent surfacing.
+  const sentFmt = body.slice(body.indexOf('const fmt'), body.indexOf('const mine'));
+  assert.match(sentFmt, /sent \? `to \$\{maskMsisdn/, 'sent rows show the masked recipient, not the SN');
+});
+
+test('home: the voucher line is labelled Voucher Balance under Balance', () => {
+  const src = readFileSync(fileURLToPath(new URL('../pages/api/webhooks/message-processor-v2.js', import.meta.url)), 'utf8');
+  const home = src.slice(src.indexOf('const home ='), src.indexOf('Just tell me what you need'));
+  const bal = home.indexOf('Balance:');
+  const vbal = home.indexOf('Voucher Balance:');
+  assert.ok(bal > -1 && vbal > bal, 'Balance first, Voucher Balance directly under it');
 });

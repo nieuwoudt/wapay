@@ -600,7 +600,7 @@ async function renderHome({ from, account }) {
     `👋 *Hi ${displayName}!*\n` +
     `💰 Balance: *${formatMoneyZar(balance)}*\n` +
     (vouchers
-      ? `🎟️ Vouchers bought: *${randsShort(vouchers.totalCents)}* (${vouchers.count}). Reply "my vouchers"\n`
+      ? `🎟️ Voucher Balance: *${randsShort(vouchers.totalCents)}* (${vouchers.count} OTT voucher${vouchers.count === 1 ? '' : 's'}). Reply "my vouchers"\n`
       : '') +
     `━━━━━━━━━━━━━━━\n\n` +
     `🛒 *Buy*: airtime, data, electricity\n` +
@@ -2615,7 +2615,7 @@ async function handleVoucherHistory({ from, account }) {
     gifts = await prisma.pendingGift.findMany({
       where: { senderAccountId: account.id },
       orderBy: { createdAt: 'desc' },
-      take: 5,
+      take: 8,
     });
   } catch (error) {
     logStructured('voucher_history_error', { from, accountId: account.id, error: error?.message });
@@ -2628,21 +2628,33 @@ async function handleVoucherHistory({ from, account }) {
     });
   }
 
+  // Yours vs sent away (founder 2026-08-27): a voucher gifted to someone
+  // else has LEFT this account. It never counts in the Voucher Balance
+  // (voucherBalanceSummary already excludes it) and the list must say so.
   const own = normaliseMsisdn(account.msisdn || '');
-  const lines = gifts.map((g) => {
+  const fmt = (g, sent) => {
     const when = g.createdAt.toISOString().slice(0, 10);
-    const who = normaliseMsisdn(g.recipientMsisdn) === own ? 'for you' : `to ${maskMsisdn(g.recipientMsisdn)}`;
     const status =
-      g.status === 'DELIVERED' ? '✅ PIN delivered' : g.status === 'CANCELLED' ? '❌ cancelled' : '⏳ awaiting claim';
-    return `• ${when} · ${randsShort(g.amountCents)} ${who}\n   SN ${g.voucherSerial || '—'} · ${status}`;
-  });
+      g.status === 'CANCELLED' ? '❌ cancelled' : g.status === 'DELIVERED' ? '✅' : '⏳ PIN on its way';
+    const tail = sent ? `to ${maskMsisdn(g.recipientMsisdn)} ${status}` : `SN ${g.voucherSerial || 'pending'} ${status}`;
+    return `• ${when} · *${randsShort(g.amountCents)}* · ${tail}`;
+  };
+  const mine = gifts.filter((g) => normaliseMsisdn(g.recipientMsisdn) === own);
+  const sent = gifts.filter((g) => normaliseMsisdn(g.recipientMsisdn) !== own);
+  const mineActive = mine.filter((g) => g.status !== 'CANCELLED');
+  const balCents = mineActive.reduce((sum, g) => sum + g.amountCents, 0);
 
-  const msg = await localizeOutbound(
-    `🎟️ *Your vouchers* (latest ${gifts.length})\n\n` +
-    lines.join('\n') +
-    `\n\nTo get a voucher PIN again, reply:\n*voucher pin <last 6 digits of its SN>*`,
-    await userLang(account)
-  );
+  const parts = [`🎟️ *Your OTT vouchers*`];
+  if (mine.length) {
+    parts.push(`\nYours, to spend online at stores that accept OTT vouchers:\n` + mine.map((g) => fmt(g, false)).join('\n'));
+  }
+  if (sent.length) {
+    parts.push(`\nSent to others (no longer yours):\n` + sent.map((g) => fmt(g, true)).join('\n'));
+  }
+  parts.push(`\n🎟️ Voucher Balance: *${randsShort(balCents)}* (${mineActive.length})`);
+  parts.push(`\nWant another? Reply "buy a voucher R50".`);
+
+  const msg = await localizeOutbound(parts.join('\n'), await userLang(account));
   await addToConversationHistory(from, 'assistant', msg);
   return await sendWhatsAppText({ to: from, text: msg });
 }
