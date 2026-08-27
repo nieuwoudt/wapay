@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-08-27 (5) — Full deterministic-surface localization (build-queue #3)
+
+The 2026-08-25 batch localized home/help/get-paid/airtime; this completes the sweep. Every
+deterministic prompt, confirmation, receipt, product list and flow error now renders in the
+user's profile language via `localizeOutbound` (money/codes frozen, fail-open English) —
+~184 call sites across the state machine, orchestrator dispatch, smart product query, all ten
+category list functions, deposit status, voucher history, contact-share, pay-request flows.
+Variable-built messages localize at assignment so conversation history stores what was
+actually sent.
+
+Deliberately NOT localized: bearer voucher claim messages (`buildVoucherClaimMessage` output
+is delivered verbatim — a translation model never sits between a bearer PIN artifact and the
+customer) and messages to OTHER parties (recipients/requesters — their language is their own
+profile's business, not the sender's).
+
+Mechanics: applied AST-driven (acorn) over a whitelist of account-scoped handlers —
+literal-only wraps, variables by hand — so every English source literal survives
+byte-identical and all pre-existing static copy tests pass untouched. New
+`tests/localize-coverage.test.mjs` locks: a ≥150-call-site floor, one representative surface
+per flow family, the bearer-verbatim rule, and userLang pairing. 365/365, build green.
+
 ## 2026-08-27 (4) — Confirm-before-create + Please Pay Me™
 
 - **One link, ever** (founder): a fee-bearing "please pay me R380" now explains the two
