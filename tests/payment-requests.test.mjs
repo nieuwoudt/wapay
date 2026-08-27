@@ -27,6 +27,8 @@ import {
   cancelPaymentRequest,
   MIN_REQUEST_CENTS,
   MAX_REQUEST_CENTS,
+  MAX_OPEN_REQUESTS,
+  MAX_REQUESTS_PER_DAY,
 } from '../lib/payment-requests.js';
 
 const processorSource = readFileSync(
@@ -71,6 +73,15 @@ function stubPrisma() {
           count += 1;
         }
         return { count };
+      },
+      async count({ where = {} }) {
+        return rows.filter((r) => {
+          if (where.accountId && r.accountId !== where.accountId) return false;
+          if (where.status && r.status !== where.status) return false;
+          if (where.expiresAt?.gt && !(r.expiresAt > where.expiresAt.gt)) return false;
+          if (where.createdAt?.gt && !(r.createdAt > where.createdAt.gt)) return false;
+          return true;
+        }).length;
       },
     },
   };
@@ -123,6 +134,71 @@ test('cancel is scoped to the owner and PENDING only', async () => {
   assert.equal(await cancelPaymentRequest({ prisma, code: r.id, accountId: 'someone-else' }), false);
   assert.equal(await cancelPaymentRequest({ prisma, code: r.id, accountId: 'acc1' }), true);
   assert.equal(await markRequestPaid({ prisma, code: r.id, payerRef: 'x' }), false, 'cancelled cannot be paid');
+});
+
+test('creation cap: open live links are limited; expired-but-PENDING rows never count', async () => {
+  const prisma = stubPrisma();
+  for (let i = 0; i < MAX_OPEN_REQUESTS; i += 1) {
+    await createPaymentRequest({ prisma, accountId: 'acc1', amountCents: 1000 });
+  }
+  // At the cap: the next create is refused with a typed, actionable error.
+  await assert.rejects(
+    () => createPaymentRequest({ prisma, accountId: 'acc1', amountCents: 1000 }),
+    (err) => err.code === 'REQUEST_LIMIT' && err.limit === 'OPEN' && err.openCount === MAX_OPEN_REQUESTS
+  );
+  // Another account is unaffected.
+  await createPaymentRequest({ prisma, accountId: 'acc2', amountCents: 1000 });
+  // Lazily-expired rows (status still PENDING, expiresAt past) MUST NOT count,
+  // or ten stale links would lock an account out of the feature forever.
+  for (const r of prisma._rows) {
+    if (r.accountId === 'acc1') r.expiresAt = new Date(Date.now() - 1000);
+  }
+  // Backdate creations so the daily cap doesn't interfere with this assertion.
+  for (const r of prisma._rows) {
+    if (r.accountId === 'acc1') r.createdAt = new Date(Date.now() - 25 * 3600 * 1000);
+  }
+  const ok = await createPaymentRequest({ prisma, accountId: 'acc1', amountCents: 1000 });
+  assert.equal(ok.status, 'PENDING');
+});
+
+test('creation cap: daily cap counts every status in 24h, frees after', async () => {
+  const prisma = stubPrisma();
+  // Seed a day's worth of creations directly (mixed statuses — a cancelled
+  // request still spent a creation; cancel-and-recreate must not be a bypass
+  // ... but the swap flow (one cancel + one create) stays well inside 20/day).
+  for (let i = 0; i < MAX_REQUESTS_PER_DAY; i += 1) {
+    prisma._rows.push({
+      id: `PRSEED${String(i).padStart(2, '0')}`.slice(0, 8),
+      accountId: 'acc1',
+      amountCents: 1000,
+      status: i % 2 === 0 ? 'CANCELLED' : 'PENDING',
+      // Expired-live mix is irrelevant to the daily cap; keep them non-live
+      // so the OPEN cap cannot be what fires.
+      expiresAt: new Date(Date.now() - 1000),
+      createdAt: new Date(Date.now() - 3600 * 1000),
+      payerRef: null, paidAt: null, note: null,
+    });
+  }
+  await assert.rejects(
+    () => createPaymentRequest({ prisma, accountId: 'acc1', amountCents: 1000 }),
+    (err) => err.code === 'REQUEST_LIMIT' && err.limit === 'DAILY'
+  );
+  // Rows older than 24h stop counting.
+  for (const r of prisma._rows) r.createdAt = new Date(Date.now() - 25 * 3600 * 1000);
+  const ok = await createPaymentRequest({ prisma, accountId: 'acc1', amountCents: 1000 });
+  assert.equal(ok.status, 'PENDING');
+});
+
+test('processor: REQUEST_LIMIT gets its own honest reply, never the generic retry', () => {
+  const start = processorSource.indexOf('async function handleCreatePaymentRequest(');
+  assert.ok(start > -1);
+  const body = processorSource.slice(start, processorSource.indexOf('\nasync function', start + 10));
+  assert.match(body, /REQUEST_LIMIT/, 'cap errors are branched on');
+  assert.match(body, /payrequest_create_capped/, 'caps are logged distinctly');
+  assert.match(body, /cancel request \$\{newest\.id\}/, 'open-cap reply offers a concrete cancel');
+  assert.match(body, /localizeOutbound/, 'cap reply is localized');
+  const capBranch = body.slice(body.indexOf('REQUEST_LIMIT'), body.indexOf('payrequest_create_error'));
+  assert.ok(!/try again in a moment/i.test(capBranch), 'cap reply is not the generic retry text');
 });
 
 // ---------------------------------------------------------------------------

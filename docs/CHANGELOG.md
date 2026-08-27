@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-08-27 — Payment-request creation caps (abuse guard on the free-band subsidy)
+
+The build-queue hardening item, made more urgent by free-under-R50: request creation now has two
+env-tunable caps, enforced in `createPaymentRequest` (the single creation path):
+
+- **Open-links cap** — max **10** live PENDING links per requester (`WAPAY_PAYREQ_MAX_OPEN`,
+  0 disables). Counts only *unexpired* PENDING rows: expiry is lazy (a stale link keeps status
+  PENDING until someone reads it), so counting raw PENDING would have permanently locked out any
+  account with 10 expired unpaid links.
+- **Daily cap** — max **20** creations per rolling 24h, any status (`WAPAY_PAYREQ_MAX_PER_DAY`,
+  0 disables). Cancelled requests still count a creation, so cancel-and-recreate is not a bypass;
+  the amount-change swap (one cancel + one create) stays far inside it.
+
+Both are abuse guards, not money invariants — enforcement is approximate by design (two
+concurrent creates can briefly exceed a cap by one; `postEntry` idempotency still guards every
+rand). Cap errors are typed (`code REQUEST_LIMIT`, `limit OPEN|DAILY`) and the processor answers
+them honestly instead of the generic "try again in a moment" (retrying a cap is futile and reads
+as broken): the open-cap reply names the newest pending code with a concrete
+*"cancel request PRXXXXXX"* to free a slot, mentions the 7-day self-expiry, and is localized.
+Logged as `payrequest_create_capped`.
+
+Tests: 3 new (359 total) — cap fires + typed error + per-account isolation + the
+expired-PENDING-never-counts lockout guard; daily cap counts every status and frees after 24h;
+static processor wiring (distinct branch, distinct log, localized, concrete cancel hint).
+
+---
+
 ## 2026-08-27 — Small requests are FREE + compose-time quoting (fee incidence resolved)
 
 The founder asked whether the pay-link fee should move to the PAYER ("if I ask for R20 I should

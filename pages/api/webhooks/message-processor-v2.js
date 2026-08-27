@@ -20,6 +20,7 @@ import {
   maskedRequesterLabel,
   MIN_REQUEST_CENTS,
   MAX_REQUEST_CENTS,
+  REQUEST_TTL_DAYS,
 } from '../../../lib/payment-requests.js';
 import {
   rememberBeneficiary,
@@ -1994,6 +1995,28 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
   try {
     request = await createPaymentRequest({ accountId: account.id, amountCents });
   } catch (error) {
+    // Creation caps get an honest, actionable answer — never the generic
+    // "try again in a moment" (retrying a cap is futile and reads as broken).
+    if (error?.code === 'REQUEST_LIMIT') {
+      logStructured('payrequest_create_capped', {
+        from, accountId: account.id, amountCents, limit: error.limit,
+      });
+      let capBody;
+      if (error.limit === 'OPEN') {
+        const newest = await getLatestPendingRequest({ accountId: account.id });
+        const cancelHint = newest
+          ? `To free one up, reply *"cancel request ${newest.id}"* (your newest — ${randsShort(newest.amountCents)}), or wait for a link to be paid.`
+          : `Wait for a link to be paid, or cancel one you no longer need.`;
+        capBody =
+          `⏸️ You already have ${error.openCount} payment links waiting to be paid — that's the most you can have open at once.\n\n${cancelHint}\n\nLinks also expire on their own after ${REQUEST_TTL_DAYS} days.`;
+      } else {
+        capBody = `⏸️ You've created today's maximum number of payment links. Please try again tomorrow.`;
+      }
+      const capMsg = await localizeOutbound(capBody, await userLang(account));
+      await updateConversationState(from, null);
+      await addToConversationHistory(from, 'assistant', capMsg);
+      return await sendWhatsAppText({ to: from, text: capMsg });
+    }
     logStructured('payrequest_create_error', { from, accountId: account.id, amountCents, error: error?.message });
     return await sendWhatsAppText({
       to: from,
