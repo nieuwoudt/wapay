@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-08-27 (9) — Mid-flow intent switch: detect, acknowledge, re-route (founder live test, BUGLOG #29)
+
+All in `pages/api/webhooks/message-processor-v2.js`; guards in the new
+`tests/intent-switch-payment-link.test.mjs` (374/374 green, build green).
+
+- **"Payment link" is now a recognised get-paid ask**: `matchRequestMoneyAsk`
+  matches create-verb + "pay(ment) link" and "pay(ment) link" + amount, so
+  "Please create a payment link for R20" routes to the request flow from
+  ANYWHERE — including mid-electricity, where it previously got the meter
+  validation error. Complaints/questions about a link still fall through to
+  the router, never a create flow.
+- **The universal escape speaks**: on a strong intent switch the customer now
+  hears the old flow being parked ("👍 No problem, switching over. We can come
+  back to the electricity purchase any time.") before the new intent's own
+  reply. Family-labelled (airtime/data/electricity/payment request/deposit/
+  voucher); silent for unlabelled states; state is cleared BEFORE the ack so
+  the re-route never depends on the send.
+- **Sentence backstop in all eight slot-collector states** (electricity
+  amount + meter, airtime amount + msisdn, data msisdn + network + period,
+  voucher-gift amount): an unparseable SENTENCE escapes to the normal router
+  (`isConversationalEscape` → clear state → `handlePostOnboarding`) instead
+  of a validation insult — the REQUEST_MONEY_AMOUNT idiom, now everywhere.
+  VOUCHER_GIFT_RECIPIENT is deliberately excluded: two-word beneficiary
+  names ("John Smith") look conversational, and the strong-intent escape
+  already covers named intents there.
+
 ## 2026-08-27 (8) — Voucher display honesty (founder screenshots round 3)
 
 - **Home line renamed**: "Balance" then "🎟️ Voucher Balance: R10 (1 OTT voucher)" — the

@@ -1040,6 +1040,23 @@ async function handlePostOnboarding({ account, from, text }) {
     if (switched) {
       logStructured('state_escape_intent_switch', { from, state, to: switched });
       await updateConversationState(from, null);
+      // Say the switch out loud (founder feedback 2026-08-27): the customer
+      // should hear the old flow being parked, not wonder whether the bot
+      // broke. One short line, then the new intent's own reply follows.
+      const parkedFlow =
+        state.startsWith('AIRTIME') ? 'the airtime purchase'
+        : state.startsWith('DATA') ? 'the data purchase'
+        : state.startsWith('ELECTRICITY') ? 'the electricity purchase'
+        : state.startsWith('REQUEST_MONEY') || state.startsWith('PAYREQ') ? 'your payment request'
+        : state.includes('DEPOSIT') ? 'your deposit'
+        : state.includes('VOUCHER') || state.includes('GIFT') ? 'the voucher'
+        : null;
+      if (parkedFlow) {
+        await sendWhatsAppText({
+          to: from,
+          text: await localizeOutbound(`👍 No problem, switching over. We can come back to ${parkedFlow} any time.`, await userLang(account)),
+        });
+      }
       // fall through to fresh routing below
     } else {
       console.log('💬 User in conversation state:', state);
@@ -1973,7 +1990,14 @@ function matchRequestMoneyAsk(text = '', slots = null) {
     /\b(please\s+)?pay\s?-?\s?me\b/i.test(s) ||
     /\bget\s+paid\b/i.test(s) ||
     /\bpayment\s+request\b/i.test(s) ||
-    /\brequest\s+(money|payment|r\s?\d)/i.test(s)
+    /\brequest\s+(money|payment|r\s?\d)/i.test(s) ||
+    // "Please create a payment link for R20" matched NOTHING, so the
+    // electricity meter state ate it (founder live sighting 2026-08-27,
+    // BUGLOG #29). A LINK ask creates only alongside a create-ish verb or
+    // an amount, so "the payment link doesn't work" stays a support
+    // question for the router, never a create flow.
+    /\b(create|make|generate|send|give|need|want|get)\b[^\n]{0,40}\bpay(?:ment)?\s*-?\s*link\b/i.test(s) ||
+    /\bpay(?:ment)?\s*-?\s*link\b[^\n]{0,24}\br?\s?\d/i.test(s)
   );
 }
 
@@ -3039,6 +3063,10 @@ async function handleConversationState({ from, text, state, data, account }) {
         // Parse amount
         const amountMatch = text.match(/(\d+)/);
         if (!amountMatch) {
+          if (isConversationalEscape(text)) {
+            await updateConversationState(from, null);
+            return await handlePostOnboarding({ account, from, text });
+          }
           return await sendWhatsAppText({
             to: from,
             text: await localizeOutbound(`Please enter a valid amount (e.g., R10, R50, R100)\n\nReply "cancel" to stop.`, await userLang(account)),
@@ -3136,6 +3164,12 @@ async function handleConversationState({ from, text, state, data, account }) {
         // If message doesn't look like a phone number at all, assume user wants to cancel
         const digitsOnly = text.replace(/[^\d]/g, '');
         if (digitsOnly.length < 8) {
+          // A real sentence carries a NEW ask: answer it instead of only
+          // cancelling (founder feedback 2026-08-27).
+          if (isConversationalEscape(text)) {
+            await updateConversationState(from, null);
+            return await handlePostOnboarding({ account, from, text });
+          }
           // Not enough digits to be a phone number - user probably wants to do something else
           await updateConversationState(from, null);
           return await sendWhatsAppText({
@@ -3294,6 +3328,10 @@ async function handleConversationState({ from, text, state, data, account }) {
           : text.trim();
         const normalisedMsisdn = normaliseMsisdn(rawMsisdnInput || '');
         if (!isValidSaMsisdn(normalisedMsisdn)) {
+            if (isConversationalEscape(text)) {
+              await updateConversationState(from, null);
+              return await handlePostOnboarding({ account, from, text });
+            }
             return await sendWhatsAppText({
               to: from,
             text: await localizeOutbound(`❌ Invalid phone number format.\n\nPlease enter a valid SA mobile number (e.g., 0781234567)\n\nOr reply "cancel" to stop.`, await userLang(account)),
@@ -3323,6 +3361,10 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         const networkCode = extractNetworkCode(text);
         if (!networkCode) {
+          if (isConversationalEscape(text)) {
+            await updateConversationState(from, null);
+            return await handlePostOnboarding({ account, from, text });
+          }
           return await sendWhatsAppText({ to: from, text: await localizeOutbound(`❌ Please reply with a network: Vodacom, MTN, Cell C, or Telkom.`, await userLang(account)) });
         }
         const merged = { ...(data || {}), networkCode };
@@ -3344,6 +3386,10 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         const periodType = extractPeriodType(text);
         if (!periodType) {
+          if (isConversationalEscape(text)) {
+            await updateConversationState(from, null);
+            return await handlePostOnboarding({ account, from, text });
+          }
           return await sendWhatsAppText({ to: from, text: await localizeOutbound(`❌ Please reply with: daily, weekly, monthly, or night.`, await userLang(account)) });
         }
         const merged = { ...(data || {}), periodType };
@@ -3652,6 +3698,10 @@ async function handleConversationState({ from, text, state, data, account }) {
         // Extract amount from text (R50, R 100, 500, etc)
         const amountMatch = text.match(/r?\s?(\d+)/i);
         if (!amountMatch) {
+          if (isConversationalEscape(text)) {
+            await updateConversationState(from, null);
+            return await handlePostOnboarding({ account, from, text });
+          }
           return await sendWhatsAppText({
             to: from,
             text: await localizeOutbound(`💡 Please enter an amount (e.g., R50, R100, R500)\n\nMin R10, Max R5000\n\nOr reply "cancel" to stop.`, await userLang(account)),
@@ -3691,6 +3741,13 @@ async function handleConversationState({ from, text, state, data, account }) {
 
       const meterNumber = text.trim().replace(/[\s-]/g, '');
       if (!/^\d{8,14}$/.test(meterNumber)) {
+        // A sentence is never a meter number: route it, don't insult it
+        // ("Please create a payment link for R20" got the meter error;
+        // founder live sighting 2026-08-27, BUGLOG #29).
+        if (isConversationalEscape(text)) {
+          await updateConversationState(from, null);
+          return await handlePostOnboarding({ account, from, text });
+        }
         return await sendWhatsAppText({
           to: from,
           text: await localizeOutbound(`❌ That doesn't look like a valid meter number.\n\nMeter numbers are usually 10-14 digits.\n\nPlease enter your meter number or reply "cancel" to stop.`, await userLang(account)),
@@ -4110,6 +4167,10 @@ async function handleConversationState({ from, text, state, data, account }) {
         const filledSlots = parseSlots(text, { waId: from, accountId: account.id });
         const amountCents = filledSlots.amountCents;
         if (!amountCents) {
+          if (isConversationalEscape(text)) {
+            await updateConversationState(from, null);
+            return await handlePostOnboarding({ account, from, text });
+          }
           return await sendWhatsAppText({
             to: from,
             text: await localizeOutbound(`Please enter a valid amount (e.g., R50, R100)\n\nReply "cancel" to stop.`, await userLang(account)),
