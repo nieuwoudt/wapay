@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-08-27 (6) — Em dashes out of chat copy (founder style rule, chat sweep)
+
+Completes the sweep the pay-page batch started: all ~55 em dashes in customer-facing chat
+copy rewritten (menu rows `*Label* — desc` → `*Label*: desc`; independent clauses split into
+sentences; short qualifiers become commas/parentheses; the voucher-history row separator is
+now `·`). Two deliberate survivors, whitelisted by content: the `'—'` null-serial placeholder
+in the voucher list and the internal orchestrator context label (never user-facing). Code
+comments untouched by design. Recipient gift notification in `lib/gifting.js` reworded too.
+
+Guard: `tests/founder-feedback-0825.test.mjs` now fails on ANY non-whitelisted em dash in a
+non-comment processor line, so new copy can't reintroduce them. Two pinned copy tests synced
+in the same commit (deposit prompt, home voucher line). 366/366, build green.
+
 ## 2026-08-27 (5) — Full deterministic-surface localization (build-queue #3)
 
 The 2026-08-25 batch localized home/help/get-paid/airtime; this completes the sweep. Every

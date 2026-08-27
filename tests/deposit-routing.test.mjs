@@ -96,7 +96,7 @@ test('routing: the pre-routing short-circuit and the AWAITING_VOUCHER_PIN state 
 
 test('deposit prompt: offers CASH via voucher (option 1) AND card/bank (option 2)', () => {
   assert.ok(
-    processorSource.includes('1️⃣ *Cash* — take your cash to the till at any major retailer'),
+    processorSource.includes('1️⃣ *Cash*: take your cash to the till at any major retailer'),
     'cash-via-voucher stays option 1, with the full step-by-step'
   );
   assert.ok(

@@ -316,3 +316,26 @@ test('client-facing pay-page copy carries no em dashes; hero is Please Pay Me™
   const clientLines = page.split('\n').filter((l) => l.includes('—') && !l.trim().startsWith('*') && !l.trim().startsWith('//') && !l.trim().startsWith('{/*'));
   assert.deepEqual(clientLines, [], 'no em dashes in client-facing page copy');
 });
+
+// ---------------------------------------------------------------------------
+// Founder style rule (2026-08-27): no em dashes in client-facing copy.
+// The pay page was swept first; chat-message copy followed. Comments keep
+// their em dashes — the rule is about what customers read, not what
+// engineers read.
+// ---------------------------------------------------------------------------
+
+test('chat copy carries no em dashes (founder style rule, whitelist-only)', () => {
+  const lines = processorSource.split('\n');
+  const offenders = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line.includes('—')) continue;
+    const stripped = line.trim();
+    if (stripped.startsWith('//') || stripped.startsWith('*') || stripped.startsWith('/*')) continue;
+    // Whitelisted non-prose uses:
+    if (line.includes("voucherSerial || '—'")) continue; // null-value placeholder in the voucher list
+    if (line.includes('RECENT CONVERSATION (context only')) continue; // internal orchestrator prompt label, never user-facing
+    offenders.push(`${i + 1}: ${stripped.slice(0, 100)}`);
+  }
+  assert.deepEqual(offenders, [], `em dashes found in chat copy:\n${offenders.join('\n')}`);
+});

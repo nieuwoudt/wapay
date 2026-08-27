@@ -305,7 +305,7 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
         to: from,
         text:
           await localizeOutbound(`💰 You need ${randsShort(totalCents)} for this voucher but your balance is ${randsShort(availableCents)}.\n\n` +
-          `Pay the ${randsShort(shortfallCents)} difference with the button below — the moment it lands, I'll finish your voucher. 🎟️\n\n` +
+          `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your voucher. 🎟️\n\n` +
           `(Prefer cash? Buy a Blu Voucher at any till and send me the code.)`, await userLang(account)),
       });
       const linkResult = await handleCardDepositLink({
@@ -361,9 +361,9 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
   const confirmMsg = await localizeOutbound(isSelfPurchase
     ? `🎟️ *Confirm OTT Voucher*\n\n` +
       `Voucher: ${randsShort(amountCents)}\n` +
-      (feeCents > 0 ? `Fee: ${randsShort(feeCents)}\nTotal: ${randsShort(totalCents)}\n` : `No fee — paid from your balance.\n`) +
+      (feeCents > 0 ? `Fee: ${randsShort(feeCents)}\nTotal: ${randsShort(totalCents)}\n` : `No fee, paid from your balance.\n`) +
       `\n` +
-      `Your voucher PIN will be delivered right here — spend it online at any store that accepts OTT vouchers.\n\n` +
+      `Your voucher PIN will be delivered right here. Spend it online at any store that accepts OTT vouchers.\n\n` +
       `Reply *YES* to confirm or *NO* to cancel.`
     : `🎁 *Confirm WaPay Voucher*\n\n` +
       `Voucher: ${randsShort(amountCents)}\n` +
@@ -600,17 +600,17 @@ async function renderHome({ from, account }) {
     `👋 *Hi ${displayName}!*\n` +
     `💰 Balance: *${formatMoneyZar(balance)}*\n` +
     (vouchers
-      ? `🎟️ Vouchers bought: *${randsShort(vouchers.totalCents)}* (${vouchers.count}) — reply "my vouchers"\n`
+      ? `🎟️ Vouchers bought: *${randsShort(vouchers.totalCents)}* (${vouchers.count}). Reply "my vouchers"\n`
       : '') +
     `━━━━━━━━━━━━━━━\n\n` +
-    `🛒 *Buy* — airtime, data, electricity\n` +
-    `💸 *Send* — "send R10 airtime to 083..."\n` +
-    `🙏 *Get Paid* — "please pay me R50" → share your link\n` +
-    `💳 *Deposit* — "deposit R100" or a Blu voucher\n` +
-    `🏧 *Withdraw* — coming soon\n` +
+    `🛒 *Buy*: airtime, data, electricity\n` +
+    `💸 *Send*: "send R10 airtime to 083..."\n` +
+    `🙏 *Get Paid*: "please pay me R50" → share your link\n` +
+    `💳 *Deposit*: "deposit R100" or a Blu voucher\n` +
+    `🏧 *Withdraw*: coming soon\n` +
     `📄 *Transactions* · ⚙️ *Settings*\n\n` +
     `⚡ Quick: ${quickActions[0]} · ${quickActions[1]} · ${quickActions[2]}\n\n` +
-    `Just tell me what you need — in any language.`;
+    `Just tell me what you need, in any language.`;
 
   logStructured('home_render', { from, accountId: account.id });
 
@@ -878,7 +878,7 @@ async function handleSharedContact({ from, account, sharedContact }) {
     const name2 = name ? ` (${name})` : '';
     return await sendWhatsAppText({
       to: from,
-      text: await localizeOutbound(`👤 Contact saved${name2}. You're busy with another step — finish it or reply "cancel" first, then say "send R50 to ${name || msisdn}" whenever you're ready.`, await userLang(account)),
+      text: await localizeOutbound(`👤 Contact saved${name2}. You're busy with another step. Finish it or reply "cancel" first, then say "send R50 to ${name || msisdn}" whenever you're ready.`, await userLang(account)),
     });
   }
 
@@ -1093,9 +1093,9 @@ async function handlePostOnboarding({ account, from, text }) {
       return await sendWhatsAppText({
         to: from,
         text:
-          await localizeOutbound(`💰 Adding ${randsShort(cardDepositCents)} to WaPay — how would you like to pay?\n\n` +
-          `1️⃣ *Cash* — Blu Voucher at any till (send me the code)\n` +
-          `2️⃣ *Card / bank* — secure PayFast link\n\nReply *1* or *2*.`, await userLang(account)),
+          await localizeOutbound(`💰 Adding ${randsShort(cardDepositCents)} to WaPay. How would you like to pay?\n\n` +
+          `1️⃣ *Cash*: Blu Voucher at any till (send me the code)\n` +
+          `2️⃣ *Card / bank*: secure PayFast link\n\nReply *1* or *2*.`, await userLang(account)),
       });
     }
     logSlotFill({
@@ -1116,7 +1116,7 @@ async function handlePostOnboarding({ account, from, text }) {
     const mins = /\b(?:buy|get|want|need|koop|thenga)\b[^\n]{0,30}?\b(\d{1,4})\s*min(?:ute)?s?\b/i.exec(text);
     if (mins && !/\b(data|bundle)\b/i.test(text)) {
       const msg =
-        `📱 Airtime is sold in *rand*, not minutes — call minutes depend on your network's rates.\n\n` +
+        `📱 Airtime is sold in *rand*, not minutes. Call minutes depend on your network's rates.\n\n` +
         `How many rand of airtime would you like? For example *R50 airtime*.`;
       await addToConversationHistory(from, 'assistant', msg);
       return await sendWhatsAppText({ to: from, text: await localizeOutbound(msg, await userLang(account)) });
@@ -1165,8 +1165,8 @@ async function handlePostOnboarding({ account, from, text }) {
       return await sendWhatsAppText({
         to: from,
         text: await localizeOutbound(cancelled
-          ? `👍 Payment request ${cancelMatch[1].toUpperCase()} cancelled — the link no longer works.`
-          : `🤔 I couldn't cancel that request — it may already be paid, cancelled, or not yours.`, await userLang(account)),
+          ? `👍 Payment request ${cancelMatch[1].toUpperCase()} cancelled. The link no longer works.`
+          : `🤔 I couldn't cancel that request. It may already be paid, cancelled, or not yours.`, await userLang(account)),
       });
     }
   }
@@ -1226,7 +1226,7 @@ async function handlePostOnboarding({ account, from, text }) {
       });
     }
     await updateConversationState(from, 'VOUCHER_GIFT_AMOUNT', { recipientMsisdn: account.msisdn });
-    const askMsg = `🎟️ *OTT Voucher*\n\nHow much would you like your voucher for? (R10–R1000)\n\nFor example "R50" — or reply "cancel" to stop.`;
+    const askMsg = `🎟️ *OTT Voucher*\n\nHow much would you like your voucher for? (R10–R1000)\n\nFor example "R50", or reply "cancel" to stop.`;
     await addToConversationHistory(from, 'assistant', askMsg);
     return await sendWhatsAppText({ to: from, text: askMsg });
   }
@@ -1944,7 +1944,7 @@ async function handleChangeRequestAmount({ from, account, amountCents, rawText =
     await cancelPaymentRequest({ code: latest.id, accountId: account.id });
     await sendWhatsAppText({
       to: from,
-      text: await localizeOutbound(`🔁 Cancelled your ${randsShort(latest.amountCents)} request (${latest.id}) — that link no longer works. Here's the new one:`, await userLang(account)),
+      text: await localizeOutbound(`🔁 Cancelled your ${randsShort(latest.amountCents)} request (${latest.id}). That link no longer works. Here's the new one:`, await userLang(account)),
     });
   }
   return await handleCreatePaymentRequest({ from, account, amountCents, rawText });
@@ -1986,7 +1986,7 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
   if (!Number.isInteger(amountCents) || amountCents < MIN_REQUEST_CENTS || amountCents > MAX_REQUEST_CENTS) {
     await updateConversationState(from, 'REQUEST_MONEY_AMOUNT');
     const askMsg = await localizeOutbound(
-      `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5–R3000)\n\nFor example "R150" — or reply "cancel" to stop.`,
+      `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5–R3000)\n\nFor example "R150", or reply "cancel" to stop.`,
       await userLang(account)
     );
     await addToConversationHistory(from, 'assistant', askMsg);
@@ -2041,10 +2041,10 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
       if (error.limit === 'OPEN') {
         const newest = await getLatestPendingRequest({ accountId: account.id });
         const cancelHint = newest
-          ? `To free one up, reply *"cancel request ${newest.id}"* (your newest — ${randsShort(newest.amountCents)}), or wait for a link to be paid.`
+          ? `To free one up, reply *"cancel request ${newest.id}"* (your newest, ${randsShort(newest.amountCents)}), or wait for a link to be paid.`
           : `Wait for a link to be paid, or cancel one you no longer need.`;
         capBody =
-          `⏸️ You already have ${error.openCount} payment links waiting to be paid — that's the most you can have open at once.\n\n${cancelHint}\n\nLinks also expire on their own after ${REQUEST_TTL_DAYS} days.`;
+          `⏸️ You already have ${error.openCount} payment links waiting to be paid. That's the most you can have open at once.\n\n${cancelHint}\n\nLinks also expire on their own after ${REQUEST_TTL_DAYS} days.`;
       } else {
         capBody = `⏸️ You've created today's maximum number of payment links. Please try again tomorrow.`;
       }
@@ -2114,7 +2114,7 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
     // Neutral response either way (no membership-enumeration signal): the
     // requester always gets the shareable link too.
     const note = await localizeOutbound(delivered
-      ? `📨 I've let ${target.label} know on WaPay — they can pay you from their balance. ` +
+      ? `📨 I've let ${target.label} know on WaPay. They can pay you from their balance. ` +
         `I'll tell you the moment it's paid.\n\nHere's the link too, to share however you like:\n${url}`
       : `🙏 *Payment request created!*\n\n${introBody}`, await userLang(account));
     await addToConversationHistory(from, 'assistant', note);
@@ -2218,7 +2218,7 @@ async function deliverDirectedRequest({ payerWaId, request, requesterLabel }) {
     const text =
       `🙏 *${label}* is asking you to pay *${randsShort(request.amountCents)}* on WaPay.\n\n` +
       `If you'd like to pay, reply:\n*pay request ${request.id}*\n\n` +
-      `Paid from your WaPay balance — no fees. Ignore this message if it wasn't expected.`;
+      `Paid from your WaPay balance, no fees. Ignore this message if it wasn't expected.`;
     // Deliberately NOT added to the payer's conversation history: this is an
     // unsolicited informational nudge, and it must not enter their AI context
     // window or influence their next turn (abuse review 2026-08-25).
@@ -2245,7 +2245,7 @@ async function handlePayRequestStart({ from, account, code, rawText = '' }) {
   if (request.accountId === account.id) {
     return await sendWhatsAppText({
       to: from,
-      text: await localizeOutbound(`🙂 That's your own payment request — forward the link to the person who owes you.`, await userLang(account)),
+      text: await localizeOutbound(`🙂 That's your own payment request. Forward the link to the person who owes you.`, await userLang(account)),
     });
   }
   if (request.status !== 'PENDING') {
@@ -2264,7 +2264,7 @@ async function handlePayRequestStart({ from, account, code, rawText = '' }) {
   await updateConversationState(from, 'PAYREQ_CONFIRM', { code: request.id, amountCents: request.amountCents, requesterLabel });
   const confirmMsg = await localizeOutbound(
     `💸 *Pay ${randsShort(request.amountCents)} to ${requesterLabel}?*\n\n` +
-    `Paid from your WaPay balance — no fees.\n\n` +
+    `Paid from your WaPay balance, no fees.\n\n` +
     `Reply *YES* to confirm or *NO* to cancel.`,
     await userLang(account)
   );
@@ -2317,12 +2317,12 @@ async function handlePaymentReceiptAsk({ from, code }) {
     if (intentSucceeded) {
       return await sendWhatsAppText({
         to: from,
-        text: `🧾 That request was closed by the requester, but a card payment WAS received on it. If that payment was yours, the money reached ${requesterLabel} — please contact them (or reply "help") if anything looks wrong.`,
+        text: `🧾 That request was closed by the requester, but a card payment WAS received on it. If that payment was yours, the money reached ${requesterLabel}. Please contact them (or reply "help") if anything looks wrong.`,
       });
     }
     return await sendWhatsAppText({
       to: from,
-      text: `⏳ That payment request is no longer active — no payment was taken on it.`,
+      text: `⏳ That payment request is no longer active. No payment was taken on it.`,
     });
   }
 
@@ -2404,9 +2404,9 @@ function matchCardDepositRequest(text = '') {
 function buildDepositPrompt() {
   return (
     `💰 *Add Money to WaPay*\n\n` +
-    `1️⃣ *Cash* — take your cash to the till at any major retailer and ask for a *Blu Voucher* for the amount you want to deposit. The cashier gives you a voucher code. Send that code to me here, and the money is automatically loaded into your WaPay wallet.\n` +
+    `1️⃣ *Cash*: take your cash to the till at any major retailer and ask for a *Blu Voucher* for the amount you want to deposit. The cashier gives you a voucher code. Send that code to me here, and the money is automatically loaded into your WaPay wallet.\n` +
     `Example: 1234-5678-9012-3456\n\n` +
-    `2️⃣ *Card / bank* — I'll send you a secure PayFast link. Pay with your card, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan or Zapper. Reply with the amount, e.g. "deposit R100"`
+    `2️⃣ *Card / bank*: I'll send you a secure PayFast link. Pay with your card, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan or Zapper. Reply with the amount, e.g. "deposit R100"`
   );
 }
 
@@ -2559,7 +2559,7 @@ async function handleDepositStatus({ from, account }) {
     });
     return await sendWhatsAppText({
       to: from,
-      text: await localizeOutbound(`⚠️ I can't check your payment status right now — please try again in a moment.`, await userLang(account)),
+      text: await localizeOutbound(`⚠️ I can't check your payment status right now. Please try again in a moment.`, await userLang(account)),
     });
   }
 
@@ -2585,7 +2585,7 @@ async function handleDepositStatus({ from, account }) {
       `💰 Balance: R${balance}`;
   } else if (intent.status === 'FAILED') {
     text =
-      `❌ Your ${amount} card payment didn't complete — nothing was credited.\n\n` +
+      `❌ Your ${amount} card payment didn't complete. Nothing was credited.\n\n` +
       `💰 Balance: R${balance}\n\n` +
       `Want to try again? Reply "deposit ${Number.isInteger(amountCents) ? randsShort(amountCents) : 'R100'}".`;
   } else {
@@ -2594,8 +2594,8 @@ async function handleDepositStatus({ from, account }) {
     // payment declined ON PayFast's page never sends an ITN, so the retry
     // line matters (observed live: FNB decline, 2026-08-19).
     text =
-      `⏳ PayFast is still confirming your ${amount} — I'll message you here the moment it clears.\n\n` +
-      `If the payment didn't go through on PayFast's page (or your bank declined it), nothing left your account — just reply "deposit ${Number.isInteger(amountCents) ? randsShort(amountCents) : 'R100'}" to try again.\n\n` +
+      `⏳ PayFast is still confirming your ${amount}. I'll message you here the moment it clears.\n\n` +
+      `If the payment didn't go through on PayFast's page (or your bank declined it), nothing left your account. Just reply "deposit ${Number.isInteger(amountCents) ? randsShort(amountCents) : 'R100'}" to try again.\n\n` +
       `💰 Balance: R${balance}`;
   }
 
@@ -2624,7 +2624,7 @@ async function handleVoucherHistory({ from, account }) {
   if (!gifts.length) {
     return await sendWhatsAppText({
       to: from,
-      text: await localizeOutbound(`🎟️ You haven't bought any vouchers yet.\n\nTry "buy an OTT voucher R50" — paid from your balance, PIN delivered right here.`, await userLang(account)),
+      text: await localizeOutbound(`🎟️ You haven't bought any vouchers yet.\n\nTry "buy an OTT voucher R50". Paid from your balance, PIN delivered right here.`, await userLang(account)),
     });
   }
 
@@ -2634,7 +2634,7 @@ async function handleVoucherHistory({ from, account }) {
     const who = normaliseMsisdn(g.recipientMsisdn) === own ? 'for you' : `to ${maskMsisdn(g.recipientMsisdn)}`;
     const status =
       g.status === 'DELIVERED' ? '✅ PIN delivered' : g.status === 'CANCELLED' ? '❌ cancelled' : '⏳ awaiting claim';
-    return `• ${when} — ${randsShort(g.amountCents)} ${who}\n   SN ${g.voucherSerial || '—'} · ${status}`;
+    return `• ${when} · ${randsShort(g.amountCents)} ${who}\n   SN ${g.voucherSerial || '—'} · ${status}`;
   });
 
   const msg = await localizeOutbound(
@@ -2699,7 +2699,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         return await sendWhatsAppText({
           to: from,
-          text: await localizeOutbound(`Please reply with the amount you'd like to request, e.g. "R150" — or "cancel" to stop.`, await userLang(account)),
+          text: await localizeOutbound(`Please reply with the amount you'd like to request, e.g. "R150", or "cancel" to stop.`, await userLang(account)),
         });
       }
       return await handleCreatePaymentRequest({ from, account, amountCents: filled.amountCents, rawText: text });
@@ -2748,7 +2748,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
       if (/^(no|nope|n|cancel|stop)$/i.test(normalized)) {
         await updateConversationState(from, null);
-        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Cancelled — nothing was paid.`, await userLang(account)) });
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Cancelled. Nothing was paid.`, await userLang(account)) });
       }
       if (isConversationalEscape(text)) {
         await updateConversationState(from, null);
@@ -2761,7 +2761,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       const normalized = text.trim().toLowerCase();
       if (/^(cancel|stop|no|exit|back)$/i.test(normalized)) {
         await updateConversationState(from, null);
-        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Cancelled — nothing was paid.`, await userLang(account)) });
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Cancelled. Nothing was paid.`, await userLang(account)) });
       }
 
       // Only something PIN-shaped reaches verifyPIN — a question or
@@ -2774,7 +2774,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         return await sendWhatsAppText({
           to: from,
-          text: await localizeOutbound(`Please enter your 4-digit WaPay PIN — or reply "cancel" to stop.`, await userLang(account)),
+          text: await localizeOutbound(`Please enter your 4-digit WaPay PIN, or reply "cancel" to stop.`, await userLang(account)),
         });
       }
 
@@ -2798,7 +2798,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       if (!request || request.status !== 'PENDING') {
         return await sendWhatsAppText({
           to: from,
-          text: await localizeOutbound(`⏳ That payment request is no longer open — nothing was paid.`, await userLang(account)),
+          text: await localizeOutbound(`⏳ That payment request is no longer open. Nothing was paid.`, await userLang(account)),
         });
       }
 
@@ -2826,14 +2826,14 @@ async function handleConversationState({ from, text, state, data, account }) {
             text:
               await localizeOutbound(`💰 You need ${randsShort(request.amountCents)} but your balance is R${balance}.\n\n` +
               `Top up and try again:\n` +
-              `1️⃣ *Cash* — buy a Blu Voucher at any till and send me the code\n` +
-              `2️⃣ *Card / bank* — reply "deposit ${randsShort(shortfallCents)}" for a secure PayFast link`, await userLang(account)),
+              `1️⃣ *Cash*: buy a Blu Voucher at any till and send me the code\n` +
+              `2️⃣ *Card / bank*: reply "deposit ${randsShort(shortfallCents)}" for a secure PayFast link`, await userLang(account)),
           });
         }
         logStructured('payrequest_pay_error', { from, accountId: account.id, code: data.code, error: error?.message });
         return await sendWhatsAppText({
           to: from,
-          text: await localizeOutbound(`❌ Sorry, the payment couldn't be completed. Nothing was charged — please try again.`, await userLang(account)),
+          text: await localizeOutbound(`❌ Sorry, the payment couldn't be completed. Nothing was charged. Please try again.`, await userLang(account)),
         });
       }
 
@@ -2843,7 +2843,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         markRequestPaid({ code: request.id, payerRef: 'REPAIR:replayed' }).catch(() => {});
         return await sendWhatsAppText({
           to: from,
-          text: await localizeOutbound(`⏳ That request was already paid — nothing was charged to you.`, await userLang(account)),
+          text: await localizeOutbound(`⏳ That request was already paid. Nothing was charged to you.`, await userLang(account)),
         });
       }
 
@@ -2918,7 +2918,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         return await sendWhatsAppText({
           to: from,
-          text: await localizeOutbound(`Please reply with just the amount you'd like to deposit, e.g. "R100" — or "cancel" to stop.`, await userLang(account)),
+          text: await localizeOutbound(`Please reply with just the amount you'd like to deposit, e.g. "R100", or "cancel" to stop.`, await userLang(account)),
         });
       }
       await updateConversationState(from, null);
@@ -2937,7 +2937,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
-            text: await localizeOutbound(`👍 No problem. When you're ready to add money again, just type "redeem voucher" — or "deposit R100" to pay by card.`, await userLang(account)),
+            text: await localizeOutbound(`👍 No problem. When you're ready to add money again, just type "redeem voucher", or "deposit R100" to pay by card.`, await userLang(account)),
           });
         }
 
@@ -3991,7 +3991,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         await updateConversationState(from, null);
         return await handlePostOnboarding({ account, from, text });
       }
-      return await sendWhatsAppText({ to: from, text: await localizeOutbound(`Please reply *1* for cash or *2* for card — or "cancel" to stop.`, await userLang(account)) });
+      return await sendWhatsAppText({ to: from, text: await localizeOutbound(`Please reply *1* for cash or *2* for card, or "cancel" to stop.`, await userLang(account)) });
     }
 
     case 'VOUCHER_PIN_RESEND_AUTH': {
@@ -4016,8 +4016,8 @@ async function handleConversationState({ from, text, state, data, account }) {
         return await sendWhatsAppText({
           to: from,
           text: await localizeOutbound(check.lockedUntil
-            ? `🔒 Too many attempts — PIN entry is locked for a while. Please try again later.`
-            : `❌ That PIN doesn't match. For safety I've cancelled — reply "my vouchers" to start again.`, await userLang(account)),
+            ? `🔒 Too many attempts. PIN entry is locked for a while. Please try again later.`
+            : `❌ That PIN doesn't match. For safety I've cancelled. Reply "my vouchers" to start again.`, await userLang(account)),
         });
       }
 
@@ -4045,7 +4045,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       const normalized = text.trim().toLowerCase();
       if (/^(cancel|stop|no|not now|later|quit|exit)$/i.test(normalized)) {
         await updateConversationState(from, null);
-        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 No problem — your money stays in your WaPay balance.`, await userLang(account)) });
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 No problem. Your money stays in your WaPay balance.`, await userLang(account)) });
       }
 
       const resumeAmountCents = data?.amountCents;
@@ -4079,7 +4079,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
       return await sendWhatsAppText({
         to: from,
-        text: await localizeOutbound(`⏳ Your top-up hasn't landed yet — the moment it does, message me anything and I'll finish your ${randsShort(resumeAmountCents)} voucher. Reply "cancel" to stop.`, await userLang(account)),
+        text: await localizeOutbound(`⏳ Your top-up hasn't landed yet. The moment it does, message me anything and I'll finish your ${randsShort(resumeAmountCents)} voucher. Reply "cancel" to stop.`, await userLang(account)),
       });
     }
 
@@ -4376,7 +4376,7 @@ async function handleConversationState({ from, text, state, data, account }) {
                 to: from,
                 text:
                   await localizeOutbound(`💰 You need ${randsShort(totalCents)} for this voucher but your balance is R${balance}.\n\n` +
-                  `Pay the ${randsShort(shortfallCents)} difference with the button below — the moment it lands, I'll finish your voucher. 🎟️\n\n` +
+                  `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your voucher. 🎟️\n\n` +
                   `(Prefer cash? Buy a Blu Voucher at any till and send me the code.)`, await userLang(account)),
               });
               const linkResult = await handleCardDepositLink({
@@ -4657,7 +4657,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
       const { balance, displayName } = await getUserBalance(from);
       const vouchers = await voucherBalanceSummary(account);
       const voucherLine = vouchers
-        ? `\n🎟️ Vouchers you've bought: *${randsShort(vouchers.totalCents)}* (${vouchers.count}) — reply "my vouchers" to see them.\n`
+        ? `\n🎟️ Vouchers you've bought: *${randsShort(vouchers.totalCents)}* (${vouchers.count}). Reply "my vouchers" to see them.\n`
         : '';
       const balanceMsg = await localizeOutbound(`💰 *Your WaPay Balance*\n\nHi ${displayName}!\nYour current balance is R ${balance}\n${voucherLine}\nWhat would you like to do next?`, await userLang(account));
       await addToConversationHistory(from, 'assistant', balanceMsg);
@@ -4816,7 +4816,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
     }
 
     case 'HELP': {
-      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083..." — or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words — any South African language works!`;
+      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083...", or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words. Any South African language works!`;
       const localizedHelp = await localizeOutbound(helpMsg, await userLang(account));
       await addToConversationHistory(from, 'assistant', localizedHelp);
       return await sendWhatsAppText({ to: from, text: localizedHelp });
@@ -4843,7 +4843,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
       action: result.action,
     });
     finalText =
-      `I can't confirm payments or balances in chat — but I can check your real transaction record. ` +
+      `I can't confirm payments or balances in chat, but I can check your real transaction record. ` +
       `Ask me "did my payment go through?" or "balance" and I'll look it up.`;
   }
   await addToConversationHistory(from, 'assistant', finalText);

@@ -52,7 +52,7 @@ test('home screen: voucher line only when there is something to show', () => {
   assert.match(body, /await voucherBalanceSummary\(account\)/);
   assert.match(body, /vouchers\s*\n?\s*\? `🎟️ Vouchers bought:/, 'gated on presence');
   assert.match(body, /: ''/, 'voucher-less users see the home screen unchanged');
-  assert.match(body, /reply "my vouchers"/, 'the line routes to the detailed list');
+  assert.match(body, /[Rr]eply "my vouchers"/, 'the line routes to the detailed list');
 });
 
 test('CHECK_BALANCE: voucher line rides the deterministic balance answer', () => {
