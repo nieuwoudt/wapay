@@ -398,7 +398,7 @@ test('delivery diagnosis: returned to internal callers, never leaked publicly, n
   const blob = JSON.stringify(out.diag);
   assert.ok(!/\b\d{6}\b/.test(blob), 'the OTP code never appears in the diagnosis');
   // The public route strips it.
-  assert.match(authRoute, /isInternal \? out : \{ ok: true \}/, 'diag is internal-key gated');
+  assert.match(authRoute, /if \(!isInternal\) return res\.status\(200\)\.json\(\{ ok: true \}\)/, 'diag is internal-key gated');
 });
 
 test('template candidates: a WABA-mismatched name is skipped for one that works', async () => {
