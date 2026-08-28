@@ -1073,6 +1073,27 @@ async function handlePostOnboarding({ account, from, text }) {
     return await renderHome({ from, account });
   }
 
+  // ADMIN LOGIN CODE, requested FROM the phone (2026-08-28, BUGLOG #33).
+  // Pushing a login code to WhatsApp is unreliable: an admin signs in from a
+  // computer, so the 24-hour service window is closed and only an approved
+  // template can cross it — and template approvals live per-WABA, which bit
+  // us. Inverting the flow removes the dependency entirely: the admin's own
+  // message opens the window, so this reply is ALWAYS deliverable free-form.
+  // Non-admin numbers get no hint that the command exists.
+  if (matchAdminLoginAsk(text)) {
+    const { requestAdminOtpInSession } = await import('../../../lib/admin-auth.js');
+    const issued = await requestAdminOtpInSession({ msisdn: account.msisdn || from });
+    if (issued.ok) {
+      logStructured('admin_login_code_in_session', { accountId: account.id });
+      return await sendWhatsAppText({
+        to: from,
+        text: `🔐 *WaPay admin code: ${issued.code}*\n\nType it into the console within 10 minutes. One attempt only.\n\nNot you? Ignore this and tell us right away.`,
+      });
+    }
+    // Not an admin (or throttled): stay silent about the feature's existence
+    // and let the message route normally.
+  }
+
   // Unified slot parsing: MUST happen before routing decisions and before any state transitions.
   const slots = parseSlots(text, { waId: from, accountId: account.id });
 
@@ -1979,6 +2000,18 @@ async function handleChangeRequestAmount({ from, account, amountCents, rawText =
  * Deliberately excludes "pay request <code>" (that's PAYING one) and
  * paying-someone phrasings ("pay my sister").
  */
+/**
+ * "admin login" / "admin code" / "login code" — an admin asking, from their
+ * own phone, for a console sign-in code. Deliberately narrow so ordinary
+ * customer sentences never match; the caller still has to be on the admin
+ * allowlist before anything is issued.
+ */
+function matchAdminLoginAsk(text = '') {
+  const s = String(text || '').trim().toLowerCase();
+  if (s.length > 40) return false;
+  return /^(admin\s*(login|code|sign\s*-?\s*in)|login\s*code|console\s*(login|code))\b/.test(s);
+}
+
 function matchRequestMoneyAsk(text = '', slots = null) {
   const s = String(text || '');
   if (PAY_REQUEST_CODE_PATTERN.test(s)) return false;

@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import {
   adminAuthConfigured, isAdminMsisdn, requestAdminOtp, verifyAdminOtp,
   mintAdminToken, verifyAdminToken, adminCookie, clearAdminCookie, requireAdmin,
+  requestAdminOtpInSession,
 } from '../lib/admin-auth.js';
 import { adminHostDecision } from '../lib/admin-host.js';
 
@@ -418,4 +419,57 @@ test('template candidates: a WABA-mismatched name is skipped for one that works'
   });
   assert.ok(tried.includes('otp_register'), 'falls through to the template on our WABA');
   assert.equal(prisma._otps.length, 1, 'code delivered and kept');
+});
+
+// ---------------------------------------------------------------------------
+// In-session admin code (BUGLOG #33): the admin asks FROM their phone, so the
+// reply rides an open window and never depends on a per-WABA template.
+// ---------------------------------------------------------------------------
+
+test('in-session code: issued to an allowlisted admin, refused for everyone else', async () => {
+  armEnv();
+  const prisma = stubPrisma();
+  const ok = await requestAdminOtpInSession({ prisma, msisdn: ADMIN });
+  assert.equal(ok.ok, true);
+  assert.match(ok.code, /^\d{6}$/, 'plaintext code returned for immediate in-session delivery');
+  assert.equal(prisma._otps.length, 1);
+  assert.match(prisma._otps[0].code, /^adm:[0-9a-f]{64}$/, 'stored hashed, never plaintext');
+  // A non-admin gets nothing at all.
+  const no = await requestAdminOtpInSession({ prisma: stubPrisma(), msisdn: '0839999999' });
+  assert.equal(no.ok, false);
+  assert.equal(no.code, undefined);
+});
+
+test('in-session code: same throttle as the push path', async () => {
+  armEnv();
+  const prisma = stubPrisma();
+  assert.equal((await requestAdminOtpInSession({ prisma, msisdn: ADMIN })).ok, true);
+  assert.equal((await requestAdminOtpInSession({ prisma, msisdn: ADMIN })).ok, false, 'throttled inside 60s');
+});
+
+test('admin-login matcher: narrow enough that customer sentences never match', () => {
+  const src = readFileSync(fileURLToPath(new URL('../pages/api/webhooks/message-processor-v2.js', import.meta.url)), 'utf8');
+  const start = src.indexOf('function matchAdminLoginAsk(');
+  assert.ok(start > -1, 'the matcher exists');
+  const body = src.slice(start, src.indexOf('\n}', start) + 2);
+  // eslint-disable-next-line no-new-func
+  const match = new Function(`${body}; return matchAdminLoginAsk;`)();
+  for (const yes of ['admin login', 'Admin Login', 'admin code', 'login code', 'console login']) {
+    assert.equal(match(yes), true, yes);
+  }
+  for (const no of [
+    'please pay me R50', 'buy airtime', 'what is my balance', 'my admin friend logged in',
+    'send R20 to 0781234567', 'I need a code for my voucher', 'help', '',
+  ]) {
+    assert.equal(match(no), false, no);
+  }
+});
+
+test('static: the in-session code path is allowlist-gated and stays silent otherwise', () => {
+  const src = readFileSync(fileURLToPath(new URL('../pages/api/webhooks/message-processor-v2.js', import.meta.url)), 'utf8');
+  const i = src.indexOf('matchAdminLoginAsk(text)');
+  const block = src.slice(i, i + 1200);
+  assert.match(block, /requestAdminOtpInSession/);
+  assert.match(block, /issued\.ok/, 'only replies when a code was actually issued');
+  assert.ok(!/not an admin/i.test(block.split('issued.ok')[0]), 'no pre-emptive rejection message');
 });

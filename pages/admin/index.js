@@ -238,6 +238,10 @@ function Login({ configured, onDone }) {
       ) : (
         <>
           <p className="note">Enter the 6-digit code. One attempt per code; a wrong guess burns it.</p>
+          <p className="note" style={{ marginTop: -4 }}>
+            No code? WhatsApp only delivers to an open chat. Send <b>“admin login”</b> to the
+            WaPay number from your phone and the code comes straight back.
+          </p>
           <input inputMode="numeric" maxLength={6} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
           <button className="go" onClick={async () => {
             setErr('');

@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-08-28 (16) — Admin login code: request it from your phone (BUGLOG #33, round 2)
+
+The template path turned out to be a dead end: production diagnosis showed `(#132001)` for
+every OTP template (approvals are per-WABA and our catalogue mixes two accounts), while the
+free-form fallback reported `ok:true` with a message id and was still silently dropped
+outside the 24h window. So the flow is inverted — message **"admin login"** to the WaPay
+number and the code comes straight back in-session, where delivery is guaranteed and no
+template is involved. Same allowlist, throttle, daily cap and hashed storage; silent for
+non-admins. The console button still works when the window is open, and the login screen now
+says so. Also added: an internal-key-only delivery diagnosis on the request endpoint (never
+the code) so this class of failure is diagnosable, not guesswork. 429/429 tests.
+
 ## 2026-08-28 (15) — Admin login code now delivers (BUGLOG #33)
 
 The founder's first login produced no code: the OTP was generated fine but sent as a

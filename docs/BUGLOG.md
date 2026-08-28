@@ -26,6 +26,26 @@
 - **Guard:** `tests/admin-console.test.mjs` — template-attempted-first, free-form-not-used-on-
   success, fallback-on-template-failure, undeliverable-row-deleted-and-retry-not-throttled,
   plus a static check that the route wires the template sender.
+- **SECOND ROUND — the template path was a dead end.** With an internal-key delivery
+  diagnosis added to the request endpoint, production said: `(#132001) Template name does not
+  exist in the translation` for BOTH `otp_register` and `otp_register_step_2`, while the
+  free-form fallback returned `ok:true` with a message id and still never arrived (Meta
+  accepts an out-of-window free-form send, then silently drops it — `ok` means *accepted*,
+  not *delivered*). Root cause of the template failure: **templates are approved per WABA**,
+  and our catalogue mixes two business accounts (`otp_register_step_2` is approved on
+  647978251504290; we send from 801970852418258) — and neither resolved in the requested
+  language on the sending account.
+- **DURABLE FIX — invert the flow.** Pushing a login code to a closed window is inherently
+  fragile, so the admin now REQUESTS it from their phone: messaging **"admin login"** to the
+  WaPay number issues the code and replies in-session, where free-form delivery is guaranteed
+  and no template is involved. `requestAdminOtpInSession` reuses the same allowlist, throttle,
+  daily cap and hashed storage; non-admins get no acknowledgement that the command exists.
+  The console's push button still works whenever the window happens to be open, and the login
+  screen now tells the user the phone path. Guards: matcher precision against a customer-
+  sentence corpus, allowlist gating, throttle parity, hashed-at-rest.
+- **Wider lesson:** onboarding has the same latent template failure — it has simply never
+  surfaced because onboarding always runs inside an open window, so its free-form fallback
+  always carries it. Worth fixing when the WABA/template catalogue is next reconciled.
 - **Lesson (applies to every future outbound):** anything the customer/admin has not just
   messaged us about needs a TEMPLATE, not free-form text. Free-form is only safe as a reply
   inside an open session.
