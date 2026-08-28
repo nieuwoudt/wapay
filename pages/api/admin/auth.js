@@ -10,7 +10,7 @@
  * unset — the login form tells the operator to configure them.
  */
 
-import { sendWhatsAppText } from '@wapay/whatsapp';
+import { sendWhatsAppText, sendWhatsAppTemplate } from '@wapay/whatsapp';
 import {
   requestAdminOtp,
   verifyAdminOtp,
@@ -40,7 +40,11 @@ export default async function handler(req, res) {
   }
 
   if (action === 'request') {
-    const out = await requestAdminOtp({ msisdn, send: sendWhatsAppText });
+    const out = await requestAdminOtp({
+      msisdn,
+      sendTemplate: sendWhatsAppTemplate, // authentication template: crosses the 24h window
+      send: sendWhatsAppText, // fallback when the window happens to be open
+    });
     return res.status(200).json(out);
   }
 

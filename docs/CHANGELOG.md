@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-08-28 (15) — Admin login code now delivers (BUGLOG #33)
+
+The founder's first login produced no code: the OTP was generated fine but sent as a
+free-form WhatsApp message, which Meta only delivers inside the 24-hour customer service
+window — and an admin logging in from a computer is exactly when that window is closed
+(28.6h had passed). Admin OTP now goes out on the approved AUTHENTICATION template
+(`otp_register_step_2`, overridable via `WAPAY_TEMPLATE_ADMIN_OTP`) with free-form as the
+fallback, and an undeliverable code row is deleted so the retry is not throttled. 4 new
+tests (423 total).
+
 ## 2026-08-28 (14) — Admin console moves to a wapay.co.za host + Didit API spec saved
 
 - **Host routing** (`middleware.js` + `lib/admin-host.js`, founder ask): set

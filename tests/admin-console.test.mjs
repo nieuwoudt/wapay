@@ -85,6 +85,11 @@ function stubPrisma() {
         }
         return { count };
       },
+      async deleteMany({ where }) {
+        const before = otps.length;
+        for (let i = otps.length - 1; i >= 0; i -= 1) if (otps[i].id === where.id) otps.splice(i, 1);
+        return { count: before - otps.length };
+      },
     },
   };
 }
@@ -313,4 +318,65 @@ test('static: middleware never intercepts APIs (webhooks must stay reachable)', 
   assert.match(mw, /matcher: \['\/', '\/admin', '\/admin\/:path\*'\]/, 'matcher is page-only');
   assert.ok(!/'\/api/.test(mw.match(/matcher: \[[^\]]*\]/)[0]), 'no /api in the matcher');
   assert.match(mw, /status: 404/, 'wrong host gets 404, not a redirect');
+});
+
+// ---------------------------------------------------------------------------
+// Delivery (fixed 2026-08-28): an admin logs in from a computer, so WhatsApp's
+// 24-hour service window is normally CLOSED. The code must go out on an
+// APPROVED AUTHENTICATION TEMPLATE, with free-form text only as a fallback.
+// ---------------------------------------------------------------------------
+
+test('OTP delivery: authentication TEMPLATE first (crosses the 24h window)', async () => {
+  armEnv();
+  const prisma = stubPrisma();
+  const templates = [], texts = [];
+  await requestAdminOtp({
+    prisma, msisdn: ADMIN,
+    sendTemplate: async (a) => { templates.push(a); return { ok: true }; },
+    send: async (a) => { texts.push(a); return { ok: true }; },
+  });
+  assert.equal(templates.length, 1, 'template attempted');
+  assert.equal(texts.length, 0, 'free-form NOT used when the template succeeds');
+  assert.equal(templates[0].to, '27731234567');
+  assert.match(templates[0].templateName, /otp/i, 'an authentication OTP template');
+  const param = templates[0].components[0].parameters[0].text;
+  assert.match(param, /^\d{6}$/, 'the code rides in the body parameter');
+  assert.equal(prisma._otps.length, 1, 'code row persists on successful delivery');
+});
+
+test('OTP delivery: falls back to free-form when the template fails', async () => {
+  armEnv();
+  const prisma = stubPrisma();
+  const texts = [];
+  await requestAdminOtp({
+    prisma, msisdn: ADMIN,
+    sendTemplate: async () => ({ ok: false, error: 'template_not_found' }),
+    send: async (a) => { texts.push(a); return { ok: true }; },
+  });
+  assert.equal(texts.length, 1, 'fallback used');
+  assert.equal(prisma._otps.length, 1, 'row kept — it was delivered');
+});
+
+test('OTP delivery: undeliverable code is DELETED so retry is not throttled', async () => {
+  armEnv();
+  const prisma = stubPrisma();
+  await requestAdminOtp({
+    prisma, msisdn: ADMIN,
+    sendTemplate: async () => ({ ok: false }),
+    send: async () => ({ ok: false, error: 'outside 24h window' }),
+  });
+  assert.equal(prisma._otps.length, 0, 'no orphan code blocking the next attempt');
+  // And the immediate retry is allowed (not throttled behind a phantom row).
+  const texts = [];
+  await requestAdminOtp({
+    prisma, msisdn: ADMIN,
+    sendTemplate: async (a) => { texts.push(a); return { ok: true }; },
+    send: async () => ({ ok: true }),
+  });
+  assert.equal(texts.length, 1, 'retry goes out immediately');
+});
+
+test('static: the auth route wires the template sender', () => {
+  assert.match(authRoute, /sendWhatsAppTemplate/, 'template sender imported and passed');
+  assert.match(authRoute, /sendTemplate: sendWhatsAppTemplate/);
 });

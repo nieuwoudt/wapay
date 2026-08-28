@@ -4,6 +4,32 @@
 
 ---
 
+## 33. Admin login code never arrived — free-form send outside WhatsApp's 24-hour window
+
+- **Symptom (founder's first login, 2026-08-28):** entered the correct number on
+  admin.wapay.co.za, never received the 6-digit code. The console gave no error (by design —
+  the request endpoint is deliberately not an allowlist oracle).
+- **Diagnosis:** two `adm:`-prefixed rows existed in `otp_codes` for the founder's account, so
+  the allowlist matched, the account resolved and the code was generated — only DELIVERY
+  failed. The last inbound WhatsApp message was 28.6 hours old, so Meta's 24-hour customer
+  service window was CLOSED and a free-form text is undeliverable.
+- **Root cause:** `requestAdminOtp` sent the code with `sendWhatsAppText` (free-form). That is
+  precisely wrong for a login flow: an admin signs in FROM A COMPUTER, so the window is
+  normally closed. The onboarding OTP had it right all along — template first
+  (`otp_register_step_2`, APPROVED/AUTHENTICATION, delivers outside the window), text as
+  fallback.
+- **Fix:** admin OTP now sends the approved AUTHENTICATION template first (name overridable
+  via `WAPAY_TEMPLATE_ADMIN_OTP`), falling back to free-form only if the template fails. If
+  BOTH fail the code row is DELETED, so the admin retries immediately instead of being
+  throttled behind a code that never arrived; logged as `admin_otp_undeliverable`. The two
+  stranded rows were cleared from prod.
+- **Guard:** `tests/admin-console.test.mjs` — template-attempted-first, free-form-not-used-on-
+  success, fallback-on-template-failure, undeliverable-row-deleted-and-retry-not-throttled,
+  plus a static check that the route wires the template sender.
+- **Lesson (applies to every future outbound):** anything the customer/admin has not just
+  messaged us about needs a TEMPLATE, not free-form text. Free-form is only safe as a reply
+  inside an open session.
+
 ## 32. Admin console + Didit KYC — 27-agent adversarial review (caught pre-ship 2026-08-28)
 
 The whole admin/KYC surface was reviewed by a 27-finding adversarial workflow BEFORE it saw
