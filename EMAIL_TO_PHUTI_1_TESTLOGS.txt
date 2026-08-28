@@ -1,0 +1,63 @@
+Subject: RE: WaPay production enablement request (testing logs attached)
+
+Hi Phuti
+
+Thank you, and no problem on the timing.
+
+Testing logs are attached: "WaPay: Blue Label Trade API UAT test evidence". It lists every
+transaction with your own reference numbers so your team can match them against your records
+directly.
+
+In short:
+
+* Voucher redemption: 8 successful production redemptions between 24 November 2025 and
+  6 January 2026, each with its Blu reference (BLU-1763971714144 and the seven that follow).
+  Used, expired and invalid PINs were each tested and are handled correctly, and redemption
+  is idempotent, so a repeated PIN can never double-credit.
+* Airtime: 6 successful vends with your references 829666075, 829673309, 829717452, 829720901,
+  829720907 and 829720922. The log also retains the declined and abandoned attempts from the
+  same period, which evidence correct handling of the failure paths.
+* Data and electricity: both verified end to end, including a vend on your compliance test
+  meter 000001020001. These ran in the Trade QA environment, so those logs sit on your QA
+  side rather than in our production records.
+
+One request. If the sign-off needs data and electricity in the same format as the others, or
+in a specific template of yours, tell me which and we will run a fresh UAT round and send the
+full logs, receipts and ledger entries. Please also let me know whether there is a production
+UAT allowance or test-vend budget we should use, since we currently only see the QA whitelist
+for test MSISDNs.
+
+While the sign-off is in progress, three items from my 18 August mail are still open, and the
+first two are what actually gate our launch:
+
+1. Production credentials: Trade API basic auth and API keys for voucher redemption and VAS
+   vending, the production base URL, and your go-live checklist.
+2. IP whitelisting: does production require caller IP whitelisting, and if so do you accept a
+   shared static egress IP from a managed cloud pool, or must it be dedicated to us? Either
+   answer is fine, we just need it definitively so we can finalise our network setup.
+3. Additional VAS categories on our trade account: lifestyle and entertainment vouchers, bill
+   payments, gaming top-ups and remittance. A short document setting out exactly what we are
+   asking for, and the commercial questions attached to each, is also attached. If any of
+   these need separate agreements or approval steps, please point me at the process and I
+   will start it now.
+
+On that third point, one thing would help us more than anything else. We have been building
+from notes taken off your Swagger UI rather than from a specification, and we have no product
+documentation for those four categories at all. So before we write any more code against
+them, could you send:
+
+* the OpenAPI or Swagger JSON URL for QA and for production;
+* the production base URL, confirmed in writing (our notes carry three different hosts and we
+  would rather not guess);
+* a product or SKU catalogue per category, with the endpoint that lists it, so we use your
+  product codes and denominations instead of placeholders;
+* confirmation of which categories our trade account can actually be enabled for.
+
+Two smaller operational questions while you are in there: are there published rate limits, and
+do you provide webhooks or a reconciliation file for settlement? Both affect how we build.
+
+Happy to jump on a call if that is quicker for any of this.
+
+Regards
+Nieuwoudt Gresse
+WaPay
