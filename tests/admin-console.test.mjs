@@ -335,7 +335,7 @@ test('OTP delivery: authentication TEMPLATE first (crosses the 24h window)', asy
     sendTemplate: async (a) => { templates.push(a); return { ok: true }; },
     send: async (a) => { texts.push(a); return { ok: true }; },
   });
-  assert.equal(templates.length, 1, 'template attempted');
+  assert.equal(templates.length, 1, 'stops at the first template that works');
   assert.equal(texts.length, 0, 'free-form NOT used when the template succeeds');
   assert.equal(templates[0].to, '27731234567');
   assert.match(templates[0].templateName, /otp/i, 'an authentication OTP template');
@@ -353,7 +353,7 @@ test('OTP delivery: falls back to free-form when the template fails', async () =
     sendTemplate: async () => ({ ok: false, error: 'template_not_found' }),
     send: async (a) => { texts.push(a); return { ok: true }; },
   });
-  assert.equal(texts.length, 1, 'fallback used');
+  assert.equal(texts.length, 1, 'fallback used only after EVERY template candidate failed');
   assert.equal(prisma._otps.length, 1, 'row kept — it was delivered');
 });
 
@@ -391,11 +391,31 @@ test('delivery diagnosis: returned to internal callers, never leaked publicly, n
   });
   assert.equal(out.ok, true, 'still a generic ok — never an oracle');
   assert.equal(out.diag.templateOk, false);
-  assert.match(out.diag.templateError, /paused/);
+  assert.ok(out.diag.tried.length >= 2, 'every candidate template is reported');
+  assert.match(out.diag.tried[0].error, /paused/);
   assert.equal(out.diag.textOk, false);
   assert.match(out.diag.to, /^\d\d•+\d{4}$/, 'destination masked, never printed in full');
   const blob = JSON.stringify(out.diag);
   assert.ok(!/\b\d{6}\b/.test(blob), 'the OTP code never appears in the diagnosis');
   // The public route strips it.
   assert.match(authRoute, /isInternal \? out : \{ ok: true \}/, 'diag is internal-key gated');
+});
+
+test('template candidates: a WABA-mismatched name is skipped for one that works', async () => {
+  armEnv();
+  const prisma = stubPrisma();
+  const tried = [];
+  await requestAdminOtp({
+    prisma, msisdn: ADMIN,
+    // Mirrors production: the first candidate is approved on a DIFFERENT WABA.
+    sendTemplate: async (a) => {
+      tried.push(a.templateName);
+      return a.templateName === 'otp_register'
+        ? { ok: true, data: { messages: [{ id: 'wamid.OK' }] } }
+        : { ok: false, error: '(#132001) Template name does not exist in the translation' };
+    },
+    send: async () => { throw new Error('free-form must NOT be reached'); },
+  });
+  assert.ok(tried.includes('otp_register'), 'falls through to the template on our WABA');
+  assert.equal(prisma._otps.length, 1, 'code delivered and kept');
 });
