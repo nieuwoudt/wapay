@@ -1,0 +1,33 @@
+Subject: RE: FICA / KYC
+
+Hi Keamo
+
+Thanks for the update, and no problem on the compliance timing.
+
+Yes, we apply a risk-based, tiered KYC model, in line with FICA's risk-based
+approach:
+
+1. Every client is identified at onboarding. The account is bound to their
+   cellphone number, verified by OTP on WhatsApp, before any transaction is
+   possible. One number, one account.
+
+2. Simply buying a product (for example an OTT voucher) requires nothing
+   further, the same as buying one at a till. Wallet activity is deliberately
+   low-value and low-risk: deposits and payment requests are capped at R3,000
+   per transaction, and the wallet is spend-only today. There is no cash-out
+   anywhere in the live product.
+
+3. Full identity verification (SA ID verified against Home Affairs data, with
+   a liveness selfie match through an accredited verification provider)
+   becomes mandatory the moment a client wants money OUT. No payout or
+   withdrawal will ever run without it. The payout rail is not yet live to
+   customers; it launches with this verification enforced from day one. This
+   is also why I asked for OTT's KYC requirements in my earlier email: we want
+   our verification thresholds to line up with what your compliance team
+   needs before we switch payouts on.
+
+Happy to walk your compliance team through the onboarding and verification
+flow in detail if that would help.
+
+Regards
+Niev
