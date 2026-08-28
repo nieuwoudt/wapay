@@ -23,6 +23,7 @@ import {
   adminAuthConfigured, isAdminMsisdn, requestAdminOtp, verifyAdminOtp,
   mintAdminToken, verifyAdminToken, adminCookie, clearAdminCookie, requireAdmin,
 } from '../lib/admin-auth.js';
+import { adminHostDecision } from '../lib/admin-host.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const authLib = read('../lib/admin-auth.js');
@@ -273,4 +274,43 @@ test('internal-key compare is constant-time (hashed), rejects wrong/array keys',
   assert.equal(requireAdmin({ headers: { 'x-internal-api-key': 'x'.repeat(40) } }).ok, false);
   assert.equal(requireAdmin({ headers: { 'x-internal-api-key': ['k'.repeat(40)] } }).ok, false, 'array header rejected, no throw');
   delete process.env.WAPAY_INTERNAL_API_KEY;
+});
+
+// ---------------------------------------------------------------------------
+// Host routing — the console lives on the wapay.co.za admin domain only
+// (founder 2026-08-28), never on the customer-facing pay-link domain.
+// ---------------------------------------------------------------------------
+
+test('admin host: unset WAPAY_ADMIN_HOST never locks anyone out', () => {
+  for (const host of ['pleasepayme.co.za', 'admin.wapay.co.za', 'localhost:3000']) {
+    assert.equal(adminHostDecision({ host, pathname: '/admin', adminHost: '' }), 'pass');
+    assert.equal(adminHostDecision({ host, pathname: '/admin', adminHost: undefined }), 'pass');
+  }
+});
+
+test('admin host: /admin serves ONLY on the configured admin host', () => {
+  const adminHost = 'admin.wapay.co.za';
+  assert.equal(adminHostDecision({ host: 'admin.wapay.co.za', pathname: '/admin', adminHost }), 'pass');
+  assert.equal(adminHostDecision({ host: 'ADMIN.WAPAY.CO.ZA', pathname: '/admin', adminHost }), 'pass', 'host is case-insensitive');
+  assert.equal(adminHostDecision({ host: 'admin.wapay.co.za:443', pathname: '/admin/anything', adminHost }), 'pass', 'port ignored');
+  // Customer-facing domains must 404 the console, not redirect (no advertising).
+  assert.equal(adminHostDecision({ host: 'pleasepayme.co.za', pathname: '/admin', adminHost }), 'block');
+  assert.equal(adminHostDecision({ host: 'wa-pay.me', pathname: '/admin/customers', adminHost }), 'block');
+  // A lookalike host must not pass.
+  assert.equal(adminHostDecision({ host: 'admin.wapay.co.za.evil.com', pathname: '/admin', adminHost }), 'block');
+});
+
+test('admin host: the admin domain root opens the console; pay pages are untouched', () => {
+  const adminHost = 'admin.wapay.co.za';
+  assert.equal(adminHostDecision({ host: 'admin.wapay.co.za', pathname: '/', adminHost }), 'rewrite');
+  // Customer pay pages on the pay domain are never intercepted.
+  assert.equal(adminHostDecision({ host: 'pleasepayme.co.za', pathname: '/', adminHost }), 'pass');
+  assert.equal(adminHostDecision({ host: 'pleasepayme.co.za', pathname: '/PRKWXQZM', adminHost }), 'pass');
+});
+
+test('static: middleware never intercepts APIs (webhooks must stay reachable)', () => {
+  const mw = read('../middleware.js');
+  assert.match(mw, /matcher: \['\/', '\/admin', '\/admin\/:path\*'\]/, 'matcher is page-only');
+  assert.ok(!/'\/api/.test(mw.match(/matcher: \[[^\]]*\]/)[0]), 'no /api in the matcher');
+  assert.match(mw, /status: 404/, 'wrong host gets 404, not a redirect');
 });

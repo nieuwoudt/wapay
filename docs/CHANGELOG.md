@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-08-28 (14) — Admin console moves to a wapay.co.za host + Didit API spec saved
+
+- **Host routing** (`middleware.js` + `lib/admin-host.js`, founder ask): set
+  `WAPAY_ADMIN_HOST` (e.g. `admin.wapay.co.za`) and the console serves ONLY there — every
+  other host **404s** `/admin` (a 404, not a redirect: the console is not advertised on
+  customer domains), and that host's root rewrites into the console. Unset = no restriction,
+  so nothing breaks before the DNS exists. The matcher is page-only: `/api/*` is never
+  intercepted, so the Didit webhook and every other API stay reachable on the app domain.
+- **`docs/DIDIT_KYC_API.md`** — the verified v3 API spec saved permanently: create-session,
+  hosted-link semantics, decision endpoint, webhook signature recipe + delivery/retry
+  contract, the exact status enum and our mapping, founder console setup, the documented
+  unknowns with the defaults already coded, what we store under POPIA, the safety properties
+  the tests lock, and **what still needs building** (the cashout KYC gate).
+- 4 new tests (419 total) incl. lookalike-host rejection (`admin.wapay.co.za.evil.com`).
+
 ## 2026-08-28 (13) — Didit KYC end-to-end + funnel/cohorts on real data
 
 The KYC rail, built against the verified Didit v3 API (researched from live docs same day):
