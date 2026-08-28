@@ -45,7 +45,12 @@ export default async function handler(req, res) {
       sendTemplate: sendWhatsAppTemplate, // authentication template: crosses the 24h window
       send: sendWhatsAppText, // fallback when the window happens to be open
     });
-    return res.status(200).json(out);
+    // Public callers get a bare {ok:true} — never an allowlist oracle. An
+    // internal-key caller additionally gets the delivery diagnosis (never the
+    // code) so "no code arrived" can be diagnosed instead of guessed.
+    const internalKey = process.env.WAPAY_INTERNAL_API_KEY || '';
+    const isInternal = internalKey && req.headers['x-internal-api-key'] === internalKey;
+    return res.status(200).json(isInternal ? out : { ok: true });
   }
 
   if (action === 'verify') {

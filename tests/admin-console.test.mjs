@@ -380,3 +380,22 @@ test('static: the auth route wires the template sender', () => {
   assert.match(authRoute, /sendWhatsAppTemplate/, 'template sender imported and passed');
   assert.match(authRoute, /sendTemplate: sendWhatsAppTemplate/);
 });
+
+test('delivery diagnosis: returned to internal callers, never leaked publicly, never carries the code', async () => {
+  armEnv();
+  const prisma = stubPrisma();
+  const out = await requestAdminOtp({
+    prisma, msisdn: ADMIN,
+    sendTemplate: async () => ({ ok: false, error: 'template paused' }),
+    send: async () => ({ ok: false, error: 'outside window' }),
+  });
+  assert.equal(out.ok, true, 'still a generic ok — never an oracle');
+  assert.equal(out.diag.templateOk, false);
+  assert.match(out.diag.templateError, /paused/);
+  assert.equal(out.diag.textOk, false);
+  assert.match(out.diag.to, /^\d\d•+\d{4}$/, 'destination masked, never printed in full');
+  const blob = JSON.stringify(out.diag);
+  assert.ok(!/\b\d{6}\b/.test(blob), 'the OTP code never appears in the diagnosis');
+  // The public route strips it.
+  assert.match(authRoute, /isInternal \? out : \{ ok: true \}/, 'diag is internal-key gated');
+});
