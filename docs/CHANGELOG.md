@@ -35,7 +35,7 @@ The KYC rail, built against the verified Didit v3 API (researched from live docs
 
 **To activate KYC**: business.didit.me → create a KYC workflow → set `DIDIT_API_KEY`,
 `DIDIT_WORKFLOW_ID`, `DIDIT_WEBHOOK_SECRET` in Vercel; webhook destination URL =
-`https://wapay.co.za/api/webhooks/didit`, subscribe `status.updated`. Sandbox app first.
+`https://pleasepayme.co.za/api/webhooks/didit`, subscribe `status.updated`. Sandbox app first.
 
 ## 2026-08-28 (12) — Mission Control admin console v1 (OTP login, live dashboard, customer CRM)
 
@@ -59,7 +59,7 @@ Founder green-light on the mockup, so the real thing: `/admin` behind a WhatsApp
   revocation, cookie flags, gate-before-query statics, PIN-leak lock, betting-word ban.
 
 **To activate in prod**: set `WAPAY_ADMIN_MSISDNS` (comma-separated, e.g. 2778…) and
-`WAPAY_ADMIN_SESSION_SECRET` (32+ random chars) in Vercel, redeploy, open wapay.co.za/admin.
+`WAPAY_ADMIN_SESSION_SECRET` (32+ random chars) in Vercel, redeploy, open pleasepayme.co.za/admin.
 
 ## 2026-08-27 (11) — Conversational QA harness + the three bugs its first run caught
 

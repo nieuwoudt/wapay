@@ -49,7 +49,7 @@ Pilot Didit head-to-head with Smile ID on price + pass-rate before committing vo
 >
 > **BUILT 2026-08-28** (`lib/didit-kyc.js`, `/api/webhooks/didit`, `/api/admin/kyc`, console
 > buttons). Founder setup: business.didit.me → KYC workflow → three envs in Vercel + webhook
-> destination `https://wapay.co.za/api/webhooks/didit` (`status.updated`). Test in a Didit
+> destination `https://pleasepayme.co.za/api/webhooks/didit` (`status.updated`). Test in a Didit
 > SANDBOX application first (`sandbox_scenario` outcomes, unbilled).
 
 **The number that decides the vendor: PASS RATE.** Remote ID checks pass 40–60% in this
