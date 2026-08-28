@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-08-28 (12) — Mission Control admin console v1 (OTP login, live dashboard, customer CRM)
+
+Founder green-light on the mockup, so the real thing: `/admin` behind a WhatsApp-OTP login.
+- **Auth**: `WAPAY_ADMIN_MSISDNS` allowlist + `WAPAY_ADMIN_SESSION_SECRET` HMAC sessions
+  (12h, HttpOnly/Secure/SameSite=Strict). OTP reuses `otp_codes`: hashed at rest, one send
+  per minute, ONE verify attempt per code (a wrong guess burns it). Allowlist is re-checked
+  on every request, so removing a number kills its sessions. Fails closed until both envs
+  exist — the login screen says exactly which to set.
+- **`/api/admin/metrics`**: the dashboard payload from the double-entry journal (vitals,
+  flows in/spend/transfer, revenue by REVENUE:* line, weekly series). Smoke-tested against
+  prod: 3 accounts, 2 funded, R197 GMV/30d, R19 revenue, R85 float — the honest truth.
+- **`/api/admin/customer?q=`**: CRM lookup by any number form — identity, KYC status
+  (**Didit chosen as v1 provider**, founder decision), balances + holds, last 40 wallet
+  postings, vouchers sent/received, requests, deposits. `voucherPin` is NEVER selected
+  (bearer secret) — statically locked.
+- **Mockup v2** republished with the customer-profile + sign-in screens (same URL). Also
+  this morning (uncommitted-then, now in): docs/KYC.md (tiered model + Didit decision),
+  docs/ADMIN_DASHBOARD_DESIGN.md updated to v1-BUILT.
+- 13 new tests (396 total): fail-closed everywhere, one-guess OTP, token tamper/expiry/
+  revocation, cookie flags, gate-before-query statics, PIN-leak lock, betting-word ban.
+
+**To activate in prod**: set `WAPAY_ADMIN_MSISDNS` (comma-separated, e.g. 2778…) and
+`WAPAY_ADMIN_SESSION_SECRET` (32+ random chars) in Vercel, redeploy, open wapay.co.za/admin.
+
 ## 2026-08-27 (11) — Conversational QA harness + the three bugs its first run caught
 
 New end-to-end "bug reporter" (founder ask 2026-08-27): `pnpm qa:chat` drives

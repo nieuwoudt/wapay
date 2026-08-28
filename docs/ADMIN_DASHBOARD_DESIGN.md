@@ -1,8 +1,24 @@
 # WaPay Mission Control — Admin Dashboard Design
 
-*Design doc, 2026-08-28. Status: DESIGN APPROVED-PENDING (founder to review mockup) → then
-build. The UI mockup artifact is "WaPay Mission Control" (see `wapay-artifacts-index`
-memory for the URL). Nothing here is built yet.*
+*Design doc, 2026-08-28. Status: **v1 BUILT** (founder green-light same day) — live at
+`/admin` behind WhatsApp-OTP login. The mockup artifact ("WaPay Mission Control", v2) now
+also carries the customer-profile and sign-in screen designs. This doc remains the contract;
+§5 architecture below matches what shipped.*
+
+## v1 shipped scope (2026-08-28)
+- **Auth** (`lib/admin-auth.js` + `POST /api/admin/auth`): allowlisted msisdns
+  (`WAPAY_ADMIN_MSISDNS`), 6-digit OTP over WhatsApp reusing the `otp_codes` table (hashed
+  at rest, 1 send/min, ONE verify attempt per code), stateless HMAC session
+  (`WAPAY_ADMIN_SESSION_SECRET`, 12h) in an HttpOnly/Secure/SameSite=Strict cookie;
+  allowlist re-checked per request so env removal revokes live sessions. FAILS CLOSED.
+- **`GET /api/admin/metrics`**: vitals + flows + revenue-by-line + weekly series from the
+  journal (verified against prod: accounts 3, funded 2, GMV R197/30d at build time).
+- **`GET /api/admin/customer?q=`**: the CRM profile — identity, KYC (Didit-planned),
+  balances, holds, last 40 postings, vouchers sent/received (voucherPin NEVER selected —
+  bearer secret, statically tested), requests, deposits.
+- **`/admin` page**: login → Dashboard + Customers tabs, mockup visual system.
+- **Not yet built** (unchanged in the contract): acquisition-source stamping (funnel
+  contacts row), retention cohorts, ops strip beyond holds, revenue subsidy netting.
 
 ---
 

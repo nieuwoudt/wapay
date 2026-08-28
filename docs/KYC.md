@@ -40,6 +40,13 @@ sales cycle.
 gate, **Smile ID** for the liveness/selfie match, orchestrated by us on the withdrawal web page.
 Pilot Didit head-to-head with Smile ID on price + pass-rate before committing volume.
 
+> **FOUNDER DECISION 2026-08-28: Didit is the v1 provider.** Integration hangs off the
+> customer profile: KYC status lives in `Account.profile.kyc` ({status, provider, verifiedAt,
+> sessionId}), shown in the admin console's customer view (already wired, reads
+> NOT_VERIFIED/PENDING/VERIFIED). Build = Didit hosted-verification link sent to the customer
+> at the withdrawal gate + webhook writing the result into profile.kyc. Keep Smile ID as the
+> benchmarked fallback if Didit's SA pass-rate disappoints.
+
 **The number that decides the vendor: PASS RATE.** Remote ID checks pass 40–60% in this
 market (playbook, stress-tested benchmarks). A failed check at the exact moment someone asks
 for their own money is the worst possible support case. Whatever we pick must expose failure

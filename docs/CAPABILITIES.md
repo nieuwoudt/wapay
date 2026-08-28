@@ -30,6 +30,8 @@ Deployed baseline: 2026-08-18 evening (deposit UX + deposit-status + orchestrati
 | User memory (profile) | **Live** | `Account.profile` (prod): preferred language by evidence (one foreign message can't flip the bot), preferred deposit method (skips the options menu for known card users), last electricity meter, product interests. Injected into the orchestrator each turn as KNOWN USER PROFILE; written deterministically at success points only. |
 | Voucher history | **Live** | "show my vouchers" — bought vouchers with values, dates, active/used status. |
 
+| Admin console (Mission Control) | **Built, env-gated** | `/admin`: WhatsApp-OTP login (allowlist `WAPAY_ADMIN_MSISDNS` + `WAPAY_ADMIN_SESSION_SECRET`, fails closed), live dashboard from the journal (`/api/admin/metrics`), customer CRM lookup (`/api/admin/customer` — never exposes voucher PINs). KYC provider decision: Didit (status shown per customer; integration next). Activate by setting the two envs in Vercel. |
+
 ## 2. Money core (the ledger)
 
 All flows share one engine: `lib/ledger-core.js` (pure math) + `lib/ledger-post.js` (single DB writer). Guarantees:
