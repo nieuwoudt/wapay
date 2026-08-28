@@ -50,7 +50,34 @@ export default async function handler(req, res) {
     // code) so "no code arrived" can be diagnosed instead of guessed.
     const internalKey = process.env.WAPAY_INTERNAL_API_KEY || '';
     const isInternal = internalKey && req.headers['x-internal-api-key'] === internalKey;
-    return res.status(200).json(isInternal ? out : { ok: true });
+    if (!isInternal) return res.status(200).json({ ok: true });
+
+    // When every template candidate failed, ask Meta what the SENDING WABA
+    // actually has approved — the local catalogue can be stale or hold
+    // approvals from a different business account (which is exactly how the
+    // #132001 blocker arose). Template names/languages are not secrets.
+    if (out?.diag && out.diag.templateOk === false) {
+      try {
+        const waba = process.env.META_WHATSAPP_BUSINESS_ACCOUNT_ID;
+        const token = process.env.META_WHATSAPP_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+        if (waba && token) {
+          const r = await fetch(
+            `https://graph.facebook.com/v21.0/${waba}/message_templates?fields=name,language,status,category&limit=200`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const j = await r.json();
+          out.diag.wabaId = waba;
+          out.diag.metaTemplates = Array.isArray(j?.data)
+            ? j.data
+                .filter((t) => t.status === 'APPROVED')
+                .map((t) => `${t.name}:${t.language}:${t.category}`)
+            : { error: j?.error?.message || 'unreadable' };
+        }
+      } catch (e) {
+        out.diag.metaTemplates = { error: e?.message || 'fetch failed' };
+      }
+    }
+    return res.status(200).json(out);
   }
 
   if (action === 'verify') {
