@@ -109,6 +109,112 @@ function HBars({ rows, fmt = Rw }) {
   );
 }
 
+function Funnel({ f }) {
+  if (!f || f.accounts == null) return <div className="empty">No data yet.</div>;
+  const stages = [
+    ['Contacts', f.contacts, 'accounts + captured pay-link payers'],
+    ['Accounts', f.accounts, 'onboarded'],
+    ['Funded', f.funded, 'first money in'],
+    ['Transacting', f.transacting, 'first spend or send'],
+    ['Repeat', f.repeat, '2+ money events in 30d'],
+  ].filter(([, v]) => v != null);
+  const top = stages[0]?.[1] || 1;
+  const shades = ['#6bbf92', '#4dae77', '#31995e', '#1d7a3f', '#14512c'];
+  return (
+    <div>
+      {stages.map(([k, v, note], i) => (
+        <div key={k}>
+          {i > 0 && stages[i - 1][1] > 0 && (
+            <div style={{ fontSize: 11, color: 'var(--ink3)', margin: '0 0 2px 160px' }}>
+              ↳ {Math.round((100 * v) / stages[i - 1][1])}% of {stages[i - 1][0].toLowerCase()}
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 130px', gap: 10, alignItems: 'center', margin: '5px 0' }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink2)', textAlign: 'right' }}>{k}</span>
+            <div><div style={{ width: `${Math.max(3, (100 * v) / top)}%`, height: 20, background: shades[i], borderRadius: '0 4px 4px 0' }} title={note} /></div>
+            <span style={{ fontSize: 12.5 }}><b>{v.toLocaleString()}</b> <span style={{ color: 'var(--ink3)' }}>· {Math.round((100 * v) / top)}%</span></span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const SRC_COLORS = { organic: 'var(--s1)', paylink: 'var(--s2)', referral: 'var(--s3)' };
+function StackBars({ rows }) {
+  // rows: [{wk, src, n}] → stacked weekly bars by acquisition source.
+  if (!rows?.length) return <div className="empty">No data yet.</div>;
+  const weeks = [...new Set(rows.map((r) => r.wk))].sort().slice(-16);
+  const srcs = [...new Set(rows.map((r) => r.src))];
+  const byWk = new Map(weeks.map((w) => [w, {}]));
+  for (const r of rows) if (byWk.has(r.wk)) byWk.get(r.wk)[r.src] = (byWk.get(r.wk)[r.src] || 0) + r.n;
+  const W = 560, H = 160, L = 8, B = 20, T = 14;
+  const mx = Math.max(...weeks.map((w) => Object.values(byWk.get(w)).reduce((a, b) => a + b, 0))) || 1;
+  const bw = Math.min(24, ((W - L) / weeks.length) * 0.6);
+  return (
+    <>
+      <div className="note" style={{ display: 'flex', gap: 14 }}>
+        {srcs.map((sc) => (
+          <span key={sc}><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: SRC_COLORS[sc] || 'var(--s4)', marginRight: 5, verticalAlign: -1 }} />{sc}</span>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img">
+        {weeks.map((w, i) => {
+          const x = L + ((W - L) * (i + 0.5)) / weeks.length - bw / 2;
+          let base = 0;
+          const total = Object.values(byWk.get(w)).reduce((a, b) => a + b, 0);
+          return (
+            <g key={w}>
+              {srcs.map((sc) => {
+                const v = byWk.get(w)[sc] || 0;
+                if (!v) return null;
+                const h = ((H - T - B) * v) / mx;
+                const y0 = H - B - base - h;
+                base += h + 2;
+                return <rect key={sc} x={x} y={y0} width={bw} height={h} rx={2} fill={SRC_COLORS[sc] || 'var(--s4)'}><title>{`${w} · ${sc}: ${v}`}</title></rect>;
+              })}
+              {total > 0 && <text x={x + bw / 2} y={H - B - base - 4} textAnchor="middle" style={{ fontWeight: 650, fill: 'var(--ink)' }}>{total}</text>}
+              {(weeks.length <= 8 || i % 2 === 0) && <text x={x + bw / 2} y={H - 6} textAnchor="middle">{w.slice(5)}</text>}
+            </g>
+          );
+        })}
+      </svg>
+    </>
+  );
+}
+
+function Cohorts({ c }) {
+  if (!c?.sizes?.length) return <div className="empty">No cohorts yet.</div>;
+  const sizes = c.sizes.slice(-8);
+  const act = new Map();
+  for (const a of c.activity || []) act.set(`${a.cohort}|${a.offsetWk}`, a.n);
+  const maxWk = 8;
+  const shade = (p) => p == null ? 'transparent' : p >= 60 ? '#1d7a3f' : p >= 40 ? '#31995e' : p >= 25 ? '#5fb185' : p >= 10 ? '#8cc8a6' : '#b5dcc6';
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ minWidth: 420 }}>
+        <thead><tr><th>Cohort</th><th className="n">Size</th>{Array.from({ length: maxWk }, (_, i) => <th key={i} className="n">{i === 0 ? 'wk 0' : '+' + i}</th>)}</tr></thead>
+        <tbody>
+          {sizes.map((r) => (
+            <tr key={r.wk}>
+              <td>{r.wk}</td><td className="n">{r.n}</td>
+              {Array.from({ length: maxWk }, (_, i) => {
+                const n = act.get(`${r.wk}|${i}`);
+                const p = n != null && r.n > 0 ? Math.round((100 * n) / r.n) : null;
+                return (
+                  <td key={i} className="n" style={{ background: p != null ? shade(p) : undefined, color: p != null && p >= 40 ? '#fff' : undefined, borderRadius: 4 }}>
+                    {p != null ? p + '%' : ''}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function Login({ configured, onDone }) {
   const [msisdn, setMsisdn] = useState('');
   const [code, setCode] = useState('');
@@ -151,11 +257,13 @@ function Dashboard() {
   const [m, setM] = useState(null);
   const [err, setErr] = useState('');
   useEffect(() => {
+    let cancelled = false;
     setErr('');
     fetch(`/api/admin/metrics?range=${range}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then(setM)
-      .catch(() => setErr('Could not load metrics.'));
+      .then((d) => { if (!cancelled) setM(d); })
+      .catch(() => { if (!cancelled) setErr('Could not load metrics.'); });
+    return () => { cancelled = true; };
   }, [range]);
   if (err) return <div className="card"><div className="empty">{err}</div></div>;
   if (!m) return <div className="card"><div className="empty">Loading live numbers…</div></div>;
@@ -182,17 +290,27 @@ function Dashboard() {
           <div className="card" key={k}><div className="k">{k}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>
         ))}
       </div>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>The funnel</h2>
+        <p className="note">All-time. Contacts include {m.funnel?.capturedPayers ?? 0} captured pay-link payer(s) who have not onboarded yet.</p>
+        <Funnel f={m.funnel} />
+      </div>
       <div className="grid two" style={{ marginTop: 14 }}>
         <div className="card">
-          <h2>New accounts per week</h2>
-          <p className="note">All-time weekly signups. Source split lands with acquisition stamping (design doc §5).</p>
-          <Bars series={(m.signupsWeekly || []).slice(-16).map((r) => ({ k: r.wk, v: r.n }))} />
+          <h2>New accounts per week, by source</h2>
+          <p className="note">Organic vs pay-link capture (money-backed attribution, stamped at creation).</p>
+          <StackBars rows={m.signupsBySource} />
         </div>
         <div className="card">
           <h2>Revenue by line, this period</h2>
           <p className="note">Credit postings into REVENUE:* accounts.</p>
           <HBars rows={revRows} fmt={R} />
         </div>
+      </div>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Retention — weekly signup cohorts</h2>
+        <p className="note">% of each cohort with a money event, by weeks since signup.</p>
+        <Cohorts c={m.cohorts} />
       </div>
       <div className="card" style={{ marginTop: 14 }}>
         <h2>Money movement, this period</h2>
@@ -212,14 +330,32 @@ function Customer() {
   const [c, setC] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [kycOn, setKycOn] = useState(false);
+  const [kycMsg, setKycMsg] = useState('');
+  useEffect(() => {
+    fetch('/api/admin/kyc').then((r) => (r.ok ? r.json() : { configured: false }))
+      .then((j) => setKycOn(!!j.configured)).catch(() => setKycOn(false));
+  }, []);
   const look = useCallback(async () => {
     if (!q.trim()) return;
-    setBusy(true); setErr(''); setC(null);
+    setBusy(true); setErr(''); setC(null); setKycMsg('');
     const r = await fetch(`/api/admin/customer?q=${encodeURIComponent(q)}`);
     setBusy(false);
     if (!r.ok) { setErr((await r.json().catch(() => ({}))).error || 'Lookup failed.'); return; }
     setC(await r.json());
   }, [q]);
+  const kycAction = useCallback(async (action) => {
+    setKycMsg('…');
+    const r = await fetch('/api/admin/kyc', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, msisdn: c?.account?.msisdn }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { setKycMsg(j.error || 'Failed.'); return; }
+    setKycMsg(action === 'start' ? (j.delivered ? 'Link sent to their WhatsApp.' : 'Session created; WhatsApp delivery failed, retry later.') : `Status: ${j.kycStatus}`);
+    const rr = await fetch(`/api/admin/customer?q=${encodeURIComponent(c.account.msisdn)}`);
+    if (rr.ok) setC(await rr.json());
+  }, [c]);
   const spend = c?.wallets?.find((w) => w.balanceType === 'SPEND');
   const kycPill = c?.kyc?.status === 'VERIFIED' ? 'g' : c?.kyc?.status === 'PENDING' ? 'y' : 'r';
   return (
@@ -248,12 +384,27 @@ function Customer() {
                 <span className="l">KYC</span>
                 <span><span className={`pill ${kycPill}`}>{c.kyc.status}</span> <span className="note" style={{ display: 'inline' }}>via {c.kyc.provider}</span></span>
               </div>
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button className="searchrow-btn" style={{ padding: '8px 14px', border: 0, borderRadius: 8, background: kycOn ? 'var(--accent)' : 'var(--grid)', color: kycOn ? '#fff' : 'var(--ink3)', fontWeight: 650, cursor: kycOn ? 'pointer' : 'not-allowed', fontSize: 12.5 }}
+                  disabled={!kycOn} onClick={() => kycAction('start')}>
+                  {c.kyc.status === 'NOT_VERIFIED' ? 'Send verification link' : 'Re-send verification link'}
+                </button>
+                {c.kyc.status !== 'NOT_VERIFIED' && (
+                  <button className="linkish" disabled={!kycOn} onClick={() => kycAction('refresh')}>Refresh status</button>
+                )}
+                {!kycOn && <span className="note" style={{ margin: 0 }}>Didit not configured yet (3 envs).</span>}
+                {kycMsg && <span className="note" style={{ margin: 0, color: 'var(--ink2)' }}>{kycMsg}</span>}
+              </div>
             </div>
             <div className="card">
               <h2>Balances</h2>
               <div style={{ display: 'flex', gap: 26, marginTop: 8, flexWrap: 'wrap' }}>
-                <div><div className="k">Available</div><div className="bal">{R(spend?.availableCents)}</div></div>
-                <div><div className="k">Pending</div><div className="bal">{R(spend?.pendingCents)}</div></div>
+                {(c.wallets && c.wallets.length ? c.wallets : [{ balanceType: 'SPEND', availableCents: 0, pendingCents: 0 }]).map((w) => (
+                  <div key={w.balanceType}>
+                    <div className="k">{w.balanceType} available</div><div className="bal">{R(w.availableCents)}</div>
+                    <div className="vs">pending {R(w.pendingCents)}</div>
+                  </div>
+                ))}
                 <div><div className="k">Active holds</div><div className="bal">{c.activeHolds?.length || 0}</div></div>
               </div>
               {c.activeHolds?.length > 0 && (

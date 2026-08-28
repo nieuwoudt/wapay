@@ -4,6 +4,40 @@
 
 ---
 
+## 32. Admin console + Didit KYC — 27-agent adversarial review (caught pre-ship 2026-08-28)
+
+The whole admin/KYC surface was reviewed by a 27-finding adversarial workflow BEFORE it saw
+prod traffic. The load-bearing catches, all fixed in the same push:
+
+- **CRITICAL — admin allowlist matched last-9-digits only.** `isAdminMsisdn`/`adminAccount`
+  reduced numbers to a 9-digit tail, so a foreign/VoIP WhatsApp number sharing an admin's
+  last 9 digits could receive the admin OTP and mint a session. **Fix:** normalise to the
+  full SA 27-form (`normSa`), resolve the account by exact full-number match, and fail closed
+  when 0 or >1 accounts match. Guard: a UK-number-collision test.
+- **HIGH — admin OTP shared the `otp_codes` table with customer money-flow OTPs.** Admin
+  verify consumed the newest live row of EITHER flow, burning a customer's onboarding code.
+  **Fix:** admin codes are namespaced `adm:`+hash and every admin query filters on the
+  prefix; the customer flow already matched exact plaintext so it never touched admin rows.
+  Plus a daily issuance cap + burn-based lockout against slow brute-force / lockout DoS.
+- **HIGH — profile JSON lost-update race.** Every profile writer did read-modify-write on the
+  whole column; a KYC merge and a language write on the next message clobbered each other.
+  **Fix:** `lib/profile-merge.js` merges in Postgres with jsonb `||` / `jsonb_set`; the KYC
+  webhook, `updateProfile`, and the acquisition backfill all use it now.
+- **HIGH — KYC webhook could permanently lose the customer notification** (gated on a
+  one-shot `changed`) and could regress VERIFIED via a stale decision. **Fix:** notify gated
+  only on `notifiedStatus`, 5xx-on-send-fail so Didit retries; a VERIFIED account is never
+  downgraded by a different/older session; the decision's `vendor_data` must match the
+  account or the write is refused.
+- **MEDIUM batch:** metrics truncated at 5000 rows (silent GMV understatement) → aggregated
+  in SQL, reversal-correct, counted by account id not wallet code; internal-key compare made
+  constant-time; declineReason free text redacted (POPIA); `getOrCreateUser` fabricated-
+  account fallback (split-brain) replaced with an upsert + rethrow; dashboard stale-response
+  guard; customer balances render all wallets.
+
+**Guard:** `tests/admin-console.test.mjs` + `tests/didit-kyc.test.mjs` (24 base + 8 regression
+tests pin every fix above). This is the review-before-ship discipline working as intended —
+none of these reached prod.
+
 ## 31. Every "what ..." question answered with the products menu
 
 - **Symptom (chat QA harness, first run 2026-08-27):** "What did I tell you my name was?" and "What is my favourite colour?" both got the 🛒 VAS products menu. The third product-query indicator was `/\b(show|list|what|which)\s+(me\s+)?(your\s+)?(the\s+)?/i` — every group after the first word optional, so ANY sentence containing "what " (or which/show/list) read as a product ask at 0.8 confidence and never reached the AI.

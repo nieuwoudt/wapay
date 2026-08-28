@@ -30,7 +30,7 @@ Deployed baseline: 2026-08-18 evening (deposit UX + deposit-status + orchestrati
 | User memory (profile) | **Live** | `Account.profile` (prod): preferred language by evidence (one foreign message can't flip the bot), preferred deposit method (skips the options menu for known card users), last electricity meter, product interests. Injected into the orchestrator each turn as KNOWN USER PROFILE; written deterministically at success points only. |
 | Voucher history | **Live** | "show my vouchers" — bought vouchers with values, dates, active/used status. |
 
-| Admin console (Mission Control) | **Built, env-gated** | `/admin`: WhatsApp-OTP login (allowlist `WAPAY_ADMIN_MSISDNS` + `WAPAY_ADMIN_SESSION_SECRET`, fails closed), live dashboard from the journal (`/api/admin/metrics`), customer CRM lookup (`/api/admin/customer` — never exposes voucher PINs). KYC provider decision: Didit (status shown per customer; integration next). Activate by setting the two envs in Vercel. |
+| Admin console (Mission Control) | **Built, env-gated** | `/admin`: WhatsApp-OTP login (allowlist `WAPAY_ADMIN_MSISDNS` + `WAPAY_ADMIN_SESSION_SECRET`, fails closed), live dashboard from the journal (`/api/admin/metrics`), customer CRM lookup (`/api/admin/customer` — never exposes voucher PINs). KYC: **Didit integrated end-to-end** (hosted link over WhatsApp, signed webhook, decision-endpoint truth, masked-PII storage) — needs `DIDIT_API_KEY`/`DIDIT_WORKFLOW_ID`/`DIDIT_WEBHOOK_SECRET`. Funnel, acquisition-source split and retention cohorts live on real data. Activate console: the two admin envs; activate KYC: the three Didit envs. |
 
 ## 2. Money core (the ledger)
 

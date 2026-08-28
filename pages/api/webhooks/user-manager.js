@@ -116,26 +116,52 @@ export async function getOrCreateUser(waId, profile = {}) {
     // Create new user
     console.log('🆕 Creating new user for:', waId);
 
-    account = await prisma.account.create({
-      data: {
-        waId: waId,
-        msisdn: waId, // Use WA ID as MSISDN for now
+    // ACQUISITION SOURCE (Mission Control funnel, 2026-08-28): money-backed
+    // attribution at the moment of creation. If this number was already
+    // captured as a pay-link payer (PayFast intent metadata), the requester
+    // loop acquired them; otherwise organic. Evidence-based, not
+    // message-text guessing — and best-effort: attribution must never block
+    // an account creation.
+    let acquisitionSource = 'organic';
+    try {
+      const local = waId.replace(/^27/, '0');
+      const paidBefore = await prisma.providerRequest.findFirst({
+        where: { provider: 'PAYFAST', metadata: { path: ['payerMsisdn'], equals: local } },
+        select: { id: true },
+      });
+      if (paidBefore) acquisitionSource = 'paylink';
+    } catch (attribErr) {
+      console.error(JSON.stringify({ type: 'acquisition_attrib_error', error: attribErr?.message }));
+    }
+
+    // UPSERT on the unique waId (review 2026-08-28): a concurrent first-
+    // contact retry could race findFirst→create and hit the unique
+    // constraint; upsert makes it a no-op instead of a P2002 that used to
+    // fall through to a FABRICATED account whose id was the phone number
+    // (split-brain: markMessageProcessed wrote the real row, state reads hit
+    // a nonexistent id). If the row already existed we adopt it and do NOT
+    // overwrite its profile/acquisitionSource.
+    account = await prisma.account.upsert({
+      where: { waId },
+      create: {
+        waId,
+        msisdn: waId,
         displayName: profile.name || 'Friend',
         createdAt: new Date(),
+        profile: { acquisitionSource },
       },
+      update: {},
     });
 
-    // Create wallet for new user
-    const wallet = await prisma.wallet.create({
-      data: {
-        accountId: account.id,
-        currency: 'ZAR',
-        availableCents: 0,
-        pendingCents: 0,
-      },
+    // Ensure the SPEND wallet exists (idempotent on the unique
+    // [accountId, balanceType]).
+    const wallet = await prisma.wallet.upsert({
+      where: { accountId_balanceType: { accountId: account.id, balanceType: 'SPEND' } },
+      create: { accountId: account.id, balanceType: 'SPEND', currency: 'ZAR', availableCents: 0, pendingCents: 0 },
+      update: {},
     });
 
-    console.log('✅ New user created:', { accountId: account.id, walletId: wallet.id });
+    console.log('✅ New user ensured:', { accountId: account.id, walletId: wallet.id });
 
     return {
       account: { ...account, wallets: [wallet] },
@@ -143,19 +169,11 @@ export async function getOrCreateUser(waId, profile = {}) {
     };
 
   } catch (error) {
-    console.error('❌ Error in getOrCreateUser:', error);
-    
-    // Fallback: return minimal user object
-    return {
-      account: {
-        id: waId,
-        waId: waId,
-        displayName: 'Friend',
-        wallets: [],
-      },
-      isNewUser: true,
-      error: error.message,
-    };
+    // NO fabricated fallback: a fake account whose id is the phone number
+    // split-brains every downstream flow. Rethrow so the webhook 5xxs and
+    // Meta redelivers against a clean state.
+    console.error(JSON.stringify({ type: 'getOrCreateUser_error', waId, error: error?.message }));
+    throw error;
   }
 }
 

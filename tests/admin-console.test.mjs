@@ -51,15 +51,23 @@ function stubPrisma() {
       },
     },
     otpCode: {
-      async findFirst({ where }) {
+      _match(o, where) {
         const now = new Date();
-        const rows = otps
-          .filter((o) => o.accountId === where.accountId)
-          .filter((o) => (where.consumedAt === null ? !o.consumedAt : true))
-          .filter((o) => (where.expiresAt?.gt ? o.expiresAt > where.expiresAt.gt : true))
-          .filter((o) => (where.createdAt?.gt ? o.createdAt > where.createdAt.gt : true))
-          .sort((a, b) => b.createdAt - a.createdAt);
+        if (where.accountId && o.accountId !== where.accountId) return false;
+        if (where.code?.startsWith && !String(o.code).startsWith(where.code.startsWith)) return false;
+        if (where.consumedAt === null && o.consumedAt) return false;
+        if (where.consumedAt?.gt && !(o.consumedAt && o.consumedAt > where.consumedAt.gt)) return false;
+        if (where.expiresAt?.gt && !(o.expiresAt > where.expiresAt.gt)) return false;
+        if (where.createdAt?.gt && !(o.createdAt > where.createdAt.gt)) return false;
+        void now;
+        return true;
+      },
+      async findFirst({ where }) {
+        const rows = otps.filter((o) => this._match(o, where)).sort((a, b) => b.createdAt - a.createdAt);
         return rows[0] ? { ...rows[0] } : null;
+      },
+      async count({ where }) {
+        return otps.filter((o) => this._match(o, where)).length;
       },
       async create({ data }) {
         const row = { id: 'otp' + otps.length, consumedAt: null, createdAt: new Date(), ...data };
@@ -111,7 +119,7 @@ test('OTP: hashed at rest, sent to the admin WhatsApp, resend throttled', async 
   const code = sends[0].text.match(/\b(\d{6})\b/)[1];
   assert.equal(prisma._otps.length, 1);
   assert.ok(!prisma._otps[0].code.includes(code), 'DB stores a hash, never the code');
-  assert.match(prisma._otps[0].code, /^[0-9a-f]{64}$/);
+  assert.match(prisma._otps[0].code, /^adm:[0-9a-f]{64}$/);
   // resend inside 60s: silently throttled
   await requestAdminOtp({ prisma, msisdn: ADMIN, send: async (a) => { sends.push(a); return { ok: true }; } });
   assert.equal(sends.length, 1, 'no second send within the minute');
@@ -139,12 +147,12 @@ test('OTP verify: right code mints a working session token', async () => {
   assert.equal(out.ok, true);
   const session = verifyAdminToken(out.token);
   assert.equal(session.ok, true);
-  assert.equal(session.msisdn, '731234567');
+  assert.equal(session.msisdn, '27731234567');
 });
 
 test('session token: tamper, expiry, and allowlist removal all revoke', () => {
   armEnv();
-  const token = mintAdminToken('731234567');
+  const token = mintAdminToken('27731234567');
   assert.equal(verifyAdminToken(token).ok, true);
   const [b64, exp, mac] = token.split('.');
   assert.equal(verifyAdminToken(`${b64}.${exp}.${'0'.repeat(mac.length)}`).ok, false, 'tampered mac');
@@ -158,7 +166,7 @@ test('session token: tamper, expiry, and allowlist removal all revoke', () => {
 
 test('cookie: HttpOnly + Secure + SameSite=Strict, and clears properly', () => {
   armEnv();
-  const c = adminCookie(mintAdminToken('731234567'));
+  const c = adminCookie(mintAdminToken('27731234567'));
   for (const flag of ['HttpOnly', 'Secure', 'SameSite=Strict', 'Path=/']) assert.ok(c.includes(flag), flag);
   assert.ok(clearAdminCookie().includes('Max-Age=0'));
 });
@@ -166,7 +174,7 @@ test('cookie: HttpOnly + Secure + SameSite=Strict, and clears properly', () => {
 test('requireAdmin: cookie or internal key, nothing else', () => {
   armEnv();
   process.env.WAPAY_INTERNAL_API_KEY = 'internal-test-key';
-  const token = mintAdminToken('731234567');
+  const token = mintAdminToken('27731234567');
   assert.equal(requireAdmin({ headers: { cookie: `wapay_admin=${token}` } }).ok, true);
   assert.equal(requireAdmin({ headers: { 'x-internal-api-key': 'internal-test-key' } }).ok, true);
   assert.equal(requireAdmin({ headers: { 'x-internal-api-key': 'wrong' } }).ok, false);
@@ -214,4 +222,55 @@ test('policy: no betting words, no cash-out copy in the console', () => {
   // "CASHOUT_" appears only as a ledger source-code constant in metrics
   // bucketing — never as customer-facing copy on the page.
   assert.ok(!/cash\s?-?\s?out|withdraw/i.test(adminPage), 'no cash-out language in the UI');
+});
+
+// ---------------------------------------------------------------------------
+// Review 2026-08-28 — regression guards for the confirmed findings
+// ---------------------------------------------------------------------------
+
+test('CRITICAL: a foreign number colliding in the last 9 digits is NOT an admin', () => {
+  armEnv(); // allowlist = 27731234567
+  assert.equal(isAdminMsisdn('447731234567'), false, 'UK number sharing 9 trailing digits rejected');
+  assert.equal(isAdminMsisdn('1731234567'), false);
+  assert.equal(isAdminMsisdn('27731234567'), true, 'the real admin still matches');
+});
+
+test('admin OTP never consumes a customer money-flow OTP (shared table)', async () => {
+  armEnv();
+  const prisma = stubPrisma();
+  // A live customer onboarding OTP (6-digit plaintext, no adm: prefix).
+  prisma._otps.push({ id: 'cust1', accountId: 'acc-admin', code: '654321', consumedAt: null,
+    createdAt: new Date(), expiresAt: new Date(Date.now() + 6e5) });
+  const r = await verifyAdminOtp({ prisma, msisdn: ADMIN, code: '654321' });
+  assert.equal(r.ok, false, 'the customer code is not a valid admin code');
+  const cust = prisma._otps.find((o) => o.id === 'cust1');
+  assert.equal(cust.consumedAt, null, 'and it was NOT burned by the admin verify');
+});
+
+test('admin OTP lockout after repeated burns', async () => {
+  armEnv();
+  const prisma = stubPrisma();
+  const sends = [];
+  const send = async (a) => { sends.push(a); return { ok: true }; };
+  // Burn the lockout threshold of admin codes.
+  for (let i = 0; i < 5; i += 1) {
+    // bypass the 60s resend throttle by ageing the previous row
+    for (const o of prisma._otps) o.createdAt = new Date(Date.now() - 2 * 60 * 1000);
+    await requestAdminOtp({ prisma, msisdn: ADMIN, send });
+    await verifyAdminOtp({ prisma, msisdn: ADMIN, code: '000000' });
+  }
+  for (const o of prisma._otps) o.createdAt = new Date(Date.now() - 2 * 60 * 1000);
+  await requestAdminOtp({ prisma, msisdn: ADMIN, send });
+  const realCode = sends[sends.length - 1].text.match(/\b(\d{6})\b/)[1];
+  const r = await verifyAdminOtp({ prisma, msisdn: ADMIN, code: realCode });
+  assert.equal(r.ok, false, 'locked out even with a correct code after too many burns');
+});
+
+test('internal-key compare is constant-time (hashed), rejects wrong/array keys', () => {
+  armEnv();
+  process.env.WAPAY_INTERNAL_API_KEY = 'k'.repeat(40);
+  assert.equal(requireAdmin({ headers: { 'x-internal-api-key': 'k'.repeat(40) } }).ok, true);
+  assert.equal(requireAdmin({ headers: { 'x-internal-api-key': 'x'.repeat(40) } }).ok, false);
+  assert.equal(requireAdmin({ headers: { 'x-internal-api-key': ['k'.repeat(40)] } }).ok, false, 'array header rejected, no throw');
+  delete process.env.WAPAY_INTERNAL_API_KEY;
 });

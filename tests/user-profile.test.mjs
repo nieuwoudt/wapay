@@ -47,6 +47,14 @@ function stubPrisma(initialProfile = null) {
         return { id: 'a1', profile: data.profile };
       },
     },
+    // updateProfile now merges atomically in Postgres (lib/profile-merge.js);
+    // model the top-level jsonb `||` merge: values = [json, accountId].
+    $executeRaw: async (_strings, ...vals) => {
+      const patch = JSON.parse(vals[0]);
+      state.profile = { ...(state.profile || {}), ...patch };
+      state.writes.push(state.profile);
+      return 1;
+    },
   };
 }
 

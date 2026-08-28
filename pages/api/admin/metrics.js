@@ -51,30 +51,31 @@ export default async function handler(req, res) {
         prisma.wallet.aggregate({ _sum: { availableCents: true, pendingCents: true }, _count: true })
       ),
       safe(() => prisma.hold.count({ where: { status: 'ACTIVE' } })),
-      // Money flows: entries in the window with their wallet-side lines.
+      // Money flows AGGREGATED IN SQL (review 2026-08-28: the old row-fetch
+      // truncated at 5000 rows and silently understated GMV). One row per
+      // (source, week) — bounded — with wallet credit/debit summed.
       safe(() =>
-        prisma.journalEntry.findMany({
-          where: { createdAt: { gt: since } },
-          select: {
-            source: true,
-            createdAt: true,
-            lines: { select: { accountCode: true, debitCents: true, creditCents: true } },
-          },
-          orderBy: { createdAt: 'asc' },
-          take: 5000,
-        })
+        prisma.$queryRaw`
+          SELECT je.source AS source,
+                 date_trunc('week', je."createdAt") AS wk,
+                 sum(coalesce(jl."creditCents", 0))::bigint AS credit,
+                 sum(coalesce(jl."debitCents", 0))::bigint AS debit
+          FROM "JournalEntry" je
+          JOIN "JournalLine" jl ON jl."entryId" = je.id AND jl."accountCode" LIKE 'WALLET:%'
+          WHERE je."createdAt" > ${since}
+          GROUP BY 1, 2`
       ),
-      // Revenue: credit lines into REVENUE:* accounts, window + prior window.
+      // Revenue AGGREGATED: net (credit − debit) per REVENUE account × week,
+      // so reversals net out and nothing truncates.
       safe(() =>
-        prisma.journalLine.findMany({
-          where: {
-            accountCode: { startsWith: 'REVENUE:' },
-            creditCents: { gt: 0 },
-            entry: { createdAt: { gt: prevSince } },
-          },
-          select: { accountCode: true, creditCents: true, entry: { select: { createdAt: true } } },
-          take: 10000,
-        })
+        prisma.$queryRaw`
+          SELECT jl."accountCode" AS code,
+                 date_trunc('week', je."createdAt") AS wk,
+                 (sum(coalesce(jl."creditCents", 0)) - sum(coalesce(jl."debitCents", 0)))::bigint AS net
+          FROM "JournalLine" jl
+          JOIN "JournalEntry" je ON je.id = jl."entryId"
+          WHERE jl."accountCode" LIKE 'REVENUE:%' AND je."createdAt" > ${prevSince}
+          GROUP BY 1, 2`
       ),
       safe(() =>
         prisma.$queryRaw`SELECT date_trunc('week', "createdAt") AS wk, count(*)::int AS n
@@ -82,60 +83,130 @@ export default async function handler(req, res) {
       ),
     ]);
 
-  // Funded / active: distinct wallet account-codes with credits, from journal.
+  // Funnel stages from the journal (the contract in the design doc §2).
   const funded = await safe(async () => {
     const rows = await prisma.$queryRaw`
-      SELECT count(DISTINCT jl."accountCode")::int AS n
+      SELECT count(DISTINCT split_part(jl."accountCode", ':', 2))::int AS n
       FROM "JournalLine" jl
       WHERE jl."accountCode" LIKE 'WALLET:%' AND jl."creditCents" > 0`;
     return rows?.[0]?.n ?? null;
   });
+  const transacting = await safe(async () => {
+    const rows = await prisma.$queryRaw`
+      SELECT count(DISTINCT split_part(jl."accountCode", ':', 2))::int AS n
+      FROM "JournalLine" jl
+      WHERE jl."accountCode" LIKE 'WALLET:%' AND jl."debitCents" > 0`;
+    return rows?.[0]?.n ?? null;
+  });
+  const repeat = await safe(async () => {
+    const rows = await prisma.$queryRaw`
+      SELECT count(*)::int AS n FROM (
+        SELECT split_part(jl."accountCode", ':', 2) AS acct
+        FROM "JournalLine" jl JOIN "JournalEntry" je ON je.id = jl."entryId"
+        WHERE jl."accountCode" LIKE 'WALLET:%'
+          AND je."createdAt" > now() - interval '30 days'
+        GROUP BY 1
+        HAVING count(DISTINCT je.id) >= 2
+      ) t`;
+    return rows?.[0]?.n ?? null;
+  });
   const mau = await safe(async () => {
     const rows = await prisma.$queryRaw`
-      SELECT count(DISTINCT jl."accountCode")::int AS n
+      SELECT count(DISTINCT split_part(jl."accountCode", ':', 2))::int AS n
       FROM "JournalLine" jl JOIN "JournalEntry" je ON je.id = jl."entryId"
       WHERE jl."accountCode" LIKE 'WALLET:%'
         AND je."createdAt" > now() - interval '30 days'`;
     return rows?.[0]?.n ?? null;
   });
+  // Contacts = accounts + captured pay-link payers who never onboarded.
+  const capturedPayers = await safe(async () => {
+    const rows = await prisma.$queryRaw`
+      SELECT count(DISTINCT p) AS n FROM (
+        SELECT pr."metadata"->>'payerMsisdn' AS p
+        FROM "ProviderRequest" pr
+        WHERE pr.provider = 'PAYFAST' AND pr."metadata"->>'payerMsisdn' IS NOT NULL
+      ) x
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "Account" a WHERE right(a."waId", 9) = right(x.p, 9)
+      )`;
+    return Number(rows?.[0]?.n ?? 0);
+  }, 0);
+  // Acquisition-source split of weekly signups (profile.acquisitionSource,
+  // stamped at creation since 2026-08-28 + backfilled).
+  const signupsBySource = await safe(async () => {
+    const rows = await prisma.$queryRaw`
+      SELECT date_trunc('week', "createdAt") AS wk,
+             coalesce("profile"->>'acquisitionSource', 'organic') AS src,
+             count(*)::int AS n
+      FROM "Account" GROUP BY 1, 2 ORDER BY 1`;
+    return rows.map((r) => ({
+      wk: r.wk instanceof Date ? r.wk.toISOString().slice(0, 10) : String(r.wk).slice(0, 10),
+      src: r.src,
+      n: r.n,
+    }));
+  }, []);
+  // Retention cohorts: weekly signup cohorts × weeks-since with a money event.
+  const cohorts = await safe(async () => {
+    const sizes = await prisma.$queryRaw`
+      SELECT date_trunc('week', "createdAt") AS wk, count(*)::int AS n
+      FROM "Account" GROUP BY 1 ORDER BY 1`;
+    const activity = await prisma.$queryRaw`
+      SELECT date_trunc('week', a."createdAt") AS cohort,
+             greatest(0, floor(extract(epoch FROM (date_trunc('week', je."createdAt") - date_trunc('week', a."createdAt"))) / 604800))::int AS offset_wk,
+             count(DISTINCT a.id)::int AS n
+      FROM "Account" a
+      JOIN "JournalLine" jl ON jl."accountCode" = 'WALLET:' || a.id || ':SPEND'
+      JOIN "JournalEntry" je ON je.id = jl."entryId"
+      GROUP BY 1, 2 ORDER BY 1, 2`;
+    const key = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
+    return {
+      sizes: sizes.map((r) => ({ wk: key(r.wk), n: r.n })),
+      activity: activity.map((r) => ({ cohort: key(r.cohort), offsetWk: r.offset_wk, n: r.n })),
+    };
+  });
 
-  // Flows + GMV from the windowed entries (wallet-perspective, per entry).
+  // Week key from a DB date_trunc('week', ...) value (Postgres weeks start
+  // Monday — the JS bucketing below matched that; now the DB does it).
+  const wkKey = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
+  const num = (v) => (typeof v === 'bigint' ? Number(v) : Number(v || 0));
+
+  // Flows + GMV from the SQL aggregate. REVERSAL_<X> nets against bucketOf(X).
   const flows = { in: 0, spend: 0, transfer: 0, out: 0 };
   const weeklyFlows = new Map();
-  for (const e of entries || []) {
-    const b = bucketOf(e.source);
+  for (const r of entries || []) {
+    let source = r.source, sign = 1;
+    if (source && source.startsWith('REVERSAL_')) { source = source.slice('REVERSAL_'.length); sign = -1; }
+    const b = bucketOf(source);
     if (b === 'other') continue;
-    const walletMoved = e.lines
-      .filter((l) => l.accountCode.startsWith('WALLET:'))
-      .reduce((s, l) => s + (b === 'in' ? l.creditCents || 0 : l.debitCents || 0), 0);
-    flows[b] += walletMoved;
-    const wk = new Date(e.createdAt);
-    wk.setUTCHours(0, 0, 0, 0);
-    wk.setUTCDate(wk.getUTCDate() - ((wk.getUTCDay() + 6) % 7)); // Monday
-    const key = wk.toISOString().slice(0, 10);
-    if (!weeklyFlows.has(key)) weeklyFlows.set(key, { in: 0, spend: 0, transfer: 0 });
-    if (b !== 'out') weeklyFlows.get(key)[b] += walletMoved;
+    const moved = sign * (b === 'in' ? num(r.credit) : num(r.debit));
+    flows[b] += moved;
+    if (b !== 'out') {
+      const key = wkKey(r.wk);
+      if (!weeklyFlows.has(key)) weeklyFlows.set(key, { in: 0, spend: 0, transfer: 0 });
+      weeklyFlows.get(key)[b] += moved;
+    }
   }
   const gmvCents = flows.in + flows.spend + flows.transfer;
 
   // Revenue split, current window vs prior (for the delta) + weekly series.
+  // `net` already subtracts reversal debits.
   const rev = { current: {}, prior: 0, weekly: new Map() };
-  for (const l of revenueLines || []) {
-    const inWindow = l.entry.createdAt > since;
-    const kind = l.accountCode.startsWith('REVENUE:COMMISSION')
+  for (const r of revenueLines || []) {
+    const net = num(r.net);
+    // Week-granular current-vs-prior split (the query spans two windows for
+    // the delta). A week bucket at/after `since` counts as current.
+    const isCurrent = new Date(r.wk).getTime() >= since.getTime();
+    const kind = r.code.startsWith('REVENUE:COMMISSION')
       ? 'commission'
-      : l.accountCode.includes(':FEE:')
-        ? l.accountCode.split(':').pop().toLowerCase()
+      : r.code.includes(':FEE:')
+        ? r.code.split(':').pop().toLowerCase()
         : 'other';
-    if (inWindow) {
-      rev.current[kind] = (rev.current[kind] || 0) + l.creditCents;
-      const wk = new Date(l.entry.createdAt);
-      wk.setUTCHours(0, 0, 0, 0);
-      wk.setUTCDate(wk.getUTCDate() - ((wk.getUTCDay() + 6) % 7));
-      const key = wk.toISOString().slice(0, 10);
-      rev.weekly.set(key, (rev.weekly.get(key) || 0) + l.creditCents);
+    if (isCurrent) {
+      rev.current[kind] = (rev.current[kind] || 0) + net;
+      const key = wkKey(r.wk);
+      rev.weekly.set(key, (rev.weekly.get(key) || 0) + net);
     } else {
-      rev.prior += l.creditCents;
+      rev.prior += net;
     }
   }
   const revenueCents = Object.values(rev.current).reduce((a, b) => a + b, 0);
@@ -160,7 +231,16 @@ export default async function handler(req, res) {
       activeHolds: holds,
       walletCount: wallets?._count ?? null,
     },
-    funnel: { contacts: null, accounts, funded, note: 'contacts pending acquisition-source stamping (design doc §5)' },
+    funnel: {
+      contacts: accounts != null ? accounts + (capturedPayers || 0) : null,
+      accounts,
+      funded,
+      transacting,
+      repeat,
+      capturedPayers,
+    },
+    signupsBySource,
+    cohorts,
     flows: { ...flows, weekly: [...weeklyFlows.entries()].map(([wk, v]) => ({ wk, ...v })) },
     revenue: {
       byLine: rev.current,

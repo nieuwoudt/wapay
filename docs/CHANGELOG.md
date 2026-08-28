@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-08-28 (13) — Didit KYC end-to-end + funnel/cohorts on real data
+
+The KYC rail, built against the verified Didit v3 API (researched from live docs same day):
+- **`lib/didit-kyc.js`**: create hosted session (`vendor_data` = account id, Didit-side
+  idempotent), HMAC-SHA256-over-raw-bytes webhook verification with a 5-minute replay
+  window, decision fetch as source of truth, exact Title Case status map (unknown statuses
+  never move our state), `profile.kyc` always MERGED. **POPIA: masked document number only —
+  the full number is never stored and person data is never logged.**
+- **`/api/webhooks/didit`**: signature before parse, process-then-ACK (BUGLOG #7 rule),
+  5xx on transient failure so Didit retries, customer notified in their language on
+  VERIFIED/DECLINED with a notifiedStatus dedupe gate.
+- **`/api/admin/kyc`** + console buttons: "Send verification link" delivers the hosted link
+  ONLY to the account's registered WhatsApp (never a caller-typed number); "Refresh status"
+  re-syncs from the decision endpoint. Probe endpoint tells the console when Didit envs are
+  missing (fails closed).
+- **Acquisition stamping**: new accounts get `profile.acquisitionSource` (money-backed:
+  captured pay-link payer = paylink, else organic); `scripts/backfill-acquisition.mjs` ran
+  on prod (3/3 — the founder's account correctly reads paylink).
+- **Metrics**: real funnel (contacts incl. captured payers, accounts, funded, transacting,
+  repeat), signups by source, retention cohorts — all live on the dashboard with new
+  Funnel/StackBars/Cohorts renderers.
+- **27-agent adversarial review run before ship** — caught 1 CRITICAL (admin tail-9-digit
+  impersonation), 6 HIGH (shared-OTP-table, profile race, KYC notification loss + VERIFIED
+  regression, backfill clobber, re-send downgrade), and a MEDIUM batch (metrics truncation,
+  timing-safe internal key, POPIA decline-text, split-brain account fallback). All fixed in
+  this push with regression guards (BUGLOG #32).
+- 23 new tests (415 total). Metrics + KYC endpoints smoke-tested against prod (funnel now
+  counts by account id, correctly collapsing a legacy dual-coded account).
+
+**To activate KYC**: business.didit.me → create a KYC workflow → set `DIDIT_API_KEY`,
+`DIDIT_WORKFLOW_ID`, `DIDIT_WEBHOOK_SECRET` in Vercel; webhook destination URL =
+`https://wapay.co.za/api/webhooks/didit`, subscribe `status.updated`. Sandbox app first.
+
 ## 2026-08-28 (12) — Mission Control admin console v1 (OTP login, live dashboard, customer CRM)
 
 Founder green-light on the mockup, so the real thing: `/admin` behind a WhatsApp-OTP login.
