@@ -233,7 +233,19 @@ function Login({ configured, onDone }) {
         <>
           <p className="note">Your WhatsApp number. A one-time code arrives in your WaPay chat.</p>
           <input inputMode="tel" placeholder="073 123 4567" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} />
-          <button className="go" onClick={async () => { setErr(''); await post({ action: 'request', msisdn }); setStage('code'); }}>Send my code</button>
+          <button className="go" onClick={async () => {
+            setErr('');
+            if (!/\d{9}/.test(String(msisdn).replace(/\D/g, ''))) { setErr('Enter your full WhatsApp number.'); return; }
+            try {
+              const r = await post({ action: 'request', msisdn });
+              if (!r.ok) { setErr('Could not request a code right now. Try again in a moment.'); return; }
+            } catch {
+              // A silent failure here is what makes the screen look frozen.
+              setErr('No connection. Check your network and try again.');
+              return;
+            }
+            setStage('code');
+          }}>Send my code</button>
         </>
       ) : (
         <>

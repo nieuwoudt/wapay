@@ -50,6 +50,32 @@
   messaged us about needs a TEMPLATE, not free-form text. Free-form is only safe as a reply
   inside an open session.
 
+## 34. admin.wapay.co.za sits behind Vercel's bot challenge; login button failed silently
+
+- **Symptom (2026-08-28):** with the login code still not arriving, verification of the admin
+  host produced a second, independent problem — every automated request to
+  `admin.wapay.co.za` returned **403 with `x-vercel-mitigated: challenge`**, while
+  `pleasepayme.co.za` returned 200 for the identical path at the same second. Vercel's bot
+  protection is enabled on the admin domain and not on the app domain.
+- **Impact:** low for humans, high for tooling. A real browser solves the challenge and then
+  the APIs answer normally (verified: `/api/admin/auth` returns 200 and a live POST returns
+  `{"ok":true}` once the challenge cookie is held). But the FIRST request of a session — the
+  page's own auth probe — can be 403'd, and any curl/monitor/uptime check against that host
+  fails permanently. It also made every remote verification of the deploy misleading.
+- **Second defect found while proving it:** the login button's handler had no error handling —
+  `await post(...)` then `setStage('code')`, with nothing catching a rejection and no check of
+  the response. A blocked or failed request therefore left the screen visibly unchanged with
+  no message, which is indistinguishable from "the app is broken". Now: the number is
+  validated before sending, a non-ok response says so, and a network rejection says so.
+- **Fix/actions:** UI error handling shipped. The Vercel challenge is a dashboard setting, not
+  code: Project → Firewall / Attack Challenge Mode, either disable it for this project or
+  exempt `admin.wapay.co.za`. Until then the console still works in a normal browser (solve
+  the challenge once), and clearing `WAPAY_ADMIN_HOST` re-opens `/admin` on the app domain as
+  an immediate fallback.
+- **Verification lesson:** `curl` against a challenged host proves nothing. Confirm a deploy
+  by inspecting the served JS bundle from a real browser (that is how the login copy was
+  finally verified) or by an authenticated version endpoint.
+
 ## 32. Admin console + Didit KYC — 27-agent adversarial review (caught pre-ship 2026-08-28)
 
 The whole admin/KYC surface was reviewed by a 27-finding adversarial workflow BEFORE it saw
