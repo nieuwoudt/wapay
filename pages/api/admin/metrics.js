@@ -11,6 +11,18 @@
 
 import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
+import { trialBalance, reconcileWallets } from '../../../lib/ledger-post.js';
+
+/** Journal source → the customer-facing thing that was sold. */
+const SELLING_LABELS = {
+  SPEND_AIRTIME: 'Airtime',
+  SPEND_DATA: 'Data',
+  SPEND_ELECTRICITY: 'Electricity',
+  SPEND_VOUCHER: 'Vouchers',
+  VOUCHER_GIFT_OTT: 'OTT vouchers',
+  VOUCHER_GIFT_BLU: 'Blu vouchers',
+  P2P_SEND: 'Requests paid',
+};
 
 export const config = { maxDuration: 55 };
 
@@ -165,6 +177,53 @@ export default async function handler(req, res) {
     };
   });
 
+  // WHAT'S BEING SOLD — rand + transaction count per category in the window.
+  // Sourced from the journal (entry source → category), so it can never
+  // disagree with GMV. NOTE: the journal carries no product reference, so
+  // product-level detail is deliberately not offered rather than guessed.
+  const selling = await safe(async () => {
+    const rows = await prisma.$queryRaw`
+      SELECT je.source AS source,
+             sum(coalesce(jl."debitCents", 0))::bigint AS cents,
+             count(DISTINCT je.id)::int AS n
+      FROM "JournalEntry" je
+      JOIN "JournalLine" jl ON jl."entryId" = je.id AND jl."accountCode" LIKE 'WALLET:%'
+      WHERE je."createdAt" > ${since} AND jl."debitCents" > 0
+      GROUP BY 1 ORDER BY 2 DESC`;
+    return rows
+      .filter((r) => SELLING_LABELS[r.source])
+      .map((r) => ({
+        category: SELLING_LABELS[r.source],
+        cents: typeof r.cents === 'bigint' ? Number(r.cents) : Number(r.cents || 0),
+        count: r.n,
+      }));
+  }, []);
+
+  // MONEY-ENGINE HEALTH — the tripwires that say whether the numbers above
+  // can be trusted at all. Each is independently guarded: a failing check
+  // reports unknown rather than a false green.
+  const ops = await safe(async () => {
+    const [tb, recon, stuck] = await Promise.all([
+      trialBalance().catch(() => null),
+      reconcileWallets({ limit: 200 }).catch(() => null),
+      prisma.hold
+        .count({ where: { status: 'ACTIVE', createdAt: { lt: new Date(Date.now() - 60 * 60 * 1000) } } })
+        .catch(() => null),
+    ]);
+    const driftCents = recon
+      ? recon.mismatches.reduce((s, m) => s + Math.abs(m.differenceCents), 0)
+      : null;
+    return {
+      trialBalanced: tb ? tb.balanced : null,
+      trialDifferenceCents: tb ? tb.differenceCents : null,
+      walletsChecked: recon ? recon.checked : null,
+      walletDriftCents: driftCents,
+      walletMismatches: recon ? recon.mismatches.length : null,
+      activeHolds: holds,
+      stuckHolds: stuck,
+    };
+  });
+
   // Week key from a DB date_trunc('week', ...) value (Postgres weeks start
   // Monday — the JS bucketing below matched that; now the DB does it).
   const wkKey = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
@@ -241,6 +300,8 @@ export default async function handler(req, res) {
     },
     signupsBySource,
     cohorts,
+    selling,
+    ops,
     flows: { ...flows, weekly: [...weeklyFlows.entries()].map(([wk, v]) => ({ wk, ...v })) },
     revenue: {
       byLine: rev.current,

@@ -473,3 +473,54 @@ test('static: the in-session code path is allowlist-gated and stays silent other
   assert.match(block, /issued\.ok/, 'only replies when a code was actually issued');
   assert.ok(!/not an admin/i.test(block.split('issued.ok')[0]), 'no pre-emptive rejection message');
 });
+
+// ---------------------------------------------------------------------------
+// Dashboard completeness (founder 2026-08-29: several sections were missing).
+// The bug was computing a block and forgetting to put it in the response, so
+// these assert the whole path: computed -> returned -> rendered.
+// ---------------------------------------------------------------------------
+
+test('metrics: every computed block is actually RETURNED in the payload', () => {
+  const body = metricsRoute.slice(metricsRoute.indexOf('return res.status(200).json('));
+  for (const key of ['vitals', 'funnel', 'signupsBySource', 'cohorts', 'selling', 'ops', 'flows', 'revenue']) {
+    assert.match(body, new RegExp(`\\b${key}[,:]`), `${key} must be in the response payload`);
+  }
+  // Guard the exact class of bug: a block computed but never returned.
+  for (const key of ['selling', 'ops']) {
+    assert.match(metricsRoute, new RegExp(`const ${key} = await safe`), `${key} is computed`);
+  }
+});
+
+test('dashboard renders every section the founder asked for', () => {
+  for (const heading of [
+    'The funnel',
+    'New accounts per week, by source',
+    'Revenue by line',
+    'Retention',
+    "What's being sold",
+    'Take rate',
+    'Money movement per week',
+    'Money-engine health',
+  ]) {
+    assert.ok(adminPage.includes(heading), `dashboard section missing: ${heading}`);
+  }
+  for (const comp of ['<WeeklyFlows', '<TakeRate', '<OpsHealth', '<Cohorts', '<Funnel', '<StackBars']) {
+    assert.ok(adminPage.includes(comp), `component not rendered: ${comp}`);
+  }
+});
+
+test('customer list: gated, searchable, and never exposes bearer secrets', () => {
+  const listRoute = read('../pages/api/admin/customers.js');
+  const body = listRoute.slice(listRoute.indexOf('export default'));
+  const gate = body.indexOf('requireAdmin(req)');
+  const firstQuery = body.search(/prisma\.[a-z$]/);
+  assert.ok(gate > -1 && (firstQuery === -1 || gate < firstQuery), 'auth gate precedes any DB access');
+  assert.match(listRoute, /401/);
+  assert.ok(!listRoute.includes('voucherPin'), 'never selects voucher PINs');
+  assert.match(listRoute, /Math\.min\(MAX_LIMIT/, 'page size is capped');
+  // Search must go through Prisma parameters, never string-built SQL.
+  assert.ok(!/\$queryRawUnsafe/.test(listRoute), 'no unsafe raw SQL');
+  // The page wires the list and makes rows open a profile.
+  assert.match(adminPage, /\/api\/admin\/customers\?limit=/, 'page calls the list endpoint');
+  assert.match(adminPage, /openCustomer\(cu\.msisdn\)/, 'rows open the full profile');
+});

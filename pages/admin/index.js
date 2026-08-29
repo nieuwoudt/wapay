@@ -109,6 +109,96 @@ function HBars({ rows, fmt = Rw }) {
   );
 }
 
+function WeeklyFlows({ weekly }) {
+  // Money in / spent / transferred, per week. Grouped bars, one group per week.
+  if (!weekly?.length) return <div className="empty">No money movement in this period yet.</div>;
+  const wks = [...weekly].sort((a, b) => a.wk.localeCompare(b.wk)).slice(-14);
+  const W = 620, H = 190, L = 46, B = 26, T = 14;
+  const mx = Math.max(...wks.flatMap((w) => [w.in, w.spend, w.transfer])) || 1;
+  const series = [['in', 'Money in', 'var(--s1)'], ['spend', 'Spent', 'var(--s2)'], ['transfer', 'Transferred', 'var(--s3)']];
+  const slot = (W - L - 10) / wks.length;
+  const bw = Math.min(9, (slot - 6) / 3);
+  const y = (v) => T + (H - T - B) * (1 - v / mx);
+  return (
+    <>
+      <div className="note" style={{ display: 'flex', gap: 14 }}>
+        {series.map(([k, label, c]) => (
+          <span key={k}><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: c, marginRight: 5, verticalAlign: -1 }} />{label}</span>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img">
+        {[0, mx / 2, mx].map((v, i) => (
+          <g key={i}>
+            <line x1={L} x2={W - 10} y1={y(v)} y2={y(v)} stroke="var(--grid)" />
+            <text x={L - 6} y={y(v) + 4} textAnchor="end">{'R' + Math.round(v / 100).toLocaleString('en-ZA')}</text>
+          </g>
+        ))}
+        {wks.map((w, i) => (
+          <g key={w.wk}>
+            {series.map(([k, label, c], si) => {
+              const v = w[k] || 0;
+              const x = L + slot * i + 3 + si * (bw + 2);
+              const h = Math.max(0, (H - T - B) * (v / mx));
+              return h > 0 ? <rect key={k} x={x} y={H - B - h} width={bw} height={h} rx={2} fill={c}><title>{`${w.wk} · ${label}: R${(v / 100).toFixed(2)}`}</title></rect> : null;
+            })}
+            {(wks.length <= 8 || i % 2 === 0) && <text x={L + slot * i + slot / 2} y={H - 8} textAnchor="middle">{w.wk.slice(5)}</text>}
+          </g>
+        ))}
+      </svg>
+    </>
+  );
+}
+
+function TakeRate({ revenueWeekly, flowsWeekly }) {
+  // Net revenue as a % of the money that moved, per week. One series, so no
+  // legend: the heading names it.
+  const flowByWk = new Map((flowsWeekly || []).map((f) => [f.wk, (f.in || 0) + (f.spend || 0) + (f.transfer || 0)]));
+  const pts = (revenueWeekly || [])
+    .map((r) => ({ wk: r.wk, pct: flowByWk.get(r.wk) ? (100 * r.cents) / flowByWk.get(r.wk) : null }))
+    .filter((p) => p.pct != null)
+    .sort((a, b) => a.wk.localeCompare(b.wk))
+    .slice(-14);
+  if (!pts.length) return <div className="empty">Not enough data yet.</div>;
+  const W = 300, H = 130, L = 34, B = 22, T = 12;
+  const mx = Math.max(5, Math.ceil(Math.max(...pts.map((p) => p.pct))));
+  const x = (i) => L + (W - L - 24) * (pts.length === 1 ? 0.5 : i / (pts.length - 1));
+  const y = (v) => T + (H - T - B) * (1 - v / mx);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.pct).toFixed(1)).join(' ');
+  const last = pts[pts.length - 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img">
+      {[0, mx / 2, mx].map((v, i) => (
+        <g key={i}>
+          <line x1={L} x2={W - 24} y1={y(v)} y2={y(v)} stroke="var(--grid)" />
+          <text x={L - 6} y={y(v) + 4} textAnchor="end">{v.toFixed(0)}%</text>
+        </g>
+      ))}
+      <path d={d} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {pts.map((p, i) => <circle key={p.wk} cx={x(i)} cy={y(p.pct)} r="3.5" fill="var(--accent)"><title>{`${p.wk}: ${p.pct.toFixed(2)}%`}</title></circle>)}
+      <text x={x(pts.length - 1)} y={y(last.pct) - 8} textAnchor="end" style={{ fontWeight: 650, fill: 'var(--ink)' }}>{last.pct.toFixed(1)}%</text>
+    </svg>
+  );
+}
+
+function OpsHealth({ ops }) {
+  if (!ops) return <div className="empty">Health checks unavailable.</div>;
+  const pill = (ok, label, detail) => (
+    <span key={label} className="pill" style={{ borderColor: ok === false ? 'var(--crit)' : undefined, color: ok === false ? 'var(--crit)' : 'var(--ink2)' }}>
+      <span className="dot" style={{ background: ok === null ? 'var(--ink3)' : ok ? 'var(--good)' : 'var(--crit)' }} />
+      {label}{detail ? ` · ${detail}` : ''}
+    </span>
+  );
+  const drift = ops.walletDriftCents;
+  return (
+    <div className="ops">
+      {pill(ops.trialBalanced, 'Trial balance', ops.trialBalanced === false ? `off by ${R(Math.abs(ops.trialDifferenceCents))}` : 'balanced')}
+      {pill(drift === null ? null : drift === 0, 'Wallets = journal', drift === null ? 'unknown' : drift === 0 ? `R0.00 drift · ${ops.walletsChecked} checked` : `${R(drift)} drift`)}
+      {pill(ops.stuckHolds === 0 || ops.stuckHolds === null, 'Stuck holds', ops.stuckHolds === null ? 'unknown' : String(ops.stuckHolds))}
+      {pill(true, 'Active holds', String(ops.activeHolds ?? 0))}
+    </div>
+  );
+}
+
 function Funnel({ f }) {
   if (!f || f.accounts == null) return <div className="empty">No data yet.</div>;
   const stages = [
@@ -328,14 +418,40 @@ function Dashboard() {
         <p className="note">% of each cohort with a money event, by weeks since signup.</p>
         <Cohorts c={m.cohorts} />
       </div>
+      <div className="grid two" style={{ marginTop: 14 }}>
+        <div className="card">
+          <h2>What's being sold</h2>
+          <p className="note">Rand and transaction count per category, this period. Straight from the journal, so it can never disagree with GMV.</p>
+          <HBars
+            rows={(m.selling || []).map((c, i) => ({ k: `${c.category} (${c.count})`, v: c.cents, c: `var(--s${Math.min(i + 1, 4)})` }))}
+            fmt={R}
+          />
+          {!(m.selling || []).length && <div className="empty">Nothing sold in this period yet.</div>}
+        </div>
+        <div className="card">
+          <h2>Take rate</h2>
+          <p className="note">Net revenue as a share of the money that moved, per week.</p>
+          <TakeRate revenueWeekly={m.revenue?.weekly} flowsWeekly={m.flows?.weekly} />
+          <p className="note" style={{ marginTop: 10, marginBottom: 0 }}>
+            This period: <b style={{ color: 'var(--ink)' }}>{m.vitals?.takeRatePct != null ? m.vitals.takeRatePct + '%' : '—'}</b>
+            {' · '}{R(m.vitals?.revenueCents)} on {Rw(m.vitals?.gmvCents)} GMV
+          </p>
+        </div>
+      </div>
+
       <div className="card" style={{ marginTop: 14 }}>
-        <h2>Money movement, this period</h2>
-        <p className="note">Wallet-perspective rand: in (loads), spent (VAS + vouchers), transferred (requests paid).</p>
-        <HBars rows={[
-          { k: 'Money in', v: m.flows?.in || 0, c: 'var(--s1)' },
-          { k: 'Spent', v: m.flows?.spend || 0, c: 'var(--s2)' },
-          { k: 'Transferred', v: m.flows?.transfer || 0, c: 'var(--s3)' },
-        ]} fmt={R} />
+        <h2>Money movement per week</h2>
+        <p className="note">In = loads and voucher redemptions. Spent = airtime, data, electricity, vouchers. Transferred = requests paid person to person.</p>
+        <WeeklyFlows weekly={m.flows?.weekly} />
+        <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>
+          Period totals: in {R(m.flows?.in)} · spent {R(m.flows?.spend)} · transferred {R(m.flows?.transfer)}
+        </p>
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Money-engine health</h2>
+        <p className="note">If any of these is red, treat every number above as suspect until it is fixed.</p>
+        <OpsHealth ops={m.ops} />
       </div>
     </>
   );
@@ -352,14 +468,36 @@ function Customer() {
     fetch('/api/admin/kyc').then((r) => (r.ok ? r.json() : { configured: false }))
       .then((j) => setKycOn(!!j.configured)).catch(() => setKycOn(false));
   }, []);
-  const look = useCallback(async () => {
-    if (!q.trim()) return;
+  const [list, setList] = useState(null);
+  const [listErr, setListErr] = useState('');
+  const loadList = useCallback(async (search = '') => {
+    setListErr('');
+    try {
+      const r = await fetch(`/api/admin/customers?limit=50&q=${encodeURIComponent(search)}`);
+      if (!r.ok) { setListErr('Could not load the customer list.'); return; }
+      setList(await r.json());
+    } catch { setListErr('Could not load the customer list.'); }
+  }, []);
+  useEffect(() => { loadList(''); }, [loadList]);
+
+  const openCustomer = useCallback(async (msisdn) => {
     setBusy(true); setErr(''); setC(null); setKycMsg('');
-    const r = await fetch(`/api/admin/customer?q=${encodeURIComponent(q)}`);
+    const r = await fetch(`/api/admin/customer?q=${encodeURIComponent(msisdn)}`);
     setBusy(false);
     if (!r.ok) { setErr((await r.json().catch(() => ({}))).error || 'Lookup failed.'); return; }
     setC(await r.json());
-  }, [q]);
+    if (typeof document !== 'undefined') {
+      setTimeout(() => document.getElementById('customer-profile')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+    }
+  }, []);
+
+  const look = useCallback(async () => {
+    // The search box drives BOTH: it filters the list and, when the number is
+    // complete enough to identify one person, opens that profile.
+    loadList(q);
+    if (!q.trim()) { setC(null); setErr(''); return; }
+    await openCustomer(q);
+  }, [q, loadList, openCustomer]);
   const kycAction = useCallback(async (action) => {
     setKycMsg('…');
     const r = await fetch('/api/admin/kyc', {
@@ -385,9 +523,40 @@ function Customer() {
         </div>
         {err && <div className="err">{err}</div>}
       </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>All customers {list ? <span className="note" style={{ display: 'inline', fontWeight: 400 }}>· {list.total} total{list.total > list.customers.length ? `, showing ${list.customers.length}` : ''}</span> : ''}</h2>
+        <p className="note">Newest first. Click anyone to open their full profile above.</p>
+        {listErr && <div className="err">{listErr}</div>}
+        {!list && !listErr && <div className="empty">Loading customers…</div>}
+        {list && !list.customers.length && <div className="empty">No customers match that search.</div>}
+        {list && list.customers.length > 0 && (
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead><tr>
+                <th>Name</th><th>Number</th><th className="n">Balance</th><th>KYC</th><th>Source</th><th>Joined</th><th>Last activity</th>
+              </tr></thead>
+              <tbody>
+                {list.customers.map((cu) => (
+                  <tr key={cu.id} onClick={() => openCustomer(cu.msisdn)} style={{ cursor: 'pointer' }} title="Open this customer">
+                    <td>{cu.displayName || <span style={{ color: 'var(--ink3)' }}>—</span>}</td>
+                    <td>{cu.msisdn}</td>
+                    <td className="n">{R(cu.availableCents)}</td>
+                    <td><span className={`pill ${cu.kycStatus === 'VERIFIED' ? 'g' : cu.kycStatus === 'NOT_VERIFIED' ? 'r' : 'y'}`}>{cu.kycStatus.replace('_', ' ')}</span></td>
+                    <td className="note" style={{ margin: 0 }}>{cu.acquisitionSource}</td>
+                    <td className="note" style={{ margin: 0 }}>{new Date(cu.createdAt).toLocaleDateString('en-ZA')}</td>
+                    <td className="note" style={{ margin: 0 }}>{cu.lastActivityAt ? new Date(cu.lastActivityAt).toLocaleDateString('en-ZA') : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {c && (
         <>
-          <div className="grid two" style={{ marginTop: 14 }}>
+          <div className="grid two" id="customer-profile" style={{ marginTop: 14 }}>
             <div className="card">
               <h2>{c.account.displayName || 'Customer'} <span className="note" style={{ display: 'inline' }}>· {c.account.msisdn}</span></h2>
               <div className="idrow" style={{ marginTop: 8 }}>
