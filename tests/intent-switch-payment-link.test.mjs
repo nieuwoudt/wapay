@@ -24,6 +24,7 @@ function extractFns(names) {
     const DEPOSIT_CARD_PATTERN = /\\b(?:deposit|depsit|deposite|diposit)\\b(?:\\s+(?:money|funds|cash))?\\s*[:,-]?\\s*r?\\s*(\\d+(?:[.,]\\d{1,2})?)(?:\\s*(?:rand|rande|zar))?\\b/i;
     const PAY_REQUEST_CODE_PATTERN = /\\bpay\\s+request\\s+(PR[A-HJKMNP-Z]{6})\\b/i;
     const RECEIPT_CODE_PATTERN = /^\\s*receipt\\s+(PR[A-HJKMNP-Z]{6})\\s*[.!]?\\s*$/i;
+    const matchFuelPurchase = (t) => /\\b(buy|get|purchase)\\b/i.test(t) && /\\b(fuel|petrol|diesel)\\b/i.test(t);
     const matchOttVoucherSelfRequest = (t) => /\\bott\\s*vouchers?\\b/i.test(t) && !/\\b(redeem\\w*|have|my)\\b/i.test(t);
   `;
   const bodies = names.map((name) => {

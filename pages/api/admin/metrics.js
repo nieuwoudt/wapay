@@ -19,6 +19,8 @@ const SELLING_LABELS = {
   SPEND_DATA: 'Data',
   SPEND_ELECTRICITY: 'Electricity',
   SPEND_VOUCHER: 'Vouchers',
+  SPEND_FUEL: 'Fuel (wiCode)',
+  SPEND_RETAIL: 'Retail (wiCode)',
   VOUCHER_GIFT_OTT: 'OTT vouchers',
   VOUCHER_GIFT_BLU: 'Blu vouchers',
   P2P_SEND: 'Requests paid',

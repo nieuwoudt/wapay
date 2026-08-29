@@ -63,6 +63,9 @@ td.n,th.n{text-align:right}
 svg{display:block;width:100%}
 svg text{font:500 10.5px system-ui;fill:var(--ink3)}
 .empty{color:var(--ink3);font-size:12.5px;padding:14px 0}
+
+.ops{display:flex;gap:8px;flex-wrap:wrap}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
 `;
 
 function Bars({ series, color = 'var(--accent)', fmt = (v) => v }) {
@@ -195,6 +198,110 @@ function OpsHealth({ ops }) {
       {pill(drift === null ? null : drift === 0, 'Wallets = journal', drift === null ? 'unknown' : drift === 0 ? `R0.00 drift · ${ops.walletsChecked} checked` : `${R(drift)} drift`)}
       {pill(ops.stuckHolds === 0 || ops.stuckHolds === null, 'Stuck holds', ops.stuckHolds === null ? 'unknown' : String(ops.stuckHolds))}
       {pill(true, 'Active holds', String(ops.activeHolds ?? 0))}
+    </div>
+  );
+}
+
+function Floats() {
+  // Own endpoint + own fetch: supplier HTTP calls have a different latency
+  // and failure profile than the DB aggregates behind /api/admin/metrics.
+  const [f, setF] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/floats')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setF(d); })
+      .catch(() => { if (!cancelled) setErr('Could not load supplier floats.'); });
+    return () => { cancelled = true; };
+  }, []);
+  if (err) return <div className="empty">{err}</div>;
+  if (!f) return <div className="empty">Asking suppliers…</div>;
+  const pill = (ok, label, detail) => (
+    <span key={label} className="pill" style={{ borderColor: ok === false ? 'var(--crit)' : undefined, color: ok === false ? 'var(--crit)' : 'var(--ink2)' }}>
+      <span className="dot" style={{ background: ok === null ? 'var(--ink3)' : ok ? 'var(--good)' : 'var(--crit)' }} />
+      {label}{detail ? ` · ${detail}` : ''}
+    </span>
+  );
+  const apiLabel = (row) => {
+    if (!row.api) return null;
+    if (!row.api.configured) return 'credentials not set';
+    if (row.api.error) return `unavailable (${row.api.error})`;
+    return null;
+  };
+  return (
+    <div>
+      {(f.floats || []).map((row) => (
+        <div key={row.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.4fr) 1fr 1fr 1.4fr', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--grid)' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{row.name}</div>
+            <div style={{ fontSize: 11, color: 'var(--ink3)' }}>{row.note}</div>
+          </div>
+          <div style={{ fontSize: 12.5 }}>
+            <span style={{ color: 'var(--ink3)' }}>supplier </span>
+            <b>{row.api?.availableCents != null ? R(row.api.availableCents) : apiLabel(row) || 'no API'}</b>
+          </div>
+          <div style={{ fontSize: 12.5 }}>
+            <span style={{ color: 'var(--ink3)' }}>ledger </span>
+            <b>{row.ledgerCents != null ? R(row.ledgerCents) : '—'}</b>
+          </div>
+          <div className="ops" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {row.low != null && pill(!row.low, row.low ? 'LOW FLOAT' : 'Float ok', `warn under ${R(row.warnCents)}`)}
+            {row.driftCents != null && pill(null, 'Drift',
+              row.driftCents === 0 ? 'none' : `${R(Math.abs(row.driftCents))} ${row.driftCents > 0 ? 'supplier ahead' : 'ledger ahead'}`)}
+            {row.ledgerRail && f.ledgerAvailable === false && pill(null, 'Ledger unavailable', '')}
+            {row.api && !row.api.configured && pill(null, 'Awaiting credentials', '')}
+            {row.api?.error && pill(false, 'Supplier check failed', row.api.error)}
+          </div>
+        </div>
+      ))}
+      <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>
+        Ledger = net CLEARING position from the journal (negative = WaPay owes the supplier). Float top-up transfers are not journaled yet, so a prepaid supplier's live float and ledger position legitimately differ; drift compares them where both exist. Cached ~60s.
+      </p>
+    </div>
+  );
+}
+
+function UniFuelPanel() {
+  const [u, setU] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/unifuel')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setU(d); })
+      .catch(() => { if (!cancelled) setErr('Could not load UniFuel stats.'); });
+    return () => { cancelled = true; };
+  }, []);
+  if (err) return <div className="empty">{err}</div>;
+  if (!u) return <div className="empty">Asking UniFuel…</div>;
+  if (!u.configured) return <div className="empty">UniFuel link not configured yet (UNIFUEL_API_BASE_URL + UNIFUEL_PARTNER_SECRET).</div>;
+  const s = u.stats;
+  return (
+    <div>
+      {(u.stats?.testMode || u.catalog?.testMode) && (
+        <p className="note" style={{ color: 'var(--crit)', fontWeight: 600 }}>
+          Yoyo TEST environment — these wiCodes do not redeem at real stations.
+        </p>
+      )}
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 12.5 }}>
+        <div><span style={{ color: 'var(--ink3)' }}>wiCodes issued </span><b>{s ? s.issuance.count : '—'}</b></div>
+        <div><span style={{ color: 'var(--ink3)' }}>issued value </span><b>{s ? R(s.issuance.cents) : '—'}</b></div>
+        <div><span style={{ color: 'var(--ink3)' }}>redemptions </span><b>{s ? s.redemptions.count : '—'}</b></div>
+        <div><span style={{ color: 'var(--ink3)' }}>redeemed value </span><b>{s ? R(s.redemptions.cents) : '—'}</b></div>
+      </div>
+      {u.stats?.truncated && (
+        <p className="note" style={{ marginTop: 8 }}>
+          Showing the most recent 1000 orders only — older issuance is not counted here.
+        </p>
+      )}
+      {u.catalog?.products?.length > 0 && (
+        <p className="note" style={{ marginTop: 10, marginBottom: 0 }}>
+          Live catalogue: {u.catalog.products
+            .map((p) => `${p.name}${Number.isInteger(p.minCents) && Number.isInteger(p.maxCents) ? ` (${Rw(p.minCents)}–${Rw(p.maxCents)})` : ''}`)
+            .join(' · ')}
+        </p>
+      )}
     </div>
   );
 }
@@ -371,7 +478,23 @@ function Dashboard() {
       .catch(() => { if (!cancelled) setErr('Could not load metrics.'); });
     return () => { cancelled = true; };
   }, [range]);
-  if (err) return <div className="card"><div className="empty">{err}</div></div>;
+  if (err) {
+    // The floats and UniFuel panels have their own endpoints — a metrics
+    // failure must not blank them too (review 2026-08-29).
+    return (
+      <>
+        <div className="card"><div className="empty">{err}</div></div>
+        <div className="card" style={{ marginTop: 14 }}>
+          <h2>Supplier floats</h2>
+          <Floats />
+        </div>
+        <div className="card" style={{ marginTop: 14 }}>
+          <h2>UniFuel / wiCode</h2>
+          <UniFuelPanel />
+        </div>
+      </>
+    );
+  }
   if (!m) return <div className="card"><div className="empty">Loading live numbers…</div></div>;
   const v = m.vitals || {};
   const revRows = Object.entries(m.revenue?.byLine || {}).sort((a, b) => b[1] - a[1])
@@ -452,6 +575,18 @@ function Dashboard() {
         <h2>Money-engine health</h2>
         <p className="note">If any of these is red, treat every number above as suspect until it is fixed.</p>
         <OpsHealth ops={m.ops} />
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Supplier floats</h2>
+        <p className="note">Prepaid balances at each counterparty, next to what the ledger believes. Top up before a low float fails a vend.</p>
+        <Floats />
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>UniFuel / wiCode</h2>
+        <p className="note">WaPay-originated fuel voucher issuance and redemptions, via the UniFuel service.</p>
+        <UniFuelPanel />
       </div>
     </>
   );

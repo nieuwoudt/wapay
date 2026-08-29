@@ -47,7 +47,11 @@ function dispatchSource() {
 test('processor free-text path uses orchestrate, not the legacy single call', () => {
   assert.match(processorSource, /import \{[^}]*orchestrate[^}]*\} from '@wapay\/ai'/);
   assert.ok(!/chatWithAI\(/.test(processorSource), 'legacy chatWithAI call must be gone');
-  assert.match(processorSource, /await orchestrate\(text, contextString\)/);
+  // v1.3: every turn injects the data-driven, claim-gated spend knowledge.
+  assert.match(
+    processorSource,
+    /await orchestrate\(text, contextString, \{\s*knowledge: buildBrainKnowledge\(\{ wicodeLive: isWicodeLive\(\) \}\),\s*\}\)/
+  );
   assert.match(processorSource, /dispatchOrchestratorAction\(\{ from, text, account, result \}\)/);
 });
 

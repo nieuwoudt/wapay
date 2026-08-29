@@ -4,6 +4,56 @@
 
 ---
 
+## 2026-08-29 (17) — v1.3: conversational fix, supplier floats, UniFuel fuel vouchers end-to-end
+
+**Task 2 — questions get answers, not menus (BUGLOG #34a).** The founder's screenshot
+("Where can I spend my WaPay money!" → bare Help Menu, twice) traced to the tier-1 fast
+path classifying capability questions as HELP and the dispatch rendering every HELP as
+the static menu. Fixed in three layers: prompts (HELP reserved for bare menu asks; the
+"Pay" persona — warm banker voice, emoji in every reply; the honest cash-out
+coming-soon script, never a date, partner unnamed), dispatch (question-shaped HELP gets
+the warm data-driven spend answer), and the adjacent traps (voucher-history how-to
+exclusion; a product ask about something we don't sell now reaches the AI instead of the
+VAS dump). New `lib/spend-catalogue.js` is the single data-driven source of spend
+knowledge, claim-gated on `WAPAY_WICODE_LIVE` and injected into every tier-2 AI call.
+`pnpm qa:chat` grew four question-never-gets-menu scenarios (10/10 PASS).
+
+**Task 1 — Supplier floats in Mission Control.** `/api/admin/floats` + card: both OTT
+balances server-side (issuance verified live: R99,960 on the sandbox float), ledger
+CLEARING:* positions per rail incl. YOYO, drift, low-float alarms; Blu ledger-only (no
+balance API; spec asked of Phuti), PayFast history-only (verified). 60s cache; errors
+reduce to short codes; credentials never leave the server.
+
+**Adversarial review round (77 agents, 34 confirmed findings, all fixed pre-ship).**
+Load-bearing catches: a reconcile racing a slow Yoyo mint could declare failure and
+release the hold while the card still landed (CRITICAL — closed with a 120s age gate on
+UniFuel's order endpoint); indeterminate purchases had no reachable retry path (closed
+with `lib/fuel-settlement.js` + an every-message reconciler that settles or releases);
+a settle failure after issuance could refund a customer whose wiCode existed (crash
+guard now disarms the moment the voucher exists); concurrent PIN taps deduped by an
+atomic EXECUTING flip + a deterministic UniFuel order id (raced live: one Yoyo card);
+`getUserGiftCards` really returns `data.giftcardList` (probed) — the reconcile parser
+was reading keys that don't exist; UniFuel's own cron/admin retries now refuse
+wapay-driven orders; the redemption webhook gained replay guards and a targeted
+single-gift claim; the fuel matcher no longer swallows complaints; list asks stay on
+deterministic voucher history; drift pills tell the truth. Full trail in
+`docs/testing/adversarial-review-2026-08-29.md`.
+
+**Task 3 — UniFuel/wiCode integration, built NOW on the Yoyo TEST env**
+(docs/UNIFUEL_INTEGRATION.md). Two repos stay separate: UniFuel gained a fail-closed
+Bearer partner surface (`/api/partner/wapay/issue|order|catalog|stats` — idempotent by
+reference, userRef `wapay:<ref>` makes lost responses reconcilable against Yoyo) plus a
+redemption forwarder; WaPay gained `lib/unifuel-client.js` (ISSUED/FAILED/UNKNOWN
+discipline — never release a hold on unknown), the full chat flow ("buy fuel" → amount →
+confirm → PIN → wiCode + redemption guide in-session, coming-soon while gated),
+`SPEND_FUEL` ledger postings into CLEARING:YOYO (commission 0 bps until signed),
+`/api/webhooks/unifuel` (partial redemption re-arms the fresh code through the atomic
+claim flow), the Mission Control UniFuel panel, and `lib/email.js` (Resend on WaPay
+identity, ops alerts first). Yoyo's undocumented ~45-char userRef limit found and fixed
+pre-ship (BUGLOG #35). Proven: 29/29 full-money E2E on an isolated scratch schema with
+REAL Yoyo TEST issuance (`pnpm qa:fuel`) + 13/13 chat-level E2E. 478/478 unit tests,
+build green. Go-live is a credentials/flag flip, not a build.
+
 ## 2026-08-28 (16) — Admin login code: request it from your phone (BUGLOG #33, round 2)
 
 The template path turned out to be a dead end: production diagnosis showed `(#132001)` for

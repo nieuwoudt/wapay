@@ -39,6 +39,23 @@ function verdict(name, checks, session, notes = []) {
 
 const has = (text, re) => re.test(String(text || ''));
 
+/**
+ * Every canned menu/fallback surface a QUESTION must never receive
+ * (founder screenshot 2026-08-29: "Where can I spend my WaPay money!"
+ * got the bare Help Menu twice). Matched loosely; run these scenarios
+ * while the profile language is English or the copy match is unreliable.
+ */
+const MENU_MARKERS = [
+  /WaPay Help Menu/i,
+  /I didn't quite understand/i,
+  /Just talk to me naturally/i,
+  /Type "help"/i,
+  /balance checks, airtime, data, electricity/i,
+  /⚡ Quick:/,
+  /🛒 \*Buy\*/,
+];
+const looksLikeMenu = (t) => MENU_MARKERS.some((re) => re.test(String(t || '')));
+
 async function run() {
   await seedQaAccount();
   const s = createSession();
@@ -116,7 +133,46 @@ async function run() {
   }
 
   // ------------------------------------------------------------------
-  // 6. Languages: switch, localized replies, non-English inbound
+  // 6. Questions never get the bare menu (founder screenshot 2026-08-29)
+  // ------------------------------------------------------------------
+  {
+    const a = await s.say('Where can I spend my WaPay money!');
+    verdict('Questions: the founder repro gets a real spend answer, never the menu', [
+      { level: 'FAIL', ok: !looksLikeMenu(a.replyText), what: 'no bare menu for the exact founder phrasing' },
+      { level: 'FAIL', ok: has(a.replyText, /airtime|electricity|voucher|data/i), what: 'the answer names real spend destinations' },
+      { level: 'WARN', ok: has(a.replyText, /[\u{1F300}-\u{1FAFF}☀-➿]/u), what: 'the reply carries warmth (emoji)' },
+    ], s);
+  }
+  {
+    const a = await s.say('How do I withdraw my money to my bank account?');
+    verdict('Questions: cash-out ask gets the coming-soon script, then spend guidance', [
+      { level: 'FAIL', ok: !looksLikeMenu(a.replyText), what: 'no bare menu for a cash-out question' },
+      { level: 'FAIL', ok: has(a.replyText, /coming soon|not (yet|available yet)|soon/i), what: 'honest coming-soon position' },
+      { level: 'FAIL', ok: !has(a.replyText, /\b(january|february|march|april|june|july|august|september|october|november|december|20\d\d)\b/i), what: 'no date is promised' },
+      { level: 'WARN', ok: has(a.replyText, /airtime|electricity|spend|voucher/i), what: 'redirects to what the money CAN do' },
+    ], s);
+  }
+  {
+    const a = await s.say('Can I buy petrol with WaPay?');
+    verdict('Questions: fuel ask in test mode is coming-soon, never claimed redeemable', [
+      { level: 'FAIL', ok: !looksLikeMenu(a.replyText), what: 'no bare menu for a fuel question' },
+      { level: 'FAIL', ok: !has(a.replyText, /redeem (it|this|your voucher) at|works at any (shell|engen|station)/i), what: 'no live-redemption claim while gated' },
+      { level: 'WARN', ok: has(a.replyText, /coming soon|soon|not (yet|available)/i), what: 'fuel presented as coming soon' },
+    ], s);
+  }
+  {
+    await s.say('buy electricity');
+    const b = await s.say('how do fees work on WaPay?');
+    await s.say('cancel');
+    verdict('Questions: a question mid-flow is answered, not menued or meter-errored', [
+      { level: 'FAIL', ok: !looksLikeMenu(b.replyText), what: 'no bare menu mid-flow' },
+      { level: 'FAIL', ok: !has(b.replyText, /valid (amount|meter)/i), what: 'no validation insult for a real question' },
+      { level: 'WARN', ok: has(b.replyText, /fee|cost|charge|free|switching over/i), what: 'the fees question is acknowledged' },
+    ], s);
+  }
+
+  // ------------------------------------------------------------------
+  // 7. Languages: switch, localized replies, non-English inbound
   // ------------------------------------------------------------------
   {
     const a = await s.say('speak zulu');

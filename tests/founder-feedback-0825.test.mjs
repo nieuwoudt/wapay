@@ -118,6 +118,7 @@ function extractSwitch() {
     const RECEIPT_CODE_PATTERN = /^\\s*receipt\\s+(PR[A-HJKMNP-Z]{6})\\s*[.!]?\\s*$/i;
     const matchRequestMoneyAsk = (t) => /\\b(please\\s+)?pay\\s?-?\\s?me\\b/i.test(t) || /\\bget\\s+paid\\b/i.test(t);
     const matchOttVoucherSelfRequest = (t) => /\\bott\\s*vouchers?\\b/i.test(t) && !/\\b(redeem\\w*|have|my)\\b/i.test(t);
+    const matchFuelPurchase = (t) => /\\b(buy|get|purchase)\\b/i.test(t) && /\\b(fuel|petrol|diesel)\\b/i.test(t);
   `;
   // eslint-disable-next-line no-new-func
   return new Function(`${preamble}; ${processorSource.slice(start, end + 2)}; return detectStrongIntentSwitch;`)();

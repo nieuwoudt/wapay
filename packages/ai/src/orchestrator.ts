@@ -69,6 +69,7 @@ export const ORCHESTRATOR_ACTIONS = [
   'BUY_AIRTIME',
   'BUY_DATA',
   'BUY_ELECTRICITY',
+  'BUY_FUEL',
   'SEND_VOUCHER',
   'REQUEST_MONEY',
   'LIST_PRODUCTS',
@@ -215,7 +216,7 @@ const PRODUCT_TRUTH = `WAPAY TODAY (never claim more, never deny these):
 - Add money, two ways: (1) CASH — take cash to the till at any major retailer and ask for a Blu Voucher for the amount you want to deposit; the cashier gives a voucher code; send that code to WaPay and the money loads automatically; (2) CARD / BANK — "deposit R100" (R10–R3000) gets a secure PayFast link accepting cards, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan and Zapper.
 - Buy for yourself or ANY number: airtime (R5–R1000), data bundles, prepaid electricity (R10–R5000, needs meter number).
 - Send money: "send R50 to 083…", a saved name ("send R50 to Philly"), or share a contact card — the recipient gets a WaPay voucher (R10–R1000, flat R3 fee).
-- Getting money OUT (withdrawals): NOT available — WaPay balances and WaPay vouchers are SPEND-ONLY. A WaPay voucher can be spent online at any platform that accepts OTT vouchers as payment; it CANNOT be exchanged for cash or paid into a bank account. NEVER claim cash-out, bank withdrawal, or "take it to your bank" — if asked, say withdrawals aren't available and list what the money CAN do (airtime, data, electricity, online spend, sending to others).
+- Getting money OUT (withdrawals): not available YET — balances are SPEND-ONLY today, and cash withdrawals are COMING SOON through our payouts partner (agreement signed, integration underway). NEVER promise a date or name the partner. A WaPay voucher can be spent online at any platform that accepts OTT vouchers as payment; it CANNOT be exchanged for cash or paid into a bank account. When asked about cash-out: say it is coming soon (no date), then warmly walk through everything the money already does (airtime, data, electricity, online voucher spend, sending to others). Identity verification will apply to withdrawals only, when they arrive.
 - REQUEST MONEY / "please pay me": LIVE. "request R150" creates a shareable payment link (R5–R3000, 7-day expiry) the user forwards to anyone. THE MECHANICS (answer questions about this precisely): the payer pays EXACTLY the requested amount — free from a WaPay balance, or by card/EFT with NO fee for the payer; on card payments a small card fee is deducted from what the REQUESTER receives (the person asking for money carries the cost, never the payer). The money lands INSTANTLY in the requester's WaPay balance — they can spend it (airtime, data, electricity, vouchers), send it to someone else, or request/receive more. Both sides get WhatsApp confirmations the moment it's paid. "Where does the money go?" = straight into your WaPay balance, and you're told immediately.
 - Check balance; redeem vouchers. NO betting top-ups yet, NO Netflix/DStv yet ("coming soon" is the honest answer for those).`;
 
@@ -243,7 +244,7 @@ DOMAINS:
 FAST PATH — set fastAction ONLY when the whole intent is one of these and unmistakable:
 - CHECK_BALANCE: any balance question ("balance", "balence", "how much money do I have", "imali yami")
 - DEPOSIT_STATUS: asking whether money they PAID IN has arrived ("did my payment go through", "where is my money")
-- HELP: asking what WaPay can do / how it works — but NOT withdrawal/cash-out questions ("how do I withdraw", "get cash out", "money to my bank"): those are MONEY domain with fastAction NONE, so the specialist can explain honestly that balances are spend-only.
+- HELP: ONLY a bare, explicit ask for the menu or a completely general "what can you do" ("help", "menu", "ncedo", "what can you do?"). A question WITH A SUBJECT is never HELP — "where can I spend my money", "who accepts WaPay", "how do vouchers work", "can I pay at a shop", and every withdrawal/cash-out question ("how do I withdraw", "get cash out", "money to my bank") all go to their domain with fastAction NONE so the specialist answers conversationally.
 - HOME: asking for the menu / home / start
 Otherwise fastAction = NONE and the domain's specialist continues.
 
@@ -256,13 +257,23 @@ Distinguish carefully:
 
 ${MONEY_TRUTH_RULES}`;
 
-function agentPrompt(domain: OrchestratorDomain): string {
+/**
+ * The customer-facing voice (founder mandate 2026-08-29): "Pay" is the
+ * personality — like speaking to your own banker who knows you, never a
+ * phone-menu robot. Warm emoji in every reply.
+ */
+const PERSONA = `PERSONALITY — you are "Pay", WaPay's assistant: the warmth of a personal banker who knows the customer. Friendly, human, specific; never robotic, never a menu recital. Every reply carries one or two fitting emoji (💰📱💡✨😊 where natural). Use the KNOWN USER PROFILE context when you have it. Short sentences. Never use em or en dashes.`;
+
+function agentPrompt(domain: OrchestratorDomain, knowledge?: string): string {
   const shared = `You are WaPay's ${domain} specialist. WaPay is a WhatsApp wallet for South Africa; users write in any of the 11 official languages, with heavy typos. You receive the user's message (plus recent conversation) and MUST return the structured action + slots + a short reply in the USER'S language.
+
+${PERSONA}
 
 ${LANGUAGE_HINTS}
 
 ${PRODUCT_TRUTH}
 
+${knowledge ? `LIVE PRODUCT KNOWLEDGE (data-driven, already gated to what may be claimed today — answer from it, never beyond it):\n${knowledge}\n` : ''}
 ${MONEY_TRUTH_RULES}
 
 LANGUAGE RULE (absolute): reply in the language of the user's CURRENT message. Recent conversation and profile are context only — an old message in another language must NEVER change the reply language. When the current message is language-neutral ("Okay", "yes", a number), use the KNOWN USER PROFILE's preferred language if given, otherwise English.
@@ -301,12 +312,14 @@ SLOT RULES:
     DISCOVER: `YOUR ACTIONS:
 - LIST_PRODUCTS: "what can I buy", general browsing.
 - SEND_VOUCHER with self=true: any OTT-voucher purchase ask ("can I buy an OTT voucher?") — OTT vouchers are WaPay's money voucher, NOT an entertainment product; never map them to LIFESTYLE.
+- BUY_FUEL: the user wants to buy fuel / petrol / diesel (a fuel voucher). amountCents when given. The system gates it honestly (coming soon until live) — always return the action, never refuse yourself.
 - LIST_CATEGORY: a specific category (AIRTIME/DATA/ELECTRICITY; LIFESTYLE/BILLPAY/GAMING exist but are coming soon — say so in reply and still return the action).
 - BUY_DATA with productQuery: a specific product search ("cheapest weekly TikTok data").
-- NONE with a reply: price/product questions you can answer from WAPAY TODAY.`,
+- NONE with a reply: price/product questions you can answer from WAPAY TODAY and the LIVE PRODUCT KNOWLEDGE.`,
     CHAT: `YOUR ACTIONS:
-- HELP: user asks what WaPay can do.
+- HELP: ONLY when the user explicitly asks for the help menu ("help", "menu", "options"). A question about what WaPay can do, where money can be spent, or how something works is NEVER HELP — answer it yourself: NONE with a warm, specific reply from WAPAY TODAY and the LIVE PRODUCT KNOWLEDGE.
 - HOME: user wants the menu.
+- BUY_FUEL: the user wants to buy fuel / petrol / diesel. The system gates it honestly — return the action, never refuse yourself.
 - CHECK_BALANCE / DEPOSIT_STATUS: when the smalltalk actually hides one of these.
 - NONE with a reply: greetings, thanks, questions. Reply naturally, 1–2 sentences, user's language. For capability questions stick to WAPAY TODAY.`,
   };
@@ -385,15 +398,31 @@ function buildUserContent(text: string, context?: string): string {
   return context ? `${context}\n\nUSER MESSAGE:\n${text}` : `USER MESSAGE:\n${text}`;
 }
 
+/** Optional per-call extras for orchestrate(). */
+export interface OrchestrateOptions {
+  /**
+   * Data-driven product knowledge injected into the tier-2 agent prompt
+   * (spend destinations, wiCode catalogue, cash-out script) — composed by
+   * the caller from live config so claims are pre-gated to what is live.
+   * Tier 1 stays lean: it only classifies and never replies.
+   */
+  knowledge?: string;
+}
+
 /**
  * Run one user message through the two-tier engine.
  *
  * @param text    the raw WhatsApp message
  * @param context optional recent-conversation block (plain text)
+ * @param opts    optional per-call extras (see OrchestrateOptions)
  * @throws AI_UNAVAILABLE / AI_QUOTA_EXCEEDED / AI_CONFIG_ERROR — the names
  *         the processor's fallback copy expects.
  */
-export async function orchestrate(text: string, context?: string): Promise<OrchestratorResult> {
+export async function orchestrate(
+  text: string,
+  context?: string,
+  opts: OrchestrateOptions = {}
+): Promise<OrchestratorResult> {
   const userContent = buildUserContent(text, context);
   const orchestratorModel = ORCHESTRATOR_MODEL();
   const agentModel = CATEGORY_AGENT_MODEL();
@@ -432,7 +461,7 @@ export async function orchestrate(text: string, context?: string): Promise<Orche
   try {
     tier2 = await callStructured<AgentTierOutput>({
       model: agentModel,
-      system: agentPrompt(tier1.domain),
+      system: agentPrompt(tier1.domain, opts.knowledge),
       user: `${userContent}\n\nROUTING NOTE (from the orchestrator): ${tier1.note}\nDETECTED LANGUAGE: ${tier1.language}`,
       schemaName: 'wapay_action',
       schema: AGENT_SCHEMA as unknown as Record<string, unknown>,

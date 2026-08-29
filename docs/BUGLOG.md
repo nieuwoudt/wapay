@@ -4,6 +4,43 @@
 
 ---
 
+## 35. Yoyo userRef over ~45 chars fails issuance with "General System Error" (caught pre-ship)
+
+- **Symptom (fuel E2E first run, 2026-08-29):** every wiCode issuance through the new
+  WaPay→UniFuel pipeline failed at Yoyo with `General System Error` — while the identical
+  call with a shorter reference succeeded. Probed on the test env: userRef ≤ 45 chars
+  issues, ≥ 47 fails. The WaPay reference `wapay-fuel-preview-fuel-<uuid>` produced a
+  66-char userRef.
+- **Root cause:** an undocumented Yoyo userRef length limit; UniFuel's own refs
+  (`fuel:guest:<uuid>` ≈ 47) sit close to the same cliff, unnoticed because Yoyo's error is
+  generic.
+- **Fix:** the WaPay execute route builds a COMPACT deterministic reference —
+  `wapay-fuel-` + 27 hex chars of the preview UUID, 38 chars total (userRef 44) — and the
+  webhook receiver maps references back via `ProviderRequest.providerRef`, never string
+  surgery. UniFuel's partner route enforces max 38 (`REFERENCE_SHAPE`).
+- **Guard:** `tests/fuel-flow.test.mjs` pins the `.slice(0, 38)` + prefix-strip; the
+  fuel E2E (`pnpm qa:fuel`) exercises the real issuance end-to-end.
+
+## 34a. "Where can I spend my WaPay money!" answered with the bare Help Menu (founder screenshot)
+
+- **Symptom (live customer, 2026-08-29):** the exact question got the static
+  `📋 WaPay Help Menu` twice. No deterministic matcher was at fault: the tier-1
+  orchestrator's fast path defined HELP as "asking what WaPay can do", so a capability
+  QUESTION short-circuited to the HELP action — and the dispatch `case 'HELP'` rendered
+  every HELP as the same static menu, discarding conversation entirely. The sibling trap:
+  "Where can I spend my voucher?" was eaten by the voucher-HISTORY regex, and "Can I buy
+  petrol?" by the product-query indicators (generic VAS dump).
+- **Fix (three layers):** (1) prompts — fast-path HELP narrowed to bare menu asks, the
+  CHAT agent told a subject question is NEVER HELP, and a data-driven claim-gated
+  knowledge block (lib/spend-catalogue.js) now rides every tier-2 call; (2) dispatch —
+  `case 'HELP'` answers question-shaped input with the warm spend-destinations reply
+  (menu only for explicit asks); (3) adjacent matchers — voucher-history excludes how-to
+  phrasings, and a no-match product query with concrete residue falls to the AI instead
+  of the product dump (recursion-guarded via `viaAi`).
+- **Guard:** `tests/help-conversational.test.mjs` (prompt pins, gate regex drives,
+  residue behavior) + four `pnpm qa:chat` scenarios asserting question-shaped input never
+  gets a bare menu (the founder phrasing verbatim among them).
+
 ## 33. Admin login code never arrived — free-form send outside WhatsApp's 24-hour window
 
 - **Symptom (founder's first login, 2026-08-28):** entered the correct number on

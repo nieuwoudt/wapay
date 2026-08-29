@@ -18,11 +18,15 @@ const ROUTES = [
   ['data', 'pages/api/vas/data/execute.js', 'wapay-data-exec-${previewId}', 'wapay-data-spend-${previewId}'],
   ['electricity', 'pages/api/vas/electricity/execute.js', 'wapay-elec-exec-${previewId}', 'wapay-elec-spend-${previewId}'],
   ['voucher', 'pages/api/vas/voucher/execute.js', 'wapay-vgift-exec-${previewId}', 'wapay-vgift-spend-${previewId}', 'buildVoucherGift'],
+  // Fuel's settle/build calls live in lib/fuel-settlement.js (shared with
+  // the reconciler); the route + module are checked as one unit.
+  ['fuel', ['pages/api/vas/fuel/execute.js', 'lib/fuel-settlement.js'], 'wapay-fuel-exec-${previewId}', 'wapay-fuel-spend-${previewId}'],
 ];
 
 test('VAS execute routes use the atomic hold/settle ledger pattern', async () => {
   for (const [name, relPath, holdKey, spendKey, entryBuilder = 'buildSpend'] of ROUTES) {
-    const text = await fileText(relPath);
+    const paths = Array.isArray(relPath) ? relPath : [relPath];
+    const text = (await Promise.all(paths.map(fileText))).join('\n');
 
     // Prisma singleton only — a per-route client leaks connections and skips
     // the shared middleware.
@@ -45,7 +49,8 @@ test('VAS execute routes use the atomic hold/settle ledger pattern', async () =>
 
 test('VAS execute routes never put Date.now() in idempotency material', async () => {
   for (const [name, relPath] of ROUTES) {
-    const text = await fileText(relPath);
+    const paths = Array.isArray(relPath) ? relPath : [relPath];
+    const text = (await Promise.all(paths.map(fileText))).join('\n');
     for (const line of text.split('\n')) {
       if (line.includes('Date.now()') && (line.includes('idemKey') || line.includes('wapay-'))) {
         assert.fail(`${name}: non-deterministic idempotency key (Date.now()): ${line.trim()}`);

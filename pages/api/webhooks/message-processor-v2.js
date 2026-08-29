@@ -8,7 +8,7 @@
 import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed, wasErrorSent, markErrorSent } from './user-manager.js';
 import { sendWhatsAppText, sendWhatsAppTemplate, sendWhatsAppCtaUrl } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
-import { resolveGift, buildRecipientNotification, buildVoucherClaimMessage, maskMsisdn } from '../../../lib/gifting.js';
+import { resolveGift, buildRecipientNotification, buildVoucherClaimMessage, buildWicodeClaimMessage, maskMsisdn } from '../../../lib/gifting.js';
 import { hasPendingGifts, hasPriorSendTo, claimPendingGifts, revertGiftDelivery } from '../../../lib/pending-gifts.js';
 import {
   createPaymentRequest,
@@ -53,6 +53,15 @@ import {
   MAX_DEPOSIT_CENTS,
 } from '../../../lib/deposits.js';
 import { orchestrate } from '@wapay/ai';
+import {
+  advertisedFuelPartners,
+  buildBrainKnowledge,
+  buildSpendDestinationsReply,
+  fuelComingSoonReply,
+  redemptionGuide,
+  isWicodeLive,
+} from '../../../lib/spend-catalogue.js';
+import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
 import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '../../../lib/localize.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
@@ -376,6 +385,105 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
       `Please check the number carefully. They'll get a WaPay voucher they can spend online at any store that accepts OTT vouchers.\n\n` +
       `Reply *YES* to confirm or *NO* to cancel.`, await userLang(account));
 
+  await addToConversationHistory(from, 'assistant', confirmMsg);
+  return await sendWhatsAppText({ to: from, text: confirmMsg });
+}
+
+/**
+ * "Buy fuel" entry point (v1.3 Task 3: WaPay wallet -> UniFuel wiCode).
+ *
+ * Gated on the wiCode PRODUCTION flag: until WAPAY_WICODE_LIVE=true every
+ * route in answers with the warm coming-soon reply and never claims real
+ * redemption (Yoyo test vouchers do not work at pumps). When live: preview
+ * -> FUEL_CONFIRM (YES/NO) -> FUEL_PIN -> /api/vas/fuel/execute, the same
+ * deterministic, PIN-gated shape as every other purchase.
+ */
+async function startFuelPurchase({ from, account, amountCents = null, rawText = '' }) {
+  if (!isCategoryLive('FUEL')) {
+    const soonMsg = await localizeOutbound(fuelComingSoonReply(), await userLang(account));
+    await addToConversationHistory(from, 'assistant', soonMsg);
+    return await sendWhatsAppText({ to: from, text: soonMsg });
+  }
+
+  const minCents = Number(process.env.WAPAY_FUEL_MIN_CENTS) || 5000;
+  const maxCents = Number(process.env.WAPAY_FUEL_MAX_CENTS) || 50000;
+
+  // An out-of-range direct ask ("buy R20 fuel") re-prompts inside the flow
+  // instead of dead-ending with "try again later" (review 2026-08-29).
+  if (amountCents && (amountCents < minCents || amountCents > maxCents)) {
+    await updateConversationState(from, 'FUEL_AMOUNT', {});
+    const boundsMsg = await localizeOutbound(
+      `⛽ Fuel vouchers are between R${minCents / 100} and R${maxCents / 100} right now.\n\nHow much would you like? (e.g., R100)\n\nReply "cancel" to stop.`,
+      await userLang(account)
+    );
+    await addToConversationHistory(from, 'assistant', boundsMsg);
+    return await sendWhatsAppText({ to: from, text: boundsMsg });
+  }
+
+  if (!amountCents) {
+    await updateConversationState(from, 'FUEL_AMOUNT', {});
+    const askMsg = await localizeOutbound(
+      `⛽ *Buy a Fuel Voucher*\n\nHow much fuel would you like? Reply with an amount (e.g., R100, R200).\n(Min R${minCents / 100}, Max R${maxCents / 100})\n\nReply "cancel" to stop.`,
+      await userLang(account)
+    );
+    await addToConversationHistory(from, 'assistant', askMsg);
+    return await sendWhatsAppText({ to: from, text: askMsg });
+  }
+
+  const previewUrl = apiUrl('/api/vas/fuel/preview');
+  logInternalFetchCall({ url: previewUrl, path: '/api/vas/fuel/preview' });
+  const previewRes = await fetch(previewUrl, {
+    method: 'POST',
+    headers: withInternalHeaders(),
+    body: JSON.stringify({ accountId: account.id, amountCents }),
+  });
+  await logInternalFetchResponse({ url: previewUrl, res: previewRes });
+  const previewData = previewRes.headers.get('content-type')?.includes('application/json')
+    ? await previewRes.json()
+    : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
+
+  if (!previewData.ok) {
+    if (previewData.error === 'INSUFFICIENT_FUNDS') {
+      const totalCents = Number.isInteger(previewData.totalCents) ? previewData.totalCents : amountCents;
+      const availableCents = Number.isInteger(previewData.availableBalance) ? previewData.availableBalance : 0;
+      const shortfallCents = Math.max(totalCents - availableCents, MIN_DEPOSIT_CENTS);
+      await sendWhatsAppText({
+        to: from,
+        text: await localizeOutbound(
+          `💰 You need ${randsShort(totalCents)} for this fuel voucher but your balance is ${randsShort(availableCents)}.\n\n` +
+          `Top up the ${randsShort(shortfallCents)} difference with the button below, then just ask me for fuel again. ⛽`,
+          await userLang(account)
+        ),
+      });
+      return await handleCardDepositLink({ from, account, amountCents: shortfallCents, rawText });
+    }
+    await updateConversationState(from, null);
+    return await sendWhatsAppText({
+      to: from,
+      text: await localizeOutbound(`❌ ${previewData.message || 'Could not start the fuel purchase.'}\n\nPlease try again later.`, await userLang(account)),
+    });
+  }
+
+  await updateConversationState(from, 'FUEL_CONFIRM', {
+    amountCents,
+    feeCents: previewData.feeCents,
+    totalCents: previewData.totalCents,
+    previewId: previewData.previewId,
+  });
+
+  // Partner names come from the DATA catalogue, never hardcoded copy
+  // (v1.3.1 amendment 1 — the list grows without a deploy).
+  const partnerNames = advertisedFuelPartners().map((partner) => partner.name).join(' and ');
+  const confirmMsg = await localizeOutbound(
+    `⛽ *Confirm Fuel Voucher*\n\n` +
+    `Fuel voucher: ${randsShort(amountCents)}\n` +
+    (previewData.feeCents > 0
+      ? `Fee: ${randsShort(previewData.feeCents)}\nTotal: ${randsShort(previewData.totalCents)}\n`
+      : `No fee, paid from your balance.\n`) +
+    `\nYour wiCode will be delivered right here, ready to use at participating ${partnerNames} stations.\n\n` +
+    `Reply *YES* to confirm or *NO* to cancel.`,
+    await userLang(account)
+  );
   await addToConversationHistory(from, 'assistant', confirmMsg);
   return await sendWhatsAppText({ to: from, text: confirmMsg });
 }
@@ -968,6 +1076,29 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
 /**
  * Handle post-onboarding operations (normal banking)
  */
+
+/**
+ * The claim message for a pending gift, by issuing rail. A YOYO gift is a
+ * wiCode (fuel/retail at physical tills) and travels with its redemption
+ * guide; everything else is the OTT online voucher. Bearer rules for both:
+ * verbatim English, never localized, never logged.
+ */
+function giftClaimText(gift, senderName = null) {
+  if (gift.rail === 'YOYO') {
+    return buildWicodeClaimMessage({
+      amountCents: gift.amountCents,
+      wicode: gift.voucherPin,
+      guide: redemptionGuide('FUEL_WICODE'),
+    });
+  }
+  return buildVoucherClaimMessage({
+    senderName,
+    amountCents: gift.amountCents,
+    pin: gift.voucherPin,
+    serial: gift.voucherSerial,
+  });
+}
+
 async function handlePostOnboarding({ account, from, text }) {
   console.log('💬 Post-onboarding message:', text);
 
@@ -980,6 +1111,33 @@ async function handlePostOnboarding({ account, from, text }) {
   // The claim message carries the FULL voucher PIN by design: send it via
   // WhatsApp only — never log it and never store it in conversation history.
   // ==========================================================================
+  // Opportunistic fuel reconciliation: an indeterminate purchase from an
+  // earlier message is resolved BEFORE the claim block below, so a freshly
+  // confirmed wiCode is delivered in this same turn — and a definitively
+  // failed one gives the money back with an honest note (adversarial
+  // review 2026-08-29: a RECONCILE hold must always have a reachable path
+  // back to settled-or-released).
+  try {
+    const hasReconcilable = await prisma.providerRequest.findFirst({
+      where: { accountId: account.id, route: 'fuel-preview', status: { in: ['RECONCILE', 'EXECUTING'] } },
+      select: { id: true },
+    });
+    if (hasReconcilable) {
+      const recon = await reconcileFuelPurchases({ account });
+      if (recon.failed > 0) {
+        await sendWhatsAppText({
+          to: from,
+          text: await localizeOutbound(
+            `💚 Quick update: a fuel voucher purchase from earlier could not be completed, so nothing was charged. Your money is back in your balance.`,
+            await userLang(account)
+          ),
+        });
+      }
+    }
+  } catch (reconError) {
+    logStructured('fuel_reconcile_hook_failed', { from, error: reconError?.message });
+  }
+
   try {
     if (await hasPendingGifts({ recipientMsisdn: account.msisdn })) {
       const gifts = await claimPendingGifts({ recipientMsisdn: account.msisdn });
@@ -994,12 +1152,7 @@ async function handlePostOnboarding({ account, from, text }) {
 
         const claimSend = await sendWhatsAppText({
           to: from,
-          text: buildVoucherClaimMessage({
-            senderName,
-            amountCents: gift.amountCents,
-            pin: gift.voucherPin,
-            serial: gift.voucherSerial,
-          }),
+          text: giftClaimText(gift, senderName),
         });
         if (claimSend?.ok === false) {
           // The PIN definitively did not reach the recipient — put the gift
@@ -1167,7 +1320,18 @@ async function handlePostOnboarding({ account, from, text }) {
   // Deterministic short-circuit: voucher HISTORY ("my vouchers") and
   // PIN-gated PIN resend ("voucher pin <serial tail>") — the founder's
   // voucher-storage ask (2026-08-20): every bought voucher is queryable.
-  if (/(?:\b(?:my|show|list)\b[^\n]{0,20}\bvouchers?\b)|voucher history/i.test(text) && !/\d{6,}/.test(text)) {
+  // "Where can I spend/use my voucher?" is a HOW-TO question, not a history
+  // ask — it falls through to the AI, which carries the redemption guide
+  // (the sibling of the 2026-08-29 help-menu bug: same intent, different
+  // wrong deterministic answer).
+  if (
+    /(?:\b(?:my|show|list)\b[^\n]{0,20}\bvouchers?\b)|voucher history/i.test(text) &&
+    !/\d{6,}/.test(text) &&
+    // Only true HOW-TO-SPEND asks divert to the AI ("where can I spend my
+    // voucher"); list asks ("where are my vouchers", "how do I see my
+    // vouchers") stay on the deterministic history — review 2026-08-29.
+    !/\b(?:spend|use|redeem)\b[^\n]{0,30}\bvouchers?\b/i.test(text)
+  ) {
     return await handleVoucherHistory({ from, account });
   }
   {
@@ -1270,6 +1434,23 @@ async function handlePostOnboarding({ account, from, text }) {
     const askMsg = `🎟️ *OTT Voucher*\n\nHow much would you like your voucher for? (R10–R1000)\n\nFor example "R50", or reply "cancel" to stop.`;
     await addToConversationHistory(from, 'assistant', askMsg);
     return await sendWhatsAppText({ to: from, text: askMsg });
+  }
+
+  // Deterministic short-circuit: clear fuel purchase commands ("buy fuel",
+  // "buy R200 petrol"). Gated inside startFuelPurchase on the wiCode
+  // production flag — coming-soon until WAPAY_WICODE_LIVE. Fuel QUESTIONS
+  // fall through to the AI on purpose (warm conversational answer).
+  if (matchFuelPurchase(text)) {
+    logSlotFill({
+      intent: 'BUY_FUEL',
+      text,
+      slots,
+      routeDecision: slots.amountCents ? 'FUEL_PREVIEW' : 'FUEL_AMOUNT',
+      missing: slots.amountCents ? [] : ['amountCents'],
+      from,
+      accountId: account.id,
+    });
+    return await startFuelPurchase({ from, account, amountCents: slots.amountCents || null, rawText: text });
   }
 
   // Deterministic short-circuit: deposit-status questions ("did my payment
@@ -1938,6 +2119,7 @@ function detectStrongIntentSwitch(text, state) {
     state.startsWith('AIRTIME') ? 'AIRTIME'
     : state.startsWith('DATA') ? 'DATA'
     : state.startsWith('ELECTRICITY') ? 'ELECTRICITY'
+    : state.startsWith('FUEL') ? 'FUEL'
     : state.startsWith('PAYREQ') || state.startsWith('REQUEST_MONEY') ? 'REQUEST_MONEY'
     : state.includes('DEPOSIT') ? 'DEPOSIT'
     : state.includes('VOUCHER') || state.includes('GIFT') ? 'VOUCHER'
@@ -1950,6 +2132,7 @@ function detectStrongIntentSwitch(text, state) {
     ['AIRTIME', /\bairtime\b/i.test(t) && /\b(buy|send|want|need|get|koop|thenga)\b/i.test(t)],
     ['DATA', /\b(data|bundle)\b/i.test(t) && /\b(buy|send|want|need|get|koop|thenga)\b/i.test(t)],
     ['ELECTRICITY', /\b(electricity|elektrisiteit|umbane|mohlagase)\b/i.test(t) && /\b(buy|want|need|get|koop|thenga|R?\s?\d)/i.test(t)],
+    ['FUEL', matchFuelPurchase(t)],
     ['BALANCE', /\b(balance|balans|imali|chelete)\b/i.test(t) && /\b(my|check|what|wat|yami|malini)\b/i.test(t)],
     ['HISTORY', /\b(my|show|list)\b[^\n]{0,20}\bvouchers?\b/i.test(t) && !/\d{6,}/.test(t)],
   ];
@@ -2421,6 +2604,34 @@ async function handlePaymentReceiptAsk({ from, code }) {
  * Excludes redemption-ish phrasings ("redeem / load / I have an OTT
  * voucher"): those belong to the future OTT-deposit path, not a purchase.
  */
+/**
+ * Clear fuel PURCHASE commands only ("buy fuel", "buy R200 petrol",
+ * "fuel voucher", "petrol R100"). Questions ("can I buy petrol?", "where
+ * does the fuel voucher work?") deliberately do NOT match — they belong to
+ * the AI, which answers conversationally with the claim-gated catalogue.
+ */
+function matchFuelPurchase(text = '') {
+  const t = String(text || '').trim();
+  if (!t || t.length > 80) return false;
+  if (/[?]/.test(t)) return false;
+  if (/^(can|could|how|where|when|what|why|do|does|is|are|will|would)\b/i.test(t)) return false;
+  // Complaints and statements are never purchase commands (review
+  // 2026-08-29: "Petrol went up to R25 again", "The fuel voucher never
+  // arrived" must reach the AI, not the checkout).
+  if (/\b(never|not|no|didn'?t|hasn'?t|haven'?t|isn'?t|wasn'?t|arrived?|missing|lost|problem|help|broken|wrong|went up|expensive|price|cost)\b/i.test(t)) {
+    return false;
+  }
+  const fuelWord = /\b(fuel|petrol|diesel)\b/i.test(t);
+  if (!fuelWord) return false;
+  const buyVerb = /\b(buy|get|purchase|koop|thenga|reka|renga|xava|tsenga|rheka)\b/i.test(t);
+  const voucherOrder = /\bvouchers?\b/i.test(t) && buyVerb;
+  // "petrol R100" style: an amount only counts as an order when the whole
+  // message is a short order phrase, not a sentence that mentions a price.
+  const amountish = /\bR?\s?\d{2,6}\b/i.test(t) && t.split(/\s+/).length <= 4;
+  const bare = /^(fuel|petrol|diesel)( vouchers?)?$/i.test(t);
+  return buyVerb || voucherOrder || amountish || bare;
+}
+
 function matchOttVoucherSelfRequest(text = '', slots = null) {
   const s = String(text || '');
   if (slots?.msisdn) return false;
@@ -2703,14 +2914,20 @@ async function handleVoucherHistory({ from, account }) {
     const tail = sent ? `to ${maskMsisdn(g.recipientMsisdn)} ${status}` : `SN ${g.voucherSerial || 'pending'} ${status}`;
     return `• ${when} · *${randsShort(g.amountCents)}* · ${tail}`;
   };
-  const mine = gifts.filter((g) => normaliseMsisdn(g.recipientMsisdn) === own);
+  // wiCode (YOYO rail) vouchers are physical-till codes, not the OTT online
+  // network — the list says which is which (v1.3: fuel vouchers joined).
+  const mine = gifts.filter((g) => normaliseMsisdn(g.recipientMsisdn) === own && g.rail !== 'YOYO');
+  const mineWicode = gifts.filter((g) => normaliseMsisdn(g.recipientMsisdn) === own && g.rail === 'YOYO');
   const sent = gifts.filter((g) => normaliseMsisdn(g.recipientMsisdn) !== own);
-  const mineActive = mine.filter((g) => g.status !== 'CANCELLED');
+  const mineActive = [...mine, ...mineWicode].filter((g) => g.status !== 'CANCELLED');
   const balCents = mineActive.reduce((sum, g) => sum + g.amountCents, 0);
 
-  const parts = [`🎟️ *Your OTT vouchers*`];
+  const parts = [`🎟️ *Your vouchers*`];
   if (mine.length) {
     parts.push(`\nYours, to spend online at stores that accept OTT vouchers:\n` + mine.map((g) => fmt(g, false)).join('\n'));
+  }
+  if (mineWicode.length) {
+    parts.push(`\n⛽ Fuel vouchers (wiCode, for participating stations):\n` + mineWicode.map((g) => fmt(g, false)).join('\n'));
   }
   if (sent.length) {
     parts.push(`\nSent to others (no longer yours):\n` + sent.map((g) => fmt(g, true)).join('\n'));
@@ -4138,12 +4355,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       logStructured('voucher_pin_resend', { from, accountId: account.id, giftId: gift.id });
       return await sendWhatsAppText({
         to: from,
-        text: buildVoucherClaimMessage({
-          senderName: null,
-          amountCents: gift.amountCents,
-          pin: gift.voucherPin,
-          serial: gift.voucherSerial,
-        }),
+        text: giftClaimText(gift),
       });
     }
 
@@ -4322,6 +4534,216 @@ async function handleConversationState({ from, text, state, data, account }) {
           intent: 'STATE_VOUCHER_GIFT_RECIPIENT',
           rawText: text,
         });
+      }
+
+    case 'FUEL_AMOUNT':
+      // Collecting the fuel voucher amount (mirrors VOUCHER_GIFT_AMOUNT,
+      // incl. the BUGLOG #29 conversational-escape backstop).
+      {
+        const normalized = text.trim().toLowerCase();
+
+        if (/^(cancel|stop|no|not now|later|reset|restart|start over|quit|exit|back)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Fuel purchase cancelled.`, await userLang(account)) });
+          return await renderHome({ from, account });
+        }
+
+        const filledSlots = parseSlots(text, { waId: from, accountId: account.id });
+        const amountCents = filledSlots.amountCents;
+        if (!amountCents) {
+          if (isConversationalEscape(text)) {
+            await updateConversationState(from, null);
+            return await handlePostOnboarding({ account, from, text });
+          }
+          return await sendWhatsAppText({
+            to: from,
+            text: await localizeOutbound(`Please enter a valid amount (e.g., R100, R200)\n\nReply "cancel" to stop.`, await userLang(account)),
+          });
+        }
+        const fuelMinCents = Number(process.env.WAPAY_FUEL_MIN_CENTS) || 5000;
+        const fuelMaxCents = Number(process.env.WAPAY_FUEL_MAX_CENTS) || 50000;
+        if (amountCents < fuelMinCents || amountCents > fuelMaxCents) {
+          return await sendWhatsAppText({
+            to: from,
+            text: await localizeOutbound(`Fuel voucher amount must be between R${fuelMinCents / 100} and R${fuelMaxCents / 100}.\n\nPlease enter a valid amount.`, await userLang(account)),
+          });
+        }
+        return await startFuelPurchase({ from, account, amountCents, rawText: text });
+      }
+
+    case 'FUEL_CONFIRM':
+      // Confirming the fuel purchase (mirrors VOUCHER_GIFT_CONFIRM).
+      {
+        const normalized = text.trim().toLowerCase();
+
+        if (/^(no|cancel|stop|not now|later|reset|restart|start over)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Fuel purchase cancelled.`, await userLang(account)) });
+          return await renderHome({ from, account });
+        }
+
+        if (!/^(yes|yep|yeah|y|sure|ok|okay|alright|confirm|yebo|ewe|ja|ee|eya)$/i.test(normalized)) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: await localizeOutbound(`I've cancelled that request. Feel free to ask me anything else!`, await userLang(account)),
+          });
+        }
+
+        const { amountCents, feeCents, previewId } = data || {};
+        if (!amountCents || !previewId) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: await localizeOutbound(`❌ Something went wrong. Please start again, e.g. "buy R200 fuel".`, await userLang(account)),
+          });
+        }
+
+        await updateConversationState(from, 'FUEL_PIN', { previewId, amountCents, feeCents });
+        return await sendWhatsAppText({
+          to: from,
+          text: await localizeOutbound(`🔐 *Enter Your PIN*\n\nTo buy your ${randsShort(amountCents)} fuel voucher${feeCents > 0 ? ` (total ${randsShort(amountCents + feeCents)} incl. fee)` : ''}, please enter your WaPay PIN.`, await userLang(account)),
+        });
+      }
+
+    case 'FUEL_PIN':
+      // Wallet PIN for the fuel purchase (mirrors VOUCHER_GIFT_PIN: only
+      // PIN-shaped input reaches verifyPIN — BUGLOG #19).
+      {
+        const normalized = text.trim();
+
+        if (/^(cancel|stop|no|reset|restart)$/i.test(normalized.toLowerCase())) {
+          await updateConversationState(from, null);
+          await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Fuel purchase cancelled.`, await userLang(account)) });
+          return await renderHome({ from, account });
+        }
+
+        const digitsOnly = text.replace(/[^\d]/g, '');
+        if (digitsOnly.length < 4 || digitsOnly.length > 6) {
+          if (digitsOnly.length === 0) {
+            await updateConversationState(from, null);
+            return await sendWhatsAppText({
+              to: from,
+              text: await localizeOutbound(`I've cancelled the fuel purchase. What else can I help you with?`, await userLang(account)),
+            });
+          }
+          return await sendWhatsAppText({
+            to: from,
+            text: await localizeOutbound(`❌ Invalid PIN. Please enter your 4-6 digit WaPay PIN.\n\nReply "cancel" to stop.`, await userLang(account)),
+          });
+        }
+
+        const pin = digitsOnly;
+        const { previewId, amountCents, feeCents } = data || {};
+        if (!previewId) {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({
+            to: from,
+            text: await localizeOutbound(`❌ Session expired. Please start again, e.g. "buy R200 fuel".`, await userLang(account)),
+          });
+        }
+
+        await sendWhatsAppText({
+          to: from,
+          text: await localizeOutbound(`⏳ Getting your fuel voucher ready...`, await userLang(account)),
+        });
+
+        try {
+          const executeUrl = apiUrl('/api/vas/fuel/execute');
+          logInternalFetchCall({ url: executeUrl, path: '/api/vas/fuel/execute' });
+          const executeRes = await fetch(executeUrl, {
+            method: 'POST',
+            headers: withInternalHeaders(),
+            body: JSON.stringify({ previewId, accountId: account.id, pin }),
+          });
+          await logInternalFetchResponse({ url: executeUrl, res: executeRes });
+          const executeData = executeRes.headers.get('content-type')?.includes('application/json')
+            ? await executeRes.json()
+            : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from execute' };
+
+          await updateConversationState(from, null);
+
+          if (!executeData.ok) {
+            if (executeData.error === 'INSUFFICIENT_FUNDS') {
+              const { balance } = await getUserBalance(from);
+              const totalCents = amountCents + (feeCents || 0);
+              const balanceCents = Math.round(parseFloat(balance) * 100) || 0;
+              const shortfallCents = Math.max(totalCents - balanceCents, MIN_DEPOSIT_CENTS);
+              await sendWhatsAppText({
+                to: from,
+                text: await localizeOutbound(`💰 You need ${randsShort(totalCents)} for this fuel voucher but your balance is R${balance}.\n\nTop up the ${randsShort(shortfallCents)} difference with the button below, then just ask me for fuel again. ⛽`, await userLang(account)),
+              });
+              return await handleCardDepositLink({ from, account, amountCents: shortfallCents, rawText: text });
+            }
+            if (executeData.error === 'PENDING_CONFIRMATION') {
+              // Money is safely reserved; the voucher is being confirmed
+              // with the network. Reassure — never guess an outcome.
+              const pendingMsg = await localizeOutbound(`⏳ ${executeData.message || 'We are confirming your fuel voucher with the network. Your money is safely reserved.'}`, await userLang(account));
+              await addToConversationHistory(from, 'assistant', pendingMsg);
+              return await sendWhatsAppText({ to: from, text: pendingMsg });
+            }
+            return await sendWhatsAppErrorOnce({
+              to: from,
+              errorKey: `${previewId || 'fuel'}:${executeData.error || 'ERROR'}`,
+              text: `❌ ${executeData.message || 'Fuel purchase failed.'}\n\nPlease try again later.`,
+            });
+          }
+
+          logStructured('vas_fuel_purchase_success', {
+            from,
+            accountId: account.id,
+            previewId,
+            reference: executeData.reference,
+            amountCents: executeData.amountCents ?? amountCents,
+            testMode: executeData.testMode === true,
+          });
+
+          const receipt = await localizeOutbound(
+            `✅ *Fuel voucher purchased!*\n\n` +
+            `⛽ Voucher: ${randsShort(executeData.amountCents ?? amountCents)}\n` +
+            ((executeData.feeCents ?? feeCents ?? 0) > 0 ? `💳 Fee: ${randsShort(executeData.feeCents ?? feeCents)}\n` : '') +
+            `🧾 Reference: ${executeData.reference}\n` +
+            `📅 ${formatDateTimeZa(new Date())}\n\n` +
+            `💳 New balance: R${((executeData.newBalance || 0) / 100).toFixed(2)}\n\n` +
+            `Your wiCode is coming right up… ⛽`,
+            await userLang(account)
+          );
+          await addToConversationHistory(from, 'assistant', receipt);
+          await sendWhatsAppText({ to: from, text: receipt });
+
+          // Deliver the wiCode through the atomic claim flow (rail YOYO →
+          // wiCode copy + redemption guide; failure reverts for retry). Any
+          // third-party gift swept up here keeps its sender's name (review
+          // 2026-08-29).
+          try {
+            const gifts = await claimPendingGifts({ recipientMsisdn: account.msisdn });
+            for (const gift of gifts) {
+              let claimSenderName = null;
+              if (gift.senderAccountId !== account.id) {
+                try {
+                  const giftSender = await prisma.account.findUnique({ where: { id: gift.senderAccountId } });
+                  claimSenderName = giftSender?.displayName || null;
+                } catch {}
+              }
+              const claimSend = await sendWhatsAppText({ to: from, text: giftClaimText(gift, claimSenderName) });
+              if (claimSend?.ok === false) {
+                await revertGiftDelivery({ giftId: gift.id });
+                logStructured('fuel_claim_send_failed_reverted', { from, giftId: gift.id });
+              }
+            }
+          } catch (claimError) {
+            logStructured('fuel_claim_deferred', { from, accountId: account.id, error: claimError?.message });
+          }
+          return await sendPostTransactionCta(from);
+        } catch (error) {
+          console.error('Fuel execute call failed:', error);
+          await updateConversationState(from, null);
+          return await sendWhatsAppErrorOnce({
+            to: from,
+            errorKey: `${previewId || 'fuel'}:CALL_FAILED`,
+            text: `❌ Something went wrong completing the purchase. If money was reserved it is safe. Ask me "my vouchers" in a minute or try again.`,
+          });
+        }
       }
 
     case 'VOUCHER_GIFT_CONFIRM':
@@ -4565,12 +4987,7 @@ async function handleConversationState({ from, text, state, data, account }) {
               for (const gift of gifts) {
                 const selfSend = await sendWhatsAppText({
                   to: from,
-                  text: buildVoucherClaimMessage({
-                    senderName: null,
-                    amountCents: gift.amountCents,
-                    pin: gift.voucherPin,
-                    serial: gift.voucherSerial,
-                  }),
+                  text: giftClaimText(gift),
                 });
                 if (selfSend?.ok === false) {
                   await revertGiftDelivery({ giftId: gift.id });
@@ -4696,7 +5113,12 @@ async function handleAIChat({ from, text, account }) {
       .filter(Boolean)
       .join('\n\n');
 
-    const result = await orchestrate(text, contextString);
+    // The brain gets the live, data-driven spend catalogue every turn —
+    // claims pre-gated on the wiCode production flag so the model can never
+    // promise redemption that is not live (v1.3 amendment 2).
+    const result = await orchestrate(text, contextString, {
+      knowledge: buildBrainKnowledge({ wicodeLive: isWicodeLive() }),
+    });
 
     // Memory writes: deterministic, best-effort, never blocking the reply.
     noteLanguage({ accountId: account.id, language: result.language }).catch(() => {});
@@ -4726,18 +5148,19 @@ async function handleAIChat({ from, text, account }) {
   } catch (error) {
     console.error('❌ AI chat error:', error);
 
-    let fallbackMessage = `I'm having trouble understanding. Type "help" to see what I can do!`;
+    let fallbackMessage = `😅 Sorry, I didn't quite catch that. Could you say it another way? Or type "help" to see everything I can do.`;
 
     if (error.message === 'AI_QUOTA_EXCEEDED') {
-      fallbackMessage = `I'm temporarily unavailable. Please type "help" to see available commands.`;
+      fallbackMessage = `😴 I'm taking a quick breather. Please try again in a moment, or type "help" to see what I can do.`;
     } else if (error.message === 'AI_CONFIG_ERROR') {
-      fallbackMessage = `Service configuration issue. Please type "help" for available commands.`;
+      fallbackMessage = `🔧 Something's not wired up right on my side. Please try again soon, or type "help" for the basics.`;
     }
 
-    await addToConversationHistory(from, 'assistant', fallbackMessage);
+    const localizedFallback = await localizeOutbound(fallbackMessage, await userLang(account));
+    await addToConversationHistory(from, 'assistant', localizedFallback);
     return await sendWhatsAppText({
       to: from,
-      text: fallbackMessage,
+      text: localizedFallback,
     });
   }
 }
@@ -4829,7 +5252,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
       // smart product query pipeline — the generic bundle list would silently
       // discard what the user asked for.
       if (result.slots?.productQuery) {
-        return await handleSmartProductQuery({ from, account, text: result.slots.productQuery, entities: {} });
+        return await handleSmartProductQuery({ from, account, text: result.slots.productQuery, entities: {}, viaAi: true });
       }
       return await handleListDataBundles({ from, account, entities: {} });
     }
@@ -4847,6 +5270,13 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
       const amountMsg = await localizeOutbound(`💡 *Buy Electricity*\n\nHow much electricity would you like to buy?\n\nReply with an amount (e.g., R50, R100, R500)\n(Min R10, Max R5000)`, await userLang(account));
       await addToConversationHistory(from, 'assistant', amountMsg);
       return await sendWhatsAppText({ to: from, text: amountMsg });
+    }
+
+    case 'BUY_FUEL': {
+      // Gated inside startFuelPurchase (coming-soon until WAPAY_WICODE_LIVE);
+      // the model's amount slot is already re-validated above.
+      await updateConversationState(from, null);
+      return await startFuelPurchase({ from, account, amountCents: amountCents || null, rawText: text });
     }
 
     case 'SEND_VOUCHER': {
@@ -4929,6 +5359,25 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
     }
 
     case 'HELP': {
+      // A QUESTION about what WaPay can do deserves a real answer, not a
+      // menu (founder screenshot 2026-08-29: "Where can I spend my WaPay
+      // money!" got the bare Help Menu twice). Bare help/menu commands are
+      // normally intercepted deterministically long before the AI, so
+      // almost anything landing here is a real sentence — the menu is the
+      // last resort, reserved for explicit menu asks in any language that
+      // slipped through. A tier-2 composed reply (already in the user's
+      // language) wins; otherwise the localized spend-destinations answer.
+      const explicitMenuAsk = /^\W*(help|help me|menu|options|\?+)\W*$/i.test(String(text || '').trim());
+      if (!explicitMenuAsk) {
+        if (reply && !looksLikeReceipt(reply)) {
+          await addToConversationHistory(from, 'assistant', reply);
+          return await sendWhatsAppText({ to: from, text: reply });
+        }
+        const spendMsg = buildSpendDestinationsReply({ wicodeLive: isWicodeLive() });
+        const localizedSpend = await localizeOutbound(spendMsg, await userLang(account));
+        await addToConversationHistory(from, 'assistant', localizedSpend);
+        return await sendWhatsAppText({ to: from, text: localizedSpend });
+      }
       const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083...", or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words. Any South African language works!`;
       const localizedHelp = await localizeOutbound(helpMsg, await userLang(account));
       await addToConversationHistory(from, 'assistant', localizedHelp);
@@ -4945,19 +5394,27 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
   }
 
   // Reply-only turns (and anything unmapped): the agent's own words, never
-  // JSON — and never anything shaped like a transaction receipt.
-  let finalText =
-    reply ||
-    'I can help you with balance checks, airtime, data, electricity, deposits and sending money. What would you like to do?';
+  // JSON — and never anything shaped like a transaction receipt. The agent
+  // reply is already in the user's language; only the canned substitutes
+  // need the localizer.
+  let finalText = reply;
+  if (!finalText) {
+    finalText = await localizeOutbound(
+      '😊 I can help you with balance checks, airtime, data, electricity, deposits and sending money. What would you like to do?',
+      await userLang(account)
+    );
+  }
   if (reply && looksLikeReceipt(reply)) {
     logStructured('orchestrator_reply_blocked', {
       from,
       reason: 'RECEIPT_SHAPED_REPLY',
       action: result.action,
     });
-    finalText =
+    finalText = await localizeOutbound(
       `I can't confirm payments or balances in chat, but I can check your real transaction record. ` +
-      `Ask me "did my payment go through?" or "balance" and I'll look it up.`;
+      `Ask me "did my payment go through?" or "balance" and I'll look it up.`,
+      await userLang(account)
+    );
   }
   await addToConversationHistory(from, 'assistant', finalText);
   return await sendWhatsAppText({ to: from, text: finalText });
@@ -4979,7 +5436,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
  * 2. Purchase intent (buy + amount + category) triggers purchase flow
  * 3. Only ask for clarification if truly ambiguous
  */
-async function handleSmartProductQuery({ from, account, text, slots: incomingSlots, entities }) {
+async function handleSmartProductQuery({ from, account, text, slots: incomingSlots, entities, viaAi = false }) {
   const lowerText = text.toLowerCase();
   const entitiesBefore = entities || {};
   const slots = incomingSlots || parseSlots(text, { waId: from, accountId: account.id });
@@ -5304,8 +5761,22 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
       matchCount: matches.length,
     });
 
-    // No matches - show all categories
+    // No category matched. "Can I buy petrol with WaPay?" is a QUESTION
+    // about something we don't sell (yet), not a browse ask — the generic
+    // product dump answers the wrong question (chat QA 2026-08-29: the fuel
+    // ask got the VAS menu). If concrete words survive after stripping the
+    // ask-frame and generic commerce vocabulary, the AI answers them with
+    // the claim-gated spend knowledge; a bare browse ask ("what can I
+    // buy?") keeps the product list. viaAi guards the AI→dispatch→here
+    // path against recursion: a model-originated query never loops back.
     if (matches.length === 0) {
+      const residue = lowerText
+        .replace(/\b(hi|hello|hey|please|thanks?|what|whats|which|where|when|why|can|could|do|does|did|how|is|are|i|we|you|u|me|my|your|it|to|a|an|the|some|any|all|buy|get|purchase|pay|sell|offer|have|need|want|top\s*up|spend|use|with|from|on|at|here|there|now|today|wapay|wa-pay|products?|things?|stuff|items?|options?|deals?|prices?|list|show|see|available|for|of|in)\b/gi, ' ')
+        .replace(/[^a-z]/gi, ' ')
+        .trim();
+      if (residue && !viaAi) {
+        return await handleAIChat({ from, text, account });
+      }
       return await handleListVasProducts({ from, account });
     }
     

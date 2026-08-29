@@ -117,9 +117,13 @@ test('voucher history: yours vs sent-away split, balance line, buy-another foote
   const src = readFileSync(fileURLToPath(new URL('../pages/api/webhooks/message-processor-v2.js', import.meta.url)), 'utf8');
   const fn = src.indexOf('async function handleVoucherHistory(');
   const body = src.slice(fn, src.indexOf('\n}\n', fn));
-  assert.match(body, /Your OTT vouchers/, 'the product is named');
+  // v1.3: fuel (wiCode) vouchers joined the list, so the header is
+  // rail-neutral and each section names its network.
+  assert.match(body, /Your vouchers/, 'the surface is named');
+  assert.match(body, /stores that accept OTT vouchers/, 'the OTT section names its network');
+  assert.match(body, /Fuel vouchers \(wiCode, for participating stations\)/, 'the wiCode section names its network');
   assert.match(body, /Sent to others \(no longer yours\)/, 'gifted vouchers are visibly not yours');
-  assert.match(body, /mineActive\.filter|mine\.filter\(\(g\) => g\.status !== 'CANCELLED'\)/, 'balance excludes cancelled');
+  assert.match(body, /filter\(\(g\) => g\.status !== 'CANCELLED'\)/, 'balance excludes cancelled');
   assert.match(body, /Voucher Balance:/, 'the same label as the home screen');
   assert.match(body, /Want another\? Reply "buy a voucher/, 'buy-another CTA');
   assert.ok(!body.includes('voucher pin <last'), 'the resend hint is gone from this surface (keyword still works)');
