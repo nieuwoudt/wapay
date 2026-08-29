@@ -135,8 +135,44 @@ credentials change, not a build.
 - Admin console lives on admin.wapay.co.za; login = WhatsApp "admin login" to the
   WaPay number; Vercel bot-challenge exemption may still be pending (BUGLOG #34).
 
+## v1.3.1 amendments (founder, 2026-08-29 PM)
+
+These refine the tasks above and change the execution mode:
+
+1. **Build fully against the Yoyo TEST environment now — including verification.**
+   Do not wait for Yoyo production. Everything ships end-to-end on test
+   credentials; going live is a credentials/flag flip, not a build. The founder is
+   separately asking Yoyo to enable **additional merchants** on the platform, so
+   the redeemable-merchant catalogue must be **data, not hardcoded copy** — it
+   will grow.
+2. **Bake the wiCode/UniFuel knowledge into the WaPay brain.** The bot must be
+   able to advise customers conversationally: where they can shop, what they can
+   buy, and *how* redemption works — both pre-purchase ("here's what you can get
+   with your balance") and post-issuance ("here's how to use the wiCode you just
+   received at a participating Shell/Engen"). Redemption guidance per voucher
+   type (wiCode at POS, partial redemption behaviour, participating-stations
+   caveat). Customer-facing claims that a voucher is redeemable at real stations
+   are **gated on the production-live flag** — in test mode the brain knows the
+   catalogue but presents fuel/retail as "coming soon".
+3. **Mission Control gets the Yoyo/UniFuel layer**: wiCode issuance in the
+   "what's being sold" categories (new journal sources → SELLING_LABELS),
+   `CLEARING:YOYO` in supplier floats, UniFuel issuance/redemption stats surfaced
+   via the service-to-service API.
+4. **Execution mode: autonomous end-to-end loop.** Build → test → fix →
+   re-test recursively until every function above is complete and verified;
+   only notify the founder when EVERYTHING is done and tested end-to-end.
+   Use the multi-agent Workflow harness with adversarial review before ship
+   (review agents READ-ONLY). "Tested end-to-end" means: full unit suite green,
+   `pnpm qa:chat` conversation harness green (including the new
+   question-never-gets-bare-menu assertions), build green, deploy verified in a
+   real browser, and the Mission Control panels rendering real data. Finish with
+   a single founder report: what shipped, what's gated on Yoyo production, and
+   the short list of founder-only actions (Vercel/DNS/supplier emails).
+
 ## Suggested order
 
-1. Task 2 (conversational fix) — it's live-customer-facing and self-contained.
-2. Task 1 (floats) — small, high investor value, mostly wiring existing clients.
-3. Task 3 (UniFuel) — design doc, founder review, then build.
+1. Task 2 (conversational fix + brain knowledge) — live-customer-facing.
+2. Task 1 (floats, now including CLEARING:YOYO) — mostly wiring existing clients.
+3. Task 3 (UniFuel integration) — design doc, then build against Yoyo TEST
+   end-to-end per amendment 1.
+4. The autonomous loop closes over all three until done; one report at the end.
