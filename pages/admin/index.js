@@ -412,12 +412,32 @@ function Cohorts({ c }) {
   );
 }
 
-function Login({ configured, onDone }) {
+function Login({ configured, passwordLogin, onDone }) {
+  // The number is remembered locally so the founder types a password only
+  // (founder ask 2026-08-30). Password-first when configured; the WhatsApp
+  // code stays as the fallback that can never lock anyone out.
   const [msisdn, setMsisdn] = useState('');
+  const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
-  const [stage, setStage] = useState('number');
+  const [stage, setStage] = useState(passwordLogin ? 'password' : 'number');
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('wapay_admin_msisdn');
+      if (saved) setMsisdn(saved);
+    } catch {
+      // private mode / blocked storage: the field simply starts empty
+    }
+  }, []);
+
+  const remember = (n) => {
+    try { window.localStorage.setItem('wapay_admin_msisdn', n); } catch {}
+  };
   const post = (body) => fetch('/api/admin/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const numberOk = /\d{9}/.test(String(msisdn).replace(/\D/g, ''));
+
   return (
     <div className="login card">
       <h2 style={{ fontSize: 16 }}>🔐 Admin sign-in</h2>
@@ -426,13 +446,43 @@ function Login({ configured, onDone }) {
           Login is not configured yet. Set <b>WAPAY_ADMIN_MSISDNS</b> and <b>WAPAY_ADMIN_SESSION_SECRET</b> in
           Vercel, then redeploy. This console fails closed until both exist.
         </p>
+      ) : stage === 'password' ? (
+        <>
+          <p className="note">Sign in with your number and password.</p>
+          <input inputMode="tel" autoComplete="username" placeholder="073 123 4567" value={msisdn}
+            onChange={(e) => setMsisdn(e.target.value)} />
+          <input type="password" autoComplete="current-password" placeholder="Password" value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') document.getElementById('pw-go')?.click(); }} />
+          <button id="pw-go" className="go" disabled={busy} onClick={async () => {
+            setErr('');
+            if (!numberOk) { setErr('Enter your full number.'); return; }
+            if (!password) { setErr('Enter your password.'); return; }
+            setBusy(true);
+            try {
+              const r = await post({ action: 'password', msisdn, password });
+              if (r.ok) { remember(msisdn); onDone(); return; }
+              setErr(r.status === 429
+                ? 'Too many attempts. Try again in 15 minutes.'
+                : 'That did not work. Check the number and password.');
+            } catch {
+              setErr('No connection. Check your network and try again.');
+            } finally {
+              setBusy(false);
+              setPassword('');
+            }
+          }}>{busy ? 'Signing in…' : 'Sign in'}</button>
+          <button className="linkish" style={{ marginTop: 10 }} onClick={() => { setStage('number'); setPassword(''); setErr(''); }}>
+            Use a one-time code instead
+          </button>
+        </>
       ) : stage === 'number' ? (
         <>
           <p className="note">Your WhatsApp number. A one-time code arrives in your WaPay chat.</p>
           <input inputMode="tel" placeholder="073 123 4567" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} />
           <button className="go" onClick={async () => {
             setErr('');
-            if (!/\d{9}/.test(String(msisdn).replace(/\D/g, ''))) { setErr('Enter your full WhatsApp number.'); return; }
+            if (!numberOk) { setErr('Enter your full WhatsApp number.'); return; }
             try {
               const r = await post({ action: 'request', msisdn });
               if (!r.ok) { setErr('Could not request a code right now. Try again in a moment.'); return; }
@@ -443,19 +493,20 @@ function Login({ configured, onDone }) {
             }
             setStage('code');
           }}>Send my code</button>
+          {passwordLogin && (
+            <button className="linkish" style={{ marginTop: 10 }} onClick={() => { setStage('password'); setErr(''); }}>
+              Use my password instead
+            </button>
+          )}
         </>
       ) : (
         <>
           <p className="note">Enter the 6-digit code. One attempt per code; a wrong guess burns it.</p>
-          <p className="note" style={{ marginTop: -4 }}>
-            No code? WhatsApp only delivers to an open chat. Send <b>“admin login”</b> to the
-            WaPay number from your phone and the code comes straight back.
-          </p>
           <input inputMode="numeric" maxLength={6} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
           <button className="go" onClick={async () => {
             setErr('');
             const r = await post({ action: 'verify', msisdn, code });
-            if (r.ok) onDone(); else { setErr('That code did not work. Request a fresh one.'); setStage('number'); setCode(''); }
+            if (r.ok) { remember(msisdn); onDone(); } else { setErr('That code did not work. Request a fresh one.'); setStage('number'); setCode(''); }
           }}>Sign in</button>
           <button className="linkish" style={{ marginTop: 10 }} onClick={() => { setStage('number'); setCode(''); }}>Different number</button>
         </>
@@ -796,10 +847,12 @@ function Customer() {
 export default function Admin() {
   const [authed, setAuthed] = useState(null);
   const [configured, setConfigured] = useState(true);
+  const [passwordLogin, setPasswordLogin] = useState(false);
   const [tab, setTab] = useState('dashboard');
   const probe = useCallback(() => {
-    fetch('/api/admin/auth').then((r) => r.json()).then((s) => { setAuthed(s.authed); setConfigured(s.configured); })
-      .catch(() => setAuthed(false));
+    fetch('/api/admin/auth').then((r) => r.json()).then((s) => {
+      setAuthed(s.authed); setConfigured(s.configured); setPasswordLogin(!!s.passwordLogin);
+    }).catch(() => setAuthed(false));
   }, []);
   useEffect(() => { probe(); }, [probe]);
   return (
@@ -823,7 +876,7 @@ export default function Admin() {
         )}
       </header>
       {authed === null && <div className="card"><div className="empty">…</div></div>}
-      {authed === false && <Login configured={configured} onDone={probe} />}
+      {authed === false && <Login configured={configured} passwordLogin={passwordLogin} onDone={probe} />}
       {authed === true && (tab === 'dashboard' ? <Dashboard /> : <Customer />)}
     </div>
   );

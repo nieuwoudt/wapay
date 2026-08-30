@@ -524,3 +524,54 @@ test('customer list: gated, searchable, and never exposes bearer secrets', () =>
   assert.match(adminPage, /\/api\/admin\/customers\?limit=/, 'page calls the list endpoint');
   assert.match(adminPage, /openCustomer\(cu\.msisdn\)/, 'rows open the full profile');
 });
+
+// ---------------------------------------------------------------------------
+// Password sign-in (founder ask 2026-08-30: the WhatsApp code round-trip is
+// fragile and the number-every-time friction is real)
+// ---------------------------------------------------------------------------
+
+test('password login: argon2id hash from env, never a stored/plaintext password', () => {
+  const src = readFileSync(fileURLToPath(new URL('../lib/admin-auth.js', import.meta.url)), 'utf8');
+  assert.match(src, /WAPAY_ADMIN_PASSWORD_HASH/);
+  assert.match(src, /argon2\.verify\(process\.env\.WAPAY_ADMIN_PASSWORD_HASH\.trim\(\), password \+ pepper\)/);
+  // The password never reaches a log line, and neither does the hash.
+  assert.ok(!/console\.(log|error)\([^)]*password[^)]*\)/i.test(src.replace(/type: 'admin_password_[a-z_]+'/g, '')),
+    'the password value is never logged');
+  // No logging call anywhere may carry the hash env or the password value.
+  const logCalls = [...src.matchAll(/console\.(?:log|error|warn)\(([^;]*?)\);/gs)].map((m) => m[1]);
+  for (const call of logCalls) {
+    assert.ok(!/PASSWORD_HASH/.test(call), `hash env inside a log call: ${call.slice(0, 80)}`);
+    assert.ok(!/\bpassword\b(?!_)/.test(call.replace(/'admin_password_[a-z]+'/g, '')), `password value inside a log call: ${call.slice(0, 80)}`);
+  }
+});
+
+test('password login: allowlist-gated, fails closed, and never an oracle', () => {
+  const src = readFileSync(fileURLToPath(new URL('../lib/admin-auth.js', import.meta.url)), 'utf8');
+  const fn = src.slice(src.indexOf('export async function verifyAdminPassword'), src.indexOf('\n/**', src.indexOf('export async function verifyAdminPassword')));
+  assert.match(fn, /if \(!adminAuthConfigured\(\) \|\| !adminPasswordConfigured\(\)\) return \{ ok: false, error: 'NOT_CONFIGURED' \}/);
+  assert.match(fn, /if \(!isAdminMsisdn\(msisdn\)\) return \{ ok: false, error: 'BAD_CREDENTIALS' \}/);
+  assert.match(fn, /catch \{\s*\n\s*valid = false;/, 'a malformed hash env refuses, never crashes open');
+  // Wrong number and wrong password are indistinguishable to the caller.
+  const route = readFileSync(fileURLToPath(new URL('../pages/api/admin/auth.js', import.meta.url)), 'utf8');
+  assert.match(route, /error: out\.error === 'LOCKED_OUT' \? 'LOCKED_OUT' : 'BAD_CREDENTIALS'/);
+});
+
+test('password login: brute force burns into a lockout', () => {
+  const src = readFileSync(fileURLToPath(new URL('../lib/admin-auth.js', import.meta.url)), 'utf8');
+  assert.match(src, /ADMIN_PW_LOCKOUT_FAILS = 5/);
+  assert.match(src, /ADMIN_PW_LOCKOUT_WINDOW_MS = 15 \* 60 \* 1000/);
+  assert.match(src, /if \(fails >= ADMIN_PW_LOCKOUT_FAILS\)/);
+  // The lockout check runs BEFORE the argon2 verify.
+  const fn = src.slice(src.indexOf('export async function verifyAdminPassword'));
+  assert.ok(fn.indexOf('ADMIN_PW_LOCKOUT_FAILS)') < fn.indexOf('argon2.verify'), 'lockout precedes verification');
+});
+
+test('the login page never advertises the WhatsApp admin-login command', () => {
+  const page = readFileSync(fileURLToPath(new URL('../pages/admin/index.js', import.meta.url)), 'utf8');
+  // A public page must not teach an attacker the in-chat command (founder,
+  // 2026-08-30). The command still works from the founder's phone.
+  assert.ok(!/admin login/i.test(page), 'the in-chat command must not appear on the public login page');
+  assert.ok(!/WaPay number/i.test(page), 'the WhatsApp number hint is gone too');
+  assert.match(page, /autoComplete="current-password"/, 'password field is a real credential field');
+  assert.match(page, /wapay_admin_msisdn/, 'the number is remembered so only the password is typed');
+});

@@ -14,6 +14,8 @@ import { sendWhatsAppText, sendWhatsAppTemplate } from '@wapay/whatsapp';
 import {
   requestAdminOtp,
   verifyAdminOtp,
+  verifyAdminPassword,
+  adminPasswordConfigured,
   adminAuthConfigured,
   adminCookie,
   clearAdminCookie,
@@ -24,11 +26,15 @@ export const config = { maxDuration: 15 };
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
-    return res.status(200).json({ authed: requireAdmin(req).ok, configured: adminAuthConfigured() });
+    return res.status(200).json({
+      authed: requireAdmin(req).ok,
+      configured: adminAuthConfigured(),
+      passwordLogin: adminPasswordConfigured(),
+    });
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
 
-  const { action, msisdn, code } = req.body || {};
+  const { action, msisdn, code, password } = req.body || {};
 
   if (action === 'logout') {
     res.setHeader('Set-Cookie', clearAdminCookie());
@@ -37,6 +43,17 @@ export default async function handler(req, res) {
 
   if (!adminAuthConfigured()) {
     return res.status(503).json({ ok: false, error: 'ADMIN_LOGIN_NOT_CONFIGURED' });
+  }
+
+  if (action === 'password') {
+    const out = await verifyAdminPassword({ msisdn, password });
+    if (!out.ok) {
+      // One shape for wrong-number and wrong-password: never an oracle.
+      const status = out.error === 'LOCKED_OUT' ? 429 : out.error === 'NOT_CONFIGURED' ? 503 : 401;
+      return res.status(status).json({ ok: false, error: out.error === 'LOCKED_OUT' ? 'LOCKED_OUT' : 'BAD_CREDENTIALS' });
+    }
+    res.setHeader('Set-Cookie', adminCookie(out.token));
+    return res.status(200).json({ ok: true });
   }
 
   if (action === 'request') {
