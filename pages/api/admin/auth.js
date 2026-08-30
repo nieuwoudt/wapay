@@ -55,6 +55,12 @@ export default async function handler(req, res) {
     const out = await verifyAdminPassword({ msisdn, password });
     if (!out.ok) {
       // One shape for wrong-number and wrong-password: never an oracle.
+      // HASH_MALFORMED is an operator error (the env holds something that is
+      // not an argon2 hash), so it is reported as a server misconfiguration
+      // rather than hidden behind the credentials answer.
+      if (out.error === 'HASH_MALFORMED') {
+        return res.status(503).json({ ok: false, error: 'HASH_MALFORMED' });
+      }
       const status = out.error === 'LOCKED_OUT' ? 429 : out.error === 'NOT_CONFIGURED' ? 503 : 401;
       return res.status(status).json({ ok: false, error: out.error === 'LOCKED_OUT' ? 'LOCKED_OUT' : 'BAD_CREDENTIALS' });
     }

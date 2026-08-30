@@ -540,14 +540,20 @@ test('password login: argon2id hash from env, never a stored/plaintext password'
   const body = fn.slice(0, fn.indexOf('\n}'));
   const code = body.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, ''); // comments may explain the pepper; code must not use it
   assert.ok(!/PIN_PEPPER/.test(code), 'the admin password hash must not be peppered');
-  // The password never reaches a log line, and neither does the hash.
-  assert.ok(!/console\.(log|error)\([^)]*password[^)]*\)/i.test(src.replace(/type: 'admin_password_[a-z_]+'/g, '')),
-    'the password value is never logged');
   // No logging call anywhere may carry the hash env or the password value.
+  // (Superseded the earlier word-match version, which flagged an operator
+  // HINT string that merely contains the word "password".)
   const logCalls = [...src.matchAll(/console\.(?:log|error|warn)\(([^;]*?)\);/gs)].map((m) => m[1]);
   for (const call of logCalls) {
-    assert.ok(!/PASSWORD_HASH/.test(call), `hash env inside a log call: ${call.slice(0, 80)}`);
-    assert.ok(!/\bpassword\b(?!_)/.test(call.replace(/'admin_password_[a-z]+'/g, '')), `password value inside a log call: ${call.slice(0, 80)}`);
+    // Strip string literals: prose may SAY "password" (an operator hint),
+    // what must never appear is the password VARIABLE being logged.
+    const code = call
+      .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+      .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+      .replace(/`(?:[^`\\$]|\\.|\$(?!\{))*`/g, '``');
+    assert.ok(!/PASSWORD_HASH/.test(code), `hash env inside a log call: ${call.slice(0, 90)}`);
+    assert.ok(!/\bpassword\b(?!_|Login|Hash)/.test(code), `password variable inside a log call: ${call.slice(0, 90)}`);
+    assert.ok(!/\$\{\s*password\s*\}/.test(call), `password interpolated into a log call: ${call.slice(0, 90)}`);
   }
 });
 

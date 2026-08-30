@@ -462,9 +462,12 @@ function Login({ configured, passwordLogin, onDone }) {
             try {
               const r = await post({ action: 'password', msisdn, password });
               if (r.ok) { remember(msisdn); onDone(); return; }
+              const body = await r.json().catch(() => ({}));
               setErr(r.status === 429
                 ? 'Too many attempts. Try again in 15 minutes.'
-                : 'That did not work. Check the number and password.');
+                : body.error === 'HASH_MALFORMED'
+                  ? 'Password sign-in is misconfigured on the server (WAPAY_ADMIN_PASSWORD_HASH is not a valid hash).'
+                  : 'That did not work. Check the number and password.');
             } catch {
               setErr('No connection. Check your network and try again.');
             } finally {
