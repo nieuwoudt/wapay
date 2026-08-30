@@ -16,6 +16,7 @@ import {
   verifyAdminOtp,
   verifyAdminPassword,
   adminPasswordConfigured,
+  adminPasswordHashShape,
   adminAuthConfigured,
   adminCookie,
   clearAdminCookie,
@@ -26,10 +27,15 @@ export const config = { maxDuration: 15 };
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
+    // The hash SHAPE (never the hash) is included only for an internal-key
+    // caller, so a mangled paste is diagnosable instead of guessed at.
+    const internalKey = process.env.WAPAY_INTERNAL_API_KEY || '';
+    const isInternal = internalKey && req.headers['x-internal-api-key'] === internalKey;
     return res.status(200).json({
       authed: requireAdmin(req).ok,
       configured: adminAuthConfigured(),
       passwordLogin: adminPasswordConfigured(),
+      ...(isInternal ? { passwordHash: adminPasswordHashShape(), build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || null } : {}),
     });
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'method' });

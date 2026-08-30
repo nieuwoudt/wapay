@@ -581,3 +581,29 @@ test('the login page never advertises the WhatsApp admin-login command', () => {
   assert.match(page, /autoComplete="current-password"/, 'password field is a real credential field');
   assert.match(page, /wapay_admin_msisdn/, 'the number is remembered so only the password is typed');
 });
+
+test('password hash shape probe: diagnoses a mangled paste without leaking the hash', async () => {
+  const prev = process.env.WAPAY_ADMIN_PASSWORD_HASH;
+  const { adminPasswordHashShape } = await import('../lib/admin-auth.js');
+  try {
+    process.env.WAPAY_ADMIN_PASSWORD_HASH =
+      '$argon2id$v=19$m=65536,t=3,p=1$KVFBF2bBFo7jnZnTLVCNZg$xJkEKMMJ/D8FqB/4V8jh4qqfSl6totBzzLyInXDN5gI';
+    const good = adminPasswordHashShape();
+    assert.equal(good.looksValid, true);
+    assert.equal(good.algorithm, 'argon2id');
+    // An unquoted shell paste eats the $-segments — the classic footgun.
+    process.env.WAPAY_ADMIN_PASSWORD_HASH = 'id=19=65536,t=3,p=1KVFB';
+    assert.equal(adminPasswordHashShape().looksValid, false);
+    delete process.env.WAPAY_ADMIN_PASSWORD_HASH;
+    assert.equal(adminPasswordHashShape(), null);
+  } finally {
+    if (prev === undefined) delete process.env.WAPAY_ADMIN_PASSWORD_HASH;
+    else process.env.WAPAY_ADMIN_PASSWORD_HASH = prev;
+  }
+  // The probe exposes shape only, to internal-key callers only.
+  const route = readFileSync(fileURLToPath(new URL('../pages/api/admin/auth.js', import.meta.url)), 'utf8');
+  assert.match(route, /isInternal \? \{ passwordHash: adminPasswordHashShape\(\)/);
+  const lib = readFileSync(fileURLToPath(new URL('../lib/admin-auth.js', import.meta.url)), 'utf8');
+  const fn = lib.slice(lib.indexOf('export function adminPasswordHashShape'));
+  assert.ok(!/return raw|hash: raw|value: raw/.test(fn.slice(0, fn.indexOf('\n}'))), 'the hash value is never returned');
+});
