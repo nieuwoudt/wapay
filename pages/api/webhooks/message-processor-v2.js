@@ -398,8 +398,18 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
  * -> FUEL_CONFIRM (YES/NO) -> FUEL_PIN -> /api/vas/fuel/execute, the same
  * deterministic, PIN-gated shape as every other purchase.
  */
+/**
+ * Fuel liveness for ONE user: the WAPAY_WICODE_LIVE flag, narrowed by the
+ * optional VAS_ALLOWLIST_FUEL pilot list (the electricity rollout idiom).
+ * Founder-only live testing in prod = flag true + allowlist of one number;
+ * full go-live = flag true, allowlist unset.
+ */
+function fuelLiveFor(waId) {
+  return isCategoryEnabledForWaId('FUEL', waId);
+}
+
 async function startFuelPurchase({ from, account, amountCents = null, rawText = '' }) {
-  if (!isCategoryLive('FUEL')) {
+  if (!fuelLiveFor(from)) {
     const soonMsg = await localizeOutbound(fuelComingSoonReply(), await userLang(account));
     await addToConversationHistory(from, 'assistant', soonMsg);
     return await sendWhatsAppText({ to: from, text: soonMsg });
@@ -718,6 +728,9 @@ async function renderHome({ from, account }) {
     `💸 *Send*: "send R10 airtime to 083..."\n` +
     `🙏 *Get Paid*: "please pay me R50" → share your link\n` +
     `💳 *Deposit*: "deposit R100" or a Blu voucher\n` +
+    (fuelLiveFor(from)
+      ? `⛽ *Fuel*: "buy fuel" for participating stations\n`
+      : `⛽ *Fuel vouchers*: coming soon\n`) +
     `🏧 *Withdraw*: coming soon\n` +
     `📄 *Transactions* · ⚙️ *Settings*\n\n` +
     `⚡ Quick: ${quickActions[0]} · ${quickActions[1]} · ${quickActions[2]}\n\n` +
@@ -5117,7 +5130,7 @@ async function handleAIChat({ from, text, account }) {
     // claims pre-gated on the wiCode production flag so the model can never
     // promise redemption that is not live (v1.3 amendment 2).
     const result = await orchestrate(text, contextString, {
-      knowledge: buildBrainKnowledge({ wicodeLive: isWicodeLive() }),
+      knowledge: buildBrainKnowledge({ wicodeLive: fuelLiveFor(from) }),
     });
 
     // Memory writes: deterministic, best-effort, never blocking the reply.
@@ -5373,7 +5386,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
           await addToConversationHistory(from, 'assistant', reply);
           return await sendWhatsAppText({ to: from, text: reply });
         }
-        const spendMsg = buildSpendDestinationsReply({ wicodeLive: isWicodeLive() });
+        const spendMsg = buildSpendDestinationsReply({ wicodeLive: fuelLiveFor(from) });
         const localizedSpend = await localizeOutbound(spendMsg, await userLang(account));
         await addToConversationHistory(from, 'assistant', localizedSpend);
         return await sendWhatsAppText({ to: from, text: localizedSpend });

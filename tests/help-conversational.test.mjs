@@ -89,8 +89,8 @@ test('HELP dispatch: question-shaped input gets the spend answer, not the menu',
   assert.match(helpCase, /explicitMenuAsk/, 'the explicit-menu gate exists');
   assert.match(
     helpCase,
-    /buildSpendDestinationsReply\(\{ wicodeLive: isWicodeLive\(\) \}\)/,
-    'the fallback answer is the data-driven spend reply, claim-gated'
+    /buildSpendDestinationsReply\(\{ wicodeLive: fuelLiveFor\(from\) \}\)/,
+    'the fallback answer is the data-driven spend reply, claim-gated per user'
   );
   assert.match(helpCase, /looksLikeReceipt\(reply\)/, 'a composed reply still passes the receipt guard');
   // The menu must be gated BEHIND the explicit-ask check, not before it.
@@ -110,11 +110,13 @@ test('HELP dispatch: question-shaped input gets the spend answer, not the menu',
   assert.ok(!gate.test('who accepts wapay'));
 });
 
-test('the brain is fed the claim-gated spend knowledge on every AI turn', () => {
+test('the brain is fed the claim-gated spend knowledge on every AI turn, per user', () => {
   assert.match(
     processorSource,
-    /knowledge: buildBrainKnowledge\(\{ wicodeLive: isWicodeLive\(\) \}\)/
+    /knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\) \}\)/
   );
+  // The helper composes the production flag with the pilot allowlist.
+  assert.match(processorSource, /function fuelLiveFor\(waId\) \{\s*return isCategoryEnabledForWaId\('FUEL', waId\);/);
 });
 
 test('how-to-SPEND voucher questions reach the AI; list asks stay on deterministic history', () => {

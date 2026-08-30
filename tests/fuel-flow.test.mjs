@@ -58,10 +58,10 @@ test('every fuel entry point checks the category gate before any flow', () => {
     processorSource.indexOf('async function startFuelPurchase'),
     processorSource.indexOf('function logInternalFetchCall')
   );
-  assert.match(fn, /if \(!isCategoryLive\('FUEL'\)\) \{/);
+  assert.match(fn, /if \(!fuelLiveFor\(from\)\) \{/);
   assert.match(fn, /fuelComingSoonReply\(\)/);
   // The gate line comes before the preview call.
-  assert.ok(fn.indexOf("isCategoryLive('FUEL')") < fn.indexOf('/api/vas/fuel/preview'));
+  assert.ok(fn.indexOf('fuelLiveFor(from)') < fn.indexOf('/api/vas/fuel/preview'));
 });
 
 // ---------------------------------------------------------------------------

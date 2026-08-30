@@ -66,6 +66,8 @@ process.env.WAPAY_WICODE_LIVE = 'false';
   VAS_CATEGORY_CONFIG.FUEL.enabled = false;
   const a = await say('buy fuel');
   ok(/coming/i.test(a), 'flag off: "buy fuel" gets the coming-soon reply');
+  const home = await say('hi');
+  ok(/Fuel vouchers\*?: coming soon/i.test(home), 'home screen teases fuel as coming soon');
   // The same turn may legitimately deliver a leftover claimable wiCode from
   // the money E2E — only the purchase FLOW must not start.
   ok(!/Confirm Fuel Voucher|Enter Your PIN|How much fuel/i.test(a), 'flag off: no purchase flow starts');
@@ -73,6 +75,21 @@ process.env.WAPAY_WICODE_LIVE = 'false';
   VAS_CATEGORY_CONFIG.FUEL.enabled = true;
 }
 process.env.WAPAY_WICODE_LIVE = 'true';
+
+// --- leg A2: pilot allowlist narrows liveness per user ---
+console.log('LEG A2: pilot allowlist');
+{
+  process.env.VAS_ALLOWLIST_FUEL = '27999999999'; // someone else
+  const a = await say('buy fuel');
+  ok(/coming/i.test(a), 'flag on but not allowlisted: coming-soon');
+  process.env.VAS_ALLOWLIST_FUEL = MSISDN; // the pilot user
+  const b = await say('hi');
+  ok(/⛽ \*Fuel\*/.test(b), 'home screen shows the live fuel line for the pilot');
+  const c = await say('buy fuel');
+  ok(/how much fuel/i.test(c), 'allowlisted: the flow opens');
+  await say('cancel');
+  delete process.env.VAS_ALLOWLIST_FUEL; // open for the rest of the run
+}
 
 // --- leg B: the full purchase in chat ---
 console.log('LEG B: buy fuel end-to-end in chat');

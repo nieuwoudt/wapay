@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-08-30 (18) — Fuel pilot gate, home-screen fuel line, wiCode network doc
+
+Founder can now live-test fuel in the real chat without exposing customers:
+fuel liveness is decided PER USER (`fuelLiveFor` = `WAPAY_WICODE_LIVE` +
+optional `VAS_ALLOWLIST_FUEL`, the electricity pilot idiom) and drives the
+flow gate, the AI's claim-gated knowledge, the HELP spend answer, and the new
+home-screen line ("⛽ Fuel vouchers: coming soon" for everyone; "⛽ Fuel: buy
+fuel" for pilots/live). `docs/WICODE_NETWORK.md` is the transparent reference
+for where wiCode works (fuel + the retail footprint, rebate reality, claim
+discipline, the open Yoyo questions). Chat E2E grew home-line + allowlist
+legs (17/17); money E2E 29/29; 478/478 unit tests; build green.
+
 ## 2026-08-29 (17) — v1.3: conversational fix, supplier floats, UniFuel fuel vouchers end-to-end
 
 **Task 2 — questions get answers, not menus (BUGLOG #34a).** The founder's screenshot

@@ -50,7 +50,7 @@ test('processor free-text path uses orchestrate, not the legacy single call', ()
   // v1.3: every turn injects the data-driven, claim-gated spend knowledge.
   assert.match(
     processorSource,
-    /await orchestrate\(text, contextString, \{\s*knowledge: buildBrainKnowledge\(\{ wicodeLive: isWicodeLive\(\) \}\),\s*\}\)/
+    /await orchestrate\(text, contextString, \{\s*knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\) \}\),\s*\}\)/
   );
   assert.match(processorSource, /dispatchOrchestratorAction\(\{ from, text, account, result \}\)/);
 });
