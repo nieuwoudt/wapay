@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-08-30 (20) — Admin password hash must not be peppered (caught in prod verification)
+
+Production verification of (19) refused the correct password: the hash was
+computed over `password + PIN_PEPPER`, and PIN_PEPPER exists in Vercel but not
+on a dev machine — so a hash generated anywhere except production could never
+verify. An argon2id hash already carries its own random salt; the pepper added
+no strength here and made the credential environment-coupled. Both the verifier
+and `scripts/hash-admin-password.mjs` now use the self-contained hash, so a
+hash generated on any machine verifies wherever it is pasted. Guard: the test
+asserts the verify call is unpeppered (comments excluded, code only).
+
 ## 2026-08-30 (19) — Admin password sign-in; the login page stops advertising the chat command
 
 The WhatsApp code round-trip failed the founder again (codes WERE generated at

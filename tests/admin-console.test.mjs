@@ -533,7 +533,13 @@ test('customer list: gated, searchable, and never exposes bearer secrets', () =>
 test('password login: argon2id hash from env, never a stored/plaintext password', () => {
   const src = readFileSync(fileURLToPath(new URL('../lib/admin-auth.js', import.meta.url)), 'utf8');
   assert.match(src, /WAPAY_ADMIN_PASSWORD_HASH/);
-  assert.match(src, /argon2\.verify\(process\.env\.WAPAY_ADMIN_PASSWORD_HASH\.trim\(\), password \+ pepper\)/);
+  // Self-contained hash: NOT peppered, or a hash generated anywhere but
+  // production could never verify (caught in prod verification 2026-08-30).
+  assert.match(src, /argon2\.verify\(process\.env\.WAPAY_ADMIN_PASSWORD_HASH\.trim\(\), password\)/);
+  const fn = src.slice(src.indexOf('export async function verifyAdminPassword'));
+  const body = fn.slice(0, fn.indexOf('\n}'));
+  const code = body.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, ''); // comments may explain the pepper; code must not use it
+  assert.ok(!/PIN_PEPPER/.test(code), 'the admin password hash must not be peppered');
   // The password never reaches a log line, and neither does the hash.
   assert.ok(!/console\.(log|error)\([^)]*password[^)]*\)/i.test(src.replace(/type: 'admin_password_[a-z_]+'/g, '')),
     'the password value is never logged');
