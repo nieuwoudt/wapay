@@ -4,6 +4,13 @@
 
 ---
 
+## 36. PayFast asked known depositors "How can we get hold of you?"
+
+- **Symptom (founder screenshot, 2026-08-31):** loading your own wallet by card, the PayFast page asks for an email/cellphone before showing payment methods — even though the depositor is a signed-in WaPay customer whose number we obviously have.
+- **Root cause:** the deposit checkout never passed `cell_number` to PayFast. (The pay-link flow did pass it, but as a raw value — a 27-format number silently fails PayFast's prefill, which expects local 0-format.)
+- **Fix:** the deposit checkout now passes the depositor's number, and `@wapay/providers-payfast` normalizes any cell number to local 0-format (27-format converted; invalid input dropped rather than sent broken). `cell_number` was already part of the signed field set, so signatures stay correct.
+- **Guard:** `tests/payfast-contact-prefill.test.mjs` — normalization, drop-on-garbage, and static assertions that both flows pass a cell number.
+
 ## 35. Yoyo userRef over ~45 chars fails issuance with "General System Error" (caught pre-ship)
 
 - **Symptom (fuel E2E first run, 2026-08-29):** every wiCode issuance through the new

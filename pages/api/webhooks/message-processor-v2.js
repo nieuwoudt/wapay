@@ -2755,6 +2755,9 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
       amountCents: grossCents,
       mPaymentId: paymentId,
       itemName: 'WaPay top-up',
+      // The depositor is a known customer — prefill PayFast's contact step
+      // so "How can we get hold of you?" never shows (founder, 2026-08-31).
+      cellNumber: from,
       // wa.me deep link reopens the WaPay chat — returning to the bare API
       // landing page strands the user outside WhatsApp (user-reported).
       returnUrl: 'https://wa.me/27760497624',

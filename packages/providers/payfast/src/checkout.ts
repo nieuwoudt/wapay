@@ -61,6 +61,7 @@ export interface PayfastCheckoutParams {
    * you" step so the payer never re-types the number our pay page already
    * captured (founder feedback 2026-08-27). PayFast expects local 0-form.
    */
+  /** Payer cell for PayFast's contact prefill; 27- or 0-format accepted. */
   cellNumber?: string;
 }
 
@@ -121,6 +122,19 @@ export function randToCents(value: string | number): number {
  * empty values are stripped BEFORE signing, and the signature is computed
  * over the survivors in that order.
  */
+
+/**
+ * PayFast's contact prefill wants a LOCAL SA cell number (0XXXXXXXXX).
+ * Accepts 27-format or 0-format input; anything else is dropped rather than
+ * sent broken (an invalid cell_number would surface as a checkout error).
+ */
+function toLocalCellNumber(raw: unknown): string {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (/^27\d{9}$/.test(digits)) return '0' + digits.slice(2);
+  if (/^0\d{9}$/.test(digits)) return digits;
+  return '';
+}
+
 function buildSignedFields(params: PayfastCheckoutParams): {
   action: string;
   cleanFields: Record<string, string>;
@@ -141,7 +155,7 @@ function buildSignedFields(params: PayfastCheckoutParams): {
     return_url: params.returnUrl,
     cancel_url: params.cancelUrl,
     notify_url: params.notifyUrl,
-    cell_number: params.cellNumber ?? '',
+    cell_number: toLocalCellNumber(params.cellNumber),
     m_payment_id: params.mPaymentId,
     amount: amountInRands,
     item_name: params.itemName,
