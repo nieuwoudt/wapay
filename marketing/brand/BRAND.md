@@ -1,66 +1,62 @@
 # WaPay / Please Pay Me — brand kit
 
-Everything the boards need: real logos (SVG masters + 3000px PNGs), hex codes,
-and the font files. The SVG wordmarks are **outlined to paths** — no font
-needed to open or scale them. The R-bubble placeholder can be replaced with
-these marks.
+The canonical logos, hex codes and font files. The WaPay logo here is the
+**real one** (the Lovable/app logo): the W mark — two slanted strokes and a
+dot — with the "WaPay" wordmark, all in the brand green.
 
 ## Logos in this kit
 
 | File | What it is |
 |---|---|
-| `logo-wapay.svg / .png` | WaPay lockup, no TM |
-| `logo-wapay-TM.svg / .png` | WaPay lockup with small TM |
-| `logo-pleasepayme.svg / .png` | Please Pay Me lockup, no TM |
-| `logo-pleasepayme-TM.svg / .png` | Please Pay Me lockup with small TM |
-| `mark-wapay.svg / .png` | W speech-bubble mark alone (avatars, favicons, app icons) |
-| `mark-pleasepayme.svg / .png` | R speech-bubble mark alone |
+| `wapay-logo-1024.png` | The logo, transparent background, no TM (canonical) |
+| `wapay-logo-1024-TM.png` | Same logo with a small TM after the wordmark |
+| `wapay-logo-512.png` / `-512-TM.png` | Half-size versions |
+| `wapay-logo-256.png` | Small use |
+| `wapay-favicon-128.png` | Favicon / avatar crop |
+| `wapay-logo-1024-white-bg.jpg` | White-background version (email, docs) |
+| `logo-pleasepayme.svg / .png` | "Please Pay Me" wordmark, no TM |
+| `logo-pleasepayme-TM.svg / .png` | "Please Pay Me" wordmark with small TM |
 
-The TM is the same size on both lockups (26% of cap height, top-aligned).
-PNGs are transparent-background. For dark backgrounds, recolor the ink
-letters `#1D2026 → #FFFFFF` in the SVG; the emerald and the marks stay as they are.
+The Please Pay Me wordmark is set in Inter SemiBold in the exact logo green,
+matching the treatment on the pleasepayme.co.za pay screen ("🙏 Please Pay
+Me™ — with WaPay"). Its SVG type is outlined to paths, so no font is needed
+to open it. The TM is 26% of cap height, top-aligned — the same proportion on
+both brands.
+
+**Note for the designer:** the WaPay logo source is raster (PNG). If you need
+it as vector, export the SVG from the Lovable project it was created in —
+don't redraw it.
 
 ## Hex codes
 
 | Token | Hex | Use |
 |---|---|---|
-| Emerald (primary) | `#1FA867` | The brand green. The word "Pay", accents, links |
-| Emerald dark | `#0C885E` | Gradient partner, hover/pressed states |
-| Ink | `#1D2026` | Headlines, wordmark letters, body on light |
+| Brand green | `#359853` | The logo green — marks, wordmarks, accents |
 | WhatsApp action green | `#25D366` | ONLY the WhatsApp CTA button, nothing else |
-| Teal (chat header) | `#075E54` | Chat-UI chrome, deep accents |
-| Mint | `#DFF5E9` | Soft tinted panels |
-| Mint soft | `#EFF9F3` | Lightest tint / section backgrounds |
-| Chat background | `#EDE9E3` | WhatsApp-style chat surfaces |
-| Gray | `#6B7280` | The TM, secondary text |
-| Gold | `#F0B429` | Sparing highlight (ratings, "new") |
-
-Mark gradient: `#1FA867 → #0C885E`, top-left to bottom-right.
-
-## Family rule (keeps the two brands related)
-
-The word **"Pay" is always emerald `#1FA867`**; every other letter is ink
-`#1D2026`. So: **Wa**·**Pay** and **Please**·**Pay**·**Me**. Marks are the same
-speech bubble — W for WaPay, R (rand) for Please Pay Me.
+| Deep green (buttons) | `#1B7A3D` | Solid CTA fills on the pay pages |
+| Ink | `#1D2026` | Headlines and body on light |
+| Muted text | `#4E5C54` | Secondary copy |
+| Surface | `#FFFFFF` | Cards |
+| Page background | `#F4F7F5` | Soft green-tinted page ground |
+| Teal (chat chrome) | `#075E54` | WhatsApp-style chat UI only |
+| Gold | `#F0B429` | Sparing highlight |
 
 ## Type
 
 | Role | Face | File |
 |---|---|---|
-| Wordmarks / display | Archivo ExtraBold 800 | `fonts/Archivo-wght-800.ttf` |
-| Headings | Archivo Bold 700 | `fonts/Archivo-wght-700.ttf` |
-| Subheads | Archivo Medium 500 | `fonts/Archivo-wght-500.ttf` |
-| Body | Public Sans Regular 400 | `fonts/Public-Sans-wght-400.ttf` |
-| Body emphasis | Public Sans SemiBold 600 | `fonts/Public-Sans-wght-600.ttf` |
+| Headlines / UI | Inter SemiBold 600 | `fonts/Inter-wght-600.ttf` |
+| Emphasis | Inter Bold 700 | `fonts/Inter-wght-700.ttf` |
+| Body | Inter Regular 400 | `fonts/Inter-wght-400.ttf` |
 
-Both families are Google Fonts under the SIL Open Font License (free for
-commercial use, embedding, and web): fonts.google.com/specimen/Archivo and
-fonts.google.com/specimen/Public+Sans.
+Inter is a Google Font under the SIL Open Font License — free for commercial
+use, embedding and web: fonts.google.com/specimen/Inter.
 
 ## Usage notes
 
-- Clearspace: keep at least half the bubble's width empty around the lockup.
-- Minimum lockup width ~120px; below that, use the bubble mark alone.
-- Don't stretch, outline, add shadows, or recolor the greens.
-- One bright `#25D366` action button per screen — everything else uses the
-  emerald family.
+- Clearspace: keep at least the height of the W-mark's dot empty around the logo.
+- Don't stretch, recolor, outline or add effects to the logo.
+- One bright `#25D366` action button per screen; everything else uses the
+  brand green family.
+- "Please Pay Me is a WaPay service for requesting payments on WhatsApp.
+  WaPay is not a bank." — the standing footer line wherever both brands appear.
