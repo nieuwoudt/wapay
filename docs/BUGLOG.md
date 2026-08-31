@@ -4,6 +4,23 @@
 
 ---
 
+## 37. "Where is OTT vouchers accepted?" started the voucher PURCHASE flow
+
+- **Symptom (Tasha/founder screenshot, 2026-08-31):** asking where OTT vouchers are
+  accepted got "🎟️ OTT Voucher — How much would you like your voucher for?" — a question
+  answered with a checkout.
+- **Root cause:** `matchOttVoucherSelfRequest` excluded redemption-ish words
+  (redeem/load/have/my/…) but had NO interrogative guard, so any sentence containing
+  "ott voucher" that wasn't a gift or redemption read as a self-purchase — including
+  pure information questions. Same class as BUGLOG #34a, different matcher.
+- **Fix:** where/what/why/who/accepted (and "how", except "how much") now fall through
+  to the AI, which carries a dedicated policy-safe accepted-at answer
+  (`ottAcceptedFacts()` in lib/spend-catalogue.js: categories + ottvoucher.com, betting
+  never named). "can I buy an ott voucher?" still purchases.
+- **Guard:** `tests/ott-voucher-self.test.mjs` drives five question phrasings against the
+  shipped matcher; `pnpm qa:chat` scenario asserts the live brain answers the question
+  and never opens the buy flow (11/11).
+
 ## 36. PayFast asked known depositors "How can we get hold of you?"
 
 - **Symptom (founder screenshot, 2026-08-31):** loading your own wallet by card, the PayFast page asks for an email/cellphone before showing payment methods — even though the depositor is a signed-in WaPay customer whose number we obviously have.

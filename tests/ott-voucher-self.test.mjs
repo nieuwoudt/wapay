@@ -53,6 +53,13 @@ test('purchase phrasings match; redemption phrasings and gifts do not', () => {
     ['I received an ott voucher', {}],
     ['send an ott voucher to 0837654321', { msisdn: '0837654321' }],
     ['buy airtime', {}],
+    // Information questions are NEVER purchases (founder screenshot
+    // 2026-08-31: "Where is OTT vouchers accepted?" started the buy flow).
+    ['Where is OTT vouchers accepted?', {}],
+    ['where can I use an ott voucher', {}],
+    ['what is an OTT voucher', {}],
+    ['how do OTT vouchers work', {}],
+    ['who accepts ott vouchers', {}],
   ]) {
     assert.ok(!m(text, slots), `must NOT match: "${text}"`);
   }

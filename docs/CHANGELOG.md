@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-08-31 (21) — Live-test feedback round: question≠purchase, UniFuel branding, quieter receipts
+
+From the founder's first live fuel purchase + Tasha's review (screenshots):
+BUGLOG #37 — "Where is OTT vouchers accepted?" no longer starts the buy flow;
+information questions reach the AI, which now carries a dedicated policy-safe
+accepted-at answer (categories + ottvoucher.com, betting never named).
+Customer copy rebrand: the voucher is a "UniFuel fuel voucher", its code a
+"UniFuel voucher code" (the word wiCode survives only in the tell-the-attendant
+step); the redemption guide's station line is simply "a participating Shell or
+Engen station". The where-can-I-spend answer restructured per founder: in-app
+breakdown first, then "You can also spend at these participating retailers"
+built from the catalogue; the OTT line says accepted without listing places.
+The post-transaction "What would you like to do next?" menu is gone — one warm
+line instead. Yoyo correspondence: EMAIL_TO_SIPHO_YOYO.txt drafted (QA
+close-out, Dean, prod handover, callback auth, small-amount production test,
+updated campaign list: Checkers/Shoprite/PnP/Engen/Shell/Total-when-onboarded)
+and docs/WICODE_NETWORK.md records the list + the exact-amount till-payment UX
+design. 488/488 tests; qa:chat 11/11 with the new accepted-at scenario.
+
 ## 2026-08-30 (20) — Admin password hash must not be peppered (caught in prod verification)
 
 Production verification of (19) refused the correct password: the hash was

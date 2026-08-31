@@ -490,7 +490,7 @@ async function startFuelPurchase({ from, account, amountCents = null, rawText = 
     (previewData.feeCents > 0
       ? `Fee: ${randsShort(previewData.feeCents)}\nTotal: ${randsShort(previewData.totalCents)}\n`
       : `No fee, paid from your balance.\n`) +
-    `\nYour wiCode will be delivered right here, ready to use at participating ${partnerNames} stations.\n\n` +
+    `\nYour UniFuel voucher code will be delivered right here, ready to use at participating ${partnerNames} stations.\n\n` +
     `Reply *YES* to confirm or *NO* to cancel.`,
     await userLang(account)
   );
@@ -640,12 +640,10 @@ async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCe
 }
 
 async function sendPostTransactionCta(to) {
-  const cta =
-    `What would you like to do next?\n\n` +
-    `• Buy more airtime\n` +
-    `• Buy data\n` +
-    `• Send money\n` +
-    `• Go to home`;
+  // Founder call (2026-08-31): no menu after a successful transaction —
+  // the receipt is the moment; a bullet list under it reads as clutter.
+  // One warm line, nothing else.
+  const cta = `💚 If you have any questions or get stuck anywhere, just tell me. I am right here.`;
   await addToConversationHistory(to, 'assistant', cta);
   return await sendWhatsAppText({ to, text: cta });
 }
@@ -2652,6 +2650,12 @@ function matchOttVoucherSelfRequest(text = '', slots = null) {
   if (/\bsend\b[\s\S]{0,40}\bto\b/i.test(s)) return false;
   if (!/\bott\s*vouchers?\b/i.test(s)) return false;
   if (/\b(redeem\w*|load\w*|deposit\w*|have|got|received?|claim\w*|my|show|list|history|bought)\b/i.test(s)) return false;
+  // An INFORMATION question is never a purchase (founder screenshot
+  // 2026-08-31: "Where is OTT vouchers accepted?" started the buy flow).
+  // "can I buy an ott voucher?" stays a purchase — only where/what/how-style
+  // questions fall through to the AI, which carries the accepted-at answer.
+  if (/\b(where|accepted|what|why|who)\b/i.test(s)) return false;
+  if (/\bhow\b/i.test(s) && !/\bhow much\b/i.test(s)) return false;
   return true;
 }
 
@@ -2943,7 +2947,7 @@ async function handleVoucherHistory({ from, account }) {
     parts.push(`\nYours, to spend online at stores that accept OTT vouchers:\n` + mine.map((g) => fmt(g, false)).join('\n'));
   }
   if (mineWicode.length) {
-    parts.push(`\n⛽ Fuel vouchers (wiCode, for participating stations):\n` + mineWicode.map((g) => fmt(g, false)).join('\n'));
+    parts.push(`\n⛽ UniFuel fuel vouchers (for participating stations):\n` + mineWicode.map((g) => fmt(g, false)).join('\n'));
   }
   if (sent.length) {
     parts.push(`\nSent to others (no longer yours):\n` + sent.map((g) => fmt(g, true)).join('\n'));
@@ -4721,7 +4725,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             `🧾 Reference: ${executeData.reference}\n` +
             `📅 ${formatDateTimeZa(new Date())}\n\n` +
             `💳 New balance: R${((executeData.newBalance || 0) / 100).toFixed(2)}\n\n` +
-            `Your wiCode is coming right up… ⛽`,
+            `Your UniFuel voucher code is coming right up… ⛽`,
             await userLang(account)
           );
           await addToConversationHistory(from, 'assistant', receipt);

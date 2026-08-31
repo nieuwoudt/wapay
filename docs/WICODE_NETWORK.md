@@ -56,6 +56,27 @@ UniFuel adds a product row (partner, campaign id, bounds) → it appears in
 `/api/partner/wapay/catalog` → WaPay's brain and menus pick it up as data.
 No WaPay build is needed per merchant; fuel is simply the first campaign wired.
 
+## The requested campaign retailer list (founder, 2026-08-31)
+
+Sent to Yoyo in `EMAIL_TO_SIPHO_YOYO.txt` (repo root), replacing the earlier
+Boxer/Checkers/Shoprite/Usave/PnP/Engen list:
+
+1. Checkers · 2. Shoprite · 3. Pick n Pay · 4. Engen (fuel) · 5. Shell (fuel)
+· 6. TotalEnergies (fuel, once onboarded — NOT yet, per Yoyo 30 Jun 2026).
+
+All are on the verified wiCode footprint. Dropped by founder choice: Boxer,
+Usave. Worth raising with the founder before launch: the ~5% rebates sit in
+fast food (KFC 1,184 stores) — none of the grocery names above has an agreed
+rebate yet, so this list is reach, not margin.
+
+**Designed retail UX (founder, 2026-08-31, builds when campaigns exist):**
+exact-amount till payment — "I need to pay Pick n Pay R69.55" → WaPay
+generates a wiCode for exactly that amount at that retailer → cashier enters
+it at checkout. The `PAY_AT_STORE` intent already exists in the NLP package
+and the issue pipeline takes arbitrary cent amounts, so this is a campaign
+enablement away, not a rebuild. Exact-amount codes also sidestep the
+partial-redemption/regeneration cycle entirely (the code dies exactly spent).
+
 ## Known unknowns to close with Yoyo (next email)
 
 1. Confirmation of OUR redeemable brand list + per-brand campaign IDs.

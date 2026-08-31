@@ -161,6 +161,15 @@ async function run() {
     ], s);
   }
   {
+    const a = await s.say('Where is OTT vouchers accepted?');
+    verdict('Questions: "where is OTT accepted" is ANSWERED, never a purchase flow (founder 2026-08-31)', [
+      { level: 'FAIL', ok: !has(a.replyText, /How much would you like your voucher for/i), what: 'the question never starts the buy flow' },
+      { level: 'FAIL', ok: !looksLikeMenu(a.replyText), what: 'no bare menu either' },
+      { level: 'WARN', ok: has(a.replyText, /online|accept|ottvoucher|stores?|platforms?/i), what: 'the answer says where OTT is accepted' },
+      { level: 'FAIL', ok: !has(a.replyText, /\b(bet|betting|casino|gambl)/i), what: 'no betting vocabulary, ever' },
+    ], s);
+  }
+  {
     await s.say('buy electricity');
     const b = await s.say('how do fees work on WaPay?');
     await s.say('cancel');

@@ -103,7 +103,7 @@ const c = await say('yes');
 ok(/enter your pin/i.test(c), 'PIN gate reached');
 const d = await say(PIN);
 ok(/fuel voucher purchased/i.test(d), 'receipt sent');
-ok(/your wicode:\s*\d{6,}/i.test(d), 'wiCode delivered in-session');
+ok(/UniFuel voucher code:\s*\d{6,}/i.test(d), 'UniFuel voucher code delivered in-session');
 ok(/participating station/i.test(d), 'redemption guide travels with the code');
 const w1 = await wallet();
 ok(w1.availableCents === w0.availableCents - 5000, `wallet debited R50 (${w0.availableCents} -> ${w1.availableCents})`);

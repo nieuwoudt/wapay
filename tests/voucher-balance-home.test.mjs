@@ -121,7 +121,7 @@ test('voucher history: yours vs sent-away split, balance line, buy-another foote
   // rail-neutral and each section names its network.
   assert.match(body, /Your vouchers/, 'the surface is named');
   assert.match(body, /stores that accept OTT vouchers/, 'the OTT section names its network');
-  assert.match(body, /Fuel vouchers \(wiCode, for participating stations\)/, 'the wiCode section names its network');
+  assert.match(body, /UniFuel fuel vouchers \(for participating stations\)/, 'the fuel section carries the UniFuel brand');
   assert.match(body, /Sent to others \(no longer yours\)/, 'gifted vouchers are visibly not yours');
   assert.match(body, /filter\(\(g\) => g\.status !== 'CANCELLED'\)/, 'balance excludes cancelled');
   assert.match(body, /Voucher Balance:/, 'the same label as the home screen');

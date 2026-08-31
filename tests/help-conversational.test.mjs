@@ -24,6 +24,7 @@ import {
   catalogue,
   advertisedFuelPartners,
 } from '../lib/spend-catalogue.js';
+import * as catalogueModule from '../lib/spend-catalogue.js';
 
 const processorSource = readFileSync(
   fileURLToPath(new URL('../pages/api/webhooks/message-processor-v2.js', import.meta.url)),
@@ -167,39 +168,62 @@ const BETTING_WORDS = /\b(bet|bets|betting|gambl\w*|bookmaker|hollywoodbets|lott
 const DATE_PROMISES = /\b(january|february|march|april|may|june|july|august|september|october|november|december|20\d\d|next (week|month|year)|by (the )?end of)\b/i;
 
 test('catalogue copy: no betting words, no em dashes, no date promises, ever', () => {
-  const surfaces = [
+  // CUSTOMER surfaces: strict — no betting vocabulary at all.
+  const customerSurfaces = [
     buildSpendDestinationsReply({ wicodeLive: false }),
     buildSpendDestinationsReply({ wicodeLive: true }),
-    buildBrainKnowledge({ wicodeLive: false }),
-    buildBrainKnowledge({ wicodeLive: true }),
     cashoutScript(),
     redemptionGuide('FUEL_WICODE'),
     redemptionGuide('RETAIL_WICODE'),
     redemptionGuide('OTT'),
   ];
-  for (const s of surfaces) {
+  for (const s of customerSurfaces) {
     assert.ok(!BETTING_WORDS.test(s), `betting words banned in: ${s.slice(0, 60)}`);
     assert.ok(!/[–—]/.test(s), `em/en dashes banned in: ${s.slice(0, 60)}`);
     assert.ok(!DATE_PROMISES.test(s), `date promises banned in: ${s.slice(0, 60)}`);
+  }
+  // The BRAIN knowledge is prompt-internal and is allowed exactly ONE use of
+  // the vocabulary: the sentence PROHIBITING it. Strip that instruction and
+  // the rest must be clean.
+  for (const k of [buildBrainKnowledge({ wicodeLive: false }), buildBrainKnowledge({ wicodeLive: true })]) {
+    const stripped = k.replace(/NEVER name or imply gambling or betting platforms[^\n]*/g, '');
+    assert.ok(!BETTING_WORDS.test(stripped), 'knowledge carries no betting vocabulary beyond the prohibition');
+    assert.ok(!DATE_PROMISES.test(k), 'knowledge never date-promises');
   }
 });
 
 test('test mode (flag off): fuel/retail are coming soon, never claimed redeemable', () => {
   const reply = buildSpendDestinationsReply({ wicodeLive: false });
   assert.match(reply, /Coming soon/i);
-  assert.ok(!/participating stations:/.test(reply), 'no live fuel line while gated');
+  assert.ok(!/participating retailers/.test(reply), 'no retailer section while gated');
+  assert.ok(!/UniFuel fuel vouchers\* at/.test(reply), 'no live fuel line while gated');
   const knowledge = buildBrainKnowledge({ wicodeLive: false });
   assert.match(knowledge, /COMING SOON, NOT LIVE/);
   assert.match(knowledge, /NEVER claim they can be redeemed/);
 });
 
-test('live mode: fuel claims carry the participating-stations caveat, never "any station"', () => {
+test('live mode: the founder structure — in-app breakdown, then participating retailers', () => {
   const reply = buildSpendDestinationsReply({ wicodeLive: true });
-  assert.match(reply, /participating stations/i);
-  assert.match(reply, /Shell \(about 85% of stations/);
-  assert.match(reply, /Engen/);
+  assert.match(reply, /You can also spend at these participating retailers:/);
+  assert.match(reply, /participating Shell and Engen stations/);
   assert.ok(!/any station\b/i.test(reply));
   assert.ok(!/TotalEnergies|Total\b/.test(reply), 'a non-onboarded partner is never advertised');
+  // The OTT line says accepted WITHOUT listing places (founder 2026-08-31).
+  assert.match(reply, /accepted at many online stores/);
+  assert.ok(!/any store that accepts OTT/.test(reply), 'the old any-store phrasing is gone');
+  // The breakdown comes before the retailer section.
+  assert.ok(reply.indexOf('Airtime and data') < reply.indexOf('participating retailers'));
+});
+
+test('the OTT accepted-at answer is policy-safe and rides the brain knowledge', () => {
+  const { ottAcceptedFacts } = catalogueModule;
+  const facts = ottAcceptedFacts();
+  assert.match(facts, /ottvoucher\.com/);
+  assert.ok(!/\b(bet|betting|gambl\w*|casino)\b/i.test(facts), 'betting never named');
+  const knowledge = buildBrainKnowledge({ wicodeLive: false });
+  assert.match(knowledge, /WHERE OTT VOUCHERS ARE ACCEPTED/);
+  assert.match(knowledge, /NEVER name or imply gambling or betting/);
+  assert.match(knowledge, /UniFuel fuel voucher/, 'the brand rides the knowledge too');
 });
 
 test('the catalogue is data: partners come from the structure, not the copy', () => {
@@ -243,7 +267,7 @@ test('cash-out script: coming soon, no dates, and redirects to live spending', (
 
 test('fuel redemption guide: wiCode mechanics + partial redemption, no bearer secrets', () => {
   const g = redemptionGuide('FUEL_WICODE');
-  assert.match(g, /participating station/i);
+  assert.match(g, /participating .*station/i, 'step 1 names participating stations (data-driven partner names)');
   assert.match(g, /BEFORE they start filling up/i);
   assert.match(g, /fresh code for what is left/i, 'partial redemption behaviour explained');
   assert.ok(!/\d{6,}/.test(g), 'no code-shaped digits in the guide');
