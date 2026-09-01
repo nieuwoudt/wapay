@@ -75,10 +75,16 @@ UPDATED CAMPAIGN RETAILER LIST
    1. Checkers
    2. Shoprite
    3. Pick n Pay
-   4. Engen (fuel)
-   5. Shell (fuel)
-   6. TotalEnergies (fuel), as soon as their onboarding completes; please
-      keep us posted on that timeline
+   4. KFC
+   5. Engen (fuel)
+   6. Shell (fuel)
+
+   If the campaign is limited to five brands, please prioritise Shoprite,
+   Pick n Pay, KFC, Engen and Shell, and leave Checkers out.
+
+   Separately, please keep us posted on the TotalEnergies onboarding
+   timeline. We would like to add them in a later phase once they are live
+   on your side.
 
    Could you confirm this list is achievable per-brand, and whether each
    brand needs its own campaign ID on your side?

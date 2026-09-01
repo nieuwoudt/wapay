@@ -61,13 +61,14 @@ No WaPay build is needed per merchant; fuel is simply the first campaign wired.
 Sent to Yoyo in `EMAIL_TO_SIPHO_YOYO.txt` (repo root), replacing the earlier
 Boxer/Checkers/Shoprite/Usave/PnP/Engen list:
 
-1. Checkers · 2. Shoprite · 3. Pick n Pay · 4. Engen (fuel) · 5. Shell (fuel)
-· 6. TotalEnergies (fuel, once onboarded — NOT yet, per Yoyo 30 Jun 2026).
+1. Checkers · 2. Shoprite · 3. Pick n Pay · 4. KFC · 5. Engen (fuel)
+· 6. Shell (fuel). TotalEnergies deferred to a later phase (not onboarded,
+per Yoyo 30 Jun 2026). Five-brand fallback, agreed with the founder
+2026-09-01: drop CHECKERS first (same POS group as Shoprite, most premium
+skew, zero agreed rebate); KFC is the only margin line (~5%, 1,184 stores).
 
 All are on the verified wiCode footprint. Dropped by founder choice: Boxer,
-Usave. Worth raising with the founder before launch: the ~5% rebates sit in
-fast food (KFC 1,184 stores) — none of the grocery names above has an agreed
-rebate yet, so this list is reach, not margin.
+Usave, and Total-for-now.
 
 **Designed retail UX (founder, 2026-08-31, builds when campaigns exist):**
 exact-amount till payment — "I need to pay Pick n Pay R69.55" → WaPay
