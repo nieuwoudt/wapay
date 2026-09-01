@@ -1,11 +1,11 @@
 To: Sipho Xongwana <sipho.xongwana@yoyorewards.com>
 Cc: Shaun Jacobs <shaun@ulted.co.za>; Dean Arendse <dean.arendse@yoyogroup.com>; Amina Abrahams <amina.abrahams@yoyogroup.com>
-Subject: Re: Walletpay & Yoyo Discussion — integration complete on our side; ready for QA close-out
+Subject: Re: Walletpay & Yoyo Discussion — integration complete; QA close-out, commercials and production path
 
 Hi Sipho,
 
-Thanks for the follow-up, and apologies for the slow reply — the good news is
-it was for a productive reason.
+Thanks for the follow-up, and apologies for the slow reply — it was for a
+productive reason.
 
 UPDATE FROM OUR SIDE
 
@@ -23,51 +23,69 @@ environment. Since we last spoke we have:
 
 To answer your earlier question directly: we want to test the FULL solution —
 purchase through our wallet, issuance through your API, and real redemption
-at store/forecourt level — not just store redemption in isolation. We will
-also use the wrapped portal for store-level checks in the meantime, thanks
-for that pointer.
+at store and forecourt level — not store redemption in isolation. We will use
+the wrapped portal for store-level checks in the meantime, thanks for that
+pointer.
 
 WHAT WE NEED TO GO LIVE
 
 1. QA close-out: what is still outstanding for QA finalisation on your side,
    and is anything needed from us to close it?
-2. Dean's verification: we are ready whenever Dean is — happy to schedule
-   this in the same call.
-3. Production handover when 1 and 2 are done: production base URL and
+2. Dean's verification: we are ready whenever Dean is — happy to cover this
+   in the same call.
+3. Production handover once 1 and 2 are done: production base URL and
    credentials, per-brand campaign IDs, and callback registration for
    https://unifuel.co/api/yoyo/callback
-4. One technical question: is there an authentication mechanism (signature
-   or shared secret) available for the redemption callbacks? We would like
-   to verify their origin in production.
+4. One technical question: is there an authentication mechanism (signature or
+   shared secret) for the redemption callbacks, so we can verify their origin
+   in production?
 
-SMALL-AMOUNT PRODUCTION TEST BEFORE LAUNCH
+What is the fastest realistic path through the above? We would like to get to
+production as soon as possible and will prioritise anything needed from our
+side to make that happen.
 
-Before we trigger the campaign publicly, we would like to run a limited
-production test: a small number of low-value real vouchers, purchased through
-our live product and redeemed by us at participating stores and forecourts.
-Is that possible ahead of full go-live, and what would you need from us to
-initiate it?
+COMMERCIALS — PLEASE CONFIRM IN WRITING
+
+5. Rebates: for the retailer list below, what rebate/commission do we earn
+   per brand on redeemed value? We would like the per-brand percentages
+   confirmed so we can model the campaign properly.
+6. Fees: over and above the monthly platform/retainer amount, what other
+   fees apply? (Per-issuance or per-redemption transaction fees, campaign
+   setup fees per brand, or anything else we should budget for.)
+7. Float/wallet funding: how do we top up our issuing wallet with you — bank
+   transfer details, minimums, how quickly funds reflect, and how we monitor
+   the balance so issuance never fails on an empty float.
+
+PRODUCTION TEST BEFORE THE RETAINER STARTS
+
+8. Before we launch publicly, we want to run a limited production test: a
+   small number of low-value real vouchers, purchased through our live
+   product and redeemed by us at participating stores and forecourts. Is it
+   possible to run this WITHOUT triggering the monthly retainer yet? Our
+   preference is that the retainer starts in the month we go live to our
+   target market — please confirm whether that structure works, and if not,
+   what you can offer for a pre-launch verification window.
 
 UPDATED CAMPAIGN RETAILER LIST
 
-Please also update the retailer list for our campaign. In place of the
-earlier list (Boxer, Checkers, Shoprite, Usave, Pick n Pay, Engen), we would
-like to commit to:
+9. Please update the retailer list for our campaign. In place of the earlier
+   list (Boxer, Checkers, Shoprite, Usave, Pick n Pay, Engen), we would like
+   to commit to:
 
-  1. Checkers
-  2. Shoprite
-  3. Pick n Pay
-  4. Engen (fuel)
-  5. Shell (fuel)
-  6. TotalEnergies (fuel) — as soon as their onboarding completes; please
-     keep us posted on that timeline
+   1. Checkers
+   2. Shoprite
+   3. Pick n Pay
+   4. Engen (fuel)
+   5. Shell (fuel)
+   6. TotalEnergies (fuel) — as soon as their onboarding completes; please
+      keep us posted on that timeline
 
-Could you confirm this list is achievable per-brand, and whether each needs
-its own campaign ID on your side?
+   Could you confirm this list is achievable per-brand, and whether each
+   brand needs its own campaign ID on your side?
 
 CALL
 
-A call works well to close the remaining items. I am available next week —
+A call works well to close all of this out. I am available next week —
 Tuesday to Thursday mornings suit best, but I will work around Dean's
 availability. Please send the invite.
 
