@@ -92,7 +92,33 @@ is free; adding a paid rail there would only add cost).
 3. Until then nothing changes: the flag defaults off and the existing
    text → template behaviour is untouched.
 
-## 5. Standing rule
+## 5. Accepted ≠ delivered — the honest limit of the fallback chain
+
+BUGLOG #33's wider lesson (raised again in review, 2026-09-01): a Meta
+`ok`/message-id response means **accepted**, not **delivered**. We have
+observed free-form sends outside the window be accepted and then silently
+dropped. Consequence for the chain: if the text rung is
+*accepted-but-dropped* rather than synchronously rejected, `delivered`
+reads true and the Direct Send rung never fires. This is not a regression —
+the old text → template chain had exactly the same blind spot — but Direct
+Send doesn't remove it either.
+
+What would remove it: reconciling the notify flags against **message-status
+webhooks** (`statuses[].status = failed/undelivered`) and re-running the
+repair path for legs whose accepted send later failed. Deliberately not
+built yet — it needs status-webhook plumbing that nothing else uses today.
+If out-of-window receipts still go missing with Direct Send enabled, that
+reconciliation is the next move, not more send rungs.
+
+And the flip side, worth testing once the beta is on: Direct Send's entire
+promise is that a utility-category message legitimately crosses a closed
+window ("without opening a conversation with your end-users" — Meta's own
+wording). If that holds in practice, this class of loss ends for utility
+messages. Authentication (OTP) stays excluded per Meta's FAQ — if Meta
+later extends Direct Send to an `authentication` category, revisit the
+admin-login and customer-OTP paths immediately.
+
+## 6. Standing rule
 
 **Nothing marketing ever goes through Direct Send** — no promos, no
 campaigns, no betting anything (that's doubly banned: Meta gambling policy).
