@@ -78,6 +78,15 @@ and the issue pipeline takes arbitrary cent amounts, so this is a campaign
 enablement away, not a rebuild. Exact-amount codes also sidestep the
 partial-redemption/regeneration cycle entirely (the code dies exactly spent).
 
+## Live-portal correction (2026-09-01)
+
+The Wrapped portal (wrappedgifts.co.za, checked live) sells vouchers for
+every brand on our campaign list AND for **SPAR** — which the July 2025
+footprint said was NOT on the network. The portal is newer evidence: raise
+SPAR's campaign availability with Yoyo before repeating the "no Spar" line.
+Store-level testing runs through that portal today: see
+`docs/STORE_TEST_PLAYBOOK.md`.
+
 ## Known unknowns to close with Yoyo (next email)
 
 1. Confirmation of OUR redeemable brand list + per-brand campaign IDs.
