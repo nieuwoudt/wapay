@@ -176,7 +176,7 @@ test('notify: send outcomes read from the RESOLVED result — send fns never thr
 test('notify: template fallbacks are env-gated and parameterised', () => {
   assert.match(notifySource, /WAPAY_TEMPLATE_REQUEST_PAID/);
   assert.match(notifySource, /WAPAY_TEMPLATE_PAYMENT_RECEIPT/);
-  assert.match(notifySource, /if \(tplName\)/);
+  assert.match(notifySource, /if \(!delivered && tplName\)/); // direct-send rung sits before the template (BUGLOG-free: see whatsapp-direct-send tests)
 });
 
 test('notify: payer receipt quotes GROSS, stays transactional, derives waId from 0-form', () => {

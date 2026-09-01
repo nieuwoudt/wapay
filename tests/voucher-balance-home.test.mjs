@@ -95,7 +95,7 @@ test('request-paid template fallback is env-gated and fires only on free-form fa
   const idx = notifySource.indexOf('WAPAY_TEMPLATE_REQUEST_PAID');
   const around = notifySource.slice(idx - 900, idx + 900);
   assert.match(around, /request_notify_requester_text_failed/, 'fallback fires only after the free-form failure is logged');
-  assert.match(around, /if \(tplName\)/, 'unset env is silent');
+  assert.match(around, /if \(!delivered && tplName\)/, 'unset env is silent; template only if direct send did not deliver');
 });
 
 // ---------------------------------------------------------------------------

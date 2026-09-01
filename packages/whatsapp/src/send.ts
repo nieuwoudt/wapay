@@ -27,6 +27,31 @@ export interface SendTemplateArgs {
 export interface SendTextArgs {
   to: string;
   text: string;
+  /** Meta Direct Send (beta, Sept 2026): top-level category on /messages. */
+  category?: 'utility';
+}
+
+/**
+ * True when this deploy has opted into Meta's Direct Send beta
+ * (WHATSAPP_DIRECT_SEND=true — set only after the WABA is enabled and the
+ * beta terms are accepted in WhatsApp Manager).
+ */
+export function directSendEnabled(): boolean {
+  return process.env.WHATSAPP_DIRECT_SEND === 'true';
+}
+
+/**
+ * Direct Send: a business-initiated UTILITY message outside the 24h window
+ * with NO template — the ordinary text payload plus `category: "utility"`.
+ * TRANSACTIONAL CONTENT ONLY: Meta warns, then revokes Direct Send access,
+ * for marketing sent this way. Gate call sites with directSendEnabled().
+ */
+export async function sendWhatsAppUtilityDirect(args: { to: string; text: string }): Promise<{
+  ok: boolean;
+  messageId?: string;
+  error?: string;
+}> {
+  return sendWhatsAppText({ ...args, category: 'utility' });
 }
 
 export interface SendCtaUrlArgs {
@@ -239,7 +264,7 @@ export async function sendWhatsAppText(args: SendTextArgs): Promise<{
     
     const url = `${WHATSAPP_API_BASE}/${phoneNumberId}/messages`;
     
-    const payload = {
+    const payload: Record<string, any> = {
       messaging_product: 'whatsapp',
       to,
       type: 'text',
@@ -247,6 +272,7 @@ export async function sendWhatsAppText(args: SendTextArgs): Promise<{
         body: text,
       },
     };
+    if (args.category) payload.category = args.category;
     
     console.log(`📤 Sending WhatsApp text to ${to}`);
     
