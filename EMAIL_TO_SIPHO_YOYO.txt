@@ -1,10 +1,10 @@
 To: Sipho Xongwana <sipho.xongwana@yoyorewards.com>
 Cc: Shaun Jacobs <shaun@ulted.co.za>; Dean Arendse <dean.arendse@yoyogroup.com>; Amina Abrahams <amina.abrahams@yoyogroup.com>
-Subject: Re: Walletpay & Yoyo Discussion — integration complete; QA close-out, commercials and production path
+Subject: Re: Walletpay & Yoyo Discussion: integration complete; QA close-out, commercials and production path
 
 Hi Sipho,
 
-Thanks for the follow-up, and apologies for the slow reply — it was for a
+Thanks for the follow-up, and apologies for the slow reply. It was for a
 productive reason.
 
 UPDATE FROM OUR SIDE
@@ -21,9 +21,9 @@ environment. Since we last spoke we have:
   test campaign 54211, delivering the voucher code and redemption guidance
   in-chat.
 
-To answer your earlier question directly: we want to test the FULL solution —
+To answer your earlier question directly: we want to test the FULL solution:
 purchase through our wallet, issuance through your API, and real redemption
-at store and forecourt level — not store redemption in isolation. We will use
+at store and forecourt level, not store redemption in isolation. We will use
 the wrapped portal for store-level checks in the meantime, thanks for that
 pointer.
 
@@ -31,7 +31,7 @@ WHAT WE NEED TO GO LIVE
 
 1. QA close-out: what is still outstanding for QA finalisation on your side,
    and is anything needed from us to close it?
-2. Dean's verification: we are ready whenever Dean is — happy to cover this
+2. Dean's verification: we are ready whenever Dean is. Happy to cover this
    in the same call.
 3. Production handover once 1 and 2 are done: production base URL and
    credentials, per-brand campaign IDs, and callback registration for
@@ -44,7 +44,7 @@ What is the fastest realistic path through the above? We would like to get to
 production as soon as possible and will prioritise anything needed from our
 side to make that happen.
 
-COMMERCIALS — PLEASE CONFIRM IN WRITING
+COMMERCIALS: PLEASE CONFIRM IN WRITING
 
 5. Rebates: for the retailer list below, what rebate/commission do we earn
    per brand on redeemed value? We would like the per-brand percentages
@@ -52,7 +52,7 @@ COMMERCIALS — PLEASE CONFIRM IN WRITING
 6. Fees: over and above the monthly platform/retainer amount, what other
    fees apply? (Per-issuance or per-redemption transaction fees, campaign
    setup fees per brand, or anything else we should budget for.)
-7. Float/wallet funding: how do we top up our issuing wallet with you — bank
+7. Float/wallet funding: how do we top up our issuing wallet with you? Bank
    transfer details, minimums, how quickly funds reflect, and how we monitor
    the balance so issuance never fails on an empty float.
 
@@ -63,7 +63,7 @@ PRODUCTION TEST BEFORE THE RETAINER STARTS
    product and redeemed by us at participating stores and forecourts. Is it
    possible to run this WITHOUT triggering the monthly retainer yet? Our
    preference is that the retainer starts in the month we go live to our
-   target market — please confirm whether that structure works, and if not,
+   target market. Please confirm whether that structure works, and if not,
    what you can offer for a pre-launch verification window.
 
 UPDATED CAMPAIGN RETAILER LIST
@@ -77,7 +77,7 @@ UPDATED CAMPAIGN RETAILER LIST
    3. Pick n Pay
    4. Engen (fuel)
    5. Shell (fuel)
-   6. TotalEnergies (fuel) — as soon as their onboarding completes; please
+   6. TotalEnergies (fuel), as soon as their onboarding completes; please
       keep us posted on that timeline
 
    Could you confirm this list is achievable per-brand, and whether each
@@ -85,7 +85,7 @@ UPDATED CAMPAIGN RETAILER LIST
 
 CALL
 
-A call works well to close all of this out. I am available next week —
+A call works well to close all of this out. I am available next week.
 Tuesday to Thursday mornings suit best, but I will work around Dean's
 availability. Please send the invite.
 
