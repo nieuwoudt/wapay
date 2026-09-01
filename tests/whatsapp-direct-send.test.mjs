@@ -106,3 +106,15 @@ test('never used for marketing: only transactional call sites exist', () => {
     assert.ok(!/marketing/i.test(s.split('send.direct')[1]?.slice(0, 400) || ''), 'no marketing near direct send');
   }
 });
+
+test('test hook: admin-gated, allowlist-recipients-only, refuses when disabled', () => {
+  const src = read('../pages/api/admin/test-direct-send.js');
+  const body = src.slice(src.indexOf('export default'));
+  const gate = body.indexOf('requireAdmin(req)');
+  const sendIdx = body.indexOf('sendWhatsAppUtilityDirect(');
+  assert.ok(gate > -1 && gate < sendIdx, 'auth gate precedes the send');
+  assert.ok(body.indexOf('directSendEnabled()') < sendIdx, 'flag check precedes the send');
+  assert.match(body, /isAdminMsisdn\(to\)/, 'recipients restricted to the admin allowlist');
+  assert.match(body, /RECIPIENT_NOT_ALLOWLISTED/);
+  assert.match(body, /DIRECT_SEND_DISABLED/);
+});
