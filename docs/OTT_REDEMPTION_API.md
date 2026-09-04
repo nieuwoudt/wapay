@@ -38,13 +38,26 @@ egress is a problem and we need the static-egress workaround (memory
 `vercel-static-egress-ip`: Fly.io Johannesburg ~R70/month, or Vercel Pro
 static IPs).
 
-## Build estimate
+## Client BUILT 2026-09-04 — `lib/ott-redemption.js`
 
-Small. The client mirrors `packages/providers/ott` almost exactly (same
-host, auth, hashing, form encoding, timeout/recovery discipline). The
-CheckRemitVoucher + timeout path maps onto the existing
-`TIMEOUT_CHECK_REQUIRED` recovery pattern. Roughly a day including tests,
-once we can actually reach the endpoints.
+`OttRedemptionClient`: `checkVoucher` (validate + value, safe at preview),
+`remitVoucher` (redeem, partial-aware), `checkRemitVoucher` (the mandated
+timeout recovery). Mirrors the issuing client's proven shape; the hash is
+verified against OTT's published golden vector in
+`tests/ott-redemption.test.mjs` (13 tests).
+
+Money-safety contract, enforced by tests:
+- a remit TIMEOUT raises `TIMEOUT_CHECK_REQUIRED` and NEVER retries the
+  remit (spec page 13); recovery is `checkRemitVoucher(uniqueReference)`;
+- epoch-shaped references are refused (they would poison derived idemKeys);
+- partial redemption returns taken + balance; the residual is OTT's to
+  re-vault via SMS, never a WaPay liability;
+- PINs are masked in every log; `GetAPIKey` is not implemented.
+
+STILL TO BUILD (deliberately not yet): the preview/execute routes and the
+chat flow that call this client, plus the ledger posting
+(`buildLoad` rail OTT, `CLEARING:OTT`). Those wait until live credentials
+prove reachable, so the flow is built against a working endpoint.
 
 ## Live status, honestly (as at 2026-09-04)
 
