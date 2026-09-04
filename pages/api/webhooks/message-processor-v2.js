@@ -1258,6 +1258,23 @@ async function handlePostOnboarding({ account, from, text }) {
     // and let the message route normally.
   }
 
+  // BUSINESS PORTAL CODE, requested FROM the phone (WaPay for Business,
+  // 2026-09-04) — the same inversion as the admin code above: the owner's own
+  // message opens the window, so the reply always delivers free-form. Numbers
+  // that own no business (and may not register) get no hint the command exists.
+  if (matchBusinessLoginAsk(text)) {
+    const { requestBusinessOtpInSession } = await import('../../../lib/business-auth.js');
+    const issued = await requestBusinessOtpInSession({ msisdn: account.msisdn || from });
+    if (issued.ok) {
+      logStructured('business_login_code_in_session', { accountId: account.id });
+      return await sendWhatsAppText({
+        to: from,
+        text: `🔐 *WaPay for Business code: ${issued.code}*\n\nType it into the business portal within 10 minutes. One attempt only.\n\nNot you? Ignore this and tell us right away.`,
+      });
+    }
+    // Not a business owner (or throttled): route normally, say nothing.
+  }
+
   // Unified slot parsing: MUST happen before routing decisions and before any state transitions.
   const slots = parseSlots(text, { waId: from, accountId: account.id });
 
@@ -2204,6 +2221,19 @@ function matchAdminLoginAsk(text = '') {
   const s = String(text || '').trim().toLowerCase();
   if (s.length > 40) return false;
   return /^(admin\s*(login|code|sign\s*-?\s*in)|login\s*code|console\s*(login|code))\b/.test(s);
+}
+
+/**
+ * "business login" / "business code" / "portal login" — a business owner
+ * asking, from their own phone, for a WaPay for Business sign-in code. As
+ * narrow as the admin matcher: a customer sentence about their business
+ * ("my business needs airtime") never matches; the caller must still own a
+ * business (or be allowed to register one) before anything is issued.
+ */
+function matchBusinessLoginAsk(text = '') {
+  const s = String(text || '').trim().toLowerCase();
+  if (s.length > 40) return false;
+  return /^(business\s*(login|code|sign\s*-?\s*in|portal)|portal\s*(login|code))\b/.test(s);
 }
 
 function matchRequestMoneyAsk(text = '', slots = null) {

@@ -52,6 +52,29 @@ export async function getServerSideProps({ params, query }) {
     // The label is cosmetic — never block the page on it.
   }
 
+  // WaPay for Business (2026-09-04): a business link names the BUSINESS, not
+  // the owner's personal number, and itemises what is being paid for. The
+  // stored name was sanitised at registration (lib/business.js) and is
+  // rendered as plain text only.
+  let isBusiness = false;
+  if (request.businessId) {
+    try {
+      const business = await prisma.business.findUnique({ where: { id: request.businessId } });
+      if (business?.name) {
+        requesterLabel = business.name;
+        isBusiness = true;
+      }
+    } catch {
+      // Falls back to the owner's masked label.
+    }
+  }
+  const items = Array.isArray(request.items)
+    ? request.items
+        .filter((it) => it && typeof it.name === 'string' && Number.isInteger(it.qty) && Number.isInteger(it.unitCents))
+        .slice(0, 25)
+        .map((it) => ({ name: String(it.name).slice(0, 60), qty: it.qty, unitCents: it.unitCents }))
+    : [];
+
   return {
     props: {
       code,
@@ -60,13 +83,16 @@ export async function getServerSideProps({ params, query }) {
       feeCents: paymentRequestFeeCents(request.amountCents),
       note: request.note ?? null,
       requesterLabel,
+      isBusiness,
+      items,
+      reference: typeof request.reference === 'string' && request.reference ? request.reference.slice(0, 40) : null,
       // Back from PayFast's return URL: the ITN may still be in flight.
       returned: query?.r === '1',
     },
   };
 }
 
-export default function PayRequestPage({ code, status, amountCents, feeCents, note, requesterLabel, returned }) {
+export default function PayRequestPage({ code, status, amountCents, feeCents, note, requesterLabel, returned, isBusiness = false, items = [], reference = null }) {
   // Card button lights up the moment a plausible number is typed, and a tap
   // WITHOUT one answers with our own popup instead of a silent browser
   // bounce (founder feedback 2026-08-27). Same shape the input's pattern
@@ -201,6 +227,17 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
           <>
             <div style={styles.sub}>{requesterLabel} is requesting</div>
             <div style={styles.amount}>{rands(amountCents)}</div>
+            {isBusiness && (items.length > 0 || reference) ? (
+              <div style={{ textAlign: 'left', background: '#f6f9f7', border: '1px solid #e3ebe6', borderRadius: 12, padding: '10px 14px', margin: '10px 0 4px', fontSize: 14, color: '#333' }}>
+                {items.map((it, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '3px 0' }}>
+                    <span>{it.name}{it.qty > 1 ? ` × ${it.qty}` : ''}</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{rands(it.qty * it.unitCents)}</span>
+                  </div>
+                ))}
+                {reference ? <div style={{ color: '#666', fontSize: 12.5, marginTop: items.length ? 6 : 0 }}>Ref: {reference}</div> : null}
+              </div>
+            ) : null}
             {note ? <div style={styles.note}>“{note}”</div> : null}
 
             <a style={{ ...styles.btn, ...styles.primary }} href={waLink}>

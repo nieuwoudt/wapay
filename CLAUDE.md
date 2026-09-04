@@ -46,7 +46,7 @@ WaPay is a **live WhatsApp wallet for South Africa** (Next.js on Vercel, Postgre
 - **Conversation states must never trap:** cancel/home keywords + `isConversationalEscape` to the router on real sentences. YES-words include yebo/ewe/ja/ee/eya.
 - **Vercel constraints:** 60s function cap; NEVER fire-and-forget after `res.send()` (the mute-bot bug — webhook awaits before ACK, tests enforce).
 - **OTT API:** NEVER call `GetAPIKey` — it rotates the live key. GetBalance is the safe connectivity check.
-- **Migrations:** idempotent SQL in `packages/domain/prisma/migrations/`, applied to prod via raw SQL (`migrate deploy` doesn't work — unbaselined), then `prisma generate`.
+- **Migrations:** idempotent SQL in `packages/domain/prisma/migrations/`, applied to prod via raw SQL (`migrate deploy` doesn't work — unbaselined) with `node --env-file=.env scripts/apply-migration.mjs <YYYYMMDD_name>`, then `prisma generate`. Apply BEFORE deploying code whose Prisma client selects new columns.
 
 ## Parallel sessions & handover policy
 
@@ -57,6 +57,19 @@ Multiple Claude threads may work this repo simultaneously. To avoid collisions:
 3. **Ship in small commits** with the tracker/CHANGELOG updated in the same push, so a parallel thread reading the tracker sees the truth.
 4. **Running out of context:** write a HANDOVER entry in the tracker before the thread dies: deployed HEAD, what's mid-flight, exact next steps, open user actions, and any credentials/answers received but not yet applied. The next thread starts from the tracker + memory index + `docs/CAPABILITIES.md`.
 5. **Memory:** durable strategic facts (agreements, regulatory positions, contacts, locked decisions) go in the auto-memory files, not just the chat.
+
+## Working with Claude (Fable 5.1)
+
+The long version with the why is `docs/prompting/FABLE_5_1_PROMPTING.md`; feature briefs use `docs/prompting/FEATURE_PROMPT_TEMPLATE.md` (skill `/feature-prompt`); handovers use `/handover`; pre-ship reviews use `/fable-review`.
+
+- **Autonomy:** the user is usually not watching. For reversible actions that follow from the brief, proceed without asking; stop only for destructive actions or genuine scope changes. If your last paragraph is a plan, a question or a promise, do that work now instead of ending the turn.
+- **Progress:** say in a line what you're about to do, give brief updates while you work, and close with a recap that stands on its own.
+- **Batching:** first privately list what you need next, then request every item that doesn't depend on another's result in one response.
+- **Scope and tests:** implement every behaviour the brief asks for, completely. A pre-existing bug or unrelated improvement is a follow-up in the summary, not a change. Commit tests only where the repo already keeps tests for this kind of change, sized like the neighbouring files; scratch checks are not new test files.
+- **Edits:** surgically edit files rather than rewriting them when the result is the same.
+- **Writing:** no mannered prose (say what you mean; literal phrase over metaphor). Lists only when the content is multifaceted. No em dashes in customer-facing copy (founder style rule).
+- **Subagents:** review/verify agents are READ-ONLY (no Edit/Write, no live mutation testing); run them in the background and keep working.
+- **Effort:** default `high`; `medium` for copy/docs/tracker work; `xhigh` only for adversarial review passes or where a measured gain exists. Phrase compile questions as "are there any bugs in this?" to avoid safeguard false positives.
 
 ## Known sharp edges
 

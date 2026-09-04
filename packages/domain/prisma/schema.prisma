@@ -320,9 +320,61 @@ model PaymentRequest {
   paidAt      DateTime?
   createdAt   DateTime  @default(now())
   expiresAt   DateTime
+  // WaPay for Business (2026-09-04). All nullable: a personal "please pay
+  // me" link leaves every one of these empty and behaves exactly as before.
+  businessId  String? // created from the business portal, for this business
+  customerId  String? // the business's customer the link is for (walk-ins: null)
+  items       Json? // POS line items [{ name, qty, unitCents }]
+  reference   String? // the business's own reference (ticket / order number)
+  channel     String? // how it was sent: WHATSAPP_BUSINESS | COPY | WAPAY
+  sentAt      DateTime?
 
   @@index([accountId, createdAt])
+  @@index([businessId, status])
+  @@index([businessId, createdAt])
   @@map("payment_requests")
+}
+
+// WaPay for Business (2026-09-04): a business is a WaPay account wearing a
+// hat. Its money lands in the OWNER's SPEND wallet through the ordinary
+// payment-request rail — no second money path. One business per account.
+// passwordHash is a self-contained argon2id hash (no pepper), null = OTP only.
+model Business {
+  id           String   @id @default(cuid())
+  accountId    String   @unique
+  name         String
+  category     String?
+  passwordHash String?
+  settings     Json? // recentItems, defaultTtlDays, notify prefs — owned by lib/business.js
+  status       String   @default("ACTIVE") // ACTIVE | SUSPENDED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  @@map("businesses")
+}
+
+// A business's customer: someone it sends payment links to. msisdn is stored
+// normalised (0XXXXXXXXX); accountId fills in once the customer has paid a
+// link from their own WaPay balance. Totals are DERIVED from payment_requests
+// at read time, never stored (the journal is the truth).
+model BusinessCustomer {
+  id         String    @id @default(cuid())
+  businessId String
+  msisdn     String
+  name       String?
+  email      String?
+  notes      String?
+  tags       Json?
+  source     String    @default("MANUAL") // MANUAL | IMPORT | PAYLINK
+  accountId  String?
+  lastPaidAt DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  @@unique([businessId, msisdn])
+  @@index([businessId, createdAt])
+  @@map("business_customers")
 }
 
 model Beneficiary {

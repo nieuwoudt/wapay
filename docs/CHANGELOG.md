@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-09-04 (22) — WaPay for Business: portal, customer CRM, POS payment links; Fable prompting kit
+
+Founder brief (design partner: a local laundry that reconciles payment links by
+hand). A business is a WaPay account wearing a hat: `/business` (host-gated by
+`WAPAY_BUSINESS_HOST` like `/admin`) signs the owner in with the wallet's
+WhatsApp number (OTP via template candidates, or `business login` typed to WaPay
+from the phone, or an optional argon2id password), registers the business name
+(sanitised, may not impersonate WaPay/rails/banks), and opens four tabs:
+Overview (paid, net after card costs, outstanding, customers, average ticket,
+links-paid %, 12-month revenue bars with 3/6/12-month totals, card-vs-balance
+split, outstanding and recent lists, top customers), Customers (derived
+lifetime spend, add, paste-import CSV/vCard, profile with 12-month spend, what
+they buy, every link), Payment links (POS composer: customer picker, line items
+with a recent-items memory, reference, note, expiry to 30d, live fee/net quote;
+result card with the link, the ready message and "Send on WhatsApp" which opens
+the OWNER's own WhatsApp prefilled; link ledger with copy/cancel; CSV export),
+Settings. Money rides the existing payment-request rail unchanged: the pay page
+now names the business and itemises the ticket; the owner's PAID chat message
+names the customer and reference. Business links carry their own caps
+(250 open / 300 per day) and personal chat links exclude them. Walk-in payers
+become customers automatically (card via the signed number, balance via the
+WaPay account). A WaPay-originated push exists but is OFF by default
+(`WAPAY_BUSINESS_NOTIFY`) and only ever reaches customers who already paid the
+business — the cross-user rule. Schema: `businesses`, `business_customers`, six
+nullable columns on `payment_requests` (migration `20260904_business`,
+idempotent). Design: mirror-finish glass cards, 20px radii, light + dark,
+Inter. Also: `docs/prompting/` (Fable 5.1 prompting guide mapped to this repo,
+the feature-brief template, this feature's brief), skills `/feature-prompt`,
+`/handover`, `/fable-review`, a "Working with Claude" section in `CLAUDE.md`,
+and a pointer `CLAUDE.md` in the iCloud parent folder. 540/540 unit tests
+(31 new), 8/8 real-DB E2E on an isolated schema (`tests/e2e/business-e2e.mjs`),
+build green. Not yet activated in production (see `docs/BUSINESS_PORTAL.md` §5).
+
 ## 2026-08-31 (21) — Live-test feedback round: question≠purchase, UniFuel branding, quieter receipts
 
 From the founder's first live fuel purchase + Tasha's review (screenshots):

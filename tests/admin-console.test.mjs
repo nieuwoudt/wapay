@@ -316,7 +316,8 @@ test('admin host: the admin domain root opens the console; pay pages are untouch
 
 test('static: middleware never intercepts APIs (webhooks must stay reachable)', () => {
   const mw = read('../middleware.js');
-  assert.match(mw, /matcher: \['\/', '\/admin', '\/admin\/:path\*'\]/, 'matcher is page-only');
+  // 2026-09-04: the business portal (/business) joined the matcher; still pages only.
+  assert.match(mw, /matcher: \['\/', '\/admin', '\/admin\/:path\*', '\/business', '\/business\/:path\*'\]/, 'matcher is page-only');
   assert.ok(!/'\/api/.test(mw.match(/matcher: \[[^\]]*\]/)[0]), 'no /api in the matcher');
   assert.match(mw, /status: 404/, 'wrong host gets 404, not a redirect');
 });
