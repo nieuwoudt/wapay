@@ -17,11 +17,12 @@ export default async function handler(req, res) {
   const ctx = await requireBusinessContext(req);
   if (!ctx.ok) return res.status(401).json({ error: 'UNAUTHORIZED' });
 
-  const rangeDays = RANGES[String(req.query.range || '30')] ?? 30;
+  const rangeKey = String(req.query.range || '30');
+  const rangeDays = Object.hasOwn(RANGES, rangeKey) ? RANGES[rangeKey] : 30; // ?range=constructor must not 500
   try {
     await linkWalkInPayers({ businessId: ctx.business.id });
     const payload = await businessOverview({ businessId: ctx.business.id, rangeDays });
-    res.setHeader('Cache-Control', 'private, max-age=60');
+    res.setHeader('Cache-Control', 'private, no-store'); // never serve one owner's dashboard to the next sign-in
     return res.status(200).json({ business: { id: ctx.business.id, name: ctx.business.name }, ...payload });
   } catch (error) {
     console.error(JSON.stringify({ type: 'business_overview_error', businessId: ctx.business.id, error: error?.message }));

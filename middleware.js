@@ -22,8 +22,15 @@ export const config = { matcher: ['/', '/admin', '/admin/:path*', '/business', '
 export function middleware(req) {
   const host = req.headers.get('host') || '';
   const pathname = req.nextUrl.pathname;
-  const admin = adminHostDecision({ host, pathname, adminHost: process.env.WAPAY_ADMIN_HOST });
-  const business = businessHostDecision({ host, pathname, businessHost: process.env.WAPAY_BUSINESS_HOST });
+  const adminHost = String(process.env.WAPAY_ADMIN_HOST || '').trim().toLowerCase();
+  const businessHost = String(process.env.WAPAY_BUSINESS_HOST || '').trim().toLowerCase();
+  const admin = adminHostDecision({ host, pathname, adminHost });
+  // The two portals must live on DIFFERENT hosts. If an operator points both
+  // envs at one host, the business host gating is ignored (its root would
+  // otherwise be swallowed by the admin rewrite) and the collision is logged.
+  const sameHost = adminHost && adminHost === businessHost;
+  if (sameHost) console.error(JSON.stringify({ type: 'portal_host_collision', host: adminHost, hint: 'WAPAY_ADMIN_HOST and WAPAY_BUSINESS_HOST must differ; business host gating disabled' }));
+  const business = businessHostDecision({ host, pathname, businessHost: sameHost ? '' : businessHost });
 
   if (admin === 'block' || business === 'block') {
     // 404, not a redirect: neither portal's existence is advertised on the

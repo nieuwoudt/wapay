@@ -48,6 +48,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
 
   const { action, msisdn, code, password, registrationToken, name, category } = req.body || {};
+  // The caller's network source, for per-source lockouts (first hop of the
+  // proxy chain; Vercel sets it). Hashed before storage, never logged raw.
+  const source = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
 
   if (action === 'logout') {
     res.setHeader('Set-Cookie', clearBusinessCookie());
@@ -61,11 +64,16 @@ export default async function handler(req, res) {
   }
 
   if (action === 'verify') {
-    const out = await verifyBusinessOtp({ msisdn, code });
-    if (!out.ok) return res.status(401).json({ ok: false });
+    const out = await verifyBusinessOtp({ msisdn, code, source });
+    if (!out.ok) return res.status(out.error === 'LOCKED_OUT' ? 429 : 401).json({ ok: false, error: out.error === 'LOCKED_OUT' ? 'LOCKED_OUT' : undefined });
     if (out.token) {
       res.setHeader('Set-Cookie', businessCookie(out.token));
       return res.status(200).json({ ok: true, registered: true });
+    }
+    if (out.allowed === false) {
+      // Verified owner, no business, not invited yet (registration is closed
+      // by default during the pilot). Honest answer, no token.
+      return res.status(200).json({ ok: true, registered: false, inviteRequired: true });
     }
     return res.status(200).json({ ok: true, registered: false, registrationToken: out.registrationToken });
   }
@@ -101,7 +109,7 @@ export default async function handler(req, res) {
   }
 
   if (action === 'password') {
-    const out = await verifyBusinessPassword({ msisdn, password });
+    const out = await verifyBusinessPassword({ msisdn, password, source });
     if (!out.ok) {
       const status = out.error === 'LOCKED_OUT' ? 429 : out.error === 'NOT_CONFIGURED' ? 503 : 401;
       return res.status(status).json({ ok: false, error: out.error === 'LOCKED_OUT' ? 'LOCKED_OUT' : 'BAD_CREDENTIALS' });

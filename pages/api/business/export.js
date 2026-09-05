@@ -17,11 +17,14 @@ export default async function handler(req, res) {
   if (!ctx.ok) return res.status(401).json({ error: 'UNAUTHORIZED' });
   const days = Math.min(3650, Math.max(1, Number(req.query.days) || 90));
   try {
-    const csv = await exportLinksCsv({ businessId: ctx.business.id, sinceDays: days });
+    const { csv, truncated } = await exportLinksCsv({ businessId: ctx.business.id, sinceDays: days });
     const stamp = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="wapay-business-payments-${stamp}.csv"`);
     res.setHeader('Cache-Control', 'private, no-store');
+    // A short file is never silently short: the CSV ends with a marker row
+    // and the header says so for scripts.
+    if (truncated) res.setHeader('X-WaPay-Truncated', '1');
     return res.status(200).send(csv);
   } catch (error) {
     console.error(JSON.stringify({ type: 'business_export_error', businessId: ctx.business.id, error: error?.message }));

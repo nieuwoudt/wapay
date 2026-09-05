@@ -75,6 +75,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'action' });
   } catch (error) {
     if (error?.code === 'BAD_MSISDN') return res.status(400).json({ ok: false, error: 'BAD_MSISDN' });
+    if (error?.code === 'CUSTOMER_LIMIT') return res.status(429).json({ ok: false, error: 'CUSTOMER_LIMIT' });
     console.error(JSON.stringify({ type: 'business_customers_write_error', businessId, action: body.action, error: error?.message }));
     return res.status(500).json({ ok: false, error: 'WRITE_FAILED' });
   }

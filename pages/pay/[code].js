@@ -57,12 +57,17 @@ export async function getServerSideProps({ params, query }) {
   // stored name was sanitised at registration (lib/business.js) and is
   // rendered as plain text only.
   let isBusiness = false;
+  let status = request.status;
   if (request.businessId) {
     try {
       const business = await prisma.business.findUnique({ where: { id: request.businessId } });
-      if (business?.name) {
+      if (business?.name && business.status === 'ACTIVE') {
         requesterLabel = business.name;
         isBusiness = true;
+      } else if (status === 'PENDING') {
+        // A suspended (or deleted) business collects nothing: the link reads
+        // as no longer active, and checkout refuses it too.
+        status = 'CANCELLED';
       }
     } catch {
       // Falls back to the owner's masked label.
@@ -78,7 +83,7 @@ export async function getServerSideProps({ params, query }) {
   return {
     props: {
       code,
-      status: request.status,
+      status,
       amountCents: request.amountCents,
       feeCents: paymentRequestFeeCents(request.amountCents),
       note: request.note ?? null,
@@ -299,7 +304,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
               securely by PayFast, no WaPay account needed. Your number is used to send your
               receipt on WhatsApp and to offer you your own free WaPay, which you're welcome to
               ignore. Paying from a WaPay balance is free: reply in WhatsApp to confirm with
-              your PIN.
+              your PIN.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
             </div>
           </>
         ) : status === 'PAID' ? (

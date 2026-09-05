@@ -1272,7 +1272,15 @@ async function handlePostOnboarding({ account, from, text }) {
         text: `🔐 *WaPay for Business code: ${issued.code}*\n\nType it into the business portal within 10 minutes. One attempt only.\n\nNot you? Ignore this and tell us right away.`,
       });
     }
-    // Not a business owner (or throttled): route normally, say nothing.
+    if (issued.reason === 'THROTTLED' && issued.hasBusiness) {
+      // A real owner asking twice inside a minute gets told why, instead of
+      // the sentence falling through to the AI (review 2026-09-05).
+      return await sendWhatsAppText({
+        to: from,
+        text: `⏱️ A code was sent less than a minute ago. Use that one, or ask again in 60 seconds.`,
+      });
+    }
+    // Not a business owner: route normally, say nothing.
   }
 
   // Unified slot parsing: MUST happen before routing decisions and before any state transitions.
@@ -2196,6 +2204,22 @@ function matchChangeRequestAmount(text = '', slots = null) {
 
 async function handleChangeRequestAmount({ from, account, amountCents, rawText = '' }) {
   const latest = await getLatestPendingRequest({ accountId: account.id });
+  if (!latest) {
+    // Only business tickets open? Say so instead of silently minting a new
+    // PERSONAL link the owner would forward by mistake (review 2026-09-05).
+    const businessTicket = await prisma.paymentRequest
+      .findFirst({ where: { accountId: account.id, status: 'PENDING', businessId: { not: null }, expiresAt: { gt: new Date() } } })
+      .catch(() => null);
+    if (businessTicket) {
+      return await sendWhatsAppText({
+        to: from,
+        text: await localizeOutbound(
+          `🧾 Your open payment links are business tickets. Change or cancel them in your WaPay for Business portal. Here in chat I only manage your personal links. To make a new personal link, say "please pay me ${randsShort(amountCents)}".`,
+          await userLang(account)
+        ),
+      });
+    }
+  }
   if (latest) {
     await cancelPaymentRequest({ code: latest.id, accountId: account.id });
     await sendWhatsAppText({
@@ -2233,7 +2257,9 @@ function matchAdminLoginAsk(text = '') {
 function matchBusinessLoginAsk(text = '') {
   const s = String(text || '').trim().toLowerCase();
   if (s.length > 40) return false;
-  return /^(business\s*(login|code|sign\s*-?\s*in|portal)|portal\s*(login|code))\b/.test(s);
+  // Anchored on BOTH ends: "business portal is not loading" is a support
+  // question, not a code request (review 2026-09-05).
+  return /^(?:wapay\s+)?(?:business\s*(?:login|code|sign\s*-?\s*in|portal)|portal\s*(?:login|code))\s*(?:please|pls)?\s*[.!?]*$/.test(s);
 }
 
 function matchRequestMoneyAsk(text = '', slots = null) {
@@ -2542,9 +2568,21 @@ async function handlePayRequestStart({ from, account, code, rawText = '' }) {
   }
 
   let requesterLabel = 'a WaPay user';
+  let businessDisclosure = '';
   try {
     const requester = await prisma.account.findUnique({ where: { id: request.accountId } });
     requesterLabel = requester?.displayName || maskMsisdn(requester?.msisdn) || requesterLabel;
+    // WaPay for Business (review 2026-09-05): a business ticket names the
+    // BUSINESS, exactly as the pay page did, never the owner personally — and
+    // a SUSPENDED business's ticket is not payable on this rail either.
+    if (request.businessId) {
+      const { businessLabelForRequest, businessRequestPayable } = await import('../../../lib/business.js');
+      if (!(await businessRequestPayable({ request }))) {
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`⏳ That payment request is no longer active.`, await userLang(account)) });
+      }
+      requesterLabel = (await businessLabelForRequest({ request })) || requesterLabel;
+      businessDisclosure = `${requesterLabel} will see your number for its records.\n\n`;
+    }
   } catch {
     // Cosmetic only.
   }
@@ -2552,7 +2590,7 @@ async function handlePayRequestStart({ from, account, code, rawText = '' }) {
   await updateConversationState(from, 'PAYREQ_CONFIRM', { code: request.id, amountCents: request.amountCents, requesterLabel });
   const confirmMsg = await localizeOutbound(
     `💸 *Pay ${randsShort(request.amountCents)} to ${requesterLabel}?*\n\n` +
-    `Paid from your WaPay balance, no fees.\n\n` +
+    `Paid from your WaPay balance, no fees. ${businessDisclosure}` +
     `Reply *YES* to confirm or *NO* to cancel.`,
     await userLang(account)
   );
@@ -2581,6 +2619,10 @@ async function handlePaymentReceiptAsk({ from, code }) {
   try {
     const requester = await prisma.account.findUnique({ where: { id: request.accountId } });
     requesterLabel = maskedRequesterLabel(requester);
+    if (request.businessId) {
+      const { businessLabelForRequest } = await import('../../../lib/business.js');
+      requesterLabel = (await businessLabelForRequest({ request })) || requesterLabel;
+    }
   } catch {
     // Cosmetic only — the receipt stands without it.
   }
@@ -3138,7 +3180,12 @@ async function handleConversationState({ from, text, state, data, account }) {
 
       await updateConversationState(from, null);
       const request = await getPaymentRequest({ code: data.code });
-      if (!request || request.status !== 'PENDING') {
+      // Re-checked at settle time: the business may have been suspended
+      // between the confirm and the PIN (review 2026-09-05).
+      const businessStillPayable = request?.businessId
+        ? await (await import('../../../lib/business.js')).businessRequestPayable({ request })
+        : true;
+      if (!request || request.status !== 'PENDING' || !businessStillPayable) {
         return await sendWhatsAppText({
           to: from,
           text: await localizeOutbound(`⏳ That payment request is no longer open. Nothing was paid.`, await userLang(account)),
@@ -3227,11 +3274,20 @@ async function handleConversationState({ from, text, state, data, account }) {
           const rw = await prisma.wallet.findFirst({
             where: { accountId: request.accountId, balanceType: 'SPEND' },
           });
+          // WaPay for Business: name the customer and ticket on this rail too,
+          // so the owner's chat reconciles itself (review 2026-09-05).
+          let businessLine = '';
+          if (request.businessId) {
+            const { businessPaidLine } = await import('../../../lib/business.js');
+            const line = await businessPaidLine({ request });
+            if (line) businessLine = `\n${line}`;
+          }
           await sendWhatsAppText({
             to: requester.waId,
             text:
               `💸 *Your payment request was PAID!*\n\n` +
               `${payerLabel} paid your ${randsShort(request.amountCents)} request.` +
+              businessLine +
               (rw ? `\n\n💳 New balance: R${(rw.availableCents / 100).toFixed(2)}` : ''),
           });
         }

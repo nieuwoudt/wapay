@@ -28,13 +28,15 @@ import {
   businessAuthConfigured, requestBusinessOtp, requestBusinessOtpInSession, verifyBusinessOtp, verifyBusinessPassword,
   hashBusinessPassword, mintBusinessToken, verifyBusinessToken, mintRegistrationToken, verifyRegistrationToken,
   businessCookie, clearBusinessCookie, requireBusiness, requireBusinessContext, mayRegister, BUSINESS_COOKIE,
+  BUSINESS_OTP_LOCKOUT_BURNS, BUSINESS_PW_LOCKOUT_FAILS,
 } from '../lib/business-auth.js';
 import { mintAdminToken, verifyAdminToken } from '../lib/admin-auth.js';
 import {
   sanitizeLabel, validateBusinessName, normaliseCustomerMsisdn, waIdFor, maskNumber, parseContactsImport, validateItems,
   quoteLink, composeLinkMessage, waDeepLink, mergeRecentItems, createBusiness, upsertCustomer, importCustomers,
   listCustomersWithStats, getCustomerProfile, createBusinessLink, markLinkSent, cancelBusinessLink, listBusinessLinks,
-  businessOverview, linkWalkInPayers, exportLinksCsv, sendLinkViaWaPay, monthKey, lastMonths,
+  businessOverview, linkWalkInPayers, exportLinksCsv, sendLinkViaWaPay, monthKey, lastMonths, dayKey, classifyPaid,
+  customerEligibleForNudge, businessPaidLine, MESSAGE_MAX,
 } from '../lib/business.js';
 import { businessHostDecision } from '../lib/business-host.js';
 import {
@@ -55,8 +57,8 @@ const schema = read('../packages/domain/prisma/schema.prisma');
 const migration = read('../packages/domain/prisma/migrations/20260904_business/migration.sql');
 
 const OWNER = '0731234567';
-function armEnv() { process.env.WAPAY_BUSINESS_SESSION_SECRET = 'biz-secret-0123456789abcdef'; delete process.env.WAPAY_BUSINESS_MSISDNS; }
-function disarmEnv() { delete process.env.WAPAY_BUSINESS_SESSION_SECRET; delete process.env.WAPAY_ADMIN_SESSION_SECRET; }
+function armEnv() { process.env.WAPAY_BUSINESS_SESSION_SECRET = 'biz-secret-0123456789abcdef'; delete process.env.WAPAY_BUSINESS_MSISDNS; process.env.WAPAY_BUSINESS_SIGNUPS = 'open'; }
+function disarmEnv() { delete process.env.WAPAY_BUSINESS_SESSION_SECRET; delete process.env.WAPAY_ADMIN_SESSION_SECRET; delete process.env.WAPAY_BUSINESS_SIGNUPS; }
 
 // ---------------------------------------------------------------------------
 // In-memory Prisma stand-in — enough of the query surface the libs touch.
@@ -64,6 +66,7 @@ function disarmEnv() { delete process.env.WAPAY_BUSINESS_SESSION_SECRET; delete 
 function matchWhere(row, where = {}) {
   for (const [k, v] of Object.entries(where)) {
     if (k === 'OR') { if (!v.some((w) => matchWhere(row, w))) return false; continue; }
+    if (k === 'NOT') { if (matchWhere(row, v)) return false; continue; }
     if (k === 'businessId_msisdn') { if (row.businessId !== v.businessId || row.msisdn !== v.msisdn) return false; continue; }
     const rv = row[k];
     if (v === null) { if (rv !== null && rv !== undefined) return false; continue; }
@@ -94,7 +97,9 @@ function table(rows, { idKey = 'id', uniques = [] } = {}) {
     async findMany({ where = {}, orderBy, take, skip = 0, select } = {}) {
       let out = sortRows(rows.filter((r) => matchWhere(r, where)), orderBy).slice(skip);
       if (take) out = out.slice(0, take);
-      return out.map((r) => ({ ...r }));
+      // Honour `select` like Prisma does: a column that was not selected is
+      // absent, so code that forgets to select what it reads fails HERE.
+      return out.map((r) => (select ? Object.fromEntries(Object.keys(select).filter((k) => select[k]).map((k) => [k, r[k]])) : { ...r }));
     },
     async findFirst({ where = {}, orderBy } = {}) { const r = sortRows(rows.filter((x) => matchWhere(x, where)), orderBy)[0]; return r ? { ...r } : null; },
     async findUnique({ where }) { const r = rows.find((x) => matchWhere(x, where)); return r ? { ...r } : null; },
@@ -110,11 +115,31 @@ function table(rows, { idKey = 'id', uniques = [] } = {}) {
     async update({ where, data }) { const r = rows.find((x) => matchWhere(x, where)); if (!r) throw new Error('not found'); Object.assign(r, data); return { ...r }; },
     async updateMany({ where, data }) { let n = 0; for (const r of rows) if (matchWhere(r, where)) { Object.assign(r, data); n += 1; } return { count: n }; },
     async deleteMany({ where }) { const before = rows.length; for (let i = rows.length - 1; i >= 0; i -= 1) if (matchWhere(rows[i], where)) rows.splice(i, 1); return { count: before - rows.length }; },
-    async aggregate() { return {}; },
+    async aggregate({ where = {}, _sum, _count, _min, _max } = {}) {
+      const hit = rows.filter((r) => matchWhere(r, where));
+      const out = {};
+      if (_sum) { out._sum = {}; for (const k of Object.keys(_sum)) out._sum[k] = hit.reduce((acc, r) => acc + (r[k] || 0), 0); }
+      if (_count) out._count = { _all: hit.length };
+      if (_min) { out._min = {}; for (const k of Object.keys(_min)) out._min[k] = hit.map((r) => r[k]).filter(Boolean).sort((x, y) => x - y)[0] || null; }
+      if (_max) { out._max = {}; for (const k of Object.keys(_max)) out._max[k] = hit.map((r) => r[k]).filter(Boolean).sort((x, y) => y - x)[0] || null; }
+      return out;
+    },
+    async createMany({ data, skipDuplicates }) {
+      let n = 0;
+      for (const d of data) {
+        try { await this.create({ data: d }); n += 1; } catch (e) { if (!(skipDuplicates && e.code === 'P2002')) throw e; }
+      }
+      return { count: n };
+    },
   };
 }
 function stubPrisma({ withBusiness = false, suspended = false } = {}) {
-  const account = table([{ id: 'acc-owner', msisdn: OWNER, waId: '27731234567', displayName: 'Lerato' }, { id: 'acc-payer', msisdn: '0821112222', waId: '27821112222', displayName: 'Thabo' }]);
+  const account = table([
+    { id: 'acc-owner', msisdn: OWNER, waId: '27731234567', displayName: 'Lerato', onboardingState: 'S5_COMPLETED', status: 'ACTIVE' },
+    { id: 'acc-payer', msisdn: '0821112222', waId: '27821112222', displayName: 'Thabo', onboardingState: 'S5_COMPLETED', status: 'ACTIVE' },
+    // Said "hi" once, never finished onboarding: has an Account row + wallet but no PIN.
+    { id: 'acc-hi', msisdn: '0839990000', waId: '27839990000', displayName: 'Friend', onboardingState: 'S0_INITIAL', onboardingStatus: 'NEW', status: 'ACTIVE' },
+  ]);
   const business = table(withBusiness ? [{ id: 'biz1', accountId: 'acc-owner', name: 'I Love My Laundry', status: suspended ? 'SUSPENDED' : 'ACTIVE', passwordHash: null, settings: { defaultTtlDays: 7, recentItems: [] }, createdAt: new Date() }] : [], { uniques: [['accountId']] });
   const p = {
     account, business,
@@ -197,8 +222,9 @@ test('verify: one attempt per code; no business → registration token; business
   assert.equal(sess.ok, true);
   assert.deepEqual(verifyBusinessToken(sess.token), { ok: true, businessId: 'biz1', accountId: 'acc-owner' });
 
-  const p4 = stubPrisma({ withBusiness: true, suspended: true });
+  const p4 = stubPrisma({ withBusiness: true });
   const c4 = await issueCode(p4);
+  biz(p4).status = 'SUSPENDED'; // suspended AFTER the code went out
   assert.equal((await verifyBusinessOtp({ prisma: p4, msisdn: OWNER, code: c4 })).ok, false, 'suspended business cannot sign in');
 });
 
@@ -256,9 +282,23 @@ test('cookie flags and requireBusiness (cookie, or internal key + explicit busin
   delete process.env.WAPAY_INTERNAL_API_KEY;
 });
 
-test('registration allowlist: open when unset, restricted when set; in-session code respects it', async () => {
+test('registration is CLOSED by default; allowlist or WAPAY_BUSINESS_SIGNUPS=open admits; in-session code respects it', async () => {
   armEnv();
-  assert.equal(mayRegister('0839999999'), true);
+  delete process.env.WAPAY_BUSINESS_SIGNUPS;
+  assert.equal(mayRegister('0839999999'), false, 'nothing set → nobody registers (fail closed)');
+  assert.equal(mayRegister(OWNER), false);
+  // A verified owner who is not invited gets an honest, tokenless answer
+  // (reachable when the invitation is withdrawn between request and verify).
+  const closed = stubPrisma();
+  process.env.WAPAY_BUSINESS_SIGNUPS = 'open';
+  const cc = await issueCode(closed);
+  delete process.env.WAPAY_BUSINESS_SIGNUPS;
+  const notInvited = await verifyBusinessOtp({ prisma: closed, msisdn: OWNER, code: cc });
+  assert.deepEqual(notInvited, { ok: true, allowed: false });
+  assert.equal((await requestBusinessOtpInSession({ prisma: stubPrisma(), msisdn: OWNER })).ok, false, 'in-session code refused when not invited');
+  process.env.WAPAY_BUSINESS_SIGNUPS = 'open';
+  assert.equal(mayRegister('0839999999'), true, 'explicitly opened');
+  delete process.env.WAPAY_BUSINESS_SIGNUPS;
   process.env.WAPAY_BUSINESS_MSISDNS = '27731234567';
   assert.equal(mayRegister('0731234567'), true); assert.equal(mayRegister('0839999999'), false);
   const prisma = stubPrisma();
@@ -295,8 +335,12 @@ test('password: argon2id self-contained hash, wrong number == wrong password, lo
 test('labels: sanitised for third parties; impersonating names rejected', () => {
   assert.equal(sanitizeLabel('  *I Love*  My_Laundry <b>  '), 'I Love MyLaundry b');
   assert.equal(validateBusinessName('I Love My Laundry').name, 'I Love My Laundry');
-  for (const bad of ['WaPay Support', 'PayFast Refunds', 'Eskom Payments', 'SARS eFiling', 'Standard Bank Fees', 'x']) {
-    assert.equal(validateBusinessName(bad).ok, false, bad);
+  for (const bad of ['WaPay Support', 'PayFast Refunds', 'Eskom Payments', 'SARS eFiling', 'Standard Bank Fees', 'x',
+    'Wa Pay Support', 'W a P a y', 'Wa\u200bPay Support', 'WaPa\u0443 Support', 'Wa\u2060Pay', 'Vodacom Refunds', 'SASSA Grants', 'Capitec Bank Refunds', 'Please Pay Me Ltd']) {
+    assert.equal(validateBusinessName(bad).ok, false, `must reject ${JSON.stringify(bad)}`);
+  }
+  for (const good of ["Thabo's Car Wash", 'Kasi Kitchen', 'Lerato Nails & Beauty', 'Soweto Laundry Co']) {
+    assert.equal(validateBusinessName(good).ok, true, good);
   }
   assert.equal(normaliseCustomerMsisdn('+27 73 123 4567'), '0731234567');
   assert.equal(normaliseCustomerMsisdn('073 123 4567'), '0731234567');
@@ -348,7 +392,14 @@ test('message + wa.me deep link: plain text, sanitised names, items, ref, url; n
   assert.match(msg, /Please pay R150 for ref T-1042\./);
   assert.match(msg, /• Wash & fold 5kg R120/); assert.match(msg, /• Ironing x3 R30/);
   assert.match(msg, /Pay here: https:\/\/pleasepayme\.co\.za\/PRKWXQZM/);
-  assert.ok(!/[—–*_]/.test(msg), 'no em dashes or formatting glyphs'); assert.ok(msg.length <= 700);
+  assert.match(msg, /No fees for you: pay from a WaPay balance or by card/, 'never reads as a card surcharge');
+  assert.ok(!/[—–*_]/.test(msg), 'no em dashes or formatting glyphs'); assert.ok(msg.length <= MESSAGE_MAX);
+  // Worst case: six 60-char items, a 60-char name, a 40-char ref and a 120-char note must never cut the URL.
+  const huge = composeLinkMessage({ businessName: 'B'.repeat(60), customerName: 'Customer', amountCents: 300000,
+    items: Array.from({ length: 12 }, (_, i) => ({ name: `Item number ${i} with a very long descriptive name that goes on`, qty: 9, unitCents: 2500 })),
+    reference: 'R'.repeat(40), note: 'N'.repeat(120), url: 'https://pleasepayme.co.za/PRABCDEF' });
+  assert.ok(huge.length <= MESSAGE_MAX, `fits ${huge.length}`);
+  assert.match(huge, /\nPay here: https:\/\/pleasepayme\.co\.za\/PRABCDEF\n/, 'the URL survives intact');
   const link = waDeepLink({ msisdn: '0731234567', text: 'Pay R150 & thanks' });
   assert.equal(link, 'https://wa.me/27731234567?text=Pay%20R150%20%26%20thanks');
   assert.throws(() => waDeepLink({ msisdn: '12345', text: 'x' }));
@@ -414,7 +465,7 @@ test('createBusinessLink: derives total from items, rejects mismatch and foreign
 
 async function seededBusiness() {
   const prisma = stubPrisma({ withBusiness: true });
-  const thabo = (await upsertCustomer({ prisma, businessId: 'biz1', msisdn: '0731234567', name: 'Thabo Nkosi' })).customer;
+  const thabo = (await upsertCustomer({ prisma, businessId: 'biz1', msisdn: '0821112222', name: 'Thabo Nkosi' })).customer;
   const lerato = (await upsertCustomer({ prisma, businessId: 'biz1', msisdn: '0825551234', name: 'Lerato M' })).customer;
   const mk = async (customerId, amountCents, status, payerRef, paidAt, items) => {
     const r = await createPaymentRequest({ prisma, accountId: 'acc-owner', amountCents, business: { businessId: 'biz1', customerId, items } });
@@ -480,11 +531,12 @@ test('walk-in payers become customers: card payer via signed intent number, bala
 
 test('CSV export: header, one row per link, escaping', async () => {
   const { prisma } = await seededBusiness();
-  const csv = await exportLinksCsv({ prisma, businessId: 'biz1', sinceDays: 90 });
+  const { csv, truncated } = await exportLinksCsv({ prisma, businessId: 'biz1', sinceDays: 90 });
+  assert.equal(truncated, false);
   const lines = csv.trim().split('\r\n');
   assert.equal(lines[0], 'created,paid,code,status,method,customer,number,reference,items,amount,fee,net,link');
   assert.equal(lines.length, 6, 'five links + header');
-  assert.ok(lines.some((l) => l.includes(',PAID,CARD,Thabo Nkosi,0731234567,,Wash & fold x1 @ 150.00,150.00,')));
+  assert.ok(lines.some((l) => l.includes(',PAID,CARD,Thabo Nkosi,0821112222,,Wash & fold x1 @ 150.00,150.00,')));
   assert.ok(lines.some((l) => l.includes(',EXPIRED,')), 'lazily expired links are reported EXPIRED');
 });
 
@@ -496,6 +548,8 @@ test('nudge: disabled by default; needs a prior PAID relationship; one per link;
   const { prisma, thabo, lerato } = await seededBusiness();
   const sends = [];
   const send = { text: async (a) => { sends.push(a); return { ok: true }; }, template: async () => ({ ok: false }), direct: async () => ({ ok: false }), directEnabled: () => false };
+  const orderChecks = [];
+  const orderedSend = { text: async () => { orderChecks.push('text'); return { ok: true }; }, template: async () => { orderChecks.push('template'); return { ok: true }; }, direct: async () => { orderChecks.push('direct'); return { ok: false }; }, directEnabled: () => true };
   const fresh = (await upsertCustomer({ prisma, businessId: 'biz1', msisdn: '0790000000', name: 'New Person' })).customer;
   const link = await createBusinessLink({ prisma, business: biz(prisma), customerId: fresh.id, amountCents: 5000 });
   delete process.env.WAPAY_BUSINESS_NOTIFY;
@@ -505,11 +559,36 @@ test('nudge: disabled by default; needs a prior PAID relationship; one per link;
   assert.equal(sends.length, 0);
   const forThabo = await createBusinessLink({ prisma, business: biz(prisma), customerId: thabo.id, amountCents: 6000, reference: 'T-2' });
   const out = await sendLinkViaWaPay({ prisma, business: biz(prisma), customer: thabo, code: forThabo.link.code, send });
-  assert.equal(out.ok, true); assert.equal(sends.length, 1); assert.equal(sends[0].to, '27731234567');
+  assert.equal(out.ok, true); assert.equal(sends.length, 1); assert.equal(sends[0].to, '27821112222');
   assert.match(sends[0].text, /A WaPay business, I Love My Laundry, sent you a payment request for R60 \(ref T-2\)/);
   assert.match(sends[0].text, /If you don't recognise this business, ignore this message/);
+  assert.match(sends[0].text, /No fees for you/, 'never reads as a card surcharge');
+  // Out-of-window rails go first: Direct Send, then the approved template, free-form text last.
+  process.env.WAPAY_TEMPLATE_BUSINESS_REQUEST = 'biz_request_v1';
+  const second = await createBusinessLink({ prisma, business: biz(prisma), customerId: thabo.id, amountCents: 7000 });
+  assert.equal((await sendLinkViaWaPay({ prisma, business: biz(prisma), customer: thabo, code: second.link.code, send: orderedSend })).ok, true);
+  assert.deepEqual(orderChecks, ['direct', 'template'], 'text is never tried while a window-crossing rail succeeds');
+  delete process.env.WAPAY_TEMPLATE_BUSINESS_REQUEST;
   assert.ok(!/reply|yes|pin/i.test(sends[0].text), 'informational only: no action is planted on the recipient');
   assert.equal((await sendLinkViaWaPay({ prisma, business: biz(prisma), customer: thabo, code: forThabo.link.code, send })).error, 'ALREADY_SENT');
+  // A later "copied" click must not reset the once-per-link guard, and a
+  // browser can never forge the WAPAY mark itself.
+  assert.equal(await markLinkSent({ prisma, businessId: 'biz1', code: forThabo.link.code, channel: 'COPY' }), false, 'WAPAY mark is never downgraded');
+  const plain = await createBusinessLink({ prisma, business: biz(prisma), customerId: thabo.id, amountCents: 900 });
+  await markLinkSent({ prisma, businessId: 'biz1', code: plain.link.code, channel: 'WAPAY' });
+  assert.equal(prisma.paymentRequest._rows.find((r) => r.id === plain.link.code).channel, 'COPY', 'WAPAY from a caller is recorded as a plain copy');
+  assert.equal((await sendLinkViaWaPay({ prisma, business: biz(prisma), customer: thabo, code: forThabo.link.code, send })).error, 'ALREADY_SENT');
+  assert.equal(sends.length, 1, 'still exactly one push');
+  // Manufactured consent: a typed number at a card checkout is NOT a relationship...
+  const victim = (await upsertCustomer({ prisma, businessId: 'biz1', msisdn: '0790001111', name: 'Victim' })).customer;
+  const cardWalkIn = await createPaymentRequest({ prisma, accountId: 'acc-owner', amountCents: 500, business: { businessId: 'biz1', customerId: victim.id } });
+  Object.assign(prisma.paymentRequest._rows.find((r) => r.id === cardWalkIn.id), { status: 'PAID', payerRef: 'PAYFAST:pfX', paidAt: new Date() });
+  assert.equal(await customerEligibleForNudge({ prisma, businessId: 'biz1', customerId: victim.id }), false, 'card payment under a customer row proves nothing');
+  // ...and neither is the business paying its OWN ticket from its own wallet under the victim's row.
+  const selfPaid = await createPaymentRequest({ prisma, accountId: 'acc-owner', amountCents: 500, business: { businessId: 'biz1', customerId: victim.id } });
+  Object.assign(prisma.paymentRequest._rows.find((r) => r.id === selfPaid.id), { status: 'PAID', payerRef: 'WAPAY:acc-owner', paidAt: new Date() });
+  assert.equal(await customerEligibleForNudge({ prisma, businessId: 'biz1', customerId: victim.id }), false, 'payer account must be the customer\'s own number');
+  assert.equal(await customerEligibleForNudge({ prisma, businessId: 'biz1', customerId: thabo.id }), true, 'Thabo paid from his own wallet: eligible');
   assert.equal((await sendLinkViaWaPay({ prisma, business: biz(prisma), customer: lerato, code: forThabo.link.code, send })).error, 'BAD_CUSTOMER', 'link must belong to that customer');
   delete process.env.WAPAY_BUSINESS_NOTIFY;
 });
@@ -566,7 +645,12 @@ test('static: pay page names the business and itemises; personal path intact; no
   assert.match(payPage, /request\.businessId/); assert.match(payPage, /prisma\.business\.findUnique/); assert.match(payPage, /isBusiness/);
   assert.match(payPage, /maskedRequesterLabel\(account\)/, 'personal links still use the masked owner label');
   assert.match(payPage, /Number\.isInteger\(it\.unitCents\)/, 'items are re-validated before render');
-  assert.match(notify, /if \(request\.businessId\)/); assert.match(notify, /businessCustomer\.findUnique/);
+  assert.match(notify, /if \(request\.businessId\)/); assert.match(notify, /businessPaidLine\(/, 'shared who-paid line');
+  assert.match(notify, /prisma\.business\.findUnique/, 'payer receipt names the business');
+  assert.match(processor, /businessPaidLine\(/, 'balance rail names the customer too');
+  assert.match(processor, /businessLabelForRequest\(/, 'in-chat pay flow names the business');
+  assert.match(payPage, /business\.status === 'ACTIVE'/, 'suspended business is not payable');
+  assert.match(read('../pages/api/pay/checkout.js'), /businessRequestPayable\(\{ request \}\)/, 'checkout refuses a suspended business via the shared helper');
 });
 
 test('static: schema + migration carry the new fields, idempotently, without touching money tables', () => {
@@ -587,9 +671,13 @@ test('processor: business-login matcher is narrow, sits after the admin hook, re
   // eslint-disable-next-line no-new-func
   const match = new Function(`${body}; return matchBusinessLoginAsk;`)();
   for (const yes of ['business login', 'Business Code', 'business sign in', 'portal login', 'business portal']) assert.equal(match(yes), true, yes);
-  for (const no of ['my business needs airtime', 'please pay me R50', 'buy airtime for my business', 'admin login', 'login code', 'help', '', 'is this a business account?']) {
+  for (const yes2 of ['business login please', 'Business code!', 'wapay business login']) assert.equal(match(yes2), true, yes2);
+  for (const no of ['my business needs airtime', 'please pay me R50', 'buy airtime for my business', 'admin login', 'login code', 'help', '', 'is this a business account?',
+    'business portal is not loading', 'business code for my customers?']) {
     assert.equal(match(no), false, no);
   }
+  assert.match(processor, /issued\.reason === 'THROTTLED' && issued\.hasBusiness/, 'owner asking twice is told about the throttle');
+  assert.match(processor, /businessId: \{ not: null \}/, '"change my amount" never mints a personal link over open business tickets');
   const adminHook = processor.indexOf('matchAdminLoginAsk(text)');
   const bizHook = processor.indexOf('matchBusinessLoginAsk(text)');
   assert.ok(adminHook > -1 && bizHook > adminHook, 'business hook follows the admin hook');
@@ -606,5 +694,197 @@ test('page: four tabs, the composer, WhatsApp send path, import, export, and no 
   assert.match(page, /action: 'import'/); assert.match(page, /autoComplete="current-password"/);
   assert.ok(!/admin login/i.test(page), 'the admin chat command is never shown here');
   assert.match(page, /backdrop-filter:blur/, 'mirror-finish surfaces'); assert.match(page, /border-radius:20px/, 'rounded cards');
+  assert.match(page, /incomplete\.length > 0/, 'an unfinished item row blocks link creation');
+  assert.match(page, /r\.quote\?\.amountCents === totalCents/, 'a stale quote is never shown under a new total');
+  assert.match(page, /if \(!w\) \{ setBlocked\(true\); return; \}/, 'a blocked popup is never recorded as sent');
+  assert.match(page, /wapay:unauth/, 'an expired session returns to sign-in');
+  assert.match(page, /setM\(null\); \/\/ never show the previous range/, 'range switch clears stale numbers');
+  assert.ok(!/no fee under R50/.test(page), 'fee threshold copy comes from the server');
   assert.match(page, /prefers-color-scheme:dark/, 'dark palette defined');
+});
+
+
+// ---------------------------------------------------------------------------
+// Adversarial review 2026-09-05 — regression guards
+// ---------------------------------------------------------------------------
+
+test('review: OTP request refuses wallets that own no business and may not register (no spam cannon)', async () => {
+  armEnv();
+  delete process.env.WAPAY_BUSINESS_SIGNUPS;
+  const prisma = stubPrisma();
+  const sends = [];
+  const out = await requestBusinessOtp({ prisma, msisdn: OWNER, sendTemplate: async (a) => { sends.push(a); return { ok: true }; }, send: async (a) => { sends.push(a); return { ok: true }; } });
+  assert.deepEqual(out, { ok: true }, 'still membership-neutral');
+  assert.equal(sends.length, 0); assert.equal(prisma.otpCode._rows.length, 0);
+  // A suspended business gets no code either (portal and in-session paths).
+  const p2 = stubPrisma({ withBusiness: true, suspended: true });
+  await requestBusinessOtp({ prisma: p2, msisdn: OWNER, send: async (a) => { sends.push(a); return { ok: true }; } });
+  assert.equal(sends.length, 0); assert.equal(p2.otpCode._rows.length, 0);
+  assert.equal((await requestBusinessOtpInSession({ prisma: p2, msisdn: OWNER })).reason, 'SUSPENDED');
+  process.env.WAPAY_BUSINESS_SIGNUPS = 'open';
+});
+
+test('review: OTP and password lockouts are per SOURCE, so a stranger cannot lock the owner out', async () => {
+  armEnv();
+  const prisma = stubPrisma({ withBusiness: true });
+  for (let i = 0; i < BUSINESS_OTP_LOCKOUT_BURNS; i += 1) {
+    for (const o of prisma.otpCode._rows) if (o.code.startsWith('biz:')) o.createdAt = new Date(Date.now() - 2 * 60 * 1000);
+    // eslint-disable-next-line no-await-in-loop
+    const code = await issueCode(prisma);
+    // eslint-disable-next-line no-await-in-loop
+    await verifyBusinessOtp({ prisma, msisdn: OWNER, code: code === '000000' ? '111111' : '000000', source: '203.0.113.9' });
+  }
+  for (const o of prisma.otpCode._rows) if (o.code.startsWith('biz:')) o.createdAt = new Date(Date.now() - 2 * 60 * 1000);
+  const fresh = await issueCode(prisma);
+  assert.equal((await verifyBusinessOtp({ prisma, msisdn: OWNER, code: fresh, source: '203.0.113.9' })).error, 'LOCKED_OUT', 'the attacker source is locked out BEFORE consuming');
+  assert.equal(prisma.otpCode._rows.filter((o) => o.code.startsWith('biz:') && !o.consumedAt).length, 1, 'the fresh code is NOT consumed by a locked-out source');
+  assert.equal((await verifyBusinessOtp({ prisma, msisdn: OWNER, code: fresh, source: '198.51.100.7' })).ok, true, 'the owner, from their own connection, signs in');
+  // Password: five failures from one source lock that source only.
+  const p2 = stubPrisma({ withBusiness: true });
+  biz(p2).passwordHash = await hashBusinessPassword('correct horse battery');
+  for (let i = 0; i < BUSINESS_PW_LOCKOUT_FAILS; i += 1) await verifyBusinessPassword({ prisma: p2, msisdn: OWNER, password: 'wrong password!!', source: 'attacker' });
+  assert.equal((await verifyBusinessPassword({ prisma: p2, msisdn: OWNER, password: 'correct horse battery', source: 'attacker' })).error, 'LOCKED_OUT');
+  assert.equal((await verifyBusinessPassword({ prisma: p2, msisdn: OWNER, password: 'correct horse battery', source: 'owner-pc' })).ok, true);
+  assert.ok(!libAuth.includes("code: `${PW_FAIL_PREFIX}${crypto.randomBytes"), 'password failures carry the source key');
+  assert.match(libAuth, /await argon2\.verify\(await dummyHash\(\), password\)/, 'timing-equal refusal when no business or password exists');
+});
+
+test('review: fees and method come from the BOOKED intent, never today\'s env; REPAIR rows classify as card', () => {
+  const row = { status: 'PAID', amountCents: 15000, payerRef: 'PAYFAST:pf1' };
+  assert.deepEqual(classifyPaid(row, { status: 'SUCCESS', metadata: { feeCents: 123 } }), { method: 'CARD', feeCents: 123 }, 'booked fee wins');
+  assert.deepEqual(classifyPaid(row, null), { method: 'CARD', feeCents: paymentRequestFeeCents(15000) }, 'legacy row without intent: banded fee');
+  assert.deepEqual(classifyPaid({ status: 'PAID', amountCents: 5000, payerRef: 'REPAIR:replayed' }, { status: 'SUCCESS', providerRef: 'pf9', metadata: { feeCents: 440 } }), { method: 'CARD', feeCents: 440 }, 'a repaired row that the card leg settled is a card payment');
+  assert.deepEqual(classifyPaid({ status: 'PAID', amountCents: 5000, payerRef: 'WAPAY:acc' }, null), { method: 'WAPAY', feeCents: 0 });
+  assert.deepEqual(classifyPaid({ status: 'PENDING', amountCents: 5000 }, null), { method: null, feeCents: 0 });
+});
+
+test('review: buckets are SAST (UTC+2), not UTC', () => {
+  const lateAugUtc = new Date(Date.UTC(2026, 7, 31, 23, 30)); // 01:30 SAST on 1 Sep
+  assert.equal(monthKey(lateAugUtc), '2026-09'); assert.equal(dayKey(lateAugUtc), '2026-09-01');
+  assert.deepEqual(lastMonths(2, lateAugUtc), ['2026-08', '2026-09']);
+});
+
+test('review: lifetime and outstanding totals come from aggregates, not the scanned slice; conversion compares like with like', async () => {
+  const { prisma, thabo } = await seededBusiness();
+  // 600 more paid links for Thabo: the 500-row scan must not understate the lifetime.
+  for (let i = 0; i < 600; i += 1) {
+    prisma.paymentRequest._rows.push({ id: `PRBULK${String(i).padStart(3, '0')}`, accountId: 'acc-owner', amountCents: 100, status: 'PAID', payerRef: 'WAPAY:acc-payer', paidAt: new Date(Date.now() - 400 * 86400000), createdAt: new Date(Date.now() - 400 * 86400000), expiresAt: new Date(), businessId: 'biz1', customerId: thabo.id, note: null, items: null, reference: null, channel: null, sentAt: null });
+  }
+  const p = await getCustomerProfile({ prisma, businessId: 'biz1', customerId: thabo.id });
+  assert.equal(p.stats.paidCount, 602); assert.equal(p.stats.paidCents, 20000 + 60000); assert.equal(p.truncated, true); assert.equal(p.links.length, 500);
+  const o = await businessOverview({ prisma, businessId: 'biz1', rangeDays: 30 });
+  assert.equal(o.vitals.outstandingCents, 8000, 'aggregate, not a 500-row slice');
+  assert.equal(o.vitals.linksCreated, 5, 'links created in the period (the bulk rows are 400 days old)');
+  assert.equal(o.vitals.conversionPct, 60, '3 of the 5 links created in the period were paid: same population top and bottom');
+});
+
+test('review: import is batched and capped; a concurrent create adopts the winner', async () => {
+  const prisma = stubPrisma({ withBusiness: true });
+  const rows = parseContactsImport(Array.from({ length: 40 }, (_, i) => `Person ${i}, 07${String(10000000 + i).padStart(8, '0')}`).join('\n'));
+  const out = await importCustomers({ prisma, businessId: 'biz1', rows });
+  assert.equal(out.added, 40); assert.equal(out.refused, 0);
+  const again = await importCustomers({ prisma, businessId: 'biz1', rows });
+  assert.equal(again.added, 0); assert.equal(again.skipped, 40, 'all already there');
+  // Race: a row appears between find and create → the loser adopts it.
+  const racing = stubPrisma({ withBusiness: true });
+  const origCreate = racing.businessCustomer.create.bind(racing.businessCustomer);
+  let once = true;
+  racing.businessCustomer.create = async (args) => { if (once) { once = false; await origCreate({ data: { ...args.data, id: 'winner' } }); } return origCreate(args); };
+  const res = await upsertCustomer({ prisma: racing, businessId: 'biz1', msisdn: '0731230000', name: 'Racer' });
+  assert.equal(res.customer.id, 'winner'); assert.equal(res.created, false);
+});
+
+test('review: who-paid line is shared by both rails and sanitised', async () => {
+  const { prisma, thabo } = await seededBusiness();
+  const r = prisma.paymentRequest._rows.find((x) => x.customerId === thabo.id);
+  r.reference = '*T-1*';
+  assert.equal(await businessPaidLine({ prisma, request: r }), '🧾 from Thabo Nkosi · ref T-1');
+  assert.equal(await businessPaidLine({ prisma, request: { businessId: null } }), null);
+});
+
+
+// ---------------------------------------------------------------------------
+// Completeness critics 2026-09-05 — regression guards
+// ---------------------------------------------------------------------------
+
+test('critics: a suspended business is not payable on ANY rail (pay page, checkout, chat confirm, chat PIN settle)', async () => {
+  const { businessRequestPayable } = await import('../lib/business.js');
+  const prisma = stubPrisma({ withBusiness: true });
+  assert.equal(await businessRequestPayable({ prisma, request: { businessId: null } }), true, 'personal links are untouched');
+  assert.equal(await businessRequestPayable({ prisma, request: { businessId: 'biz1' } }), true);
+  biz(prisma).status = 'SUSPENDED';
+  assert.equal(await businessRequestPayable({ prisma, request: { businessId: 'biz1' } }), false);
+  assert.equal(await businessRequestPayable({ prisma, request: { businessId: 'nope' } }), false, 'missing row fails closed');
+  const checkout = read('../pages/api/pay/checkout.js');
+  assert.match(checkout, /businessRequestPayable\(\{ request \}\)/, 'checkout asks the shared helper');
+  assert.equal((checkout.match(/res\.status\(410\)/g) || []).length, 1, 'still exactly one 410 path');
+  const confirmIdx = processor.indexOf("await updateConversationState(from, 'PAYREQ_CONFIRM'");
+  assert.ok(processor.slice(confirmIdx - 1500, confirmIdx).includes('businessRequestPayable({ request })'), 'chat confirm checks payability before PAYREQ_CONFIRM');
+  const pinIdx = processor.indexOf("const request = await getPaymentRequest({ code: data.code });");
+  assert.ok(processor.slice(pinIdx, pinIdx + 900).includes('businessStillPayable'), 'PIN settle re-checks payability');
+  assert.match(payPage, /business\.status === 'ACTIVE'/);
+  assert.match(processor, /will see your number for its records/, 'balance payers are told the business receives their number');
+  assert.match(payPage, /receives your number for its records/, 'card payers too');
+});
+
+test('critics: nudge claims the link atomically before sending; a failed send releases the claim', async () => {
+  const { prisma, thabo } = await seededBusiness();
+  process.env.WAPAY_BUSINESS_NOTIFY = 'true';
+  const link = await createBusinessLink({ prisma, business: biz(prisma), customerId: thabo.id, amountCents: 5000 });
+  let inFlight = 0, maxInFlight = 0, sends = 0;
+  const slowSend = { text: async () => { inFlight += 1; maxInFlight = Math.max(maxInFlight, inFlight); await new Promise((r) => setTimeout(r, 20)); inFlight -= 1; sends += 1; return { ok: true }; }, template: async () => ({ ok: false }), direct: async () => ({ ok: false }), directEnabled: () => false };
+  const [a, b] = await Promise.all([
+    sendLinkViaWaPay({ prisma, business: biz(prisma), customer: thabo, code: link.link.code, send: slowSend }),
+    sendLinkViaWaPay({ prisma, business: biz(prisma), customer: thabo, code: link.link.code, send: slowSend }),
+  ]);
+  assert.deepEqual([a.ok, b.ok].sort(), [false, true], 'exactly one winner');
+  assert.equal(sends, 1, 'the customer gets ONE message');
+  // Undeliverable: the claim is released so the owner can retry later.
+  const second = await createBusinessLink({ prisma, business: biz(prisma), customerId: thabo.id, amountCents: 6000 });
+  const dead = { text: async () => ({ ok: false, error: 'down' }), template: async () => ({ ok: false }), direct: async () => ({ ok: false }), directEnabled: () => false };
+  assert.equal((await sendLinkViaWaPay({ prisma, business: biz(prisma), customer: thabo, code: second.link.code, send: dead })).error, 'UNDELIVERABLE');
+  const row = prisma.paymentRequest._rows.find((r) => r.id === second.link.code);
+  assert.equal(row.channel, null, 'claim released'); assert.equal(row.sentAt, null);
+  delete process.env.WAPAY_BUSINESS_NOTIFY;
+  const linksRoute = read('../pages/api/business/links.js');
+  assert.match(linksRoute, /\['WHATSAPP_BUSINESS', 'COPY'\]\.includes\(body\.channel\)/, 'route refuses channel WAPAY from browsers');
+});
+
+test('critics: password set/clear needs a fresh factor; owners must be onboarded wallets', async () => {
+  armEnv();
+  const { verifyStepUp } = await import('../lib/business-auth.js');
+  const prisma = stubPrisma({ withBusiness: true });
+  // No password yet → a fresh code is the factor.
+  assert.deepEqual(await verifyStepUp({ prisma, business: biz(prisma), msisdn: OWNER }), { ok: false, error: 'STEP_UP_REQUIRED' });
+  const code = await issueCode(prisma);
+  assert.equal((await verifyStepUp({ prisma, business: biz(prisma), msisdn: OWNER, code })).via, 'otp');
+  // With a password → the current password is the factor; a cookie alone is refused.
+  biz(prisma).passwordHash = await hashBusinessPassword('correct horse battery');
+  assert.deepEqual(await verifyStepUp({ prisma, business: biz(prisma), msisdn: OWNER }), { ok: false, error: 'STEP_UP_REQUIRED' });
+  assert.equal((await verifyStepUp({ prisma, business: biz(prisma), msisdn: OWNER, currentPassword: 'wrong password!!' })).error, 'STEP_UP_FAILED');
+  assert.equal((await verifyStepUp({ prisma, business: biz(prisma), msisdn: OWNER, currentPassword: 'correct horse battery' })).via, 'password');
+  const settings = read('../pages/api/business/settings.js');
+  assert.match(settings, /verifyStepUp\(/); assert.match(settings, /clear-password/); assert.match(settings, /business_password_set/);
+  assert.match(page, /action: 'clear-password'/); assert.match(page, /currentPassword: stepUp/);
+  // "No wallet, no business": a first-contact account is not an owner.
+  const p2 = stubPrisma();
+  const sends = [];
+  await requestBusinessOtp({ prisma: p2, msisdn: '0839990000', send: async (a) => { sends.push(a); return { ok: true }; } });
+  assert.equal(sends.length, 0, 'no code for an unfinished onboarding');
+  assert.equal((await requestBusinessOtpInSession({ prisma: p2, msisdn: '0839990000' })).ok, false);
+});
+
+test('critics: overview range lookup ignores prototype keys; CSV window is created-or-paid; hosts must differ', async () => {
+  const overviewRoute = read('../pages/api/business/overview.js');
+  assert.match(overviewRoute, /Object\.hasOwn\(RANGES, rangeKey\)/);
+  const { prisma } = await seededBusiness();
+  // A ticket created long ago but paid inside the window appears in the export.
+  const old = prisma.paymentRequest._rows.find((r) => r.status === 'PAID' && r.payerRef === 'WAPAY:acc-payer');
+  old.createdAt = new Date(Date.now() - 200 * 86400000);
+  const { csv } = await exportLinksCsv({ prisma, businessId: 'biz1', sinceDays: 90 });
+  assert.ok(csv.includes(old.id), 'paid-in-window row exported despite an old createdAt');
+  assert.match(middleware, /portal_host_collision/, 'identical admin/business hosts are logged and business gating disabled');
+  const e2e = read('../tests/e2e/business-e2e.mjs');
+  assert.match(e2e, /new URL\(RAW\)\.searchParams\.get\('schema'\)/, 'scratch-schema guard parses the URL');
+  assert.match(e2e, /SELECT current_schema\(\)/, 'and verifies the live connection');
 });

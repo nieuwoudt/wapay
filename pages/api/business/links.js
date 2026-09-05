@@ -81,6 +81,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, ...out, nudge });
     }
     if (body.action === 'sent') {
+      // Browser callers may record only the OWNER-side channels; 'WAPAY' is
+      // claimed by the nudge itself and can never be forged from here.
+      if (!['WHATSAPP_BUSINESS', 'COPY'].includes(body.channel)) return res.status(400).json({ ok: false, error: 'BAD_CHANNEL' });
       const ok = await markLinkSent({ businessId: business.id, code: body.code, channel: body.channel });
       return res.status(ok ? 200 : 404).json({ ok });
     }

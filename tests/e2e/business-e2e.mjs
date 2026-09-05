@@ -21,9 +21,12 @@
 import assert from 'node:assert/strict';
 
 const RAW = process.env.DATABASE_URL || '';
-const SCHEMA = RAW.match(/schema=(wapay_qa_biz_[a-z0-9_]+)/)?.[1];
-if (!SCHEMA) {
-  console.error('FATAL: DATABASE_URL must point at an isolated scratch schema (?schema=wapay_qa_biz_...)');
+let SCHEMA = null;
+try { SCHEMA = new URL(RAW).searchParams.get('schema'); } catch { SCHEMA = null; }
+if (!/^wapay_qa_biz_[a-z0-9_]+$/.test(SCHEMA || '')) {
+  // A URL that already carries a query string would make "?schema=" a value
+  // of the previous param and Prisma would silently use `public` (prod).
+  console.error('FATAL: DATABASE_URL must carry a parseable ?schema=wapay_qa_biz_... parameter');
   process.exit(2);
 }
 process.env.WAPAY_BUSINESS_SESSION_SECRET = process.env.WAPAY_BUSINESS_SESSION_SECRET || 'e2e-business-secret-0123456789';
@@ -54,6 +57,16 @@ if (process.argv.includes('--teardown')) {
 }
 
 let owner, payer, business, thabo, links = {};
+
+// Belt and braces: the connection must really be on the scratch schema.
+{
+  const rows = await prisma.$queryRaw`SELECT current_schema() AS s`;
+  if (rows?.[0]?.s !== SCHEMA) {
+    console.error(`FATAL: connected to schema "${rows?.[0]?.s}", expected "${SCHEMA}" — refusing to touch it`);
+    await prisma.$disconnect();
+    process.exit(2);
+  }
+}
 
 await step('seed: owner + payer accounts with SPEND wallets (idempotent)', async () => {
   owner = await prisma.account.upsert({ where: { waId: OWNER.waId }, update: {}, create: { ...OWNER, onboardingState: 'S5_COMPLETED', onboardingStatus: 'COMPLETED' } });
@@ -142,14 +155,17 @@ await step('walk-in linker: the balance payer becomes a customer (source PAYLINK
 await step('dashboard: overview, customer profile and CSV all derive the same truth', async () => {
   const o = await businessOverview({ prisma, businessId: business.id, rangeDays: 30 });
   const fee = paymentRequestFeeCents(15000);
+  const dump = () => JSON.stringify({ vitals: o.vitals, methods: o.methods, totals: o.totals, top: o.topCustomers }, null, 0).slice(0, 1500);
   assert.ok(o.vitals.paidCents >= 17500, `paid ${o.vitals.paidCents}`);
-  assert.ok(o.vitals.feeCents >= fee); assert.ok(o.methods.card.count >= 1 && o.methods.wapay.count >= 1);
+  assert.ok(o.vitals.feeCents >= fee, `fee ${o.vitals.feeCents} < ${fee} · ${dump()}`);
+  assert.ok(o.methods.card.count >= 1 && o.methods.wapay.count >= 1, `methods ${dump()}`);
   assert.ok(o.vitals.outstandingCount >= 1, 'the duvet link is still open');
-  assert.equal(o.monthly.length, 12); assert.ok(o.totals.last3mCents >= o.vitals.paidCents);
-  assert.ok(o.topCustomers.some((c) => c.name === 'Thabo Nkosi'));
+  assert.equal(o.monthly.length, 12); assert.ok(o.totals.last3mCents >= o.vitals.paidCents, `totals ${dump()}`);
+  assert.ok(o.topCustomers.some((c) => c.name === 'Thabo Nkosi'), `top ${dump()}`);
   const p = await getCustomerProfile({ prisma, businessId: business.id, customerId: thabo.id });
-  assert.ok(p.stats.paidCents >= 17500); assert.ok(p.stats.openCents >= 8000); assert.ok(p.topItems.some((i) => i.name === 'Wash & fold 5kg'));
-  const csv = await exportLinksCsv({ prisma, businessId: business.id, sinceDays: 30 });
+  const pdump = () => JSON.stringify({ stats: p.stats, topItems: p.topItems, truncated: p.truncated }).slice(0, 1200);
+  assert.ok(p.stats.paidCents >= 17500, `profile paid ${pdump()}`); assert.ok(p.stats.openCents >= 8000, `profile open ${pdump()}`); assert.ok(p.topItems.some((i) => i.name === 'Wash & fold 5kg'), `items ${pdump()}`);
+  const { csv } = await exportLinksCsv({ prisma, businessId: business.id, sinceDays: 30 });
   assert.match(csv, /,PAID,CARD,Thabo Nkosi,0600000912,T-/); assert.match(csv, /,PAID,WAPAY,Thabo Nkosi,/);
 });
 

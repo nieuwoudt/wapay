@@ -4,6 +4,20 @@
 
 ---
 
+## 39. Business nudge "consent" could be manufactured with a typed card-checkout number
+
+- **Symptom (adversarial review 2026-09-05, HIGH, caught pre-ship):** the WaPay-originated "Also send from WaPay" push was allowed for any customer with a prior PAID link. A business could pay its own R5 walk-in link by card, type a VICTIM's number into the pay page's receipt field, let the walk-in linker file that number as a "customer who paid", and then have WaPay message the victim. A business paying its own ticket from its own wallet under a victim's customer row worked the same way.
+- **Root cause:** eligibility keyed on `customerId` + a PAID row, and the customer row's number was whatever a card payer typed (`custom_str1` is signed against the PayFast session, not against a person).
+- **Fix:** `customerEligibleForNudge` requires a PAID row whose payer is a WaPay account (`payerRef WAPAY:*`) WHOSE NUMBER IS the customer's number, or a customer row bound to such an account. Card payments never count. `markLinkSent` can no longer downgrade a `WAPAY` mark (the once-per-link and per-day caps read that column). The flag stays off by default.
+- **Guard:** `tests/business-portal.test.mjs` "nudge: … manufactured consent" drives both attacks and asserts NOT_ELIGIBLE; the downgrade test asserts a later COPY click leaves ALREADY_SENT in force.
+
+## 38. Overview classified card payments as balance payments on the real database (stub hid a missing `select`)
+
+- **Symptom (isolated-schema E2E, 2026-09-05):** `businessOverview` reported card count 0 and fees R0 for a link paid by card, while unit tests were green.
+- **Root cause:** the paid-rows query used an explicit Prisma `select` that omitted `status`; `classifyPaid` reads `r.status` and treated `undefined` as not-PAID → balance. The in-memory Prisma stub ignored `select` and returned whole rows, so the unit tests could not see it.
+- **Fix:** `status: true` added to the select; fees and method now come from the booked intent (`loadIntents` + `classifyPaid`), never recomputed from today's env.
+- **Guard:** the test stub now projects `select` exactly like Prisma (a column not selected is absent), so any code that reads an unselected column fails in unit tests; `tests/e2e/business-e2e.mjs` step "dashboard" asserts card count, fee and net against the real DB.
+
 ## 37. "Where is OTT vouchers accepted?" started the voucher PURCHASE flow
 
 - **Symptom (Tasha/founder screenshot, 2026-08-31):** asking where OTT vouchers are

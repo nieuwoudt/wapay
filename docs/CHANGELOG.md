@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-09-05 (23) — WaPay for Business hardened by adversarial review; registration closed by default; deployed
+
+Read-only adversarial review of the whole business change (7 lens finders, 3
+refuters per finding, 3 completeness critics; trail in
+`docs/testing/adversarial-review-2026-09-05.md`). Every confirmed finding fixed
+before this deploy, each with a regression guard. Headliners: the WaPay-originated
+nudge's "prior PAID relationship" could be manufactured with a number typed at a
+card checkout, or by a business paying its own ticket from its own wallet (BUGLOG
+#39: eligibility now needs a WaPay-account payer whose number IS the customer's;
+a later copy click can no longer reset the once-per-link mark; out-of-window rails
+go first). The public OTP request no longer messages wallets that own no business
+and are not invited (a paid-template spam cannon otherwise). Sign-in lockouts are
+now per SOURCE, so a stranger looping wrong codes or passwords at a shop's public
+number locks their own connection out, never the owner, and a locked-out source
+cannot consume the owner's fresh code. Dashboard fees and card/balance method are
+read from the BOOKED PayFast intent instead of today's env; buckets are SAST;
+lifetime, outstanding and conversion figures come from aggregates over every row
+(no 500-row slice); the CSV export can never be silently short. The in-chat pay
+flow, the payer's receipt and the balance-rail owner notification now name the
+BUSINESS (and the customer + reference) like the pay page does; a suspended
+business's links stop rendering and stop being payable. Composer: unfinished item
+rows block creation instead of silently billing less; "1,500" and "1500,00" parse;
+a stale quote is never shown under a new total; a blocked WhatsApp popup is not
+recorded as sent; expired sessions return to sign-in; keyboard access for the
+customer picker and rows; error messages are red. Completeness critics then found
+the load-bearing gap: a suspended business's tickets were still payable from a
+WaPay balance in chat — a shared `businessRequestPayable` now guards the pay page,
+checkout, the in-chat confirm and the PIN settle; the nudge claims its link
+atomically before sending; password set/clear needs the current password or a
+fresh code (a borrowed cookie can no longer become permanent access); a browser
+cannot forge a "sent by WaPay" mark; the CSV window is created-or-paid; owners
+must be onboarded wallets. Registration is CLOSED by
+default: `WAPAY_BUSINESS_MSISDNS` invites numbers, `WAPAY_BUSINESS_SIGNUPS=open`
+opens it later. Host decided: `business.wapay.co.za`. BUGLOG #38: the real-DB E2E
+caught a missing `status` in an explicit `select` that the in-memory stub had
+hidden — the stub now projects `select` like Prisma. 547/547 unit tests (38 in the
+business file), 8/8 real-DB E2E on an isolated schema, build green. Founder test
+plan: `docs/BUSINESS_PORTAL_TEST_GUIDE.md`.
+
 ## 2026-09-04 (22) — WaPay for Business: portal, customer CRM, POS payment links; Fable prompting kit
 
 Founder brief (design partner: a local laundry that reconciles payment links by

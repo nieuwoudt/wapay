@@ -24,6 +24,7 @@ import { buildCheckoutUrl } from '@wapay/providers-payfast';
 import prisma from '../../../lib/prisma.js';
 import { getPaymentRequest } from '../../../lib/payment-requests.js';
 import { paymentRequestFeeCents } from '../../../lib/deposits.js';
+import { businessRequestPayable } from '../../../lib/business.js';
 import { normaliseMsisdn, isValidSaMsisdn } from '../../../lib/msisdn.js';
 
 export default async function handler(req, res) {
@@ -56,7 +57,11 @@ export default async function handler(req, res) {
   }
 
   const requester = await prisma.account.findUnique({ where: { id: request.accountId } });
-  if (!requester) return res.status(410).send('requester unavailable');
+  // WaPay for Business (2026-09-05): a SUSPENDED business's open links are
+  // not payable — the portal is locked and so is the till, on every rail.
+  if (!requester || !(await businessRequestPayable({ request }))) {
+    return res.status(410).send('requester unavailable');
+  }
 
   // FEE DIRECTION (founder decision 2026-08-22): the PAYER pays exactly
   // the request amount — the card fee is deducted from what the REQUESTER
