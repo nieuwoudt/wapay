@@ -919,3 +919,17 @@ test('brand: the portal renders the official lockup and favicons, not a drawn pl
     assert.ok(existsSync(fileURLToPath(new URL(`../public/brand/${f}`, import.meta.url))), `public/brand/${f} ships with the app`);
   }
 });
+
+
+test('allowlist: the singular env spelling is honoured as an alias (the founder\'s first live test)', () => {
+  armEnv();
+  delete process.env.WAPAY_BUSINESS_SIGNUPS;
+  delete process.env.WAPAY_BUSINESS_MSISDNS;
+  process.env.WAPAY_BUSINESS_MSISDN = '0787051175';
+  assert.deepEqual(businessSignupAllowlistReport().valid, ['27787051175']);
+  assert.equal(mayRegister('0787051175'), true, 'the singular name invites the owner');
+  process.env.WAPAY_BUSINESS_MSISDNS = '0731234567';
+  assert.deepEqual(businessSignupAllowlistReport().valid, ['27731234567', '27787051175'], 'both spellings merge');
+  delete process.env.WAPAY_BUSINESS_MSISDN; delete process.env.WAPAY_BUSINESS_MSISDNS;
+  assert.match(libAuth, /business_signups_closed_no_invites/, 'a closed portal with nobody invited is logged');
+});

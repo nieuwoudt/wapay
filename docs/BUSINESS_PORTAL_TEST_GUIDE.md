@@ -7,7 +7,7 @@
 *Status 2026-09-05: the founder attached `business.wapay.co.za`, set the envs and redeployed; the portal serves on its own host. Section 0 is now a confirmation list.*
 
 1. Vercel → project `wapay-api` → Settings → Environment Variables:
-   - `WAPAY_BUSINESS_MSISDNS` = your WaPay WhatsApp number (any SA form, e.g. `0787051175`). Add the laundry owner's number with a comma when they are ready. Registration is closed to everyone else: an uninvited number receives no code at all (the screen still says one is on its way, on purpose).
+   - `WAPAY_BUSINESS_MSISDNS` (plural; the singular spelling also works) = your WaPay WhatsApp number (any SA form, e.g. `0787051175`). Add the laundry owner's number with a comma when they are ready. Registration is closed to everyone else: an uninvited number receives no code at all (the screen still says one is on its way, on purpose).
    - Nothing else is required: the portal reuses `WAPAY_ADMIN_SESSION_SECRET`.
 2. Optional host: Settings → Domains → add `business.wapay.co.za`, create the CNAME Vercel shows at the DNS provider for wapay.co.za, then set `WAPAY_BUSINESS_HOST=business.wapay.co.za` and exempt that host from Attack Challenge Mode under Firewall. Without this the portal is at `https://pleasepayme.co.za/business`.
 3. **Redeploy** (Deployments → ⋯ → Redeploy). Env changes do nothing until then.
