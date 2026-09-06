@@ -16,7 +16,7 @@ Sanity check after the deploy: open `https://business.wapay.co.za`. You should s
 
 ## 1. Register the business (5 min)
 
-1. From your phone, WhatsApp **`business login`** to the WaPay number. The code comes straight back in the chat (this is the primary path; the portal's "Send me a code" only delivers if you chatted with WaPay in the last 24 hours, a WhatsApp rule). Asked twice inside a minute? The chat tells you to wait 60 seconds.
+1. From your phone, WhatsApp **`business login`** to the WaPay number. The code comes straight back in the chat (this is the primary path; the portal's "Send me a code" only delivers if you chatted with WaPay in the last 24 hours, a WhatsApp rule). Asked twice inside a minute? The chat tells you to wait 60 seconds. On the portal, enter your number and press **I have my code from WhatsApp** (it only opens the code box; it never asks for another code), then type the code from the chat.
 2. Enter the code → **Name your business** (e.g. `I Love My Laundry`, category Laundry) → set a password (10+ characters) → **Create my business**.
 3. Expected: you land on Overview with zeros; the header shows your business name. Sign out, sign back in with **I have a password**.
 

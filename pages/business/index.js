@@ -280,6 +280,16 @@ function Login({ configured, onDone }) {
   const remember = (n) => { try { window.localStorage.setItem('wapay_biz_msisdn', n); } catch {} };
   const numberOk = /\d{9}/.test(String(msisdn).replace(/\D/g, ''));
 
+  // "I have my code from WhatsApp" only opens the code box. It must NOT ask
+  // the server for a code: a portal request mints a NEWER code (which Meta
+  // drops outside the 24h window), and until 2026-09-06 the verifier compared
+  // the newest code only, so the one already in the owner's chat stopped
+  // working (BUGLOG #40).
+  const haveCode = () => {
+    setErr('');
+    if (!numberOk) { setErr('Enter your full WhatsApp number.'); return; }
+    setCode(''); setStage('code');
+  };
   const requestCode = async () => {
     setErr('');
     if (!numberOk) { setErr('Enter your full WhatsApp number.'); return; }
@@ -347,14 +357,14 @@ function Login({ configured, onDone }) {
           <h2 style={{ fontSize: 18, marginBottom: 6 }}>Sign in or register</h2>
           <p className="note">Your business runs on your WaPay wallet. Enter the WhatsApp number of that wallet, then get a one-time code.</p>
           <label className="f">WhatsApp number</label>
-          <input inputMode="tel" autoComplete="username" placeholder="073 123 4567" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !busy && requestCode()} />
+          <input inputMode="tel" autoComplete="username" placeholder="073 123 4567" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !busy && haveCode()} />
           <div className="msg" style={{ marginTop: 12, fontSize: 13.5 }}>
             <b>Fastest:</b> from that phone, WhatsApp <b>business login</b> to WaPay. The code comes straight back in the chat.
           </div>
-          <button className="btn p" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={requestCode}>{busy ? 'Sending…' : 'I have my code from WhatsApp'}</button>
+          <button className="btn p" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={haveCode}>I have my code from WhatsApp</button>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
             <button className="linkish" onClick={() => { setStage('password'); setErr(''); }}>I have a password</button>
-            <button className="linkish" disabled={busy} onClick={requestCode}>Send me a code instead</button>
+            <button className="linkish" disabled={busy} onClick={requestCode}>{busy ? 'Sending…' : 'Send me a code instead'}</button>
           </div>
           <p className="note" style={{ marginTop: 14 }}>"Send me a code" only delivers if you chatted with WaPay in the last 24 hours (a WhatsApp rule). No WaPay yet? Say hi to WaPay on WhatsApp first: your wallet is your business account.</p>
         </>

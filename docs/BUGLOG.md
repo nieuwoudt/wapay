@@ -4,6 +4,14 @@
 
 ---
 
+## 40. A sign-in code already in the owner's chat stopped working once the portal minted a newer one
+
+- **Symptom (founder test round, 2026-09-06):** "No code yet." The portal's "Send my code" created a `biz:` row at 09:43Z that Meta accepted as free-form text and dropped (the founder's last chat with WaPay was 3 Sept, outside the 24-hour window, the BUGLOG #33 shape). The rebuilt sign-in page then led with the chat command `business login`, but its primary button ("I have my code from WhatsApp") still POSTed a code request first, so pressing it after reading a code in the chat minted a NEWER code, which was the only one the verifier compared against: the code in hand failed on the first try, the page said "did not work", and every retry repeated the trap while counting towards the per-source lockout.
+- **Root cause:** two things stacked. The verifier consumed and compared only the newest live `biz:` code (`findFirst … orderBy createdAt desc`), and the page conflated "open the code box" with "request a code".
+- **Fix:** the primary button only opens the code box (no request); "Send me a code instead" is the only portal push. `verifyBusinessOtp` now consumes EVERY live code in the one attempt and succeeds if the submitted code matches any of them. One attempt per code still holds (a wrong guess burns all of them), the per-source lockout is unchanged, and a code consumed by a racing attempt is never compared.
+- **Guard:** `tests/business-portal.test.mjs` "verify: a code already in hand keeps working after a newer one is minted" (chat code, then a newer portal code: the older signs in, both are burned, the newer then fails) and the page assertion that the primary button is `haveCode`, never `requestCode`.
+- **Also learned:** `processed_messages.accountId` is never populated in production (0 of 174 rows), so "is this account inside the 24-hour window" cannot be answered from that table without a processor change; the portal push therefore stays best-effort and the chat command stays primary.
+
 ## 39. Business nudge "consent" could be manufactured with a typed card-checkout number
 
 - **Symptom (adversarial review 2026-09-05, HIGH, caught pre-ship):** the WaPay-originated "Also send from WaPay" push was allowed for any customer with a prior PAID link. A business could pay its own R5 walk-in link by card, type a VICTIM's number into the pay page's receipt field, let the walk-in linker file that number as a "customer who paid", and then have WaPay message the victim. A business paying its own ticket from its own wallet under a victim's customer row worked the same way.

@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-09-06 (24) — Business sign-in: the chat command is the primary path; a code in hand always works
+
+Founder test round, day one: three "no code arrives" causes closed in order.
+The invite variable was spelled in the singular in Vercel (both spellings now
+honoured, `972c9e1`). The portal's push is free-form text that Meta accepts and
+drops outside the 24-hour window, so the sign-in page now leads with
+`business login` from the phone, which works mid-flow and answers a throttled or
+capped owner instead of falling through to the AI (`a0be61e`). And the verifier
+compared the newest code only, so a code already in the chat failed the moment
+the portal minted a newer one (BUGLOG #40): the "I have my code from WhatsApp"
+button now only opens the code box, and one verify attempt consumes every live
+code and matches any of them. Official lockup + favicons on the portal
+(`86a9c84`). In between, the peer session shipped OTT vouchers loading into a
+wallet as a second cash-in rail (`8c726e8`, with `tests/ott-redemption.test.mjs`).
+
 ## 2026-09-05 (23) — WaPay for Business hardened by adversarial review; registration closed by default; deployed
 
 Read-only adversarial review of the whole business change (7 lens finders, 3

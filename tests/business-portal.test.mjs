@@ -228,6 +228,18 @@ test('verify: one attempt per code; no business → registration token; business
   assert.equal((await verifyBusinessOtp({ prisma: p4, msisdn: OWNER, code: c4 })).ok, false, 'suspended business cannot sign in');
 });
 
+test('verify: a code already in hand keeps working after a newer one is minted; one attempt burns every live code (BUGLOG #40)', async () => {
+  armEnv();
+  const prisma = stubPrisma({ withBusiness: true });
+  const fromChat = (await requestBusinessOtpInSession({ prisma, msisdn: OWNER })).code;
+  for (const o of prisma.otpCode._rows) if (o.code.startsWith('biz:')) o.createdAt = new Date(Date.now() - 2 * 60 * 1000); // past the resend throttle
+  const fromPortal = await issueCode(prisma); // NEWER: the portal push, which Meta drops outside the 24h window
+  assert.equal(prisma.otpCode._rows.filter((o) => o.code.startsWith('biz:') && !o.consumedAt).length, 2);
+  assert.equal((await verifyBusinessOtp({ prisma, msisdn: OWNER, code: fromChat, source: 's1' })).ok, true, "the older code in the owner's chat still signs in");
+  assert.equal(prisma.otpCode._rows.filter((o) => o.code.startsWith('biz:') && !o.consumedAt).length, 0, 'the attempt consumed every live code');
+  assert.equal((await verifyBusinessOtp({ prisma, msisdn: OWNER, code: fromPortal, source: 's1' })).ok, false, 'the newer code is burned too: one attempt per code stands');
+});
+
 test('shared otp_codes table: business verify never consumes admin or customer codes', async () => {
   armEnv();
   const prisma = stubPrisma({ withBusiness: true });
@@ -713,6 +725,8 @@ test('page: four tabs, the composer, WhatsApp send path, import, export, and no 
   assert.match(page, /setM\(null\); \/\/ never show the previous range/, 'range switch clears stale numbers');
   assert.ok(!/no fee under R50/.test(page), 'fee threshold copy comes from the server');
   assert.match(page, /prefers-color-scheme:dark/, 'dark palette defined');
+  assert.match(page, /onClick=\{haveCode\}>I have my code from WhatsApp/, 'the "I have my code" button only opens the code box (BUGLOG #40)');
+  assert.ok(!/onClick=\{requestCode\}>\{busy \? 'Sending…' : 'I have my code/.test(page), 'it never mints a newer code');
 });
 
 
