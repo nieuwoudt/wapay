@@ -322,8 +322,14 @@ export default async function handler(req, res) {
                       id: status.id,
                       status: status.status,
                       timestamp: status.timestamp,
+                      errors: status.errors,
                     })
                   );
+                  // Delivery outcomes as pulse rows ("status-delivered", "status-failed-131047"
+                  // = dropped outside the 24h window), so "did the code reach the phone" is
+                  // answerable from the database.
+                  const errCode = status.errors?.[0]?.code;
+                  await webhookPulse(`status-${status.status || 'unknown'}${errCode ? `-${errCode}` : ''}`);
                 }
               }
             }
