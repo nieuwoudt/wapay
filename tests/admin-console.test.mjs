@@ -68,6 +68,10 @@ function stubPrisma() {
         const rows = otps.filter((o) => this._match(o, where)).sort((a, b) => b.createdAt - a.createdAt);
         return rows[0] ? { ...rows[0] } : null;
       },
+      async findMany({ where, take } = {}) {
+        const rows = otps.filter((o) => this._match(o, where || {})).sort((a, b) => b.createdAt - a.createdAt);
+        return (take ? rows.slice(0, take) : rows).map((r) => ({ ...r }));
+      },
       async count({ where }) {
         return otps.filter((o) => this._match(o, where)).length;
       },
@@ -240,6 +244,22 @@ test('CRITICAL: a foreign number colliding in the last 9 digits is NOT an admin'
   assert.equal(isAdminMsisdn('447731234567'), false, 'UK number sharing 9 trailing digits rejected');
   assert.equal(isAdminMsisdn('1731234567'), false);
   assert.equal(isAdminMsisdn('27731234567'), true, 'the real admin still matches');
+});
+
+test('OTP verify: a code already in the admin\'s chat keeps working after the console mints a newer one; one attempt burns every live code (BUGLOG #40)', async () => {
+  armEnv();
+  const prisma = stubPrisma();
+  const sends = [];
+  const send = async (a) => { sends.push(a); return { ok: true }; };
+  await requestAdminOtp({ prisma, msisdn: ADMIN, send });
+  const fromChat = sends[0].text.match(/\b(\d{6})\b/)[1];
+  for (const o of prisma._otps) o.createdAt = new Date(Date.now() - 2 * 60 * 1000); // past the resend throttle
+  await requestAdminOtp({ prisma, msisdn: ADMIN, send });
+  const fromConsole = sends[1].text.match(/\b(\d{6})\b/)[1];
+  assert.equal(prisma._otps.filter((o) => String(o.code).startsWith('adm:') && !o.consumedAt).length, 2);
+  assert.equal((await verifyAdminOtp({ prisma, msisdn: ADMIN, code: fromChat })).ok, true, 'the older code still signs in');
+  assert.equal(prisma._otps.filter((o) => String(o.code).startsWith('adm:') && !o.consumedAt).length, 0, 'the attempt consumed every live admin code');
+  assert.equal((await verifyAdminOtp({ prisma, msisdn: ADMIN, code: fromConsole })).ok, false, 'the newer one is burned too');
 });
 
 test('admin OTP never consumes a customer money-flow OTP (shared table)', async () => {

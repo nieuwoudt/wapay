@@ -47,7 +47,7 @@ function toCents(v) {
 const CSS = `
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 :root{color-scheme:light;
---page:#eef3ef;--orb1:rgba(53,152,83,.28);--orb2:rgba(37,211,102,.16);--orb3:rgba(24,86,112,.14);
+--page:#eef3ef;--bgfx:radial-gradient(90vmax 70vmax at 8% -12%,rgba(53,152,83,.26),transparent 62%),radial-gradient(80vmax 60vmax at 96% 108%,rgba(37,211,102,.16),transparent 60%),linear-gradient(180deg,#eef3ef 0%,#e7efe9 100%);
 --glass:linear-gradient(180deg,rgba(255,255,255,.78),rgba(255,255,255,.56));--glass-edge:rgba(255,255,255,.75);--glass-line:rgba(9,30,18,.08);
 --sheen:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.9),rgba(255,255,255,0));
 --ink:#0b1411;--ink2:#3d4a43;--ink3:#7b877f;--grid:rgba(9,30,18,.08);
@@ -56,7 +56,7 @@ const CSS = `
 --shadow:0 18px 50px -22px rgba(8,40,20,.35),0 2px 6px -2px rgba(8,40,20,.12);
 --field:rgba(255,255,255,.85);--field-edge:rgba(9,30,18,.14)}
 @media (prefers-color-scheme:dark){:root{color-scheme:dark;
---page:#0b100d;--orb1:rgba(53,152,83,.28);--orb2:rgba(37,211,102,.12);--orb3:rgba(40,120,160,.14);
+--page:#0b100d;--bgfx:radial-gradient(90vmax 70vmax at 8% -12%,rgba(53,152,83,.30),transparent 62%),radial-gradient(80vmax 60vmax at 96% 108%,rgba(37,211,102,.13),transparent 60%),linear-gradient(180deg,#0b100d 0%,#0d150f 100%);
 --glass:linear-gradient(180deg,rgba(28,34,31,.78),rgba(20,25,22,.62));--glass-edge:rgba(255,255,255,.14);--glass-line:rgba(255,255,255,.06);
 --sheen:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.35),rgba(255,255,255,0));
 --ink:#f2f6f3;--ink2:#c3ccc6;--ink3:#8a948d;--grid:rgba(255,255,255,.08);
@@ -65,11 +65,10 @@ const CSS = `
 --field:rgba(255,255,255,.06);--field-edge:rgba(255,255,255,.14)}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--page);color:var(--ink);font:400 14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
-.bg{position:fixed;inset:0;z-index:-1;overflow:hidden;background:var(--page)}
-.bg i{position:absolute;border-radius:50%;filter:blur(60px);opacity:.9}
-.bg .o1{width:52vw;height:52vw;left:-14vw;top:-20vw;background:var(--orb1)}
-.bg .o2{width:40vw;height:40vw;right:-10vw;top:10vh;background:var(--orb2)}
-.bg .o3{width:46vw;height:46vw;left:30vw;bottom:-28vw;background:var(--orb3)}
+/* One fixed, seamless gradient behind everything (founder 2026-09-06: the
+   blurred orbs rendered as a hard two-tone band on Chrome, and the teal one
+   read as a stray colour). No filter: blur, greens only, same on every tab. */
+.bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--bgfx)}
 .wrap{max-width:1200px;margin:0 auto;padding:22px 20px 90px}
 header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
@@ -1066,7 +1065,7 @@ export default function BusinessPortal() {
         <link rel="apple-touch-icon" sizes="180x180" href="/brand/apple-touch-icon.png" />
       </Head>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
-      <div className="bg"><i className="o1" /><i className="o2" /><i className="o3" /></div>
+      <div className="bg" />
       <header>
         <span className="brand">
           <img className="logo" src="/brand/wapay-lockup-120.png" srcSet="/brand/wapay-lockup-120.png 1x, /brand/wapay-lockup-240.png 2x" alt="WaPay" width={121} height={30} />

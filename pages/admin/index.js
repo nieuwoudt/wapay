@@ -18,37 +18,60 @@ const Rw = (c) => 'R' + Math.round((c || 0) / 100).toLocaleString('en-ZA');
 const dt = (s) => (s ? new Date(s).toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 
 const CSS = `
-:root{color-scheme:light;--page:#f9f9f7;--surface:#fcfcfb;--edge:rgba(11,11,11,.10);--ink:#0b0b0b;
---ink2:#52514e;--ink3:#898781;--grid:#e1e0d9;--accent:#1d7a3f;--accent-ink:#14512c;--accent-soft:#e7f1ea;
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+/* Same visual system as the business portal (founder 2026-09-06): glass cards
+   on one seamless green gradient, Inter, the official lockup + an "Admin" tag. */
+:root{color-scheme:light;--page:#eef3ef;--bgfx:radial-gradient(90vmax 70vmax at 8% -12%,rgba(53,152,83,.26),transparent 62%),radial-gradient(80vmax 60vmax at 96% 108%,rgba(37,211,102,.16),transparent 60%),linear-gradient(180deg,#eef3ef 0%,#e7efe9 100%);
+--surface:rgba(255,255,255,.72);--edge:rgba(9,30,18,.10);--ink:#0b1411;--ink2:#3d4a43;--ink3:#7b877f;--grid:rgba(9,30,18,.10);
+--accent:#359853;--accent-2:#2e8a4c;--accent-ink:#1f6a39;--accent-soft:rgba(53,152,83,.12);
+--glass:linear-gradient(180deg,rgba(255,255,255,.78),rgba(255,255,255,.56));--glass-edge:rgba(255,255,255,.75);--glass-line:rgba(9,30,18,.08);
+--sheen:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.9),rgba(255,255,255,0));
+--field:rgba(255,255,255,.85);--field-edge:rgba(9,30,18,.14);--shadow:0 18px 50px -22px rgba(8,40,20,.35),0 2px 6px -2px rgba(8,40,20,.12);
 --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--good:#0ca30c;--crit:#d03b3b;--up:#006300;--down:#b3362a}
-@media (prefers-color-scheme:dark){:root{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;
---edge:rgba(255,255,255,.10);--ink:#fff;--ink2:#c3c2b7;--ink3:#898781;--grid:#2c2c2a;--accent:#55b47f;
---accent-ink:#8ed3ac;--accent-soft:#1b2b21;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--up:#0ca30c;--down:#e66767}}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--page:#0b100d;--bgfx:radial-gradient(90vmax 70vmax at 8% -12%,rgba(53,152,83,.30),transparent 62%),radial-gradient(80vmax 60vmax at 96% 108%,rgba(37,211,102,.13),transparent 60%),linear-gradient(180deg,#0b100d 0%,#0d150f 100%);
+--surface:rgba(28,34,31,.7);--edge:rgba(255,255,255,.10);--ink:#f2f6f3;--ink2:#c3ccc6;--ink3:#8a948d;--grid:rgba(255,255,255,.08);
+--accent:#4fb572;--accent-2:#3d9d5e;--accent-ink:#9fe0b6;--accent-soft:rgba(79,181,114,.16);
+--glass:linear-gradient(180deg,rgba(28,34,31,.78),rgba(20,25,22,.62));--glass-edge:rgba(255,255,255,.14);--glass-line:rgba(255,255,255,.06);
+--sheen:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.35),rgba(255,255,255,0));
+--field:rgba(255,255,255,.06);--field-edge:rgba(255,255,255,.14);--shadow:0 24px 60px -24px rgba(0,0,0,.7),0 2px 6px -2px rgba(0,0,0,.5);
+--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--up:#0ca30c;--down:#e66767}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--page);color:var(--ink);font:400 14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding:24px 20px 80px}
-header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
-.brand b{color:var(--accent);font-weight:750}.brand{font-size:18px;font-weight:750}
+html,body{margin:0;background:var(--page);color:var(--ink);font:400 14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--bgfx)}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 20px 90px}
+header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand img.logo{height:30px;width:auto;display:block;flex:none}
+.brand .tag{font-size:11px;font-weight:600;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;padding-left:12px;border-left:1px solid var(--field-edge);line-height:1.2}
+@media(max-width:700px){.brand img.logo{height:26px}}
 .spacer{flex:1}
-.tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--edge);border-radius:10px;padding:3px}
-.tabs button{border:0;background:transparent;color:var(--ink2);font:600 12.5px system-ui;padding:6px 13px;border-radius:8px;cursor:pointer}
-.tabs button.on{background:var(--accent);color:#fff}
-.linkish{border:0;background:none;color:var(--ink3);font-size:12px;cursor:pointer;text-decoration:underline}
+.tabs{display:flex;gap:4px;background:var(--glass);border:1px solid var(--glass-edge);border-radius:14px;padding:4px;backdrop-filter:blur(18px) saturate(1.6);-webkit-backdrop-filter:blur(18px) saturate(1.6);box-shadow:var(--shadow)}
+.tabs button{border:0;background:transparent;color:var(--ink2);font:600 12.5px Inter,system-ui;padding:8px 14px;border-radius:10px;cursor:pointer;transition:all .15s}
+.tabs button:hover{background:var(--accent-soft)}
+.tabs button.on{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;box-shadow:0 6px 18px -8px rgba(53,152,83,.8)}
+.linkish{border:0;background:none;color:var(--ink3);font-size:12.5px;cursor:pointer;text-decoration:underline;padding:4px}
 .grid{display:grid;gap:14px}.kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
 .two{grid-template-columns:1fr 1fr}@media(max-width:860px){.two{grid-template-columns:1fr}}
-.card{background:var(--surface);border:1px solid var(--edge);border-radius:12px;padding:16px 18px;min-width:0}
+.card{position:relative;background:var(--glass);border:1px solid var(--glass-edge);border-radius:20px;padding:18px 20px;min-width:0;
+backdrop-filter:blur(18px) saturate(1.6);-webkit-backdrop-filter:blur(18px) saturate(1.6);box-shadow:var(--shadow)}
+.card::before{content:"";position:absolute;left:14%;right:14%;top:0;height:1px;background:var(--sheen);opacity:.9}
 .card h2{font-size:13.5px;font-weight:700;margin:0 0 2px}
 .note{font-size:11.5px;color:var(--ink3);margin:0 0 10px}
 .k{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3)}
 .v{font-size:25px;font-weight:650;margin-top:3px}
 .vs{font-size:11.5px;color:var(--ink3);margin-top:3px}
-.login{max-width:360px;margin:9vh auto 0}
-.login input{width:100%;padding:11px 12px;border:1px solid var(--edge);border-radius:9px;background:var(--page);color:var(--ink);font-size:15px;margin:6px 0 12px}
-.login button.go{width:100%;padding:11px;border:0;border-radius:9px;background:var(--accent);color:#fff;font:650 14px system-ui;cursor:pointer}
+.login{max-width:400px;margin:9vh auto 0}
+.login input{width:100%;padding:11px 13px;border:1px solid var(--field-edge);border-radius:12px;background:var(--field);color:var(--ink);font:inherit;font-size:15px;margin:6px 0 12px;outline:none;transition:border .15s,box-shadow .15s}
+.login input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.login button.go{width:100%;padding:12px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font:650 14px Inter,system-ui;cursor:pointer;box-shadow:0 10px 24px -10px rgba(53,152,83,.8)}
+.login button.go:disabled{opacity:.6;cursor:default}
+.login .msg{background:var(--field);border:1px solid var(--field-edge);border-radius:14px;padding:12px 14px;font-size:13.5px;line-height:1.5;margin-bottom:12px}
+.login .links{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px}
 .err{color:var(--crit);font-size:12.5px;margin-top:8px}
 .searchrow{display:flex;gap:8px}
-.searchrow input{flex:1;padding:10px 12px;border:1px solid var(--edge);border-radius:9px;background:var(--page);color:var(--ink);font-size:14px}
-.searchrow button{padding:10px 16px;border:0;border-radius:9px;background:var(--accent);color:#fff;font-weight:650;cursor:pointer}
+.searchrow input{flex:1;padding:10px 13px;border:1px solid var(--field-edge);border-radius:12px;background:var(--field);color:var(--ink);font:inherit;font-size:14px;outline:none}
+.searchrow input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.searchrow button{padding:10px 16px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-weight:650;cursor:pointer}
 table{border-collapse:collapse;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
 th{text-align:left;color:var(--ink3);font-weight:600;padding:5px 10px 5px 0;border-bottom:1px solid var(--grid);white-space:nowrap}
 td{padding:5px 10px 5px 0;border-bottom:1px solid var(--grid)}
@@ -61,7 +84,7 @@ td.n,th.n{text-align:right}
 .idrow .l{color:var(--ink3)}
 .bal{font-size:22px;font-weight:650}
 svg{display:block;width:100%}
-svg text{font:500 10.5px system-ui;fill:var(--ink3)}
+svg text{font:500 10.5px Inter,system-ui;fill:var(--ink3)}
 .empty{color:var(--ink3);font-size:12.5px;padding:14px 0}
 
 .ops{display:flex;gap:8px;flex-wrap:wrap}
@@ -440,7 +463,7 @@ function Login({ configured, passwordLogin, onDone }) {
 
   return (
     <div className="login card">
-      <h2 style={{ fontSize: 16 }}>🔐 Admin sign-in</h2>
+      <h2 style={{ fontSize: 18, marginBottom: 6 }}>Admin sign-in</h2>
       {!configured ? (
         <p className="note" style={{ marginTop: 8 }}>
           Login is not configured yet. Set <b>WAPAY_ADMIN_MSISDNS</b> and <b>WAPAY_ADMIN_SESSION_SECRET</b> in
@@ -481,35 +504,38 @@ function Login({ configured, passwordLogin, onDone }) {
         </>
       ) : stage === 'number' ? (
         <>
-          <p className="note">Your WhatsApp number. A one-time code arrives in your WaPay chat.</p>
-          <input inputMode="tel" placeholder="073 123 4567" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} />
-          <button className="go" onClick={async () => {
-            setErr('');
-            if (!numberOk) { setErr('Enter your full WhatsApp number.'); return; }
-            try {
-              const r = await post({ action: 'request', msisdn });
-              if (!r.ok) { setErr('Could not request a code right now. Try again in a moment.'); return; }
-            } catch {
-              // A silent failure here is what makes the screen look frozen.
-              setErr('No connection. Check your network and try again.');
-              return;
-            }
-            setStage('code');
-          }}>Send my code</button>
-          {passwordLogin && (
-            <button className="linkish" style={{ marginTop: 10 }} onClick={() => { setStage('password'); setErr(''); }}>
-              Use my password instead
-            </button>
-          )}
+          <p className="note">Enter the WhatsApp number on the admin list, then use a one-time code.</p>
+          <input inputMode="tel" autoComplete="username" placeholder="073 123 4567" value={msisdn} onChange={(e) => setMsisdn(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') document.getElementById('have-code')?.click(); }} />
+          <div className="msg"><b>Fastest:</b> ask for your code from your phone in the WaPay chat. It comes straight back there.</div>
+          {/* Opens the code box only. Minting a code here would burn the one already in the chat (BUGLOG #40). */}
+          <button id="have-code" className="go" onClick={() => { setErr(''); if (!numberOk) { setErr('Enter your full WhatsApp number.'); return; } setCode(''); setStage('code'); }}>I have my code from WhatsApp</button>
+          <div className="links">
+            {passwordLogin ? <button className="linkish" onClick={() => { setStage('password'); setErr(''); }}>Use my password instead</button> : <span />}
+            <button className="linkish" disabled={busy} onClick={async () => {
+              setErr('');
+              if (!numberOk) { setErr('Enter your full WhatsApp number.'); return; }
+              setBusy(true);
+              try {
+                const r = await post({ action: 'request', msisdn });
+                if (!r.ok) { setErr('Could not request a code right now. Try again in a moment.'); return; }
+                setStage('code');
+              } catch {
+                // A silent failure here is what makes the screen look frozen.
+                setErr('No connection. Check your network and try again.');
+              } finally { setBusy(false); }
+            }}>{busy ? 'Sending…' : 'Send me a code instead'}</button>
+          </div>
+          <p className="note" style={{ marginTop: 12 }}>"Send me a code" only delivers if you chatted with WaPay in the last 24 hours (a WhatsApp rule).</p>
         </>
       ) : (
         <>
-          <p className="note">Enter the 6-digit code. One attempt per code; a wrong guess burns it.</p>
+          <p className="note">Six digits, one attempt per code. A wrong guess burns it. Nothing in your chat? Ask for a code from your phone and use the one that comes back.</p>
           <input inputMode="numeric" maxLength={6} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
           <button className="go" onClick={async () => {
             setErr('');
             const r = await post({ action: 'verify', msisdn, code });
-            if (r.ok) { remember(msisdn); onDone(); } else { setErr('That code did not work. Request a fresh one.'); setStage('number'); setCode(''); }
+            if (r.ok) { remember(msisdn); onDone(); } else { setErr(r.status === 429 ? 'Too many attempts. Try again in 15 minutes.' : 'That code did not work. Ask for a fresh one from your phone.'); setStage('number'); setCode(''); }
           }}>Sign in</button>
           <button className="linkish" style={{ marginTop: 10 }} onClick={() => { setStage('number'); setCode(''); }}>Different number</button>
         </>
@@ -860,10 +886,23 @@ export default function Admin() {
   useEffect(() => { probe(); }, [probe]);
   return (
     <div className="wrap">
-      <Head><title>WaPay Mission Control</title><meta name="robots" content="noindex,nofollow" /></Head>
+      <Head>
+        <title>WaPay Admin</title>
+        <meta name="robots" content="noindex,nofollow" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+        <link rel="icon" type="image/png" sizes="48x48" href="/brand/favicon-48.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/brand/apple-touch-icon.png" />
+      </Head>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
+      <div className="bg" />
       <header>
-        <span className="brand"><b>WaPay</b> Mission Control</span>
+        <span className="brand">
+          <img className="logo" src="/brand/wapay-lockup-120.png" srcSet="/brand/wapay-lockup-120.png 1x, /brand/wapay-lockup-240.png 2x" alt="WaPay" width={121} height={30} />
+          <span className="tag">Admin</span>
+        </span>
         <div className="spacer" />
         {authed && (
           <>
