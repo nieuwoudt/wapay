@@ -35,6 +35,7 @@ import {
   BUSINESS_PASSWORD_MIN,
 } from '../../../lib/business-auth.js';
 import { createBusiness } from '../../../lib/business.js';
+import { onboardingOtpDisabled } from '@wapay/auth';
 
 export const config = { maxDuration: 15 };
 
@@ -50,7 +51,18 @@ export default async function handler(req, res) {
     let signups;
     if (isInternal) {
       const { valid, malformed } = businessSignupAllowlistReport();
-      signups = { open: signupsOpen(), allowlisted: valid.length, malformed, build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || null };
+      signups = {
+        open: signupsOpen(),
+        allowlisted: valid.length,
+        malformed,
+        build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || null,
+        // The sign-up OTP switch as this deployment reads it (docs/ONBOARDING.md
+        // §4): "off" only for off/false/0/no/skip; anything else keeps the OTP.
+        // Shown so "I set the variable" and "the deploy runs with it" are never
+        // confused again (the invite-list lesson of 2026-09-06).
+        onboardingOtp: onboardingOtpDisabled() ? 'off' : 'on',
+        onboardingOtpRaw: process.env.WAPAY_ONBOARDING_OTP === undefined ? null : String(process.env.WAPAY_ONBOARDING_OTP).slice(0, 20),
+      };
     }
     return res.status(200).json({
       authed: ctx.ok,
