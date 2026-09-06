@@ -16,6 +16,22 @@ import { claimMessage } from '../../../lib/ledger-post.js';
 // only reads query params, so it is unaffected.
 export const config = { api: { bodyParser: false } };
 
+/**
+ * A per-minute heartbeat row in processed_messages ("webhook-ok:<minute>",
+ * "webhook-401:<reason>:<minute>") so whether Meta is reaching this endpoint,
+ * and whether its signatures verify, can be read from the database when the
+ * logs are out of reach (inbound silence since 2026-09-03, found 2026-09-06).
+ * Synthetic ids never collide with Meta's wamid.* ids; a repeat within the
+ * same minute is swallowed by the unique index. Never affects the webhook.
+ */
+async function webhookPulse(kind) {
+  try {
+    await claimMessage({ waMessageId: `${kind}:${new Date().toISOString().slice(0, 16)}` });
+  } catch {
+    // diagnostics must never change the webhook's behaviour
+  }
+}
+
 export default async function handler(req, res) {
   
   // GET: Webhook verification
@@ -65,6 +81,7 @@ export default async function handler(req, res) {
 
     if (!check.ok) {
       console.error(JSON.stringify({ type: 'wa_webhook_signature_rejected', reason: check.reason }));
+      await webhookPulse(`webhook-401:${check.reason || 'bad'}`);
       return res.status(401).json({ error: 'invalid signature' });
     }
 
@@ -75,6 +92,7 @@ export default async function handler(req, res) {
       console.error(JSON.stringify({ type: 'wa_webhook_invalid_json' }));
       return res.status(400).json({ error: 'invalid json' });
     }
+    await webhookPulse('webhook-ok');
 
     // Processing MUST complete before the ACK. On Vercel serverless,
     // execution after the response is not guaranteed — a fire-and-forget

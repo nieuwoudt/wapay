@@ -64,7 +64,11 @@ const CSS = `
 --shadow:0 24px 60px -24px rgba(0,0,0,.7),0 2px 6px -2px rgba(0,0,0,.5);
 --field:rgba(255,255,255,.06);--field-edge:rgba(255,255,255,.14)}}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--page);color:var(--ink);font:400 14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+html{background:var(--page)}
+/* body stays transparent: an opaque body only as tall as the content painted
+   over the fixed gradient layer and left a hard edge below it (the "band"). */
+html,body{margin:0;color:var(--ink);font:400 14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+body{background:transparent;min-height:100vh}
 /* One fixed, seamless gradient behind everything (founder 2026-09-06: the
    blurred orbs rendered as a hard two-tone band on Chrome, and the teal one
    read as a stray colour). No filter: blur, greens only, same on every tab. */

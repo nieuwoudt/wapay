@@ -36,7 +36,9 @@ const CSS = `
 --field:rgba(255,255,255,.06);--field-edge:rgba(255,255,255,.14);--shadow:0 24px 60px -24px rgba(0,0,0,.7),0 2px 6px -2px rgba(0,0,0,.5);
 --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--up:#0ca30c;--down:#e66767}}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--page);color:var(--ink);font:400 14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+html{background:var(--page)}
+html,body{margin:0;color:var(--ink);font:400 14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+body{background:transparent;min-height:100vh}
 .bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--bgfx)}
 .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 90px}
 header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px}
