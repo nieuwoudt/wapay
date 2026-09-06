@@ -62,6 +62,7 @@ import {
   isWicodeLive,
 } from '../../../lib/spend-catalogue.js';
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
+import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
 import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '../../../lib/localize.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
@@ -6758,6 +6759,172 @@ async function handleListAllProducts({ from, account }) {
 }
 
 /**
+ * OTT voucher redemption — the SECOND cash-in rail, tried when Blu does not
+ * recognise a PIN. Blu stays the primary path (it is proven and live); this
+ * widens cash-in to the much larger OTT voucher network without touching
+ * the Blu flow at all.
+ *
+ * MONEY SAFETY (this is money coming IN, so the risk is the mirror image of
+ * a spend: OTT consumes the voucher first, and only then do we credit):
+ * - The idemKey is derived from the voucher PIN, so one PIN can only ever
+ *   be credited once, on any retry, to any account (the Blu discipline).
+ *   It is rail-prefixed so a Blu PIN and an OTT PIN can never collide.
+ * - A ProviderRequest row is written BEFORE the remit and marked REMITTED
+ *   the moment OTT confirms, so a crash between "voucher consumed" and
+ *   "wallet credited" leaves a durable record the customer's next message
+ *   can finish (postEntry is idempotent, so completing it is safe).
+ * - A remit TIMEOUT is never treated as failure: the client raises
+ *   TIMEOUT_CHECK_REQUIRED and we resolve it with checkRemitVoucher on the
+ *   same reference before deciding anything.
+ * - The PIN is a bearer secret: masked in logs, never stored on the row.
+ *
+ * @returns {Promise<boolean>} true when OTT handled it (message already
+ *   sent), false when this PIN is not an OTT voucher either.
+ */
+async function attemptOttRedemption({ from, pin, account }) {
+  if (!process.env.OTT_MERCHANT_API_KEY) return false; // rail not configured
+
+  const pinHash = crypto.createHash('sha256').update(String(pin)).digest('hex');
+  // 'x' every 8 hex chars: a long digit run in a hash trips the ledger's
+  // timestamp guard AFTER the voucher is consumed (BUGLOG #17's shape).
+  const safeHash = pinHash.slice(0, 32).replace(/(.{8})/g, '$1x');
+  const idemKey = `wapay-redeem-ott-${safeHash}`;
+  const reference = `wapay-rdm-${safeHash}`.slice(0, 50);
+
+  let client;
+  try {
+    client = new OttRedemptionClient();
+  } catch {
+    return false; // misconfigured: stay silent, Blu's error stands
+  }
+
+  // Read-only validation first: tells us the value AND whether this PIN is
+  // an OTT voucher at all, without moving anything.
+  let check;
+  try {
+    check = await client.checkVoucher(pin);
+  } catch (error) {
+    logStructured('ott_redeem_not_ours', { from, error: error.message, code: error.errorCode });
+    return false; // not an OTT voucher (or OTT rejected it): Blu's message stands
+  }
+  if (!check?.valueCents || check.valueCents <= 0) return false;
+
+  await sendWhatsAppText({
+    to: from,
+    text: await localizeOutbound(
+      `🎟️ Found it! That is a ${randsShort(check.valueCents)} OTT voucher. Loading it now...`,
+      await userLang(account)
+    ),
+  });
+
+  // Durable record BEFORE the voucher is consumed.
+  await prisma.providerRequest.upsert({
+    where: { id: reference },
+    create: {
+      id: reference,
+      idemKey: reference,
+      route: 'ott-redeem',
+      status: 'PENDING',
+      accountId: account.id,
+      provider: 'OTT',
+      metadata: { valueCents: check.valueCents, serial: check.serial },
+    },
+    update: {},
+  }).catch(() => {});
+
+  let remit;
+  try {
+    remit = await client.remitVoucher({
+      voucherPin: pin,
+      amountCents: check.valueCents,
+      uniqueReference: reference,
+      mobile: account.msisdn,
+      clientId: account.id,
+    });
+  } catch (error) {
+    if (error.message === 'TIMEOUT_CHECK_REQUIRED') {
+      // NEVER retry the remit. Ask OTT what actually happened.
+      try {
+        remit = await client.checkRemitVoucher(reference);
+      } catch {
+        await prisma.providerRequest.update({
+          where: { id: reference }, data: { status: 'RECONCILE' },
+        }).catch(() => {});
+        logStructured('ott_redeem_indeterminate', { from, reference });
+        return await sendWhatsAppText({
+          to: from,
+          text: await localizeOutbound(
+            `⏳ Your voucher is being confirmed with the network. Nothing is lost. Send me any message in a minute and I will finish loading it. 💚`,
+            await userLang(account)
+          ),
+        }) && true;
+      }
+    } else {
+      await prisma.providerRequest.update({
+        where: { id: reference }, data: { status: 'FAILED' },
+      }).catch(() => {});
+      logStructured('ott_redeem_failed', { from, reference, error: error.message, reason: error.reason });
+      const friendly = error.reason && !['AUTH', 'RETRYABLE', 'USER_INPUT'].includes(error.reason)
+        ? error.reason
+        : 'That voucher could not be loaded. Please check the PIN and try again.';
+      await sendWhatsAppText({
+        to: from,
+        text: await localizeOutbound(`❌ ${friendly}`, await userLang(account)),
+      });
+      return true;
+    }
+  }
+
+  // The voucher is consumed at OTT from here on: the customer MUST be
+  // credited, so the row records that before the ledger write.
+  await prisma.providerRequest.update({
+    where: { id: reference },
+    data: { status: 'REMITTED', providerRef: remit.voucherId || reference },
+  }).catch(() => {});
+
+  await ensureWallet({ accountId: account.id });
+  const loadEntry = buildLoad({
+    accountId: account.id,
+    rail: RAIL.OTT,
+    faceCents: remit.voucherAmountCents,
+    idemKey,
+  });
+  loadEntry.externalRef = remit.voucherId || reference;
+  await postEntry(loadEntry);
+  const creditedCents = loadEntry.meta.creditCents;
+
+  await prisma.providerRequest.update({
+    where: { id: reference }, data: { status: 'SUCCESS' },
+  }).catch(() => {});
+
+  await updateConversationState(from, null);
+  noteDepositMethod({ accountId: account.id, method: 'VOUCHER' }).catch(() => {});
+  const { balance } = await getUserBalance(from);
+
+  logStructured('ott_redeem_success', {
+    from,
+    reference,
+    faceCents: remit.voucherAmountCents,
+    creditedCents,
+    residualCents: remit.voucherBalanceCents,
+  });
+
+  const residualLine = remit.voucherBalanceCents > 0
+    ? `\n\n💡 ${randsShort(remit.voucherBalanceCents)} is left on that voucher. OTT will SMS you a link to use it.`
+    : '';
+  const msg = await localizeOutbound(
+    `✅ *Voucher loaded!*\n\n🎟️ Voucher value: ${randsShort(remit.voucherAmountCents)}\n` +
+    `💰 Added to your wallet: ${randsShort(creditedCents)}\n` +
+    `💳 New balance: R${balance}${residualLine}\n\n` +
+    `What would you like to do with it? 😊`,
+    await userLang(account)
+  );
+  await addToConversationHistory(from, 'assistant', msg);
+  await sendWhatsAppText({ to: from, text: msg });
+  return true;
+}
+
+/**
  * Handle voucher redemption
  */
 async function handleVoucherRedemption({ from, pin, account }) {
@@ -6811,6 +6978,10 @@ async function handleVoucherRedemption({ from, pin, account }) {
       }
     } catch (statusError) {
       console.error('⚠️ Status check failed', statusError);
+      // Blu does not know this PIN. Before giving up, try the OTT voucher
+      // network — the second cash-in rail. It validates read-only first, so
+      // a PIN that is not an OTT voucher either costs nothing.
+      if (await attemptOttRedemption({ from, pin, account })) return { ok: true };
       await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
       return await sendWhatsAppText({
         to: from,
