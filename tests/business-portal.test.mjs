@@ -676,15 +676,27 @@ test('processor: business-login matcher is narrow, sits after the admin hook, re
     'business portal is not loading', 'business code for my customers?']) {
     assert.equal(match(no), false, no);
   }
-  assert.match(processor, /issued\.reason === 'THROTTLED' && issued\.hasBusiness/, 'owner asking twice is told about the throttle');
   assert.match(processor, /businessId: \{ not: null \}/, '"change my amount" never mints a personal link over open business tickets');
+  // The shared helper issues the code, answers throttle/cap for legitimate
+  // askers only, and stays silent for everyone else.
+  const helperIdx = processor.indexOf('async function handleBusinessLoginAsk(');
+  assert.ok(helperIdx > -1, 'shared helper exists');
+  const helper = processor.slice(helperIdx, processor.indexOf('\nfunction matchBusinessLoginAsk', helperIdx));
+  assert.match(helper, /requestBusinessOtpInSession/); assert.match(helper, /issued\.ok/);
+  assert.ok(!/not a business/i.test(helper.split('issued.ok')[0]), 'silent for non-owners');
+  assert.match(helper, /issued\.reason === 'THROTTLED'/, 'an owner or invitee asking twice is told about the throttle');
+  assert.match(helper, /issued\.reason === 'CAPPED'/, 'and about the daily cap');
+  assert.match(helper, /return null;\s*\n\}/, 'everyone else falls through');
+  // Two call sites: fresh routing (after the admin hook, before slot parsing)
+  // and inside a waiting conversation state (before the state dispatch).
+  assert.equal((processor.match(/await handleBusinessLoginAsk\(\{ from, account \}\)/g) || []).length, 2, 'called from fresh routing AND from inside a waiting state');
   const adminHook = processor.indexOf('matchAdminLoginAsk(text)');
-  const bizHook = processor.indexOf('matchBusinessLoginAsk(text)');
-  assert.ok(adminHook > -1 && bizHook > adminHook, 'business hook follows the admin hook');
-  const block = processor.slice(bizHook, bizHook + 1000);
-  assert.match(block, /requestBusinessOtpInSession/); assert.match(block, /issued\.ok/);
-  assert.ok(!/not a business/i.test(block.split('issued.ok')[0]), 'silent for non-owners');
-  assert.ok(bizHook < processor.indexOf('const slots = parseSlots(text'), 'runs before slot parsing like the admin hook');
+  const freshHook = processor.lastIndexOf('matchBusinessLoginAsk(text)');
+  assert.ok(adminHook > -1 && freshHook > adminHook, 'fresh-routing hook follows the admin hook');
+  assert.ok(freshHook < processor.indexOf('const slots = parseSlots(text'), 'runs before slot parsing like the admin hook');
+  const stateHook = processor.indexOf('matchBusinessLoginAsk(text)');
+  const stateDispatch = processor.indexOf('return await handleConversationState({ from, text, state, data, account });');
+  assert.ok(stateHook > -1 && stateHook < stateDispatch, 'an owner mid-flow still gets a code: the escape sits before the state dispatch');
 });
 
 test('page: four tabs, the composer, WhatsApp send path, import, export, and no admin command advertised', () => {

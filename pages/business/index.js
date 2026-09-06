@@ -345,19 +345,23 @@ function Login({ configured, onDone }) {
       ) : stage === 'start' ? (
         <>
           <h2 style={{ fontSize: 18, marginBottom: 6 }}>Sign in or register</h2>
-          <p className="note">Your business runs on your WaPay wallet. Enter the WhatsApp number of that wallet and we send a one-time code there.</p>
+          <p className="note">Your business runs on your WaPay wallet. Enter the WhatsApp number of that wallet, then get a one-time code.</p>
           <label className="f">WhatsApp number</label>
           <input inputMode="tel" autoComplete="username" placeholder="073 123 4567" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !busy && requestCode()} />
-          <button className="btn p" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={requestCode}>{busy ? 'Sending…' : 'Send my code'}</button>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
-            <button className="linkish" onClick={() => { setStage('password'); setErr(''); }}>I have a password</button>
+          <div className="msg" style={{ marginTop: 12, fontSize: 13.5 }}>
+            <b>Fastest:</b> from that phone, WhatsApp <b>business login</b> to WaPay. The code comes straight back in the chat.
           </div>
-          <p className="note" style={{ marginTop: 14 }}>No WaPay yet? Say hi to WaPay on WhatsApp first: your wallet is your business account. Code not arriving? From your phone, send <b>business login</b> to WaPay and it comes straight back.</p>
+          <button className="btn p" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={requestCode}>{busy ? 'Sending…' : 'I have my code from WhatsApp'}</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
+            <button className="linkish" onClick={() => { setStage('password'); setErr(''); }}>I have a password</button>
+            <button className="linkish" disabled={busy} onClick={requestCode}>Send me a code instead</button>
+          </div>
+          <p className="note" style={{ marginTop: 14 }}>"Send me a code" only delivers if you chatted with WaPay in the last 24 hours (a WhatsApp rule). No WaPay yet? Say hi to WaPay on WhatsApp first: your wallet is your business account.</p>
         </>
       ) : stage === 'code' ? (
         <>
           <h2 style={{ fontSize: 18, marginBottom: 6 }}>Enter your code</h2>
-          <p className="note">Six digits, one attempt per code. A wrong guess burns it.</p>
+          <p className="note">Six digits, one attempt per code. A wrong guess burns it. Nothing in your chat? From your phone, WhatsApp <b>business login</b> to WaPay and use the code that comes back.</p>
           <input inputMode="numeric" maxLength={6} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !busy && verify()} autoFocus />
           <button className="btn p" style={{ width: '100%', marginTop: 12 }} disabled={busy || code.length !== 6} onClick={verify}>{busy ? 'Checking…' : 'Continue'}</button>
           <button className="linkish" style={{ marginTop: 10 }} onClick={() => { setStage('start'); setCode(''); setErr(''); }}>Different number</button>

@@ -1227,6 +1227,12 @@ async function handlePostOnboarding({ account, from, text }) {
       }
       // fall through to fresh routing below
     } else {
+      // A business owner asking for a portal code must get it even while a
+      // flow is waiting on them; anything else stays with the flow.
+      if (matchBusinessLoginAsk(text)) {
+        const answered = await handleBusinessLoginAsk({ from, account });
+        if (answered) return answered;
+      }
       console.log('💬 User in conversation state:', state);
       return await handleConversationState({ from, text, state, data, account });
     }
@@ -1264,24 +1270,9 @@ async function handlePostOnboarding({ account, from, text }) {
   // message opens the window, so the reply always delivers free-form. Numbers
   // that own no business (and may not register) get no hint the command exists.
   if (matchBusinessLoginAsk(text)) {
-    const { requestBusinessOtpInSession } = await import('../../../lib/business-auth.js');
-    const issued = await requestBusinessOtpInSession({ msisdn: account.msisdn || from });
-    if (issued.ok) {
-      logStructured('business_login_code_in_session', { accountId: account.id });
-      return await sendWhatsAppText({
-        to: from,
-        text: `🔐 *WaPay for Business code: ${issued.code}*\n\nType it into the business portal within 10 minutes. One attempt only.\n\nNot you? Ignore this and tell us right away.`,
-      });
-    }
-    if (issued.reason === 'THROTTLED' && issued.hasBusiness) {
-      // A real owner asking twice inside a minute gets told why, instead of
-      // the sentence falling through to the AI (review 2026-09-05).
-      return await sendWhatsAppText({
-        to: from,
-        text: `⏱️ A code was sent less than a minute ago. Use that one, or ask again in 60 seconds.`,
-      });
-    }
-    // Not a business owner: route normally, say nothing.
+    const answered = await handleBusinessLoginAsk({ from, account });
+    if (answered) return answered;
+    // Not a business owner (and not invited): route normally, say nothing.
   }
 
   // Unified slot parsing: MUST happen before routing decisions and before any state transitions.
@@ -2255,6 +2246,38 @@ function matchAdminLoginAsk(text = '') {
  * ("my business needs airtime") never matches; the caller must still own a
  * business (or be allowed to register one) before anything is issued.
  */
+/**
+ * Issue and reply with a WaPay for Business sign-in code, in-session. Returns
+ * the send result when this number is an owner or an invitee (code, or an
+ * honest throttle/cap line), and null for everyone else so the message routes
+ * on as if the command did not exist. Called from the fresh-routing path AND
+ * from inside any waiting conversation state: an owner who is mid-flow must
+ * still be able to get into the portal (founder live test 2026-09-06).
+ */
+async function handleBusinessLoginAsk({ from, account }) {
+  const { requestBusinessOtpInSession } = await import('../../../lib/business-auth.js');
+  const issued = await requestBusinessOtpInSession({ msisdn: account.msisdn || from });
+  if (issued.ok) {
+    logStructured('business_login_code_in_session', { accountId: account.id });
+    return await sendWhatsAppText({
+      to: from,
+      text: `🔐 *WaPay for Business code: ${issued.code}*\n\nType it into the business portal within 10 minutes. One attempt only.\n\nNot you? Ignore this and tell us right away.`,
+    });
+  }
+  // A reason is only ever returned to an owner or an invitee (the gate runs
+  // first), so answering it leaks nothing about anyone else.
+  if (issued.reason === 'THROTTLED') {
+    return await sendWhatsAppText({
+      to: from,
+      text: `⏱️ A code was sent less than a minute ago. If it did not reach you, ask again in 60 seconds and I will send a fresh one right here.`,
+    });
+  }
+  if (issued.reason === 'CAPPED') {
+    return await sendWhatsAppText({ to: from, text: `⏸️ That is today's limit of sign-in codes. Please try again tomorrow, or sign in with your password.` });
+  }
+  return null;
+}
+
 function matchBusinessLoginAsk(text = '') {
   const s = String(text || '').trim().toLowerCase();
   if (s.length > 40) return false;
