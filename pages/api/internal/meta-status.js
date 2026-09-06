@@ -103,8 +103,12 @@ export default async function handler(req, res) {
       : (sa.data || []).map((a) => ({ appId: mask(a.whatsapp_business_api_data?.id), name: a.whatsapp_business_api_data?.name, overrideCallbackUri: a.override_callback_uri || null }));
     const waba = await graph(wabaId, token, { fields: 'id,name,account_review_status,business_verification_status' });
     out.waba = waba.error ? { error: waba.error } : { name: waba.name, accountReviewStatus: waba.account_review_status, businessVerificationStatus: waba.business_verification_status };
-    const tpl = await graph(`${wabaId}/message_templates`, token, { fields: 'name,status,category,language', limit: '100' });
-    out.templates = tpl.error ? { error: tpl.error } : (tpl.data || []).map((t) => ({ name: t.name, status: t.status, category: t.category, language: t.language }));
+    const tpl = await graph(`${wabaId}/message_templates`, token, { fields: 'name,status,category,language,components', limit: '100' });
+    // Components are returned for authentication templates only: their exact
+    // button shape decides which parameters a send must carry (BUGLOG #41).
+    out.templates = tpl.error
+      ? { error: tpl.error }
+      : (tpl.data || []).map((t) => ({ name: t.name, status: t.status, category: t.category, language: t.language, ...(t.category === 'AUTHENTICATION' ? { components: t.components } : {}) }));
   } else {
     out.wabaSubscribedApps = { skipped: 'no WHATSAPP_BUSINESS_ACCOUNT_ID in this deployment' };
   }
