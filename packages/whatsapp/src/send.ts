@@ -15,6 +15,8 @@ export interface SendTemplateArgs {
   language?: string;
   components?: Array<{
     type: 'header' | 'body' | 'button';
+    sub_type?: 'url' | 'quick_reply' | 'copy_code';
+    index?: string;
     parameters: Array<{
       type: 'text' | 'currency' | 'date_time';
       text?: string;
@@ -115,6 +117,20 @@ export function buildCtaUrlPayload(args: SendCtaUrlArgs): Record<string, any> {
 /**
  * Send WhatsApp template message
  */
+/**
+ * The components an AUTHENTICATION template send must carry: the code in the
+ * body AND in the copy-code URL button (Meta's standard OTP template shape,
+ * which is what `otp_register_step_2` is). A body-only send is rejected for a
+ * parameter mismatch, so every code fell back to free-form text, which Meta
+ * drops outside the 24-hour window (BUGLOG #42, 2026-09-06).
+ */
+export function authTemplateComponents(code: string): NonNullable<SendTemplateArgs['components']> {
+  return [
+    { type: 'body', parameters: [{ type: 'text', text: code }] },
+    { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] },
+  ];
+}
+
 export async function sendWhatsAppTemplate(args: SendTemplateArgs): Promise<{
   ok: boolean;
   data?: any;
@@ -130,8 +146,12 @@ export async function sendWhatsAppTemplate(args: SendTemplateArgs): Promise<{
       throw new Error('META_WHATSAPP_TOKEN or META_WHATSAPP_PHONE_NUMBER_ID not set');
     }
     
-    // Resolve language from catalog
-    const resolvedLanguage = resolveLanguage(templateName, language) || 'en_US';
+    // Resolve language from the catalog; when the catalog is empty (API routes
+    // never build it, only the webhook does) trust the caller's language before
+    // the en_US default. Falling to en_US for our `en` templates produced
+    // "(#132001) Template name does not exist in the translation" on every
+    // portal/admin code push (BUGLOG #42, 2026-09-06).
+    const resolvedLanguage = resolveLanguage(templateName, language) || language || 'en_US';
     
     const url = `${WHATSAPP_API_BASE}/${phoneNumberId}/messages`;
     

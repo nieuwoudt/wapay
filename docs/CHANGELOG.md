@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-09-06 (26) — Inbound-silence diagnostics; admin console on the portal's design; the band
+
+Three days without an inbound WhatsApp message (BUGLOG #41) turned out not to
+be the webhook: a read-only `/api/internal/meta-status` probe (app, callback
+URL, WABA subscription, phone state, templates) and per-minute pulse rows in
+`processed_messages` (`webhook-ok`, `webhook-401`, `status-*`) proved Meta
+reaches the endpoint and its signatures verify. Runbook:
+`docs/runbooks/whatsapp-inbound-silent.md`. The admin verifier accepts any
+live code (BUGLOG #40, admin side). The admin console now shares the business
+portal's visual system (glass cards, Inter, official lockup + "Admin" tag,
+the same login shape; the page still never names the in-chat command). The
+hard horizontal band on both consoles was the body's opaque background over
+the fixed gradient layer; the root paints the base colour now and the body
+is transparent, and the blurred orbs became one seamless green gradient.
+Internal probe also reports the effective onboarding OTP switch. And the reason
+the portal's "Send me a code" only ever worked inside the 24-hour window (BUGLOG
+#42): the template sender fell back to `en_US` whenever the catalog was empty
+(every API route), and no caller sent the copy-code button parameter the
+authentication template requires; fixed in `@wapay/whatsapp` and used by the
+onboarding, portal and admin code paths, so a code now reaches an owner who has
+not chatted for days.
+
 ## 2026-09-06 (25) — Business sign-up from inside WhatsApp; the onboarding OTP behind a flag
 
 The portal is no longer the only door. A wallet that finishes onboarding is

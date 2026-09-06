@@ -8,7 +8,7 @@
  */
 
 import { getPrisma } from '@wapay/domain';
-import { sendWhatsAppTemplate, sendWhatsAppText } from '@wapay/whatsapp';
+import { sendWhatsAppTemplate, sendWhatsAppText, authTemplateComponents } from '@wapay/whatsapp';
 
 const OTP_LENGTH = 6;
 const OTP_TTL_MINUTES = 5;
@@ -86,17 +86,7 @@ export async function sendOTP(args: {
       to: msisdn,
       templateName: 'otp_register_step_2',
       language: 'en',
-      components: [
-        {
-          type: 'body',
-          parameters: [
-            {
-              type: 'text',
-              text: code,
-            },
-          ],
-        },
-      ],
+      components: authTemplateComponents(code),
     });
     
     // Fallback to text message if template not found
