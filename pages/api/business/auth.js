@@ -85,7 +85,14 @@ export default async function handler(req, res) {
   if (!businessAuthConfigured()) return res.status(503).json({ ok: false, error: 'BUSINESS_LOGIN_NOT_CONFIGURED' });
 
   if (action === 'request') {
-    await requestBusinessOtp({ msisdn, sendTemplate: sendWhatsAppTemplate, send: sendWhatsAppText });
+    const out = await requestBusinessOtp({ msisdn, sendTemplate: sendWhatsAppTemplate, send: sendWhatsAppText });
+    // Operators (internal key) also see which rail carried the code and why
+    // the others failed (template errors), so "no code" is diagnosable without
+    // the Vercel logs. Everyone else gets the generic answer, always.
+    const internalKey = process.env.WAPAY_INTERNAL_API_KEY || '';
+    if (internalKey && req.headers['x-internal-api-key'] === internalKey && out?.diag) {
+      return res.status(200).json({ ok: true, diag: out.diag });
+    }
     return res.status(200).json({ ok: true }); // generic, always
   }
 

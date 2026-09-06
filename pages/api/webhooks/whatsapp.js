@@ -313,7 +313,11 @@ export default async function handler(req, res) {
                 }
               }
 
-              if (change.field === 'message_status') {
+              // Delivery statuses arrive under field "messages" as value.statuses
+              // (the Cloud API has no "message_status" field; that check never
+              // matched since January, so statuses were silently ignored: found
+              // 2026-09-06 while diagnosing inbound silence).
+              if (change.field === 'message_status' || Array.isArray(change.value?.statuses)) {
                 const statuses = change.value?.statuses || [];
                 for (const status of statuses) {
                   console.log(
