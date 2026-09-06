@@ -19,6 +19,8 @@ import { sendWhatsAppText, sendWhatsAppTemplate } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
 import {
   businessAuthConfigured,
+  businessSignupAllowlistReport,
+  signupsOpen,
   requestBusinessOtp,
   verifyBusinessOtp,
   verifyBusinessPassword,
@@ -39,10 +41,22 @@ export const config = { maxDuration: 15 };
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     const ctx = await requireBusinessContext(req).catch(() => ({ ok: false }));
+    // Internal-key callers additionally see the signup gate as parsed (how
+    // many numbers were accepted, which raw entries were rejected) and the
+    // deployed build, so "no code arrives" is diagnosable, not guessed.
+    // Numbers themselves are never listed; malformed entries are not numbers.
+    const internalKey = process.env.WAPAY_INTERNAL_API_KEY || '';
+    const isInternal = internalKey && req.headers['x-internal-api-key'] === internalKey;
+    let signups;
+    if (isInternal) {
+      const { valid, malformed } = businessSignupAllowlistReport();
+      signups = { open: signupsOpen(), allowlisted: valid.length, malformed, build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || null };
+    }
     return res.status(200).json({
       authed: ctx.ok,
       configured: businessAuthConfigured(),
       business: ctx.ok ? { id: ctx.business.id, name: ctx.business.name, hasPassword: !!ctx.business.passwordHash } : null,
+      ...(signups ? { signups } : {}),
     });
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'method' });

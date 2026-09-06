@@ -71,10 +71,11 @@ html,body{margin:0;background:var(--page);color:var(--ink);font:400 14px/1.5 Int
 .bg .o3{width:46vw;height:46vw;left:30vw;bottom:-28vw;background:var(--orb3)}
 .wrap{max-width:1200px;margin:0 auto;padding:22px 20px 90px}
 header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:-.01em}
-.brand .mark{width:34px;height:34px;border-radius:11px;background:linear-gradient(135deg,#43b268,#2a8449);display:grid;place-items:center;color:#fff;font-weight:800;box-shadow:0 8px 20px -8px rgba(53,152,83,.7)}
-.brand .mark::after{content:"W"}
-.brand small{display:block;font-size:11px;font-weight:600;color:var(--ink3);letter-spacing:.06em;text-transform:uppercase;line-height:1.1}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand img.logo{height:30px;width:auto;display:block;flex:none}
+.brand .tag{font-size:11px;font-weight:600;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;padding-left:12px;border-left:1px solid var(--field-edge);line-height:1.2}
+.brand .bizname{font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(40vw,320px)}
+@media(max-width:700px){.brand img.logo{height:26px}.brand .bizname{max-width:100%}}
 .spacer{flex:1}
 .tabs{display:flex;gap:4px;background:var(--glass);border:1px solid var(--glass-edge);border-radius:14px;padding:4px;backdrop-filter:blur(18px) saturate(1.6);-webkit-backdrop-filter:blur(18px) saturate(1.6);box-shadow:var(--shadow)}
 .tabs button{border:0;background:transparent;color:var(--ink2);font:600 12.5px Inter,system-ui;padding:8px 14px;border-radius:10px;cursor:pointer;transition:all .15s}
@@ -336,8 +337,8 @@ function Login({ configured, onDone }) {
 
   return (
     <div className="login card">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-        <span className="brand"><span className="mark" /><span>WaPay <small>for Business</small></span></span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <span className="brand"><img className="logo" src="/brand/wapay-lockup-120.png" srcSet="/brand/wapay-lockup-120.png 1x, /brand/wapay-lockup-240.png 2x" alt="WaPay" width={121} height={30} /><span className="tag">for Business</span></span>
       </div>
       {!configured ? (
         <p className="note">The portal is not configured yet. Set <b>WAPAY_BUSINESS_SESSION_SECRET</b> (or reuse <b>WAPAY_ADMIN_SESSION_SECRET</b>) in Vercel and redeploy. It fails closed until then.</p>
@@ -1044,11 +1045,19 @@ export default function BusinessPortal() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+        <link rel="icon" type="image/png" sizes="48x48" href="/brand/favicon-48.png" />
+        <link rel="icon" type="image/png" sizes="128x128" href="/brand/wapay-favicon-128.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/brand/apple-touch-icon.png" />
       </Head>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className="bg"><i className="o1" /><i className="o2" /><i className="o3" /></div>
       <header>
-        <span className="brand"><span className="mark" /><span>{biz?.name || 'WaPay'} <small>{biz ? 'WaPay for Business' : 'for Business'}</small></span></span>
+        <span className="brand">
+          <img className="logo" src="/brand/wapay-lockup-120.png" srcSet="/brand/wapay-lockup-120.png 1x, /brand/wapay-lockup-240.png 2x" alt="WaPay" width={121} height={30} />
+          <span className="tag">for Business</span>
+          {biz?.name && <span className="bizname" title={biz.name}>{biz.name}</span>}
+        </span>
         <div className="spacer" />
         {authed && (
           <>

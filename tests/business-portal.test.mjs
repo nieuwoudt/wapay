@@ -21,14 +21,14 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import {
   businessAuthConfigured, requestBusinessOtp, requestBusinessOtpInSession, verifyBusinessOtp, verifyBusinessPassword,
   hashBusinessPassword, mintBusinessToken, verifyBusinessToken, mintRegistrationToken, verifyRegistrationToken,
   businessCookie, clearBusinessCookie, requireBusiness, requireBusinessContext, mayRegister, BUSINESS_COOKIE,
-  BUSINESS_OTP_LOCKOUT_BURNS, BUSINESS_PW_LOCKOUT_FAILS,
+  BUSINESS_OTP_LOCKOUT_BURNS, BUSINESS_PW_LOCKOUT_FAILS, businessSignupAllowlistReport,
 } from '../lib/business-auth.js';
 import { mintAdminToken, verifyAdminToken } from '../lib/admin-auth.js';
 import {
@@ -887,4 +887,35 @@ test('critics: overview range lookup ignores prototype keys; CSV window is creat
   const e2e = read('../tests/e2e/business-e2e.mjs');
   assert.match(e2e, /new URL\(RAW\)\.searchParams\.get\('schema'\)/, 'scratch-schema guard parses the URL');
   assert.match(e2e, /SELECT current_schema\(\)/, 'and verifies the live connection');
+});
+
+
+// ---------------------------------------------------------------------------
+// Founder live test 2026-09-06 — a nine-digit invite entry must be loud
+// ---------------------------------------------------------------------------
+
+test('allowlist: a malformed entry is reported and ignored, never silently emptying the invite list', () => {
+  armEnv();
+  delete process.env.WAPAY_BUSINESS_SIGNUPS;
+  process.env.WAPAY_BUSINESS_MSISDNS = '078705175, 0787051175 ,27731234567,+27 82 555 1234';
+  const report = businessSignupAllowlistReport();
+  assert.deepEqual(report.malformed, ['078705175'], 'the nine-digit typo is named');
+  assert.deepEqual(report.valid, ['27787051175', '27731234567', '27825551234']);
+  assert.equal(mayRegister('0787051175'), true, 'the well-formed twin still gets in');
+  assert.equal(mayRegister('078705175'), false);
+  const authRoute = read('../pages/api/business/auth.js');
+  assert.match(authRoute, /malformed/, 'internal-key probe surfaces the parse');
+  assert.match(authRoute, /if \(isInternal\)/, 'and only for internal-key callers');
+  assert.match(libAuth, /business_allowlist_malformed/, 'logged once per cold start');
+  delete process.env.WAPAY_BUSINESS_MSISDNS;
+});
+
+test('brand: the portal renders the official lockup and favicons, not a drawn placeholder', () => {
+  assert.match(page, /\/brand\/wapay-lockup-120\.png/); assert.match(page, /\/brand\/wapay-lockup-240\.png 2x/);
+  assert.match(page, /rel="apple-touch-icon"/); assert.match(page, /\/brand\/favicon-32\.png/);
+  assert.ok(!/className="mark"/.test(page), 'the invented W tile is gone');
+  assert.ok(!/content:"W"/.test(page), 'no CSS-drawn mark');
+  for (const f of ['wapay-lockup-120.png', 'wapay-lockup-240.png', 'favicon-32.png', 'favicon-48.png', 'apple-touch-icon.png', 'wapay-favicon-128.png']) {
+    assert.ok(existsSync(fileURLToPath(new URL(`../public/brand/${f}`, import.meta.url))), `public/brand/${f} ships with the app`);
+  }
 });
