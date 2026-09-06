@@ -197,6 +197,30 @@ async function run() {
     ], s);
   }
 
+  // ------------------------------------------------------------------
+  // 8. Business sign-up from the chat (founder ask 2026-09-06)
+  // ------------------------------------------------------------------
+  {
+    // The pilot is closed: invite the QA wallet for this run only, and give
+    // the portal-code command a secret so "business login" can answer.
+    process.env.WAPAY_BUSINESS_MSISDNS = QA_WA_ID;
+    const hadSecret = !!process.env.WAPAY_BUSINESS_SESSION_SECRET;
+    process.env.WAPAY_BUSINESS_SESSION_SECRET ||= 'chat-qa-business-secret-0123456789abcdef';
+    const a = await s.say('business account');
+    const b = await s.say('I Love My Laundry');
+    const c = await s.say('business account');
+    const d = await s.say('business login');
+    verdict('Business sign-up in chat: two answers, then the portal code', [
+      { level: 'FAIL', ok: has(a.replyText, /trading name/i) && !looksLikeMenu(a.replyText), what: '"business account" asks for the trading name' },
+      { level: 'FAIL', ok: has(b.replyText, /I Love My Laundry\* is now a WaPay business/), what: 'the name registers the business' },
+      { level: 'FAIL', ok: has(b.replyText, /business login/i) && has(b.replyText, /business\.wapay\.co\.za|\/business/), what: 'the reply explains the portal and the code command' },
+      { level: 'FAIL', ok: has(c.replyText, /already registered/i) && has(c.replyText, /I Love My Laundry/), what: 'asking again names the existing business' },
+      { level: 'FAIL', ok: has(d.replyText, /WaPay for Business code: \d{6}/), what: '"business login" now answers with a portal code (the wallet owns a business)' },
+    ], s);
+    delete process.env.WAPAY_BUSINESS_MSISDNS;
+    if (!hadSecret) delete process.env.WAPAY_BUSINESS_SESSION_SECRET;
+  }
+
   return results;
 }
 

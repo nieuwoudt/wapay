@@ -14,7 +14,11 @@
 
 Sanity check after the deploy: open `https://business.wapay.co.za`. You should see the "Sign in or register" glass card. `https://business.wapay.co.za/api/business/auth` should return `{"authed":false,"configured":true,"business":null}`.
 
-## 1. Register the business (5 min)
+## 0. Fastest path: register from the chat (2 min, 2026-09-06)
+
+From the business phone, WhatsApp **`business account`** to WaPay. It asks for the trading name; reply with it (e.g. `I Love My Laundry`). Expected: "*I Love My Laundry* is now a WaPay business" with the portal address and the `business login` hint. Then WhatsApp **`business login`**, and type the code at [business.wapay.co.za](https://business.wapay.co.za) → you land on Overview. (A brand-new number is asked "for you, or for a business? 1 / 2" right after onboarding instead; reply 2.) Negative checks: `business account` again names the existing business; a wallet NOT on the invite list gets the "small group first" answer and no business.
+
+## 1. Register the business on the portal (5 min)
 
 1. From your phone, WhatsApp **`business login`** to the WaPay number. The code comes straight back in the chat (this is the primary path; the portal's "Send me a code" only delivers if you chatted with WaPay in the last 24 hours, a WhatsApp rule). Asked twice inside a minute? The chat tells you to wait 60 seconds. On the portal, enter your number and press **I have my code from WhatsApp** (it only opens the code box; it never asks for another code), then type the code from the chat.
 2. Enter the code → **Name your business** (e.g. `I Love My Laundry`, category Laundry) → set a password (10+ characters) → **Create my business**.

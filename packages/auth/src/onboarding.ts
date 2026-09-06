@@ -61,6 +61,39 @@ async function transitionState(args: {
 }
 
 /**
+ * WAPAY_ONBOARDING_OTP=off removes the in-chat OTP step from sign-up
+ * (decision note: docs/ONBOARDING.md). The message already arrives from a
+ * WhatsApp account Meta verified by SMS, over a webhook WaPay verifies by
+ * HMAC, so a code sent back into the SAME chat proves nothing more; the PIN
+ * (S3) and consent (S4) steps stay. Default ON (unchanged behaviour) until
+ * the founder flips it; accounts already waiting in S2 still verify.
+ */
+export function onboardingOtpDisabled(): boolean {
+  return /^(off|false|0|no|skip)$/i.test(String(process.env.WAPAY_ONBOARDING_OTP || '').trim());
+}
+
+/**
+ * The PIN-creation prompt (template onboarding_step_3_pin_creation, text
+ * fallback), used when S1 goes straight to S3 without an OTP.
+ */
+async function sendPinCreationPrompt(args: { waId: string; displayName: string }): Promise<void> {
+  const { waId, displayName } = args;
+  const pinResult = await sendWhatsAppTemplate({
+    to: waId,
+    templateName: 'onboarding_step_3_pin_creation',
+    language: 'en',
+    components: [{ type: 'body', parameters: [{ type: 'text', text: displayName }] }],
+  });
+  if (!pinResult.ok) {
+    console.error(`❌ PIN template failed: ${pinResult.error}`);
+    await sendWhatsAppText({
+      to: waId,
+      text: `✅ Welcome, ${displayName}!\n\n🔐 Now create a 4-6 digit PIN:\n\nExample: 1234\n\n⚠️ Don't use 0000 or 1234`,
+    });
+  }
+}
+
+/**
  * S0 → S1: Send welcome template (ONLY send once)
  */
 export async function handleS0Initial(args: {
@@ -146,6 +179,18 @@ export async function handleS1WelcomeSent(args: {
       console.log(`⚠️ User message doesn't match continue words, but proceeding anyway: "${userMessage}"`);
     }
     
+    if (onboardingOtpDisabled()) {
+      console.log(`⏭️ OTP step skipped (WAPAY_ONBOARDING_OTP=off) for ${displayName}`);
+      await sendPinCreationPrompt({ waId, displayName });
+      await transitionState({
+        accountId,
+        from: 'S1_WELCOME_SENT',
+        to: 'S3_OTP_VERIFIED',
+        metadata: { otpSkipped: true },
+      });
+      return { ok: true };
+    }
+
     // Send OTP via template
     console.log(`📧 Sending OTP via template to ${waId}`);
     const otpResult = await sendOTP({

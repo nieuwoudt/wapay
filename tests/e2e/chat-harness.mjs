@@ -99,6 +99,14 @@ export async function teardownQaAccount() {
   await prisma.paymentRequest.deleteMany({ where: { accountId: account.id } });
   await prisma.providerRequest.deleteMany({ where: { accountId: account.id } }).catch(() => {});
   await prisma.authFactor.deleteMany({ where: { accountId: account.id } }).catch(() => {});
+  // The chat sign-up scenario registers a business and asks for a portal
+  // code: both rows hang off the account and must go first.
+  const businesses = await prisma.business.findMany({ where: { accountId: account.id }, select: { id: true } }).catch(() => []);
+  if (businesses.length) {
+    await prisma.businessCustomer.deleteMany({ where: { businessId: { in: businesses.map((b) => b.id) } } }).catch(() => {});
+    await prisma.business.deleteMany({ where: { accountId: account.id } }).catch(() => {});
+  }
+  await prisma.otpCode.deleteMany({ where: { accountId: account.id } }).catch(() => {});
   await prisma.wallet.deleteMany({ where: { accountId: account.id } });
   await prisma.account.delete({ where: { id: account.id } });
 }

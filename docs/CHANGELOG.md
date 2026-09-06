@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-09-06 (25) — Business sign-up from inside WhatsApp; the onboarding OTP behind a flag
+
+The portal is no longer the only door. A wallet that finishes onboarding is
+asked once, "is this account for you, or for a business? 1 / 2"; business
+leads to "what is your trading name?" and the business row exists (same
+invite gate, name validation and one-per-account rule as the portal;
+category and password stay in the portal's Settings; a wallet that may not
+register yet is put on a list and told so). Existing wallets get the same
+two questions from `business account`; the help menu lists it; the
+intent-switch escape names the parked flow. New `lib/business-chat.js` is
+pure (returns steps; the processor sends), `tests/business-chat.test.mjs`
+drives it, and `pnpm qa:chat` gained a live scenario. The in-chat OTP of the
+sign-up can now be switched off (`WAPAY_ONBOARDING_OTP=off`, default on):
+`docs/ONBOARDING.md` records the flow, what a business account is, and the
+recommendation to remove the step (same-channel code proves nothing Meta
+has not verified; the PIN and consent stay).
+
 ## 2026-09-06 (24) — Business sign-in: the chat command is the primary path; a code in hand always works
 
 Founder test round, day one: three "no code arrives" causes closed in order.

@@ -1070,14 +1070,23 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
         userMessage: text,
       });
 
-    case 'S4_PIN_SET':
+    case 'S4_PIN_SET': {
       // User accepted consent - complete onboarding
-      return await handleS4PinSet({
+      const done = await handleS4PinSet({
         accountId: account.id,
         waId: from,
         displayName,
         userMessage: text,
       });
+      // The wallet is live: ask the one sign-up question WaPay for Business
+      // needs ("for you, or for a business?", founder 2026-09-06). Additive:
+      // the auth package's state machine is untouched, and a failure here can
+      // never undo the completed onboarding.
+      if (done?.ok && (await getOnboardingState(account.id)) === 'S5_COMPLETED') {
+        await askAccountType({ from, account }).catch((e) => logStructured('business_signup_ask_failed', { from, error: e?.message }));
+      }
+      return done;
+    }
 
     default:
       console.error(`❌ Unknown onboarding state: ${onboardingState}`);
@@ -1218,6 +1227,7 @@ async function handlePostOnboarding({ account, from, text }) {
         : state.startsWith('REQUEST_MONEY') || state.startsWith('PAYREQ') ? 'your payment request'
         : state.includes('DEPOSIT') ? 'your deposit'
         : state.includes('VOUCHER') || state.includes('GIFT') ? 'the voucher'
+        : state.startsWith('BIZ_SIGNUP') ? 'your business sign-up'
         : null;
       if (parkedFlow) {
         await sendWhatsAppText({
@@ -1273,6 +1283,14 @@ async function handlePostOnboarding({ account, from, text }) {
     const answered = await handleBusinessLoginAsk({ from, account });
     if (answered) return answered;
     // Not a business owner (and not invited): route normally, say nothing.
+  }
+
+  // BUSINESS SIGN-UP from the chat (founder ask 2026-09-06): "business
+  // account" / "register my business" starts the two-question flow for an
+  // existing wallet; a brand-new wallet is asked right after onboarding.
+  {
+    const { matchBusinessSignupAsk } = await import('../../../lib/business-chat.js');
+    if (matchBusinessSignupAsk(text)) return await handleBusinessSignupAsk({ from, account });
   }
 
   // Unified slot parsing: MUST happen before routing decisions and before any state transitions.
@@ -2254,6 +2272,38 @@ function matchAdminLoginAsk(text = '') {
  * from inside any waiting conversation state: an owner who is mid-flow must
  * still be able to get into the portal (founder live test 2026-09-06).
  */
+/**
+ * WaPay for Business from inside the chat (founder ask 2026-09-06): the one
+ * sign-up question after onboarding, and the "business account" command for
+ * an existing wallet. Copy and rules live in lib/business-chat.js; this only
+ * parks the conversation state, localises and sends. Steps marked raw carry
+ * a command or URL and are sent verbatim.
+ */
+async function deliverBusinessStep({ from, account, step }) {
+  if (!step) return null;
+  await updateConversationState(from, step.state || null, step.data || null);
+  const msg = step.raw ? step.text : await localizeOutbound(step.text, await userLang(account));
+  await addToConversationHistory(from, 'assistant', msg);
+  return await sendWhatsAppText({ to: from, text: msg });
+}
+async function askAccountType({ from, account }) {
+  const { accountTypeQuestion } = await import('../../../lib/business-chat.js');
+  logStructured('business_signup_question', { accountId: account.id });
+  return await deliverBusinessStep({ from, account, step: accountTypeQuestion() });
+}
+async function handleBusinessSignupAsk({ from, account }) {
+  const { startBusinessSignup } = await import('../../../lib/business-chat.js');
+  const step = await startBusinessSignup({ account });
+  logStructured('business_signup_ask', { accountId: account.id, state: step?.state || null, waitlisted: !!step?.waitlisted, already: !!step?.already });
+  return await deliverBusinessStep({ from, account, step });
+}
+async function handleBusinessSignupState({ from, account, state, data, text }) {
+  const { handleBusinessSignupReply } = await import('../../../lib/business-chat.js');
+  const step = await handleBusinessSignupReply({ account, state, data, text });
+  if (step?.done) logStructured('business_registered_in_chat', { accountId: account.id, businessId: step.businessId });
+  else if (step?.waitlisted) logStructured('business_signup_waitlisted', { accountId: account.id });
+  return await deliverBusinessStep({ from, account, step });
+}
 async function handleBusinessLoginAsk({ from, account }) {
   const { requestBusinessOtpInSession } = await import('../../../lib/business-auth.js');
   const issued = await requestBusinessOtpInSession({ msisdn: account.msisdn || from });
@@ -3094,6 +3144,10 @@ async function handleConversationState({ from, text, state, data, account }) {
   console.log('💬 Handling conversation state:', { state, text, data });
 
   switch (state) {
+    case 'BIZ_SIGNUP_TYPE':
+    case 'BIZ_SIGNUP_NAME':
+      return await handleBusinessSignupState({ from, account, state, data, text });
+
     case 'REQUEST_MONEY_AMOUNT': {
       const trimmed = text.trim().toLowerCase();
       if (/^(cancel|stop|no|home|menu|back|exit)$/i.test(trimmed)) {
@@ -5508,7 +5562,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
         await addToConversationHistory(from, 'assistant', localizedSpend);
         return await sendWhatsAppText({ to: from, text: localizedSpend });
       }
-      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083...", or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n\nJust ask me in your own words. Any South African language works!`;
+      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083...", or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n🏪 *Business* - "business account" to get paid by your customers\n\nJust ask me in your own words. Any South African language works!`;
       const localizedHelp = await localizeOutbound(helpMsg, await userLang(account));
       await addToConversationHistory(from, 'assistant', localizedHelp);
       return await sendWhatsAppText({ to: from, text: localizedHelp });

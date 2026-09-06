@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
+import { BUSINESS_CATEGORIES } from '../../lib/business-categories.js';
 import Head from 'next/head';
 
 const R = (c) => 'R' + (Math.round(c || 0) / 100).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -263,7 +264,7 @@ function Split({ methods }) {
 // Sign in / register
 // ---------------------------------------------------------------------------
 
-const CATEGORIES = ['Laundry', 'Salon & beauty', 'Food & drinks', 'Retail shop', 'Services & repairs', 'Transport', 'Other'];
+const CATEGORIES = BUSINESS_CATEGORIES;
 
 function Login({ configured, onDone }) {
   const [stage, setStage] = useState('start'); // start | code | register | password

@@ -16,6 +16,10 @@ A WaPay-originated push ("Also send from WaPay") exists but is **off by default*
 
 Contact import: the WhatsApp Cloud API has **no contact-list endpoint**, so "import my WhatsApp contacts" is not possible by API. The portal accepts a pasted CSV (either column order), bare numbers, undelimited "Name 073 …" lines, and vCard blocks (phone / Google Contacts export), mixed freely; and every payer of a link is captured automatically (card payers from the signed `custom_str1` number, balance payers from their WaPay account) by an idempotent lazy linker that runs on dashboard loads. A future phase can connect a business's own WABA via Embedded Signup.
 
+## 2a. Sign-up from WhatsApp (2026-09-06)
+
+The portal is no longer the only door. Right after a wallet finishes onboarding the bot asks once, *"is this account for you, or for a business? 1 / 2"*; **2** leads to *"what is your trading name?"* and the business exists. An existing wallet gets the same two questions from the command **`business account`**. The invite gate, the name validation and the one-business-per-account rule are the portal's own (`lib/business-chat.js` calls `mayRegister`, `validateBusinessName`, `createBusiness`); a wallet that may not register yet is put on a list (`profile.businessInterestAt`) and told so. Category and the portal password are never asked in chat. After registering, `business login` in chat gives the portal code. Details and the OTP decision: `docs/ONBOARDING.md`.
+
 ## 3. Money and data model
 
 - **No new money path.** `createPaymentRequest` gained an optional `business` bag (`businessId, customerId, items, reference, ttlDays`); every existing caller passes nothing and behaves byte-for-byte as before. The ITN, the pay page's card form, `markRequestPaid`, and the in-chat balance leg are untouched.
@@ -48,7 +52,7 @@ Mirrors the admin console (`lib/admin-auth.js`), keyed on the account instead of
 5. Leave `WAPAY_BUSINESS_NOTIFY` unset (the WaPay-originated push stays off).
 6. **Redeploy** after every env change (env changes do nothing until then).
 
-First login for the laundry: they must already have a WaPay wallet (say hi to WaPay on WhatsApp). Then at the portal: number → code (or `business login` from the phone) → name the business → set a password for the shop computer. Step-by-step founder test plan: `docs/BUSINESS_PORTAL_TEST_GUIDE.md`.
+First login for the laundry: they must already have a WaPay wallet (say hi to WaPay on WhatsApp; a brand-new wallet is asked "for you, or for a business?" at the end and can register right there). An existing wallet says `business account` in chat, gives the trading name, and is registered. Then `business login` in chat → the code → the portal → set a password for the shop computer in Settings. The portal's own registration path (number → code → name) still works for invited owners. Step-by-step founder test plan: `docs/BUSINESS_PORTAL_TEST_GUIDE.md`.
 
 ## 6. Files
 
