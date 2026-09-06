@@ -4,13 +4,15 @@
 
 ## 0. Setup (Vercel, five minutes)
 
+*Status 2026-09-05: the founder attached `business.wapay.co.za`, set the envs and redeployed; the portal serves on its own host. Section 0 is now a confirmation list.*
+
 1. Vercel → project `wapay-api` → Settings → Environment Variables:
    - `WAPAY_BUSINESS_MSISDNS` = your WaPay WhatsApp number (any SA form, e.g. `0787051175`). Add the laundry owner's number with a comma when they are ready. Registration is closed to everyone else: an uninvited number receives no code at all (the screen still says one is on its way, on purpose).
    - Nothing else is required: the portal reuses `WAPAY_ADMIN_SESSION_SECRET`.
 2. Optional host: Settings → Domains → add `business.wapay.co.za`, create the CNAME Vercel shows at the DNS provider for wapay.co.za, then set `WAPAY_BUSINESS_HOST=business.wapay.co.za` and exempt that host from Attack Challenge Mode under Firewall. Without this the portal is at `https://pleasepayme.co.za/business`.
 3. **Redeploy** (Deployments → ⋯ → Redeploy). Env changes do nothing until then.
 
-Sanity check after the deploy: open the portal URL. You should see the "Sign in or register" glass card. `https://pleasepayme.co.za/api/business/auth` should return `{"authed":false,"configured":true,"business":null}`.
+Sanity check after the deploy: open `https://business.wapay.co.za`. You should see the "Sign in or register" glass card. `https://business.wapay.co.za/api/business/auth` should return `{"authed":false,"configured":true,"business":null}`.
 
 ## 1. Register the business (5 min)
 
@@ -56,6 +58,10 @@ Also try a **walk-in** link (leave the customer empty, amount `R 5`): no WhatsAp
 
 Anything that shows a wrong number, any message that reads wrong to a customer, and any step where you had to guess. Screenshots with the link code (PRXXXXXX) let me trace it in the ledger.
 
+## 5b. Optional: "Also send from WaPay" (only with `WAPAY_BUSINESS_NOTIFY=true`, redeployed)
+
+Do step 4's balance-rail payment first: the customer who paid from their own WaPay wallet is now the only kind of customer this button appears for (a card payment, or a number you typed in, never qualifies). Create a second R5 link for that customer. Expected: the "Link ready" card shows **Also send from WaPay**; tap it and the customer phone receives, from WaPay's number, "A WaPay business, <your business>, sent you a payment request for R5 (ref …) … If you don't recognise this business, ignore this message." Tap it again: "Already handed to WaPay for this link." The message delivers without a template here because that phone messaged WaPay minutes ago; outside a 24-hour window it needs Direct Send or an approved template (`WAPAY_TEMPLATE_BUSINESS_REQUEST`). Limits: one per link, 20 per business per day. To switch the feature off, remove the variable and redeploy.
+
 ## Not in this test (by design)
 
-"Also send from WaPay" is hidden until `WAPAY_BUSINESS_NOTIFY=true`; leave it off. Importing contacts straight from WhatsApp is not possible through Meta's API; paste them once, payers are captured automatically after that.
+Importing contacts straight from WhatsApp is not possible through Meta's API; paste them once, payers are captured automatically after that.
