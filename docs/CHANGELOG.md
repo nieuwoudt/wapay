@@ -24,7 +24,8 @@ the portal's "Send me a code" only ever worked inside the 24-hour window (BUGLOG
 (every API route), and no caller sent the copy-code button parameter the
 authentication template requires; fixed in `@wapay/whatsapp` and used by the
 onboarding, portal and admin code paths, so a code now reaches an owner who has
-not chatted for days.
+not chatted for days. "Send my code" is therefore the primary sign-in action
+again on both consoles (2026-09-07), with "I already have a code" as the link.
 
 ## 2026-09-06 (25) — Business sign-up from inside WhatsApp; the onboarding OTP behind a flag
 
