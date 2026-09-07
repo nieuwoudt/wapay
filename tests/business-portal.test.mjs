@@ -725,8 +725,8 @@ test('page: four tabs, the composer, WhatsApp send path, import, export, and no 
   assert.match(page, /setM\(null\); \/\/ never show the previous range/, 'range switch clears stale numbers');
   assert.ok(!/no fee under R50/.test(page), 'fee threshold copy comes from the server');
   assert.match(page, /prefers-color-scheme:dark/, 'dark palette defined');
-  assert.match(page, /onClick=\{haveCode\}>I have my code from WhatsApp/, 'the "I have my code" button only opens the code box (BUGLOG #40)');
-  assert.ok(!/onClick=\{requestCode\}>\{busy \? 'Sending…' : 'I have my code/.test(page), 'it never mints a newer code');
+  assert.match(page, /onClick=\{haveCode\}>I already have a code/, 'the "already have a code" link only opens the code box (BUGLOG #40)');
+  assert.match(page, /onClick=\{requestCode\}>\{busy \? 'Sending…' : 'Send my code'\}/, 'the primary action sends a code (rides the authentication template since BUGLOG #42)');
 });
 
 

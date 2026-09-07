@@ -508,13 +508,8 @@ function Login({ configured, passwordLogin, onDone }) {
         <>
           <p className="note">Enter the WhatsApp number on the admin list, then use a one-time code.</p>
           <input inputMode="tel" autoComplete="username" placeholder="073 123 4567" value={msisdn} onChange={(e) => setMsisdn(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') document.getElementById('have-code')?.click(); }} />
-          <div className="msg"><b>Fastest:</b> ask for your code from your phone in the WaPay chat. It comes straight back there.</div>
-          {/* Opens the code box only. Minting a code here would burn the one already in the chat (BUGLOG #40). */}
-          <button id="have-code" className="go" onClick={() => { setErr(''); if (!numberOk) { setErr('Enter your full WhatsApp number.'); return; } setCode(''); setStage('code'); }}>I have my code from WhatsApp</button>
-          <div className="links">
-            {passwordLogin ? <button className="linkish" onClick={() => { setStage('password'); setErr(''); }}>Use my password instead</button> : <span />}
-            <button className="linkish" disabled={busy} onClick={async () => {
+            onKeyDown={(e) => { if (e.key === 'Enter') document.getElementById('send-code')?.click(); }} />
+          <button id="send-code" className="go" disabled={busy} onClick={async () => {
               setErr('');
               if (!numberOk) { setErr('Enter your full WhatsApp number.'); return; }
               setBusy(true);
@@ -526,9 +521,13 @@ function Login({ configured, passwordLogin, onDone }) {
                 // A silent failure here is what makes the screen look frozen.
                 setErr('No connection. Check your network and try again.');
               } finally { setBusy(false); }
-            }}>{busy ? 'Sending…' : 'Send me a code instead'}</button>
+            }}>{busy ? 'Sending…' : 'Send my code'}</button>
+          <div className="links">
+            {passwordLogin ? <button className="linkish" onClick={() => { setStage('password'); setErr(''); }}>Use my password instead</button> : <span />}
+            {/* Opens the code box only; a code already in the chat stays valid (BUGLOG #40). */}
+            <button className="linkish" onClick={() => { setErr(''); if (!numberOk) { setErr('Enter your full WhatsApp number.'); return; } setCode(''); setStage('code'); }}>I already have a code</button>
           </div>
-          <p className="note" style={{ marginTop: 12 }}>"Send me a code" only delivers if you chatted with WaPay in the last 24 hours (a WhatsApp rule).</p>
+          <p className="note" style={{ marginTop: 12 }}>The code arrives as a WhatsApp message with a <b>Copy code</b> button.</p>
         </>
       ) : (
         <>

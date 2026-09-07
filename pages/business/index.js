@@ -359,18 +359,15 @@ function Login({ configured, onDone }) {
       ) : stage === 'start' ? (
         <>
           <h2 style={{ fontSize: 18, marginBottom: 6 }}>Sign in or register</h2>
-          <p className="note">Your business runs on your WaPay wallet. Enter the WhatsApp number of that wallet, then get a one-time code.</p>
+          <p className="note">Your business runs on your WaPay wallet. Enter the WhatsApp number of that wallet (for example 078 123 4567) and we send a one-time code to that WhatsApp.</p>
           <label className="f">WhatsApp number</label>
-          <input inputMode="tel" autoComplete="username" placeholder="073 123 4567" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !busy && haveCode()} />
-          <div className="msg" style={{ marginTop: 12, fontSize: 13.5 }}>
-            <b>Fastest:</b> from that phone, WhatsApp <b>business login</b> to WaPay. The code comes straight back in the chat.
-          </div>
-          <button className="btn p" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={haveCode}>I have my code from WhatsApp</button>
+          <input inputMode="tel" autoComplete="username" placeholder="073 123 4567" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !busy && requestCode()} />
+          <button className="btn p" style={{ width: '100%', marginTop: 12 }} disabled={busy} onClick={requestCode}>{busy ? 'Sending…' : 'Send my code'}</button>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
             <button className="linkish" onClick={() => { setStage('password'); setErr(''); }}>I have a password</button>
-            <button className="linkish" disabled={busy} onClick={requestCode}>{busy ? 'Sending…' : 'Send me a code instead'}</button>
+            <button className="linkish" onClick={haveCode}>I already have a code</button>
           </div>
-          <p className="note" style={{ marginTop: 14 }}>"Send me a code" only delivers if you chatted with WaPay in the last 24 hours (a WhatsApp rule). No WaPay yet? Say hi to WaPay on WhatsApp first: your wallet is your business account.</p>
+          <p className="note" style={{ marginTop: 14 }}>The code arrives as a WhatsApp message with a <b>Copy code</b> button. Or, from that phone, WhatsApp <b>business login</b> to WaPay and the code comes straight back in the chat. No WaPay yet? Say hi to WaPay on WhatsApp first: your wallet is your business account.</p>
         </>
       ) : stage === 'code' ? (
         <>
