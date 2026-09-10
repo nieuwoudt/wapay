@@ -4,6 +4,7 @@
  * GET → { business: {id, name, category, settings}, hasPassword, owner: {msisdn masked} }
  * POST {action:'profile', name?, category?}
  * POST {action:'defaults', defaultTtlDays}          (1..30)
+ * POST {action:'logo', dataUrl | null}              (PNG/JPEG/WebP data URL ≤ 64 KB, browser-resized)
  * POST {action:'set-password', password, currentPassword? | code?}
  *      Step-up required: the current password when one exists, else a fresh
  *      one-time code (owner types `business login` to WaPay). A 24h cookie
@@ -17,7 +18,7 @@
 import prisma from '../../../lib/prisma.js';
 import { requireBusinessContext, hashBusinessPassword, passwordAcceptable, verifyStepUp, BUSINESS_PASSWORD_MIN } from '../../../lib/business-auth.js';
 import { sendWhatsAppText } from '@wapay/whatsapp';
-import { updateBusinessProfile, updateBusinessSettings, maskNumber, normaliseCustomerMsisdn } from '../../../lib/business.js';
+import { updateBusinessProfile, updateBusinessSettings, maskNumber, normaliseCustomerMsisdn, validateLogoDataUrl, setBusinessLogo, MAX_LOGO_BYTES } from '../../../lib/business.js';
 import { MAX_BUSINESS_TTL_DAYS } from '../../../lib/payment-requests.js';
 import { PAYREQ_FREE_BELOW_CENTS } from '../../../lib/deposits.js';
 
@@ -51,6 +52,16 @@ export default async function handler(req, res) {
     if (body.action === 'profile') {
       const row = await updateBusinessProfile({ businessId: business.id, name: body.name, category: body.category });
       return res.status(200).json({ ok: true, business: { id: row.id, name: row.name, category: row.category } });
+    }
+    if (body.action === 'logo') {
+      if (body.dataUrl === null || body.dataUrl === '') {
+        await setBusinessLogo({ businessId: business.id, dataUrl: null });
+        return res.status(200).json({ ok: true, logo: null });
+      }
+      const v = validateLogoDataUrl(body.dataUrl);
+      if (!v.ok) return res.status(400).json({ ok: false, error: v.error, maxBytes: MAX_LOGO_BYTES });
+      await setBusinessLogo({ businessId: business.id, dataUrl: v.dataUrl });
+      return res.status(200).json({ ok: true, logo: v.dataUrl });
     }
     if (body.action === 'defaults') {
       const ttl = Number(body.defaultTtlDays);

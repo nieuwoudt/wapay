@@ -1275,6 +1275,25 @@ async function handlePostOnboarding({ account, from, text }) {
     // and let the message route normally.
   }
 
+  // STOP / START from a customer of a WaPay business (2026-09-10): opt out of,
+  // or back into, payment requests that WaPay sends on a business's behalf.
+  // Only answered when the number is on at least one business's customer
+  // list; anyone else's "stop" routes as before.
+  if (/^\s*(stop|start|unstop)\s*[.!]*\s*$/i.test(String(text || ''))) {
+    const { setCustomerOptOut } = await import('../../../lib/business.js');
+    const optOut = /^\s*stop/i.test(String(text));
+    const touched = await setCustomerOptOut({ msisdn: account.msisdn || from, optedOut: optOut }).catch(() => 0);
+    if (touched > 0) {
+      logStructured('business_customer_opt', { accountId: account.id, optOut, rows: touched });
+      return await sendWhatsAppText({
+        to: from,
+        text: optOut
+          ? `✅ Done. WaPay businesses can no longer send you payment requests through WaPay. Reply START to allow them again.`
+          : `✅ Done. WaPay businesses may send you payment requests again. Reply STOP any time to block them.`,
+      });
+    }
+  }
+
   // BUSINESS PORTAL CODE, requested FROM the phone (WaPay for Business,
   // 2026-09-04) — the same inversion as the admin code above: the owner's own
   // message opens the window, so the reply always delivers free-form. Numbers

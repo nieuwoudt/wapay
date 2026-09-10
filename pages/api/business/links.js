@@ -8,6 +8,8 @@
  *        WhatsApp with the message prefilled — the default send path)
  * POST {action:'sent', code, channel}                    → records how it went out
  * POST {action:'cancel', code}
+ * POST {action:'attach', code, msisdn, name?}  → files a walk-in link under a
+ *      (new or existing) customer; returns the link + message + waLink
  * POST {action:'nudge', code}   → WaPay-originated delivery; flag-gated
  *      (WAPAY_BUSINESS_NOTIFY) and allowed only for customers who have
  *      already PAID this business before. Informational-only text.
@@ -24,6 +26,7 @@ import {
   createBusinessLink,
   markLinkSent,
   cancelBusinessLink,
+  attachCustomerToLink,
   quoteLink,
   sendLinkViaWaPay,
   customerEligibleForNudge,
@@ -87,6 +90,12 @@ export default async function handler(req, res) {
       const ok = await markLinkSent({ businessId: business.id, code: body.code, channel: body.channel });
       return res.status(ok ? 200 : 404).json({ ok });
     }
+    if (body.action === 'attach') {
+      const out = await attachCustomerToLink({ business, code: body.code, msisdn: body.msisdn, name: body.name });
+      let nudge = { available: false };
+      if (nudgeEnabled()) nudge = { available: await customerEligibleForNudge({ businessId: business.id, customerId: out.customer.id }) };
+      return res.status(200).json({ ok: true, link: out.link, message: out.message, waLink: out.waLink, nudge });
+    }
     if (body.action === 'cancel') {
       const ok = await cancelBusinessLink({ business, code: body.code });
       return res.status(ok ? 200 : 409).json({ ok, error: ok ? undefined : 'NOT_OPEN' });
@@ -105,7 +114,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'action' });
   } catch (error) {
     if (error?.code === 'REQUEST_LIMIT') return res.status(429).json({ ok: false, error: 'REQUEST_LIMIT', limit: error.limit });
-    if (['BAD_AMOUNT', 'BAD_ITEM', 'TOO_MANY_ITEMS', 'AMOUNT_MISMATCH', 'BAD_CUSTOMER'].includes(error?.code)) {
+    if (['BAD_AMOUNT', 'BAD_ITEM', 'TOO_MANY_ITEMS', 'AMOUNT_MISMATCH', 'BAD_CUSTOMER', 'BAD_MSISDN', 'NOT_FOUND', 'NOT_OPEN', 'ALREADY_ATTACHED', 'CUSTOMER_LIMIT'].includes(error?.code)) {
       return res.status(400).json({ ok: false, error: error.code, message: error.message });
     }
     console.error(JSON.stringify({ type: 'business_links_write_error', businessId: business.id, action: body.action, error: error?.message }));

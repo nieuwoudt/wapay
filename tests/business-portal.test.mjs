@@ -37,6 +37,7 @@ import {
   listCustomersWithStats, getCustomerProfile, createBusinessLink, markLinkSent, cancelBusinessLink, listBusinessLinks,
   businessOverview, linkWalkInPayers, exportLinksCsv, sendLinkViaWaPay, monthKey, lastMonths, dayKey, classifyPaid,
   customerEligibleForNudge, businessPaidLine, MESSAGE_MAX,
+  attachCustomerToLink, setCustomerOptOut, validateLogoDataUrl, ownerVetted, customerEligibleForNudge as eligibleForNudge, sendLinkViaWaPay as sendViaWaPay,
 } from '../lib/business.js';
 import { businessHostDecision } from '../lib/business-host.js';
 import {
@@ -958,4 +959,92 @@ test('allowlist: the singular env spelling is honoured as an alias (the founder\
   assert.deepEqual(businessSignupAllowlistReport().valid, ['27731234567', '27787051175'], 'both spellings merge');
   delete process.env.WAPAY_BUSINESS_MSISDN; delete process.env.WAPAY_BUSINESS_MSISDNS;
   assert.match(libAuth, /business_signups_closed_no_invites/, 'a closed portal with nobody invited is logged');
+});
+
+// ---------------------------------------------------------------------------
+// 2026-09-10: attach a customer to a walk-in link, STOP/START, the vetted-owner
+// send gate with delivery receipts, the logo, and the portal's new surfaces
+// ---------------------------------------------------------------------------
+
+test('attach: a walk-in link is filed under a new customer afterwards; it is never re-homed to a second customer', async () => {
+  armEnv();
+  const prisma = stubPrisma({ withBusiness: true });
+  const walkIn = await createBusinessLink({ prisma, business: biz(prisma), amountCents: 3800, reference: 'T001' });
+  assert.equal(walkIn.link.customerName, null); assert.equal(walkIn.waLink, null);
+  const out = await attachCustomerToLink({ prisma, business: biz(prisma), code: walkIn.link.code, msisdn: '082 111 2222', name: 'Thabo' });
+  assert.equal(out.link.customerName, 'Thabo'); assert.equal(out.customer.msisdn, '0821112222');
+  assert.match(out.waLink, /wa\.me\/27821112222/); assert.match(out.message, /Hi 👋 I Love My Laundry here\.\s+Thabo,|Thabo/);
+  assert.equal(prisma.paymentRequest._rows[0].customerId, out.customer.id, 'the ticket now belongs to the customer');
+  const again = await attachCustomerToLink({ prisma, business: biz(prisma), code: walkIn.link.code, msisdn: '0821112222' });
+  assert.equal(again.customer.id, out.customer.id, 'same customer again is a no-op');
+  await assert.rejects(() => attachCustomerToLink({ prisma, business: biz(prisma), code: walkIn.link.code, msisdn: '0839990000' }), /another customer/);
+  await assert.rejects(() => attachCustomerToLink({ prisma, business: { id: 'other', accountId: 'x', name: 'X' }, code: walkIn.link.code, msisdn: '0821112222' }), /Unknown link/);
+  await assert.rejects(() => attachCustomerToLink({ prisma, business: biz(prisma), code: walkIn.link.code, msisdn: '12' }), /cellphone/);
+});
+
+test('STOP flips every business row that holds the number; an opted-out customer is never sent to from WaPay; START undoes it', async () => {
+  armEnv();
+  process.env.WAPAY_BUSINESS_NOTIFY = 'true';
+  process.env.WAPAY_BUSINESS_MSISDNS = OWNER; // the owner is on the pilot list: vetted
+  const prisma = stubPrisma({ withBusiness: true });
+  const { customer } = await upsertCustomer({ prisma, businessId: 'biz1', msisdn: '0821112222', name: 'Thabo' });
+  assert.equal(await eligibleForNudge({ prisma, businessId: 'biz1', customerId: customer.id }), true, 'vetted owner: any customer, no prior payment needed');
+  assert.equal(await setCustomerOptOut({ prisma, msisdn: '082 111 2222', optedOut: true }), 1);
+  assert.ok(prisma.businessCustomer._rows[0].optedOutAt);
+  assert.equal(await eligibleForNudge({ prisma, businessId: 'biz1', customerId: customer.id }), false, 'STOP is honoured');
+  assert.equal(await setCustomerOptOut({ prisma, msisdn: '0821112222', optedOut: false }), 1);
+  assert.equal(await eligibleForNudge({ prisma, businessId: 'biz1', customerId: customer.id }), true, 'START restores it');
+  assert.equal(await setCustomerOptOut({ prisma, msisdn: '0700000000', optedOut: true }), 0, "not anyone's customer: nothing to flip");
+  delete process.env.WAPAY_BUSINESS_MSISDNS; delete process.env.WAPAY_BUSINESS_NOTIFY;
+});
+
+test('vetted owner: invited or KYC-verified; a stranger stays on the prior-paid rule; receipts land on the link', async () => {
+  armEnv();
+  process.env.WAPAY_BUSINESS_NOTIFY = 'true';
+  const prisma = stubPrisma({ withBusiness: true });
+  assert.equal(await ownerVetted({ prisma, business: biz(prisma) }), false, 'signups open, nobody invited, no KYC: not vetted');
+  prisma.account._rows[0].profile = { kyc: { status: 'VERIFIED' } };
+  assert.equal(await ownerVetted({ prisma, business: biz(prisma) }), true, 'KYC-verified owner is vetted');
+  prisma.account._rows[0].profile = { kyc: { status: 'PENDING' } };
+  assert.equal(await ownerVetted({ prisma, business: biz(prisma) }), false);
+  process.env.WAPAY_BUSINESS_MSISDNS = '27731234567';
+  assert.equal(await ownerVetted({ prisma, business: biz(prisma) }), true, 'invited owner is vetted (27-form on the list, 0-form on the account)');
+  const { customer } = await upsertCustomer({ prisma, businessId: 'biz1', msisdn: '0821112222', name: 'Thabo' });
+  const link = await createBusinessLink({ prisma, business: biz(prisma), customerId: customer.id, amountCents: 3800, reference: 'T001' });
+  const sent = [];
+  const out = await sendViaWaPay({ prisma, business: biz(prisma), customer, code: link.link.code, send: { text: async (a) => { sent.push(a); return { ok: true, data: { messages: [{ id: 'wamid.ABC' }] } }; } } });
+  assert.equal(out.ok, true); assert.equal(out.waMessageId, 'wamid.ABC');
+  assert.match(sent[0].text, /Send STOP to block/i, 'the message tells the customer how to stop it');
+  assert.ok(!/reply|yes|pin/i.test(sent[0].text), 'still informational only: no action prompt');
+  const row = prisma.paymentRequest._rows.find((r) => r.id === link.link.code);
+  assert.equal(row.waMessageId, 'wamid.ABC'); assert.equal(row.deliveryStatus, 'accepted'); assert.equal(row.channel, 'WAPAY');
+  row.deliveryStatus = 'delivered'; // what the status webhook writes
+  const listed = await listBusinessLinks({ prisma, businessId: 'biz1', status: 'open' });
+  assert.equal(listed.links[0].deliveryStatus, 'delivered', 'receipts are serialised for the portal');
+  delete process.env.WAPAY_BUSINESS_MSISDNS; delete process.env.WAPAY_BUSINESS_NOTIFY;
+});
+
+test('logo: only a small PNG/JPEG/WebP data URL is accepted', () => {
+  const png = 'data:image/png;base64,' + Buffer.alloc(3000, 1).toString('base64');
+  assert.equal(validateLogoDataUrl(png).ok, true);
+  assert.equal(validateLogoDataUrl('data:image/svg+xml;base64,' + Buffer.from('<svg/>').toString('base64')).error, 'BAD_LOGO', 'SVG can carry scripts: refused');
+  assert.equal(validateLogoDataUrl('https://example.com/logo.png').error, 'BAD_LOGO');
+  assert.equal(validateLogoDataUrl('data:image/png;base64,' + Buffer.alloc(70 * 1024, 1).toString('base64')).error, 'LOGO_TOO_BIG');
+  assert.equal(validateLogoDataUrl('').error, 'BAD_LOGO');
+});
+
+test('processor + webhook + page wiring for the 2026-09-10 features', () => {
+  const stopHook = processor.indexOf("if (/^\\s*(stop|start|unstop)\\s*[.!]*\\s*$/i.test(String(text || '')))");
+  const loginHook = processor.lastIndexOf('if (matchBusinessLoginAsk(text)) {');
+  assert.ok(stopHook > -1 && stopHook < loginHook, 'STOP/START is answered in fresh routing before the portal-code command');
+  assert.match(processor, /setCustomerOptOut\(\{ msisdn: account\.msisdn \|\| from, optedOut: optOut \}\)/);
+  const hook = readFileSync(fileURLToPath(new URL('../pages/api/webhooks/whatsapp.js', import.meta.url)), 'utf8');
+  assert.match(hook, /where: \{ waMessageId: String\(status\.id\) \}, data: \{ deliveryStatus: st/, 'delivery receipts are mapped onto the link by Meta message id');
+  assert.match(page, /as a new customer/, 'a typed name can be added as a customer on the spot');
+  assert.match(page, /type="file" accept="\.csv,\.txt,\.vcf/, 'CSV / vCard file drop');
+  assert.match(page, /QRCode\.toDataURL\(/, 'QR codes are rendered in the browser');
+  assert.match(page, /action: 'logo'/); assert.match(page, /action: 'attach'/); assert.match(page, /ticks\(l\.deliveryStatus\)/);
+  assert.match(page, /\['payouts', 'Payouts'\]/, 'the Payouts tab exists');
+  assert.match(page, /intentId, method, amountCents, recipient: rec/, 'every pay-out carries its intent id');
+  assert.ok(!/<script/i.test(page.replace(/dangerouslySetInnerHTML=\{\{ __html: CSS \}\}/, '')), 'no inline scripts beyond the style block');
 });

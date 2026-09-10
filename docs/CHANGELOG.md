@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-09-10 (27) — Founder review round: speed, customers on the spot, CSV drop, QR, logo, WaPay sends with receipts, Payouts
+
+Dashboards were slow because Vercel ran the functions in Virginia against the
+Stockholm database (`regions: ["arn1"]` now; Overview 3.7 s → 0.3 s). From the
+founder's screenshots: a typed name becomes a customer on the spot and a
+walk-in link can be attached to a customer afterwards; CSV / vCard files drop
+onto the import panel; every link has a QR code (copy, share, download); a
+business logo (browser-resized data URL, validated server-side) shows in the
+header and on the pay page. "Also send from WaPay" opens to vetted owners
+(KYC-verified or invited) for any customer who has not sent STOP, with
+delivery receipts mapped from Meta's status webhook onto the link and shown
+as ticks. New Payouts tab and `lib/payouts.js`: PayShap / RTC / CashSend on
+OTT's rail through the ledger hold pattern (SPEND → CASH upgrade, hold,
+performPayout, settle or release, webhook finalisation), KYC-gated, a fresh
+factor on every request, unit-tested against every OTT outcome; live only
+behind `WAPAY_PAYOUT_ENABLED` once the sandbox and counsel clear it.
+Migration `20260910_link_delivery` (additive) applied to prod first.
+
 ## 2026-09-06 (26) — Inbound-silence diagnostics; admin console on the portal's design; the band
 
 Three days without an inbound WhatsApp message (BUGLOG #41) turned out not to

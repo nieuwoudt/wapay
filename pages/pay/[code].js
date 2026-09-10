@@ -57,6 +57,7 @@ export async function getServerSideProps({ params, query }) {
   // stored name was sanitised at registration (lib/business.js) and is
   // rendered as plain text only.
   let isBusiness = false;
+  let businessLogo = null;
   let status = request.status;
   if (request.businessId) {
     try {
@@ -64,6 +65,10 @@ export async function getServerSideProps({ params, query }) {
       if (business?.name && business.status === 'ACTIVE') {
         requesterLabel = business.name;
         isBusiness = true;
+        // The logo the business uploaded (a small data URL kept in its
+        // settings, validated on upload); never anything else from settings.
+        const logo = business.settings && typeof business.settings === 'object' ? business.settings.logo : null;
+        if (typeof logo === 'string' && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(logo) && logo.length < 120000) businessLogo = logo;
       } else if (status === 'PENDING') {
         // A suspended (or deleted) business collects nothing: the link reads
         // as no longer active, and checkout refuses it too.
@@ -89,6 +94,7 @@ export async function getServerSideProps({ params, query }) {
       note: request.note ?? null,
       requesterLabel,
       isBusiness,
+      businessLogo,
       items,
       reference: typeof request.reference === 'string' && request.reference ? request.reference.slice(0, 40) : null,
       // Back from PayFast's return URL: the ITN may still be in flight.
@@ -97,7 +103,7 @@ export async function getServerSideProps({ params, query }) {
   };
 }
 
-export default function PayRequestPage({ code, status, amountCents, feeCents, note, requesterLabel, returned, isBusiness = false, items = [], reference = null }) {
+export default function PayRequestPage({ code, status, amountCents, feeCents, note, requesterLabel, returned, isBusiness = false, businessLogo = null, items = [], reference = null }) {
   // Card button lights up the moment a plausible number is typed, and a tap
   // WITHOUT one answers with our own popup instead of a silent browser
   // bounce (founder feedback 2026-08-27). Same shape the input's pattern
@@ -230,6 +236,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
           </>
         ) : status === 'PENDING' ? (
           <>
+            {businessLogo && <img src={businessLogo} alt="" width={64} height={64} style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'cover', display: 'block', margin: '0 auto 8px', background: '#fff' }} />}
             <div style={styles.sub}>{requesterLabel} is requesting</div>
             <div style={styles.amount}>{rands(amountCents)}</div>
             {isBusiness && (items.length > 0 || reference) ? (

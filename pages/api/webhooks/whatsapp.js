@@ -10,6 +10,7 @@ import { isReady } from '../../../lib/initTemplates.js';
 import { ensureTemplatesReady } from './_middleware.js';
 import { checkInboundWebhook, readRawBody } from '../../../lib/webhook-security.js';
 import { claimMessage } from '../../../lib/ledger-post.js';
+import prisma from '../../../lib/prisma.js';
 
 // X-Hub-Signature-256 is an HMAC over the EXACT raw bytes Meta sent; Next's
 // body parser must stay off so those bytes are available. GET verification
@@ -334,6 +335,14 @@ export default async function handler(req, res) {
                   // answerable from the database.
                   const errCode = status.errors?.[0]?.code;
                   await webhookPulse(`status-${status.status || 'unknown'}${errCode ? `-${errCode}` : ''}`);
+                  // A WaPay-sent business link carries this message id: the
+                  // receipt becomes the tick the portal shows (2026-09-10).
+                  if (status.id && status.status) {
+                    const st = String(status.status).slice(0, 20);
+                    await prisma.paymentRequest
+                      .updateMany({ where: { waMessageId: String(status.id) }, data: { deliveryStatus: st, ...(st === 'delivered' || st === 'read' ? { deliveredAt: new Date() } : {}) } })
+                      .catch(() => {});
+                  }
                 }
               }
             }

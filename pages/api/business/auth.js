@@ -67,7 +67,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       authed: ctx.ok,
       configured: businessAuthConfigured(),
-      business: ctx.ok ? { id: ctx.business.id, name: ctx.business.name, hasPassword: !!ctx.business.passwordHash } : null,
+      business: ctx.ok ? { id: ctx.business.id, name: ctx.business.name, hasPassword: !!ctx.business.passwordHash, logo: ctx.business.settings?.logo || null } : null,
       ...(signups ? { signups } : {}),
     });
   }

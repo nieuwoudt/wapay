@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
+import QRCode from 'qrcode';
 import { BUSINESS_CATEGORIES } from '../../lib/business-categories.js';
 import Head from 'next/head';
 
@@ -25,6 +26,55 @@ const Rw = (c) => 'R' + Math.round((c || 0) / 100).toLocaleString('en-ZA');
 const dt = (s) => (s ? new Date(s).toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 const d = (s) => (s ? new Date(s).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** Delivery ticks for a link WaPay sent from its own number (webhook receipts). */
+const ticks = (st) => (st === 'read' ? '✓✓ read' : st === 'delivered' ? '✓✓ delivered' : st === 'sent' || st === 'accepted' ? '✓ sent' : st === 'failed' ? '✗ not delivered' : '');
+/** A payment link as a QR image (data URL), rendered in the browser. */
+function useQr(text) {
+  const [qr, setQr] = useState('');
+  useEffect(() => {
+    let live = true;
+    if (!text) { setQr(''); return undefined; }
+    QRCode.toDataURL(text, { width: 512, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#0b1411', light: '#ffffff' } }).then((u) => { if (live) setQr(u); }).catch(() => { if (live) setQr(''); });
+    return () => { live = false; };
+  }, [text]);
+  return qr;
+}
+async function dataUrlToBlob(dataUrl) { const r = await fetch(dataUrl); return r.blob(); }
+/** Copy / share / download for a QR image; every path degrades honestly. */
+function QrActions({ qr, code, url }) {
+  const [msg, setMsg] = useState('');
+  if (!qr) return null;
+  const file = async () => new File([await dataUrlToBlob(qr)], `wapay-${code}.png`, { type: 'image/png' });
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+      <button className="btn q sm" onClick={async () => { try { const blob = await dataUrlToBlob(qr); await navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })]); setMsg('QR copied'); } catch { setMsg(`Could not copy the image here. Download it instead.`); } }}>Copy QR</button>
+      {typeof navigator !== 'undefined' && navigator.share && <button className="btn q sm" onClick={async () => { try { const fl = await file(); if (navigator.canShare && !navigator.canShare({ files: [fl] })) { await navigator.share({ title: 'WaPay payment link', text: url, url }); } else { await navigator.share({ files: [fl], title: 'WaPay payment link', text: url }); } setMsg('Shared'); } catch { /* user closed the sheet */ } }}>Share</button>}
+      <a className="btn q sm" href={qr} download={`wapay-${code}.png`}>Download</a>
+      {msg && <span className="note" style={{ margin: 0, alignSelf: 'center' }}>{msg}</span>}
+    </div>
+  );
+}
+/** Resize an uploaded image to a small square PNG/JPEG data URL for the logo. */
+function fileToLogoDataUrl(fileObj, size = 256) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const src = URL.createObjectURL(fileObj);
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas'); c.width = size; c.height = size;
+        const ctx = c.getContext('2d');
+        const side = Math.min(img.width, img.height);
+        ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+        let out = c.toDataURL('image/png');
+        if (out.length > 60 * 1024) out = c.toDataURL('image/jpeg', 0.86);
+        if (out.length > 84 * 1024) out = c.toDataURL('image/jpeg', 0.7);
+        URL.revokeObjectURL(src); resolve(out);
+      } catch (e) { URL.revokeObjectURL(src); reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(src); reject(new Error('not an image')); };
+    img.src = src;
+  });
+}
 const monthLabel = (ym) => MONTHS[Number(ym.slice(5, 7)) - 1] || ym;
 
 /**
@@ -79,6 +129,7 @@ header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20p
 .brand img.logo{height:30px;width:auto;display:block;flex:none}
 .brand .tag{font-size:11px;font-weight:600;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;padding-left:12px;border-left:1px solid var(--field-edge);line-height:1.2}
 .brand .bizname{font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(40vw,320px)}
+.brand img.bizlogo{width:28px;height:28px;border-radius:8px;object-fit:cover;flex:none;background:#fff}
 @media(max-width:700px){.brand img.logo{height:26px}.brand .bizname{max-width:100%}}
 .spacer{flex:1}
 .tabs{display:flex;gap:4px;background:var(--glass);border:1px solid var(--glass-edge);border-radius:14px;padding:4px;backdrop-filter:blur(18px) saturate(1.6);-webkit-backdrop-filter:blur(18px) saturate(1.6);box-shadow:var(--shadow)}
@@ -601,8 +652,24 @@ function CustomerProfile({ id, onBack, onNewLink, onLinkAction }) {
   );
 }
 
+function RowQr({ link, onClose }) {
+  const qr = useQr(link.url);
+  return (
+    <div className="linkbox mt" style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      {qr && <img src={qr} alt={`QR for ${link.code}`} width={132} height={132} style={{ borderRadius: 12, background: '#fff', padding: 6 }} />}
+      <div style={{ flex: 1, minWidth: 180 }}>
+        <div style={{ fontWeight: 600 }}>{link.reference || link.code} · {R(link.amountCents)}</div>
+        <div className="note" style={{ margin: 0 }}>{link.url}</div>
+        <QrActions qr={qr} code={link.code} url={link.url} />
+      </div>
+      <button className="linkish" onClick={onClose}>Close</button>
+    </div>
+  );
+}
+
 function LinksTable({ links, onAction, showCustomer = false, highlight = null }) {
   const [msg, setMsg] = useState('');
+  const [qrFor, setQrFor] = useState(null);
   if (!links?.length) return <div className="empty">No links yet.</div>;
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -620,11 +687,12 @@ function LinksTable({ links, onAction, showCustomer = false, highlight = null })
               </td>
               <td className="n"><b>{R(l.amountCents)}</b>{l.status === 'PAID' && l.feeCents > 0 && <div className="note" style={{ margin: 0 }}>net {R(l.netCents)}</div>}</td>
               <td><span className={`pill ${statusPill(l.status)}`}>{l.status}</span>{l.status === 'PAID' && <div className="note" style={{ margin: 0 }}>{l.method === 'CARD' ? 'card' : 'WaPay'} · {d(l.paidAt)}</div>}</td>
-              <td className="note" style={{ margin: 0 }}>{l.sentAt ? `${d(l.sentAt)} · ${l.channel === 'WHATSAPP_BUSINESS' ? 'WhatsApp' : l.channel === 'WAPAY' ? 'WaPay' : 'copied'}` : '—'}</td>
+              <td className="note" style={{ margin: 0 }}>{l.sentAt ? `${d(l.sentAt)} · ${l.channel === 'WHATSAPP_BUSINESS' ? 'WhatsApp' : l.channel === 'WAPAY' ? 'WaPay' : 'copied'}` : '—'}{l.channel === 'WAPAY' && ticks(l.deliveryStatus) && <div style={{ color: l.deliveryStatus === 'failed' ? 'var(--crit)' : l.deliveryStatus === 'read' ? 'var(--accent)' : 'inherit' }}>{ticks(l.deliveryStatus)}</div>}</td>
               <td style={{ whiteSpace: 'nowrap' }}>
                 {l.status === 'PENDING' && (
                   <>
                     <button className="btn g sm" onClick={async () => { if (await copyText(l.url)) { setMsg(`Copied ${l.url}`); onAction('sent', { ...l, channel: 'COPY' }); } else setMsg('Could not copy. Open the link and copy it from the address bar.'); }}>Copy</button>{' '}
+                    <button className="btn q sm" onClick={() => setQrFor(qrFor === l.code ? null : l.code)} title="QR code">QR</button>{' '}
                     <button className="btn q sm" onClick={() => { if (window.confirm(`Cancel link ${l.code} for ${R(l.amountCents)}?`)) onAction('cancel', l); }}>Cancel</button>
                   </>
                 )}
@@ -634,6 +702,7 @@ function LinksTable({ links, onAction, showCustomer = false, highlight = null })
           ))}
         </tbody>
       </table>
+      {qrFor && links.find((x) => x.code === qrFor) && <RowQr link={links.find((x) => x.code === qrFor)} onClose={() => setQrFor(null)} />}
     </div>
   );
 }
@@ -696,8 +765,15 @@ function Customers({ openId, onOpen, onNewLink, onLinkAction }) {
         )}
         {imp && (
           <div className="mt">
-            <label className="f">Paste your contacts</label>
-            <p className="note">One per line: <b>Thabo Nkosi, 073 123 4567</b>. A CSV export from your phone, Google Contacts or Excel works, and so does a vCard (.vcf) file opened in a text editor. WhatsApp itself does not let apps read your contact list, so paste them here once; anyone who pays a link is added automatically.</p>
+            <label className="f">Drop a file, or paste your contacts</label>
+            <div
+              onDragOver={(e) => { e.preventDefault(); }}
+              onDrop={async (e) => { e.preventDefault(); const fl = e.dataTransfer?.files?.[0]; if (!fl) return; const txt = await fl.text(); setImpText((cur) => (cur ? cur + '\n' : '') + txt); }}
+              style={{ border: '1px dashed var(--field-edge)', borderRadius: 14, padding: '14px 16px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+              <span className="note" style={{ margin: 0, flex: 1, minWidth: 220 }}><b>CSV, TXT or vCard (.vcf)</b> with name, surname and WhatsApp number in any column order: drop it here or choose it. Every row becomes a customer.</span>
+              <input type="file" accept=".csv,.txt,.vcf,text/csv,text/plain,text/vcard,text/x-vcard" onChange={async (e) => { const fl = e.target.files?.[0]; e.target.value = ''; if (!fl) return; const txt = await fl.text(); setImpText((cur) => (cur ? cur + '\n' : '') + txt); }} />
+            </div>
+            <p className="note">Or one per line: <b>Thabo Nkosi, 073 123 4567</b>. An export from your phone, Google Contacts or Excel works as is. WhatsApp itself does not let apps read your contact list, so bring them across once; anyone who pays a link is added automatically.</p>
             <textarea rows={6} value={impText} onChange={(e) => setImpText(e.target.value)} placeholder={'Thabo Nkosi, 073 123 4567\nLerato M, 082 555 1234'} />
             <button className="btn p" style={{ marginTop: 10 }} onClick={runImport} disabled={!impText.trim()}>Import contacts</button>
           </div>
@@ -783,6 +859,23 @@ function Composer({ preset, customers, recentItems, defaultTtl, onCreated }) {
     const s = pick.trim().toLowerCase(); const digits = s.replace(/\D/g, '');
     return (customers || []).filter((c) => !s || (c.name || '').toLowerCase().includes(s) || (digits.length >= 3 && c.msisdn.includes(digits))).slice(0, 8);
   }, [customers, pick]);
+  // A name that is not on the list yet becomes a customer right here (founder
+  // 2026-09-10: a typed name used to fall through as a walk-in), so the link is
+  // filed under them and the WhatsApp send has a number to go to.
+  const [newCust, setNewCust] = useState(null); // { name, msisdn }
+  const [custBusy, setCustBusy] = useState(false);
+  const [custErr, setCustErr] = useState('');
+  const startNew = () => { const t = pick.trim(); const digits = t.replace(/\D/g, ''); setNewCust(digits.length >= 9 && /^[\s+()\d-]+$/.test(t) ? { name: '', msisdn: t } : { name: t, msisdn: '' }); setOpen(false); setCustErr(''); };
+  const saveNew = async () => {
+    setCustErr('');
+    if (!/\d{9}/.test(String(newCust?.msisdn || '').replace(/\D/g, ''))) { setCustErr('Enter the customer\'s WhatsApp number, e.g. 073 123 4567.'); return; }
+    setCustBusy(true);
+    try {
+      const r = await api('/api/business/customers', { action: 'create', msisdn: newCust.msisdn, name: newCust.name });
+      if (!r.ok) { setCustErr(r.error === 'BAD_MSISDN' ? 'That is not a valid South African cellphone number.' : r.error === 'CUSTOMER_LIMIT' ? 'This business has reached its customer limit.' : 'Could not add the customer.'); return; }
+      setCustomer(r.customer); setNewCust(null); setPick('');
+    } catch { setCustErr('No connection. Try again.'); } finally { setCustBusy(false); }
+  };
 
   const create = async () => {
     setErr('');
@@ -818,15 +911,29 @@ function Composer({ preset, customers, recentItems, defaultTtl, onCreated }) {
       <div style={{ position: 'relative' }}>
         {customer ? (
           <div className="linkbox"><span className="avatar" style={{ width: 28, height: 28, fontSize: 11, borderRadius: 9 }}>{initials(customer.name, customer.msisdn)}</span><code style={{ color: 'var(--ink)' }}>{customer.name || 'Unnamed'} · {customer.msisdn}</code><button className="btn q sm" onClick={() => { setCustomer(null); setPick(''); }}>Change</button></div>
+        ) : newCust ? (
+          <div className="linkbox" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <input style={{ flex: '1 1 160px' }} placeholder="Name" value={newCust.name} onChange={(e) => setNewCust({ ...newCust, name: e.target.value })} maxLength={80} autoFocus={!newCust.name} />
+            <input style={{ flex: '1 1 160px' }} inputMode="tel" placeholder="WhatsApp number, e.g. 073 123 4567" value={newCust.msisdn} onChange={(e) => setNewCust({ ...newCust, msisdn: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && !custBusy && saveNew()} autoFocus={!!newCust.name} />
+            <button className="btn p sm" disabled={custBusy} onClick={saveNew}>{custBusy ? 'Saving…' : 'Save customer'}</button>
+            <button className="btn q sm" onClick={() => { setNewCust(null); setPick(''); }}>Cancel</button>
+            {custErr && <div className="err" style={{ width: '100%', marginTop: 0 }}>{custErr}</div>}
+          </div>
         ) : (
           <div onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false); }}>
-            <input placeholder="Type a name or number, or leave empty for a walk-in" value={pick} role="combobox" aria-expanded={open && matches.length > 0} aria-controls="customer-options"
+            <input placeholder="Type a name or number (new customers are added on the spot), or leave empty for a walk-in" value={pick} role="combobox" aria-expanded={open && (matches.length > 0 || !!pick.trim())} aria-controls="customer-options"
               onChange={(e) => { setPick(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
-              onKeyDown={(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); document.getElementById('customer-options')?.querySelector('button')?.focus(); } if (e.key === 'Enter' && matches.length === 1) { setCustomer(matches[0]); setOpen(false); } }} />
-            {open && matches.length > 0 && (
+              onKeyDown={(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); document.getElementById('customer-options')?.querySelector('button')?.focus(); } if (e.key === 'Enter') { if (matches.length === 1) { setCustomer(matches[0]); setOpen(false); } else if (matches.length === 0 && pick.trim()) startNew(); } }} />
+            {open && (matches.length > 0 || pick.trim()) && (
               <div className="dd" id="customer-options" role="listbox">{matches.map((c) => <button key={c.id} role="option" aria-selected={false} onClick={() => { setCustomer(c); setOpen(false); }}
                 onKeyDown={(e) => { const sib = e.key === 'ArrowDown' ? e.currentTarget.nextElementSibling : e.key === 'ArrowUp' ? e.currentTarget.previousElementSibling : null; if (sib) { e.preventDefault(); sib.focus(); } }}>
-                <span className="avatar" style={{ width: 28, height: 28, fontSize: 11, borderRadius: 9 }}>{initials(c.name, c.msisdn)}</span><span style={{ flex: 1 }}>{c.name || 'Unnamed'}<div className="note" style={{ margin: 0 }}>{c.msisdn}</div></span>{c.paidCount > 0 && <span className="note" style={{ margin: 0 }}>{c.paidCount} paid</span>}</button>)}</div>
+                <span className="avatar" style={{ width: 28, height: 28, fontSize: 11, borderRadius: 9 }}>{initials(c.name, c.msisdn)}</span><span style={{ flex: 1 }}>{c.name || 'Unnamed'}<div className="note" style={{ margin: 0 }}>{c.msisdn}</div></span>{c.paidCount > 0 && <span className="note" style={{ margin: 0 }}>{c.paidCount} paid</span>}</button>)}
+                {pick.trim() && !matches.some((c) => (c.name || '').toLowerCase() === pick.trim().toLowerCase() || c.msisdn === pick.trim().replace(/\D/g, '')) && (
+                  <button role="option" aria-selected={false} onClick={startNew} onKeyDown={(e) => { const sib = e.key === 'ArrowUp' ? e.currentTarget.previousElementSibling : null; if (sib) { e.preventDefault(); sib.focus(); } }}>
+                    <span className="avatar" style={{ width: 28, height: 28, fontSize: 14, borderRadius: 9 }}>＋</span><span style={{ flex: 1 }}>Add “{pick.trim()}” as a new customer<div className="note" style={{ margin: 0 }}>Name and WhatsApp number, saved to your list</div></span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -870,11 +977,28 @@ function Composer({ preset, customers, recentItems, defaultTtl, onCreated }) {
   );
 }
 
-function Created({ result, onDone }) {
+function Created({ result: initial, onDone }) {
+  const [result, setResult] = useState(initial);
+  useEffect(() => { setResult(initial); }, [initial]);
   const [copied, setCopied] = useState('');
   const [nudged, setNudged] = useState('');
   const l = result.link;
   const [blocked, setBlocked] = useState(false);
+  const qr = useQr(l.url);
+  // Walk-in link → a customer, after the fact (founder 2026-09-10).
+  const [att, setAtt] = useState({ msisdn: '', name: '' });
+  const [attBusy, setAttBusy] = useState(false);
+  const [attErr, setAttErr] = useState('');
+  const attach = async () => {
+    setAttErr('');
+    if (!/\d{9}/.test(att.msisdn.replace(/\D/g, ''))) { setAttErr('Enter the customer\'s WhatsApp number.'); return; }
+    setAttBusy(true);
+    try {
+      const r = await api('/api/business/links', { action: 'attach', code: l.code, msisdn: att.msisdn, name: att.name });
+      if (!r.ok) { setAttErr(r.error === 'BAD_MSISDN' ? 'That is not a valid South African cellphone number.' : r.error === 'NOT_OPEN' ? 'This link is no longer open.' : 'Could not attach the customer.'); return; }
+      setResult({ ...result, link: r.link, message: r.message, waLink: r.waLink, nudge: r.nudge });
+    } catch { setAttErr('No connection. Try again.'); } finally { setAttBusy(false); }
+  };
   const sendWa = async () => {
     // A blocked popup must not be recorded as "sent" (shop PCs block popups).
     const w = window.open(result.waLink, '_blank', 'noopener');
@@ -905,17 +1029,36 @@ function Created({ result, onDone }) {
               <p className="note" style={{ marginTop: 8 }}>Opens your own WhatsApp with the message filled in for this customer. You tap send, so it arrives from your business, not from WaPay.</p>
             </>
           ) : (
-            <p className="note">Walk-in link: copy it, show a QR, or paste it into any chat. Whoever pays is added to your customers automatically.</p>
+            <>
+              <p className="note">Walk-in link: copy it, show the QR, or paste it into any chat. Whoever pays is added to your customers automatically.</p>
+              <label className="f" style={{ marginTop: 8 }}>Or send it to a customer</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <input style={{ flex: '1 1 150px' }} inputMode="tel" placeholder="WhatsApp number" value={att.msisdn} onChange={(e) => setAtt({ ...att, msisdn: e.target.value })} />
+                <input style={{ flex: '1 1 120px' }} placeholder="Name (optional)" value={att.name} onChange={(e) => setAtt({ ...att, name: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && !attBusy && attach()} />
+                <button className="btn g sm" disabled={attBusy} onClick={attach}>{attBusy ? 'Saving…' : 'Attach & send'}</button>
+              </div>
+              {attErr && <div className="err">{attErr}</div>}
+            </>
           )}
           {result.nudge?.available && (
             <button className="btn g" style={{ width: '100%', marginTop: 8 }} disabled={nudged === 'ok'} onClick={async () => { const r = await api('/api/business/links', { action: 'nudge', code: l.code }); setNudged(r.ok ? 'ok' : r.error === 'RATE_LIMITED' ? 'Daily WaPay send limit reached.' : r.error === 'ALREADY_SENT' ? 'Already handed to WaPay for this link.' : 'Could not send from WaPay right now.'); }}>Also send from WaPay</button>
           )}
-          {nudged === 'ok' && <div className="ok">Handed to WhatsApp for delivery from WaPay.</div>}
+          {nudged === 'ok' && <div className="ok">Handed to WhatsApp for delivery from WaPay. The ticks in the list below update as it is sent, delivered and read.</div>}
           {nudged && nudged !== 'ok' && <div className="err">{nudged}</div>}
           <p className="note" style={{ marginTop: 10 }}>You receive {R(result.quote.netBalanceCents)} if they pay from a WaPay balance, or {R(result.quote.netCardCents)} by card. The customer always pays exactly {R(l.amountCents)}.</p>
         </div>
       </div>
       {copied && <div className={copied.startsWith('Could') ? 'err' : 'ok'}>{copied}</div>}
+      {qr && (
+        <div className="mt" style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <img src={qr} alt={`QR code for ${l.url}`} width={148} height={148} style={{ borderRadius: 14, background: '#fff', padding: 6, flex: 'none' }} />
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label className="f">QR code for this payment</label>
+            <p className="note" style={{ margin: 0 }}>Show it on the screen, print it on the ticket, or share it. Anyone who scans it lands on the pay page for exactly {R(l.amountCents)}.</p>
+            <QrActions qr={qr} code={l.code} url={l.url} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -960,6 +1103,117 @@ function Links({ presetCustomer, onLinkAction, focusCode }) {
 }
 
 // ---------------------------------------------------------------------------
+// Payouts (founder ask 2026-09-10): the balance, and paying it out on OTT's
+// rail. Every request needs a fresh factor and mints its own intent id, so a
+// double click can never pay twice.
+// ---------------------------------------------------------------------------
+
+const newIntentId = () => (window.crypto?.randomUUID ? window.crypto.randomUUID() : `i-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+
+function Payouts() {
+  const [st, setSt] = useState(null);
+  const [err, setErr] = useState('');
+  const [method, setMethod] = useState('PAYSHAP');
+  const [amount, setAmount] = useState('');
+  const [rec, setRec] = useState({ firstname: '', surname: '', id_number: '', mobile: '', account_number: '', branch_code: '', branch_name: '' });
+  const [stepUp, setStepUp] = useState('');
+  const [quote, setQuote] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [intentId, setIntentId] = useState('');
+  const load = useCallback(() => getJson('/api/business/payout').then((j) => { if (j) setSt(j); else setErr('Could not load payouts.'); }), []);
+  useEffect(() => { load(); setIntentId(newIntentId()); }, [load]);
+  const amountCents = toCents(amount) ?? 0;
+  useEffect(() => {
+    if (!amountCents || !st?.enabled) { setQuote(null); return undefined; }
+    let live = true;
+    const t = setTimeout(() => api('/api/business/payout', { action: 'quote', method, amountCents }).then((r) => { if (live) setQuote(r.ok ? r.quote : { error: r.error, minCents: r.minCents, maxCents: r.maxCents }); }), 250);
+    return () => { live = false; clearTimeout(t); };
+  }, [amountCents, method, st?.enabled]);
+  if (err) return <div className="card"><div className="err">{err}</div></div>;
+  if (!st) return <div className="card"><div className="empty">Loading…</div></div>;
+  const m = st.methods.find((x) => x.method === method) || st.methods[0];
+  const need = new Set(m?.requiredFields || []);
+  const submit = async () => {
+    setErr('');
+    if (!quote || quote.error) { setErr('Enter an amount within the limits first.'); return; }
+    if (!stepUp) { setErr(st.hasPassword ? 'Enter your portal password to confirm.' : 'Enter a one-time code to confirm.'); return; }
+    if (!window.confirm(`Pay out ${R(amountCents)} by ${m.label} to ${rec.firstname} ${rec.surname}? Fee ${R(quote.feeCents)}, ${R(quote.totalCents)} leaves your balance.`)) return;
+    setBusy(true);
+    try {
+      const r = await api('/api/business/payout', { action: 'request', intentId, method, amountCents, recipient: rec, ...(st.hasPassword ? { currentPassword: stepUp } : { code: stepUp }) });
+      setResult(r);
+      if (r.ok) { setAmount(''); setStepUp(''); setIntentId(newIntentId()); load(); }
+      else if (r.error === 'STEP_UP_FAILED') setErr('That password or code did not work.');
+      else if (r.error === 'KYC_REQUIRED') setErr('Pay-outs need identity verification first. Ask WaPay to send you the verification link on WhatsApp.');
+      else if (r.error === 'INSUFFICIENT_FUNDS') setErr(`Not enough balance: ${R(r.totalCents || quote.totalCents)} is needed including the fee.`);
+      else if (r.error === 'BAD_RECIPIENT') setErr(`Please fill in the recipient's ${String(r.field || 'details').replace('_', ' ')}.`);
+      else setErr(r.error === 'DISABLED' ? 'Pay-outs are not switched on yet.' : r.error === 'NO_PROVIDER' ? 'That pay-out method is not available right now.' : `The pay-out did not go through (${r.error || 'error'}). Nothing has left your balance.`);
+    } catch { setErr('No connection. Try again.'); } finally { setBusy(false); }
+  };
+  const hist = st.history || [];
+  return (
+    <>
+      <div className="grid kpis">
+        <div className="card"><div className="k">Available balance</div><div className="v">{R(st.balance.totalCents)}</div><div className="vs">{st.balance.cashCents ? `${R(st.balance.cashCents)} already cleared for pay-out` : 'Everything customers paid you, minus card costs'}</div></div>
+        <div className="card"><div className="k">Pay-out fees</div><div className="v" style={{ fontSize: 18 }}>{st.methods.map((x) => x.label.split(' ')[0]).join(' · ')}</div><div className="vs">Flat fee per pay-out; you see it before you confirm. PayShap arrives in minutes.</div></div>
+        <div className="card"><div className="k">Identity</div><div className="v" style={{ fontSize: 18 }}>{st.kyc.verified ? 'Verified' : st.kyc.required ? 'Not verified yet' : 'Not required (test)'}</div><div className="vs">{st.kyc.verified ? 'Pay-outs are open to your own bank account.' : 'Pay-outs need a once-off ID check on WhatsApp.'}</div></div>
+      </div>
+      {!st.enabled || !st.configured ? (
+        <div className="card mt">
+          <h2>Pay out your balance</h2>
+          <p className="note">Pay-outs to a bank account (PayShap, RTC) or cash at an ATM are being switched on. The rail is integrated and tested; it goes live once the pay-out provider's sandbox sign-off and the compliance review are done. Until then your balance keeps working for airtime, data, electricity and WaPay payments, and every rand stays yours.</p>
+        </div>
+      ) : (
+        <div className="card mt">
+          <h2>Pay out your balance</h2>
+          <p className="note">Money goes to the bank account or ATM cash you choose below. Minimum {R(st.limits.minCents)}, maximum {R(st.limits.maxCents)} per pay-out.</p>
+          <div className="grid two">
+            <div>
+              <label className="f">How</label>
+              <select value={method} onChange={(e) => setMethod(e.target.value)}>{st.methods.map((x) => <option key={x.method} value={x.method} disabled={st.enabled && !x.live}>{x.label}{st.enabled && !x.live ? ' (not available now)' : ''}</option>)}</select>
+              {m?.hint && <p className="note" style={{ margin: '4px 0 0' }}>{m.hint}</p>}
+            </div>
+            <div><label className="f">Amount</label><input inputMode="decimal" placeholder="R 500.00" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+          </div>
+          <div className="grid two mt">
+            <div><label className="f">Recipient first name</label><input value={rec.firstname} onChange={(e) => setRec({ ...rec, firstname: e.target.value })} maxLength={40} /></div>
+            <div><label className="f">Surname</label><input value={rec.surname} onChange={(e) => setRec({ ...rec, surname: e.target.value })} maxLength={40} /></div>
+            {need.has('mobile') && <div><label className="f">Recipient cellphone</label><input inputMode="tel" placeholder="073 123 4567" value={rec.mobile} onChange={(e) => setRec({ ...rec, mobile: e.target.value })} /></div>}
+            {need.has('account_number') && <div><label className="f">Bank account number</label><input inputMode="numeric" value={rec.account_number} onChange={(e) => setRec({ ...rec, account_number: e.target.value })} /></div>}
+            {need.has('branch_code') && <div><label className="f">Universal branch code</label><input inputMode="numeric" placeholder="e.g. 250655" value={rec.branch_code} onChange={(e) => setRec({ ...rec, branch_code: e.target.value })} /></div>}
+            {need.has('branch_code') && <div><label className="f">Bank</label><input placeholder="e.g. FNB" value={rec.branch_name} onChange={(e) => setRec({ ...rec, branch_name: e.target.value })} /></div>}
+            {need.has('id_number') && <div><label className="f">Recipient SA ID number</label><input inputMode="numeric" maxLength={13} value={rec.id_number} onChange={(e) => setRec({ ...rec, id_number: e.target.value })} /></div>}
+          </div>
+          <div className="total">
+            <div>
+              <div className="k">Leaves your balance</div>
+              {quote && !quote.error && <div className="note" style={{ margin: '4px 0 0' }}>{R(quote.amountCents)} to the recipient + {R(quote.feeCents)} fee</div>}
+              {quote?.error === 'BAD_AMOUNT' && <div className="err" style={{ marginTop: 4 }}>Between {R(quote.minCents)} and {R(quote.maxCents)} per pay-out.</div>}
+            </div>
+            <b>{quote && !quote.error ? R(quote.totalCents) : 'R0.00'}</b>
+          </div>
+          <label className="f" style={{ marginTop: 10 }}>{st.hasPassword ? 'Your portal password' : 'One-time code (WhatsApp "business login" to WaPay)'}</label>
+          <input type={st.hasPassword ? 'password' : 'text'} autoComplete={st.hasPassword ? 'current-password' : 'one-time-code'} value={stepUp} onChange={(e) => setStepUp(e.target.value)} />
+          <button className="btn p" style={{ width: '100%', marginTop: 12, padding: 14, fontSize: 15 }} disabled={busy || !quote || quote.error || !st.kyc.verified && st.kyc.required} onClick={submit}>{busy ? 'Paying out…' : 'Pay out'}</button>
+          {err && <div className="err">{err}</div>}
+          {result?.ok && <div className="ok">{result.status === 'SETTLED' ? `Paid. Reference ${result.reference}.` : `Accepted by the bank rail, reference ${result.reference}. It shows as paid below as soon as the bank confirms.`}</div>}
+        </div>
+      )}
+      <div className="card mt">
+        <h2>Pay-out history</h2>
+        {!hist.length ? <div className="empty">No pay-outs yet.</div> : (
+          <div style={{ overflowX: 'auto' }}><table>
+            <thead><tr><th>Date</th><th>Reference</th><th>How</th><th>To</th><th className="n">Amount</th><th className="n">Fee</th><th>Status</th></tr></thead>
+            <tbody>{hist.map((h) => <tr key={h.reference}><td className="note" style={{ margin: 0, whiteSpace: 'nowrap' }}>{dt(h.createdAt)}</td><td><code>{h.reference}</code></td><td>{h.method}</td><td>{h.recipient?.name}{h.recipient?.account ? ` · ${h.recipient.account}` : h.recipient?.mobile ? ` · ${h.recipient.mobile}` : ''}</td><td className="n">{R(h.amountCents)}</td><td className="n">{R(h.feeCents)}</td><td><span className={`pill ${h.status === 'SUCCESS' ? 'g' : h.status === 'PENDING' ? 'y' : 'r'}`}>{h.status === 'SUCCESS' ? 'PAID' : h.status}</span></td></tr>)}</tbody>
+          </table></div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
 
@@ -968,6 +1222,7 @@ function Settings() {
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [ttl, setTtl] = useState(7);
+  const [logoBusy, setLogoBusy] = useState(false);
   const [pw, setPw] = useState('');
   const [stepUp, setStepUp] = useState(''); // current password, or a fresh code
   const [msg, setMsg] = useState('');
@@ -981,6 +1236,24 @@ function Settings() {
       <div className="card">
         <h2>Your business</h2>
         <p className="note">Shown to customers on every link. Money lands in the WaPay wallet of {s.owner?.msisdn || 'the owner'}.</p>
+        <label className="f">Logo</label>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+          {s.business?.settings?.logo ? <img src={s.business.settings.logo} alt="" width={56} height={56} style={{ borderRadius: 14, objectFit: 'cover', flex: 'none' }} /> : <span className="avatar" style={{ width: 56, height: 56, borderRadius: 14, fontSize: 18 }}>{initials(s.business?.name, '')}</span>}
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <input type="file" accept="image/png,image/jpeg,image/webp" disabled={logoBusy} onChange={async (e) => {
+              const fl = e.target.files?.[0]; e.target.value = ''; if (!fl) return;
+              say(''); setLogoBusy(true);
+              try {
+                const dataUrl = await fileToLogoDataUrl(fl);
+                const r = await api('/api/business/settings', { action: 'logo', dataUrl });
+                if (r.ok) { say('Logo saved.'); window.dispatchEvent(new Event('wapay:refresh')); } else say(r.error === 'LOGO_TOO_BIG' ? 'That image is too large even after resizing. Try a simpler one.' : 'Could not save the logo.', true);
+                load();
+              } catch { say('That file is not an image we can read.', true); } finally { setLogoBusy(false); }
+            }} />
+            <p className="note" style={{ margin: '4px 0 0' }}>PNG, JPEG or WebP. It is resized to a small square and shown next to your name here and on every pay page. WhatsApp does not share business profile pictures with other apps, so upload the same one you use there.</p>
+            {s.business?.settings?.logo && <button className="linkish" onClick={async () => { const r = await api('/api/business/settings', { action: 'logo', dataUrl: null }); if (r.ok) { say('Logo removed.'); window.dispatchEvent(new Event('wapay:refresh')); load(); } }}>Remove logo</button>}
+          </div>
+        </div>
         <label className="f">Business name</label><input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
         <label className="f" style={{ marginTop: 10 }}>Category</label><select value={category} onChange={(e) => setCategory(e.target.value)}><option value="">—</option>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
         <label className="f" style={{ marginTop: 10 }}>Links stay open for</label><select value={ttl} onChange={(e) => setTtl(Number(e.target.value))}>{[3, 7, 14, 30].map((n) => <option key={n} value={n}>{n} days</option>)}</select>
@@ -1045,8 +1318,10 @@ export default function BusinessPortal() {
   useEffect(() => {
     const onUnauth = () => { setAuthed(false); setBiz(null); setExpired(true); };
     window.addEventListener('wapay:unauth', onUnauth);
-    return () => window.removeEventListener('wapay:unauth', onUnauth);
-  }, []);
+    const onRefresh = () => probe();
+    window.addEventListener('wapay:refresh', onRefresh);
+    return () => { window.removeEventListener('wapay:unauth', onUnauth); window.removeEventListener('wapay:refresh', onRefresh); };
+  }, [probe]);
   const linkAction = useCallback(async (a, l) => {
     if (a === 'cancel') await api('/api/business/links', { action: 'cancel', code: l.code });
     if (a === 'sent') await api('/api/business/links', { action: 'sent', code: l.code, channel: l.channel || 'COPY' });
@@ -1071,13 +1346,14 @@ export default function BusinessPortal() {
         <span className="brand">
           <img className="logo" src="/brand/wapay-lockup-120.png" srcSet="/brand/wapay-lockup-120.png 1x, /brand/wapay-lockup-240.png 2x" alt="WaPay" width={121} height={30} />
           <span className="tag">for Business</span>
+          {biz?.logo && <img className="bizlogo" src={biz.logo} alt="" width={28} height={28} />}
           {biz?.name && <span className="bizname" title={biz.name}>{biz.name}</span>}
         </span>
         <div className="spacer" />
         {authed && (
           <>
             <div className="tabs">
-              {[['overview', 'Overview'], ['customers', 'Customers'], ['links', 'Payment links'], ['settings', 'Settings']].map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => go(k)}>{l}</button>)}
+              {[['overview', 'Overview'], ['customers', 'Customers'], ['links', 'Payment links'], ['payouts', 'Payouts'], ['settings', 'Settings']].map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => go(k)}>{l}</button>)}
             </div>
             <button className="linkish" onClick={async () => { await api('/api/business/auth', { action: 'logout' }); setAuthed(false); setBiz(null); }}>Sign out</button>
           </>
@@ -1089,6 +1365,7 @@ export default function BusinessPortal() {
       {authed === true && tab === 'overview' && <Overview onOpenCustomer={(id, code) => { if (id) { setOpenCustomer(id); setTab('customers'); } else { setFocusCode(code); setTab('links'); } }} onNewLink={() => { setPresetCustomer(null); setTab('links'); }} />}
       {authed === true && tab === 'customers' && <Customers openId={openCustomer} onOpen={setOpenCustomer} onNewLink={(c) => { setPresetCustomer(c); setTab('links'); }} onLinkAction={linkAction} />}
       {authed === true && tab === 'links' && <Links presetCustomer={presetCustomer} onLinkAction={linkAction} focusCode={focusCode} />}
+      {authed === true && tab === 'payouts' && <Payouts />}
       {authed === true && tab === 'settings' && <Settings />}
     </div>
   );

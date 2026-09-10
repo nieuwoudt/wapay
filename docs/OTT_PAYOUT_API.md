@@ -19,8 +19,8 @@ money-safety mapping, the open questions, and the launch gates — not a re-past
 | Money-safe status→settlement mapping | ✅ `classifyPayoutStatus` |
 | Test API credentials | ⛔ **not yet generated** — do this in the test portal (§3) |
 | IP allowlisting (if any) | ⛔ confirm with OTT + register our egress IP |
-| Ledger wiring (reserveHold → payout → settle/hold/release) + KYC capture | ⛔ next build, once credentials let us sandbox-test |
-| Customer-facing "Withdraw" flow | ⛔ **counsel gate** — cash-out ends WaPay's no-cash-out posture; legal opinion required before it goes live |
+| Ledger wiring (reserveHold → payout → settle/hold/release) + KYC capture | ✅ **built 2026-09-10**: `lib/payouts.js` (`requestPayout`, `finalisePayout`, `resolveProviders`), webhook `pages/api/webhooks/ott-payout.js`, business dashboard `pages/api/business/payout.js` + the Payouts tab; `tests/payouts.test.mjs` scripts every OTT outcome (100 / 98 / 99 / timeout / 0-97 / duplicate) against an in-memory ledger. Sandbox run still needed: the test portal's login OTP never arrived (ticket with OTT IT Support) |
+| Customer-facing "Withdraw" flow | ⛔ **counsel gate** — cash-out ends WaPay's no-cash-out posture; legal opinion required before it goes live. Switch: `WAPAY_PAYOUT_ENABLED=true` (+ `WAPAY_PAYOUT_KYC=off` in the sandbox only). The in-chat consumer flow is the next build; it reuses `requestPayout` |
 
 **Nothing customer-facing ships until counsel clears cash-out.** Building and sandbox-testing the
 rail in parallel is fine and expected.

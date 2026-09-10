@@ -11,6 +11,7 @@
  */
 import crypto from 'node:crypto';
 import { getBaseUrl } from '../../../lib/api-url.js';
+import { directSendEnabled } from '@wapay/whatsapp';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 export const config = { maxDuration: 25 };
@@ -68,6 +69,9 @@ export default async function handler(req, res) {
       paylinkBaseUrl: process.env.PAYLINK_BASE_URL || null,
       businessHost: process.env.WAPAY_BUSINESS_HOST || null,
       adminHost: process.env.WAPAY_ADMIN_HOST || null,
+      directSend: directSendEnabled(),
+      businessNotify: process.env.WAPAY_BUSINESS_NOTIFY === 'true',
+      businessRequestTemplate: process.env.WAPAY_TEMPLATE_BUSINESS_REQUEST || null,
     },
   };
   if (!token) return res.status(200).json({ ...out, error: 'no WhatsApp token in this deployment' });
