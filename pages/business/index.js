@@ -967,7 +967,7 @@ function Composer({ preset, customers, recentItems, defaultTtl, onCreated }) {
         <div>
           <div className="k">Customer pays</div>
           {incomplete.length > 0 && <div className="err" style={{ marginTop: 4 }}>Finish or remove item {items.indexOf(incomplete[0]) + 1} before creating the link.</div>}
-          {quoteMatches && <div className="note" style={{ margin: '4px 0 0' }}>You receive <b>{R(quote.netBalanceCents)}</b> from a WaPay balance, or <b>{R(quote.netCardCents)}</b> by card{quote.feeCents ? ` (${R(quote.feeCents)} card cost)` : quote.freeBelowCents ? ` (no card cost under ${R(quote.freeBelowCents)})` : ''}. The customer pays exactly the total either way.</div>}
+          {quoteMatches && <div className="note" style={{ margin: '4px 0 0' }}>You receive <b>{R(quote.netBalanceCents)}</b> from a WaPay balance, or <b>{R(quote.netCardCents)}</b> by card{quote.feeCents ? ` (${R(quote.feeCents)} card cost${quote.feeIncludesVat ? ' incl. VAT' : ''})` : quote.freeBelowCents ? ` (no card cost under ${R(quote.freeBelowCents)})` : ''}. The customer pays exactly the total either way.</div>}
         </div>
         <b>{totalCents ? R(totalCents) : 'R0.00'}</b>
       </div>

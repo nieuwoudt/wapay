@@ -90,6 +90,13 @@ test('fees per rail: PayFast unchanged, Adumo R1 + 2.5% by default (the floor), 
   process.env.WAPAY_ADUMO_FEE_BPS = '300'; process.env.WAPAY_ADUMO_FEE_FIXED_CENTS = '150';
   assert.equal(paymentRequestFeeCents(10000, 'ADUMO'), 450);
   delete process.env.WAPAY_ADUMO_FEE_BPS; delete process.env.WAPAY_ADUMO_FEE_FIXED_CENTS;
+  // VAT registration day: one switch grosses every card fee up by 15% (R3.50 → R4.03 → R4.10 after 10c rounding); off = unchanged.
+  process.env.WAPAY_VAT_REGISTERED = 'true';
+  assert.equal(paymentRequestFeeCents(10000, 'ADUMO'), 410);
+  assert.equal(paymentRequestFeeCents(10000), 750, 'PayFast R6.50 → R7.48 → R7.50');
+  assert.equal(paymentRequestFeeCents(4900, 'ADUMO'), 0, 'still free under R50');
+  delete process.env.WAPAY_VAT_REGISTERED;
+  assert.equal(paymentRequestFeeCents(10000, 'ADUMO'), 350);
   assert.equal(RAIL.ADUMO, 'ADUMO');
   const e = buildLoad({ accountId: 'a1', rail: RAIL.ADUMO, faceCents: 3420, customerFeeCents: 380, idemKey: 'wapay-payreq-PRX' });
   assert.equal(e.postings.find((p) => p.accountCode === ACCT.clearing('ADUMO')).debitCents, 3800, 'gross lands in Adumo clearing');
