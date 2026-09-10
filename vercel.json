@@ -19,6 +19,10 @@
     "pages/api/webhooks/whatsapp.js": {
       "maxDuration": 60,
       "memory": 1024
+    },
+    "pages/api/business/**/*.js": {
+      "maxDuration": 25,
+      "memory": 1024
     }
   },
   "crons": [
@@ -26,5 +30,8 @@
       "path": "/api/cron/daily-vas-sync",
       "schedule": "0 2 * * *"
     }
+  ],
+  "regions": [
+    "arn1"
   ]
 }

@@ -34,13 +34,12 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
-      await linkWalkInPayers({ businessId });
-      const out = await listCustomersWithStats({
+      const [out] = await Promise.all([listCustomersWithStats({
         businessId,
         q: String(req.query.q || ''),
         sort: String(req.query.sort || 'recent'),
         includeArchived: req.query.archived === '1',
-      });
+      }), linkWalkInPayers({ businessId }).catch(() => {})]);
       return res.status(200).json(out);
     } catch (error) {
       console.error(JSON.stringify({ type: 'business_customers_error', businessId, error: error?.message }));
