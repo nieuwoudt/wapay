@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-09-10 (28) — Adumo Online (Nedbank via SHB) as a second card rail, sandbox-proven; rail-aware fees
+
+The SHB offer (credit 2.35%, debit 1.35%, gateway R0.80 + 0.10%, ex VAT) makes
+card economics viable, so the hosted "Virtual" page is wired in next to
+PayFast: rail choice on the pay page, one intent per request booking THAT
+rail's fee, a signed JWT request, a return route and webhook that trust only
+Adumo's signed response token, and a shared card settlement mirroring the
+PayFast ITN (`lib/adumo.js`, `lib/card-settlement.js`). Proven on Adumo's
+staging with the published test merchant: a R38 request paid with a test
+card, settled into the scratch ledger; a declined 3DS attempt handled with
+nothing credited. `paymentRequestFeeCents(amount, rail)`: PayFast unchanged,
+Adumo R1 + 2.8% by default (env-tunable), `RAIL.ADUMO` in the ledger. Off
+until `WAPAY_ADUMO_ENABLED` + credentials; blocked on SHB's written answer to
+the form's third-party-processing declaration. `docs/ADUMO.md`.
+
 ## 2026-09-10 (27) — Founder review round: speed, customers on the spot, CSV drop, QR, logo, WaPay sends with receipts, Payouts
 
 Dashboards were slow because Vercel ran the functions in Virginia against the

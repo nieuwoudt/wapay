@@ -24,6 +24,7 @@ import { buildCheckoutUrl } from '@wapay/providers-payfast';
 import prisma from '../../../lib/prisma.js';
 import { getPaymentRequest } from '../../../lib/payment-requests.js';
 import { paymentRequestFeeCents } from '../../../lib/deposits.js';
+import { adumoEnabled, primaryCardRail, buildVirtualCheckout, adumoMerchantReference, autoSubmitHtml } from '../../../lib/adumo.js';
 import { businessRequestPayable } from '../../../lib/business.js';
 import { normaliseMsisdn, isValidSaMsisdn } from '../../../lib/msisdn.js';
 
@@ -67,7 +68,12 @@ export default async function handler(req, res) {
   // the request amount — the card fee is deducted from what the REQUESTER
   // receives. Whoever sends the link carries the cost.
   const amountCents = request.amountCents;
-  const feeCents = paymentRequestFeeCents(amountCents);
+  // Which card rail (2026-09-10): Adumo (card, Instant EFT, Capitec Pay,
+  // Apple/Google Pay via Nedbank/SHB) when enabled and asked for or primary;
+  // PayFast for everything it does not carry, and as the fallback.
+  const askedRail = String((req.method === 'POST' ? req.body?.rail : req.query.rail) || '').toLowerCase();
+  const rail = adumoEnabled() && (askedRail === 'adumo' || (askedRail !== 'payfast' && primaryCardRail() === 'ADUMO')) ? 'ADUMO' : 'PAYFAST';
+  const feeCents = rail === 'ADUMO' ? paymentRequestFeeCents(amountCents, 'ADUMO') : paymentRequestFeeCents(amountCents);
   const creditCents = amountCents - feeCents;
 
   // ONE intent per request code, and ONE idemKey shared with the balance
@@ -85,7 +91,7 @@ export default async function handler(req, res) {
       intent = await prisma.providerRequest.create({
         data: {
           id: `pfreq-${code}`,
-          provider: 'PAYFAST',
+          provider: rail,
           route: 'payrequest',
           idemKey,
           status: 'PENDING',
@@ -99,6 +105,7 @@ export default async function handler(req, res) {
             feeCents,
             grossCents: amountCents,
             requestCode: code,
+            rail,
             // Where the payer's receipt goes (0-form; null when not given).
             payerMsisdn,
           },
@@ -109,7 +116,20 @@ export default async function handler(req, res) {
       intent = await prisma.providerRequest.findUnique({ where: { idemKey } });
       if (!intent) throw err;
     }
-  } else if (payerMsisdn && intent.metadata?.payerMsisdn !== payerMsisdn) {
+  }
+  if (intent.status === 'PENDING' && (intent.provider !== rail || intent.metadata?.feeCents !== feeCents)) {
+    // The payer switched rails before paying: the intent books THIS rail's
+    // fee, so settlement (which reads feeCents from the intent) is right.
+    try {
+      intent = await prisma.providerRequest.update({
+        where: { idemKey },
+        data: { provider: rail, metadata: { ...intent.metadata, rail, feeCents, amountCents: creditCents } },
+      });
+    } catch (err) {
+      console.error(JSON.stringify({ type: 'payrequest_rail_switch_error', requestCode: code, error: err?.message }));
+    }
+  }
+  if (payerMsisdn && intent.metadata?.payerMsisdn !== payerMsisdn) {
     // The intent is reused across checkout clicks. This metadata copy is
     // LEAD CAPTURE ONLY — the receipt destination is bound to the PayFast
     // session via custom_str1 (signed, echoed in the ITN), so a later click
@@ -141,6 +161,28 @@ export default async function handler(req, res) {
   );
 
   const base = String(process.env.APP_BASE_URL || '').replace(/\/+$/, '');
+
+  if (rail === 'ADUMO') {
+    // One merchant reference per ATTEMPT (a declined try must not collide
+    // with the retry), mapped back to the request code on return.
+    const attempt = Number(intent.metadata?.adumoAttempt || 0) + 1;
+    const mref = adumoMerchantReference(code, attempt);
+    await prisma.providerRequest
+      .update({ where: { idemKey }, data: { metadata: { ...intent.metadata, adumoAttempt: attempt, adumoRef: mref } } })
+      .catch(() => {});
+    const form = buildVirtualCheckout({
+      amountCents,
+      merchantReference: mref,
+      successUrl: `${base}/api/pay/adumo-return?code=${code}`,
+      failUrl: `${base}/api/pay/adumo-return?code=${code}`,
+      description: `WaPay payment request ${code}`,
+      ipAddress: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || undefined,
+    });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(autoSubmitHtml(form)); // 200: the browser posts itself onward to Adumo
+  }
+
   const checkoutUrl = buildCheckoutUrl({
     merchantId: process.env.PAYFAST_MERCHANT_ID,
     merchantKey: process.env.PAYFAST_MERCHANT_KEY,

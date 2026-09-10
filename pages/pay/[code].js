@@ -39,6 +39,10 @@ function rands(cents) {
 
 export async function getServerSideProps({ params, query }) {
   const code = String(params.code || '').toUpperCase();
+  const { adumoEnabled } = await import('../../lib/adumo.js');
+  const adumo = adumoEnabled();
+  // Back from a declined / cancelled hosted-page attempt: a short reason, no PII.
+  const declined = typeof query?.e === 'string' ? String(query.e).replace(/[^A-Za-z_ ]/g, '').slice(0, 24) : null;
   if (!/^[A-Z]{6,12}$/.test(code)) return { notFound: true };
 
   const request = await getPaymentRequest({ code });
@@ -95,6 +99,8 @@ export async function getServerSideProps({ params, query }) {
       requesterLabel,
       isBusiness,
       businessLogo,
+      adumo,
+      declined,
       items,
       reference: typeof request.reference === 'string' && request.reference ? request.reference.slice(0, 40) : null,
       // Back from PayFast's return URL: the ITN may still be in flight.
@@ -103,7 +109,7 @@ export async function getServerSideProps({ params, query }) {
   };
 }
 
-export default function PayRequestPage({ code, status, amountCents, feeCents, note, requesterLabel, returned, isBusiness = false, businessLogo = null, items = [], reference = null }) {
+export default function PayRequestPage({ code, status, amountCents, feeCents, note, requesterLabel, returned, isBusiness = false, businessLogo = null, adumo = false, declined = null, items = [], reference = null }) {
   // Card button lights up the moment a plausible number is typed, and a tap
   // WITHOUT one answers with our own popup instead of a silent browser
   // bounce (founder feedback 2026-08-27). Same shape the input's pattern
@@ -277,12 +283,20 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
               }}
             >
               <input type="hidden" name="code" value={code} />
+              {declined ? <div style={styles.nudge}>That payment did not go through ({declined.toLowerCase().replace(/_/g, ' ')}). Nothing was charged. You can try again, or pay from your WaPay balance.</div> : null}
               <button
                 type="submit"
+                name="rail"
+                value={adumo ? 'adumo' : 'payfast'}
                 style={{ ...styles.btn, ...(numberLooksOk ? styles.cardReady : styles.secondary) }}
               >
-                Pay {rands(amountCents)} by card / EFT
+                {adumo ? `Pay ${rands(amountCents)} by card, Instant EFT or Capitec Pay` : `Pay ${rands(amountCents)} by card / EFT`}
               </button>
+              {adumo ? (
+                <button type="submit" name="rail" value="payfast" style={{ ...styles.btn, ...styles.secondary, marginTop: 8 }}>
+                  Other ways to pay (PayFast)
+                </button>
+              ) : null}
               {numberNudge && !numberLooksOk ? (
                 <div style={styles.nudge}>📱 Enter your WhatsApp number first.</div>
               ) : null}
@@ -308,7 +322,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
 
             <div style={styles.fine}>
               No fees for you. You pay exactly {rands(amountCents)}. Card payments are processed
-              securely by PayFast, no WaPay account needed. Your number is used to send your
+              securely by PayFast{adumo ? ' or Adumo (Nedbank)' : ''}, no WaPay account needed. Your number is used to send your
               receipt on WhatsApp and to offer you your own free WaPay, which you're welcome to
               ignore. Paying from a WaPay balance is free: reply in WhatsApp to confirm with
               your PIN.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
