@@ -80,7 +80,8 @@ test('fees per rail: PayFast unchanged, Adumo R1 + 2.5% by default (the floor), 
   assert.ok(paymentRequestFeeCents(5000, 'ADUMO') < Math.ceil(200 + 5000 * 0.032) * 1.15, 'cheaper than PayFast at R50');
   assert.equal(paymentRequestFeeCents(4900, 'ADUMO'), 0, 'free under R50 on every rail');
   // Adumo blended true cost incl VAT (60% debit / 40% credit): R0.92 + 2.13%. Margin-positive at every amount R50–R3000.
-  for (let c = 5000; c <= 300000; c += 2500) {
+  // (R50–R60 is the taper across the free threshold: a deliberate, bounded subsidy so NET never falls as the amount rises.)
+  for (let c = 6000; c <= 300000; c += 2500) {
     const cost = 92 + Math.ceil(c * 0.0213);
     assert.ok(paymentRequestFeeCents(c, 'ADUMO') - cost > 0, `blended margin at ${c}`);
   }

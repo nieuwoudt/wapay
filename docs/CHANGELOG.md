@@ -15,7 +15,7 @@ PayFast ITN (`lib/adumo.js`, `lib/card-settlement.js`). Proven on Adumo's
 staging with the published test merchant: a R38 request paid with a test
 card, settled into the scratch ledger; a declined 3DS attempt handled with
 nothing credited. `paymentRequestFeeCents(amount, rail)`: PayFast unchanged,
-Adumo R1 + 2.8% by default (env-tunable), `RAIL.ADUMO` in the ledger. Off
+Adumo R1 + 2.5% by default (the floor for a single blended fee; env-tunable), `RAIL.ADUMO` in the ledger. Off
 until `WAPAY_ADUMO_ENABLED` + credentials; blocked on SHB's written answer to
 the form's third-party-processing declaration. `docs/ADUMO.md`.
 
