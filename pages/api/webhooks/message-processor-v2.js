@@ -2212,7 +2212,7 @@ function detectStrongIntentSwitch(text, state) {
     ['FUEL', matchFuelPurchase(t)],
     ['BALANCE', /\b(balance|balans|imali|chelete)\b/i.test(t) && /\b(my|check|what|wat|yami|malini)\b/i.test(t)],
     ['HISTORY', /\b(my|show|list)\b[^\n]{0,20}\bvouchers?\b/i.test(t) && !/\d{6,}/.test(t)],
-    ['WITHDRAW', payoutEnabled() && /\b(withdraw|cash ?out|payshap)\b/i.test(t)],
+    ['WITHDRAW', process.env.WAPAY_PAYOUT_ENABLED === 'true' && /\b(withdraw|cash ?out|payshap)\b/i.test(t)],
   ];
   for (const [fam, hit] of candidates) {
     if (!hit) continue;

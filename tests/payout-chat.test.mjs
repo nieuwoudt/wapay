@@ -102,7 +102,7 @@ test('processor + menu + AI truth follow the switch; the PIN case is the only pa
   assert.match(pinCase, /verifyPIN\(\{ accountId: account\.id, pin: text\.trim\(\) \}\)/);
   assert.ok(pinCase.indexOf('await updateConversationState(from, null);\n      const { executeWithdraw }') > -1, 'state cleared BEFORE the money call');
   assert.equal((p.match(/executeWithdraw\(/g) || []).length, 1, 'exactly one call site');
-  assert.match(p, /state\.startsWith\('PAYOUT'\) \? 'WITHDRAW'/); assert.match(p, /\['WITHDRAW', payoutEnabled\(\) &&/);
+  assert.match(p, /state\.startsWith\('PAYOUT'\) \? 'WITHDRAW'/); assert.match(p, /\['WITHDRAW', process\.env\.WAPAY_PAYOUT_ENABLED === 'true' &&/, 'self-contained: the isolated-function tests evaluate it without imports');
   assert.match(p, /payoutEnabled\(\) \? `🏧 \*Withdraw\*: "withdraw R200"/, 'home menu flips with the switch');
   const script = read('../lib/spend-catalogue.js');
   assert.match(script, /if \(process\.env\.WAPAY_PAYOUT_ENABLED === 'true'\) \{\s*\n\s*return \(\s*\n\s*`💸 Withdrawals are live!/);
