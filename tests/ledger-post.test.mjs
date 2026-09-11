@@ -118,7 +118,7 @@ test('a cash-out only ever moves the CASH wallet', () => {
   assert.equal(deltas.length, 1);
   assert.equal(deltas[0].balanceType, BALANCE.CASH);
   assert.equal(deltaFor(e, ALICE, BALANCE.SPEND), 0, 'the no-KYC balance is untouched');
-  assert.equal(deltaFor(e, ALICE, BALANCE.CASH), -11200, 'amount plus the R12 fee');
+  assert.equal(deltaFor(e, ALICE, BALANCE.CASH), -11400, 'amount plus the R14 fee (Pay@ default, +R2 margin 2026-09-11)');
 });
 
 test('the same account with two balance types is tracked separately', () => {

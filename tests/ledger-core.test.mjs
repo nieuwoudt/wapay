@@ -191,7 +191,7 @@ test('Flow C: load, send, cash out LOSES money unless fees are charged', () => {
   const margin = netMarginCents(all);
   // Pay@ costs R8.65 EXCL VAT; WaPay cannot reclaim VAT, so the real cost
   // booked is R9.95 incl (see cashoutRailCostCents).
-  assert.equal(margin, 250 + 1200 - 995, 'send R2.50 + cashout R12.00 - Pay@ R9.95 incl VAT');
+  assert.equal(margin, 250 + 1400 - 995, 'send R2.50 + cashout R14.00 - Pay@ R9.95 incl VAT (+R2 margin 2026-09-11)');
   assert.ok(margin > 0, 'the send+cashout path must not run at a loss');
 });
 

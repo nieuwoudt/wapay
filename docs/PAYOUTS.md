@@ -8,11 +8,11 @@ WaPay balances stop being spend-only. A customer or a business can move money fr
 
 | Method | What the customer gets | Speed | Customer fee (flat, locked model) | Needs |
 |---|---|---|---|---|
-| **PayShap** | money in their own bank account, addressed by their cellphone number (ShapID) | minutes, 24/7 | R6 | a cellphone number registered for PayShap at their bank |
-| **Bank transfer (RTC)** | money in a bank account by account number | usually within the hour | R8 | account number + bank (universal branch code) |
-| **Cash at an ATM (CashSend)** | cash from any Absa or Nedbank ATM, no bank account needed | minutes | R16 up to R700, R21 to R1,500, R28 above | a cellphone number to receive the collection code by SMS |
+| **PayShap** | money in their own bank account, addressed by their cellphone number (ShapID) | minutes, 24/7 | R8 | a cellphone number registered for PayShap at their bank |
+| **Bank transfer (RTC)** | money in a bank account by account number | usually within the hour | R10 | account number + bank (universal branch code) |
+| **Cash at an ATM (CashSend)** | cash from any Absa or Nedbank ATM, no bank account needed | minutes | R18 up to R700, R23 to R1,500, R30 above | a cellphone number to receive the collection code by SMS |
 
-Limits: R20 to R3,000 per pay-out (`WAPAY_PAYOUT_MIN_CENTS` / `WAPAY_PAYOUT_MAX_CENTS`). Identity check (Didit KYC) once, before the first pay-out. Recipient is the customer themselves: the verified KYC name goes to the bank rail, never a typed name. What OTT charges us (ex VAT): PayShap R2.50, RTC R4.50, CashSend R9.96 + 0.3%; every fee band is margin-positive after VAT (`lib/ledger-core.js`, locked by tests).
+Limits: R20 to R3,000 per pay-out (`WAPAY_PAYOUT_MIN_CENTS` / `WAPAY_PAYOUT_MAX_CENTS`). Identity check (Didit KYC) once, before the first pay-out. Recipient is the customer themselves: the verified KYC name goes to the bank rail, never a typed name. What OTT charges us (ex VAT): PayShap R2.50, RTC R4.50, CashSend R9.96 + 0.3%; after VAT that is R2.88 / R5.18 / R11.45 + 0.35%, so the margin per pay-out is about R5.12 (PayShap), R4.82 (RTC) and R4 to R8 (CashSend). Fees carry the founder's +R2 of 2026-09-11 over the 2026-08-10 numbers (`lib/ledger-core.js`, locked by tests).
 
 ## 2. How it works for a WaPay customer on WhatsApp
 

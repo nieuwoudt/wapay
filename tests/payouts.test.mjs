@@ -63,8 +63,8 @@ function client(script) { const calls = []; return { calls, async performPayout(
 test('quote + reference + recipient cleaning', () => {
   env();
   const q = quotePayout({ method: 'PAYSHAP', amountCents: 50000 });
-  assert.equal(q.feeCents, 600, 'PayShap flat R6 (ledger-core bands)');
-  assert.equal(q.totalCents, 50600);
+  assert.equal(q.feeCents, 800, 'PayShap flat R8 (ledger-core bands, +R2 margin 2026-09-11)');
+  assert.equal(q.totalCents, 50800);
   assert.throws(() => quotePayout({ method: 'PAYSHAP', amountCents: MIN_PAYOUT_CENTS - 1 }), /between/);
   assert.throws(() => quotePayout({ method: 'PAYSHAP', amountCents: MAX_PAYOUT_CENTS + 1 }), /between/);
   assert.throws(() => quotePayout({ method: 'BITCOIN', amountCents: 5000 }), /Unknown/);
@@ -96,13 +96,13 @@ test('status 100: upgrade → hold → pay → settle (cashout) + rail cost; rec
   env();
   const prisma = stubPrisma(); const ledger = stubLedger(); const c = client({ status: '100', settlement: 'SETTLE', outcome: 'SUCCESS', paymentReference: 'OTT-REF-1' });
   const r = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId: 'intent-1000', method: 'PAYSHAP', amountCents: 50000, recipient, providers });
-  assert.equal(r.ok, true); assert.equal(r.status, 'SETTLED'); assert.equal(r.feeCents, 600); assert.equal(r.providerRef, 'OTT-REF-1');
+  assert.equal(r.ok, true); assert.equal(r.status, 'SETTLED'); assert.equal(r.feeCents, 800); assert.equal(r.providerRef, 'OTT-REF-1');
   assert.deepEqual(ledger.calls, ['ensureWallet', 'post:BALANCE_UPGRADE', 'reserveHold', 'settleHold:CASHOUT_PAYSHAP', 'post:CASHOUT_COST_PAYSHAP']);
   assert.equal(c.calls[0].amountCents, 50000); assert.equal(c.calls[0].providerCode, '7'); assert.match(c.calls[0].yourUniqueReference, /^WP/);
   assert.equal(c.calls[0].recipient.mobile, '27731234567');
   assert.equal(prisma._prs[0].status, 'SUCCESS'); assert.equal(prisma._prs[0].providerRef, 'OTT-REF-1');
   assert.equal(prisma._prs[0].metadata.recipient.account, '•••678', 'recipient stored masked');
-  assert.equal(ledger.spend, 100000 - 50600, 'amount + fee left SPEND'); assert.equal(ledger.cash, 0, 'and CASH after settle');
+  assert.equal(ledger.spend, 100000 - 50800, 'amount + fee left SPEND'); assert.equal(ledger.cash, 0, 'and CASH after settle');
   const again = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId: 'intent-1000', method: 'PAYSHAP', amountCents: 50000, recipient, providers });
   assert.equal(again.replayed, true); assert.equal(again.status, 'SETTLED'); assert.equal(c.calls.length, 1, 'the double submit never reaches OTT');
 });
@@ -147,7 +147,7 @@ test('insufficient balance: refused before any hold; no provider for the method:
   env();
   const prisma = stubPrisma(); const ledger = stubLedger({ spendCents: 1000 });
   const r = await requestPayout({ prisma, ledger, client: client({}), account: kycd, intentId: 'intent-4000', method: 'PAYSHAP', amountCents: 50000, recipient, providers });
-  assert.equal(r.error, 'INSUFFICIENT_FUNDS'); assert.equal(r.totalCents, 50600);
+  assert.equal(r.error, 'INSUFFICIENT_FUNDS'); assert.equal(r.totalCents, 50800);
   assert.deepEqual(ledger.calls, ['ensureWallet', 'post:BALANCE_UPGRADE']); assert.equal(prisma._prs[0].status, 'FAILED');
   const l2 = stubLedger();
   const r2 = await requestPayout({ prisma: stubPrisma(), ledger: l2, client: client({}), account: kycd, intentId: 'intent-4001', method: 'RTC', amountCents: 50000, recipient, providers });

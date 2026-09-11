@@ -92,7 +92,7 @@ test('PayShap is the margin rail: constant margin at any ticket size', () => {
   const small = cashoutMarginCents('PAYSHAP', MIN_CENTS);
   const large = cashoutMarginCents('PAYSHAP', MAX_CENTS);
   assert.equal(small, large, 'flat cost + flat fee = flat margin');
-  assert.equal(small, 312, 'R6.00 charged - R2.88 cost incl VAT');
+  assert.equal(small, 512, 'R8.00 charged - R2.88 cost incl VAT (+R2 margin 2026-09-11)');
   // It must also beat CashSend at the top end — that is why we steer to it.
   assert.ok(
     cashoutRailCostCents('PAYSHAP', MAX_CENTS) < cashoutRailCostCents('CASHSEND', MAX_CENTS)
