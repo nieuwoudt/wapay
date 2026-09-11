@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-09-11 (29) — Withdrawals in chat; pay-out outcomes on WhatsApp; OTT test credentials received
+
+OTT issued the payout test credentials (API key + password; username to
+follow) and the portal webhook is set to `/api/webhooks/ott-payout`. The
+consumer side of payouts is built: "withdraw R200" starts a PIN-gated,
+KYC-gated flow (PayShap by cellphone number, bank transfer by account +
+universal branch code, cash at an Absa/Nedbank ATM), confirm, PIN, one
+idempotent money call through `lib/payouts.js`; the webhook tells the
+customer when a pending pay-out is paid or fails. Home menu, the cash-out
+script and the AI's product truth flip with `WAPAY_PAYOUT_ENABLED`. Portal
+copy names the three methods and fees. `docs/PAYOUTS.md`. Go-to-market card
+fee confirmed: 2.5% + R1 ex VAT on Adumo rails, free under R50.
+
 ## 2026-09-10 (28) — Adumo Online (Nedbank via SHB) as a second card rail, sandbox-proven; rail-aware fees
 
 The SHB offer (credit 2.35%, debit 1.35%, gateway R0.80 + 0.10%, ex VAT) makes

@@ -17,10 +17,10 @@ money-safety mapping, the open questions, and the launch gates — not a re-past
 | API client (`lib/ott-payout.js`) | ✅ built, unit-tested against OTT's two published golden vectors |
 | Crypto (Basic auth + SHA-256 hash + webhook verify) | ✅ provably byte-identical to the spec |
 | Money-safe status→settlement mapping | ✅ `classifyPayoutStatus` |
-| Test API credentials | ⛔ **not yet generated** — do this in the test portal (§3) |
+| Test API credentials | ✅ **issued 2026-09-11** (API key + password shared by the founder; the API USERNAME is still to be copied from the portal's API Settings page). In local `.env` only; Vercel env to follow. Rotate before production |
 | IP allowlisting (if any) | ⛔ confirm with OTT + register our egress IP |
 | Ledger wiring (reserveHold → payout → settle/hold/release) + KYC capture | ✅ **built 2026-09-10**: `lib/payouts.js` (`requestPayout`, `finalisePayout`, `resolveProviders`), webhook `pages/api/webhooks/ott-payout.js`, business dashboard `pages/api/business/payout.js` + the Payouts tab; `tests/payouts.test.mjs` scripts every OTT outcome (100 / 98 / 99 / timeout / 0-97 / duplicate) against an in-memory ledger. Sandbox run still needed: the test portal's login OTP never arrived (ticket with OTT IT Support) |
-| Customer-facing "Withdraw" flow | ⛔ **counsel gate** — cash-out ends WaPay's no-cash-out posture; legal opinion required before it goes live. Switch: `WAPAY_PAYOUT_ENABLED=true` (+ `WAPAY_PAYOUT_KYC=off` in the sandbox only). The in-chat consumer flow is the next build; it reuses `requestPayout` |
+| Customer-facing "Withdraw" flow | ✅ **built 2026-09-11** (`lib/payout-chat.js`, states `PAYOUT_*`, PIN-gated, KYC-gated, docs/PAYOUTS.md) — ⛔ **counsel gate** still applies: cash-out ends WaPay's no-cash-out posture; legal opinion required before the switch. `WAPAY_PAYOUT_ENABLED=true` (+ `WAPAY_PAYOUT_KYC=off` in the sandbox only) |
 
 **Nothing customer-facing ships until counsel clears cash-out.** Building and sandbox-testing the
 rail in parallel is fine and expected.
@@ -56,7 +56,7 @@ OTT_PAYOUT_API_KEY=<API key generated in the portal — shown ONCE>
   before first login.
 - The **API key is displayed only once** at generation. Store it immediately in `.env` (never in the
   repo). If lost or suspected leaked, regenerate and rotate.
-- The portal is also where the **webhook URL** is configured (Administration → API Settings → Webhook).
+- The portal is also where the **webhook URL** is configured (Administration → API Settings → Webhook): `https://pleasepayme.co.za/api/webhooks/ott-payout` (set 2026-09-11; the secondary webhook stays empty).
 
 **Auth model (three credentials):**
 - HTTP **Basic auth** header = `Base64(API_USERNAME:API_PASSWORD)`.

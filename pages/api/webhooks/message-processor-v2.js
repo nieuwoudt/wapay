@@ -68,6 +68,7 @@ import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '.
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
+import { payoutEnabled } from '../../../lib/payouts.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
 import { searchProducts } from '../../../lib/vas-search.js';
 import {
@@ -730,7 +731,7 @@ async function renderHome({ from, account }) {
     (fuelLiveFor(from)
       ? `⛽ *Fuel*: "buy fuel" for participating stations\n`
       : `⛽ *Fuel vouchers*: coming soon\n`) +
-    `🏧 *Withdraw*: coming soon\n` +
+    (payoutEnabled() ? `🏧 *Withdraw*: "withdraw R200" to your bank, or cash at an ATM\n` : `🏧 *Withdraw*: coming soon\n`) +
     `📄 *Transactions* · ⚙️ *Settings*\n\n` +
     `⚡ Quick: ${quickActions[0]} · ${quickActions[1]} · ${quickActions[2]}\n\n` +
     `Just tell me what you need, in any language.`;
@@ -1228,6 +1229,7 @@ async function handlePostOnboarding({ account, from, text }) {
         : state.includes('DEPOSIT') ? 'your deposit'
         : state.includes('VOUCHER') || state.includes('GIFT') ? 'the voucher'
         : state.startsWith('BIZ_SIGNUP') ? 'your business sign-up'
+        : state.startsWith('PAYOUT') ? 'your withdrawal'
         : null;
       if (parkedFlow) {
         await sendWhatsAppText({
@@ -1310,6 +1312,15 @@ async function handlePostOnboarding({ account, from, text }) {
   {
     const { matchBusinessSignupAsk } = await import('../../../lib/business-chat.js');
     if (matchBusinessSignupAsk(text)) return await handleBusinessSignupAsk({ from, account });
+  }
+
+  // WITHDRAW (2026-09-11, OTT payout rail live behind WAPAY_PAYOUT_ENABLED):
+  // "withdraw R200" / "cash out" / "payshap" starts the in-chat flow; with the
+  // switch off the honest coming-soon answer stays with the AI path.
+  if (payoutEnabled()) {
+    const { matchWithdrawAsk } = await import('../../../lib/payout-chat.js');
+    const ask = matchWithdrawAsk(text);
+    if (ask) return await handleWithdrawStart({ from, account, ask });
   }
 
   // Unified slot parsing: MUST happen before routing decisions and before any state transitions.
@@ -2188,6 +2199,7 @@ function detectStrongIntentSwitch(text, state) {
     : state.startsWith('PAYREQ') || state.startsWith('REQUEST_MONEY') ? 'REQUEST_MONEY'
     : state.includes('DEPOSIT') ? 'DEPOSIT'
     : state.includes('VOUCHER') || state.includes('GIFT') ? 'VOUCHER'
+    : state.startsWith('PAYOUT') ? 'WITHDRAW'
     : 'OTHER';
   const candidates = [
     ['DEPOSIT', DEPOSIT_CARD_PATTERN.test(t)],
@@ -2200,6 +2212,7 @@ function detectStrongIntentSwitch(text, state) {
     ['FUEL', matchFuelPurchase(t)],
     ['BALANCE', /\b(balance|balans|imali|chelete)\b/i.test(t) && /\b(my|check|what|wat|yami|malini)\b/i.test(t)],
     ['HISTORY', /\b(my|show|list)\b[^\n]{0,20}\bvouchers?\b/i.test(t) && !/\d{6,}/.test(t)],
+    ['WITHDRAW', payoutEnabled() && /\b(withdraw|cash ?out|payshap)\b/i.test(t)],
   ];
   for (const [fam, hit] of candidates) {
     if (!hit) continue;
@@ -2322,6 +2335,39 @@ async function handleBusinessSignupState({ from, account, state, data, text }) {
   if (step?.done) logStructured('business_registered_in_chat', { accountId: account.id, businessId: step.businessId });
   else if (step?.waitlisted) logStructured('business_signup_waitlisted', { accountId: account.id });
   return await deliverBusinessStep({ from, account, step });
+}
+/**
+ * Withdrawals in chat (lib/payout-chat.js does the thinking; this parks the
+ * state, localises, sends, and runs the PIN + the one money call).
+ */
+async function deliverPayoutStep({ from, account, step }) {
+  if (!step) return null;
+  if (step.action === 'START_KYC') {
+    const { startKycSession } = await import('../../../lib/didit-kyc.js');
+    await updateConversationState(from, null);
+    const k = await startKycSession({ account }).catch(() => ({ ok: false }));
+    const msg = k.ok
+      ? `🪪 Here is your secure identity-check link. It takes about two minutes:\n${k.url}\n\nOnce it clears, say "withdraw" again.`
+      : await localizeOutbound(`🪪 I could not start the identity check right now. Please try again a little later.`, await userLang(account));
+    await addToConversationHistory(from, 'assistant', msg);
+    return await sendWhatsAppText({ to: from, text: msg });
+  }
+  await updateConversationState(from, step.state || null, step.data || null);
+  const msg = step.raw ? step.text : await localizeOutbound(step.text, await userLang(account));
+  await addToConversationHistory(from, 'assistant', msg);
+  return await sendWhatsAppText({ to: from, text: msg });
+}
+async function handleWithdrawStart({ from, account, ask }) {
+  const { startWithdraw } = await import('../../../lib/payout-chat.js');
+  const step = await startWithdraw({ account, ask });
+  if (!step) return await handleAIChat({ from, text: 'withdraw', account });
+  logStructured('withdraw_started', { accountId: account.id, state: step.state, gated: step.state === 'PAYOUT_KYC' });
+  return await deliverPayoutStep({ from, account, step });
+}
+async function handleWithdrawState({ from, account, state, data, text }) {
+  const { handleWithdrawReply } = await import('../../../lib/payout-chat.js');
+  const step = await handleWithdrawReply({ account, state, data, text });
+  return await deliverPayoutStep({ from, account, step });
 }
 async function handleBusinessLoginAsk({ from, account }) {
   const { requestBusinessOtpInSession } = await import('../../../lib/business-auth.js');
@@ -3166,6 +3212,47 @@ async function handleConversationState({ from, text, state, data, account }) {
     case 'BIZ_SIGNUP_TYPE':
     case 'BIZ_SIGNUP_NAME':
       return await handleBusinessSignupState({ from, account, state, data, text });
+
+    case 'PAYOUT_KYC':
+    case 'PAYOUT_METHOD':
+    case 'PAYOUT_AMOUNT':
+    case 'PAYOUT_ACCOUNT':
+    case 'PAYOUT_BRANCH':
+    case 'PAYOUT_MOBILE':
+    case 'PAYOUT_ID':
+    case 'PAYOUT_CONFIRM':
+      return await handleWithdrawState({ from, account, state, data, text });
+
+    case 'PAYOUT_PIN': {
+      // Same discipline as PAYREQ_PIN: only PIN-shaped input reaches verifyPIN.
+      const normalized = text.trim().toLowerCase();
+      if (/^(cancel|stop|no|exit|back)$/i.test(normalized)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Cancelled. Your money stays in your balance.`, await userLang(account)) });
+      }
+      if (!/^\d{4,6}$/.test(text.trim())) {
+        if (isConversationalEscape(text)) {
+          await updateConversationState(from, null);
+          return await handlePostOnboarding({ account, from, text });
+        }
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`Please enter your 4-digit WaPay PIN, or reply "cancel" to stop.`, await userLang(account)) });
+      }
+      const pinResult = await verifyPIN({ accountId: account.id, pin: text.trim() });
+      if (!pinResult.ok) {
+        if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
+          await updateConversationState(from, null);
+          return await sendWhatsAppText({ to: from, text: await localizeOutbound(`🔒 Too many incorrect PIN attempts. Please try again later.`, await userLang(account)) });
+        }
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`❌ Incorrect PIN. Try again, or reply "cancel".`, await userLang(account)) });
+      }
+      // The one money call. State is cleared FIRST so a retry can never run it twice;
+      // requestPayout is idempotent on the intent id regardless.
+      await updateConversationState(from, null);
+      const { executeWithdraw } = await import('../../../lib/payout-chat.js');
+      const step = await executeWithdraw({ account, data });
+      logStructured('withdraw_executed', { accountId: account.id, done: !!step.done });
+      return await deliverPayoutStep({ from, account, step: { ...step, raw: true } });
+    }
 
     case 'REQUEST_MONEY_AMOUNT': {
       const trimmed = text.trim().toLowerCase();

@@ -1162,7 +1162,7 @@ function Payouts() {
       {!st.enabled || !st.configured ? (
         <div className="card mt">
           <h2>Pay out your balance</h2>
-          <p className="note">Pay-outs to a bank account (PayShap, RTC) or cash at an ATM are being switched on. The rail is integrated and tested; it goes live once the pay-out provider's sandbox sign-off and the compliance review are done. Until then your balance keeps working for airtime, data, electricity and WaPay payments, and every rand stays yours.</p>
+          <p className="note">Three ways, all from this page: <b>PayShap</b> to your bank in minutes using your cellphone number (R6 flat), a <b>bank transfer</b> to any account (R8 flat, usually within the hour), or <b>cash at an Absa or Nedbank ATM</b> with no bank account needed (from R16). A once-off identity check applies. The rail is integrated and tested and goes live once the pay-out provider's sandbox sign-off and the compliance review are done. Until then your balance keeps working for airtime, data, electricity and WaPay payments, and every rand stays yours.</p>
         </div>
       ) : (
         <div className="card mt">
@@ -1292,7 +1292,7 @@ function Settings() {
           )}
         </div>
         <h2 style={{ marginTop: 22 }}>How you get paid</h2>
-        <p className="note">Every paid link credits your WaPay balance instantly, and WaPay tells you on WhatsApp who paid and for what. Card costs are deducted from your side, never added to the customer.{s.freeBelowCents ? ` Links under ${R(s.freeBelowCents)} carry no card cost at all.` : ''}</p>
+        <p className="note">Every paid link credits your WaPay balance instantly, and WaPay tells you on WhatsApp who paid and for what. Card costs are deducted from your side, never added to the customer.{s.freeBelowCents ? ` Links under ${R(s.freeBelowCents)} carry no card cost at all.` : ''} Move money to your bank from the <b>Payouts</b> tab: PayShap in minutes, a bank transfer, or cash at an ATM.</p>
       </div>
     </div>
   );
