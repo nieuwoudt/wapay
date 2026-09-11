@@ -41,3 +41,17 @@ The **Payouts** tab shows the balance (SPEND plus any cleared CASH), the three m
 ## 5. Files
 
 `lib/payouts.js` (service), `lib/payout-chat.js` (WhatsApp flow), `lib/ott-payout.js` (client), `pages/api/business/payout.js`, `pages/api/webhooks/ott-payout.js`, the Payouts tab in `pages/business/index.js`, states `PAYOUT_*` in `pages/api/webhooks/message-processor-v2.js`. Tests: `tests/payouts.test.mjs`, `tests/payout-chat.test.mjs`, `tests/ott-payout.test.mjs`.
+
+## Status 2026-09-11 (production probe)
+
+`GET /api/internal/payout-status` (header `x-internal-api-key`) is the operator's
+read-only view of the rail: switches, masked credential presence, and OTT's
+GetBalance / GetActiveProviders / GetActiveProvidersLimits responses. It cannot
+start a pay-out. First production run: `payoutEnabled: true`, `payoutConfigured:
+true`, `kycRequired: true`, `diditConfigured: false`; OTT TEST account balance
+R0.00, providers `[]`, requiredFields `[]`. Consequences: the WhatsApp and portal
+flows run up to the confirmation step and then answer "that pay-out method is not
+available right now" (`NO_PROVIDER`, no ledger movement) until OTT enables the
+providers on the test account and loads a test float. Ask OTT for: providers
+PayShap + RTC + CashSend active on the TEST account, a test float (R500 is
+plenty), and confirmation that the webhook URL above is registered.

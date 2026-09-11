@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-09-11 (30) — Pay-outs switched on in production; +R2 margin on every pay-out fee; OTT sandbox probe
+
+`WAPAY_PAYOUT_ENABLED=true` and the OTT_PAYOUT_* credentials are set in
+Vercel (founder). A read-only operator probe, `/api/internal/payout-status`
+(internal key), reports the switches, masked credential presence, and what
+OTT's read endpoints return. First run against production: credentials
+authenticate; the TEST account shows balance R0.00, **no active providers**
+and no limits, so every pay-out request is refused with `NO_PROVIDER`
+before any ledger movement until OTT enables PayShap / RTC / CashSend on the
+sandbox and loads a float. KYC is still required but Didit is not
+configured, so withdrawals stop at the identity gate until either the three
+Didit envs land or `WAPAY_PAYOUT_KYC=off` is set for the sandbox window.
+Founder decision: **+R2 margin on every pay-out method** — PayShap R8, bank
+transfer R10, CashSend R18 / R23 / R30, Pay@ R14 (`lib/ledger-core.js`;
+margin tests re-pinned; portal copy + `docs/PAYOUTS.md` updated). Internal
+fee benchmark calculator published as an artifact (see tracker Delta 22).
+
 ## 2026-09-11 (29) — Withdrawals in chat; pay-out outcomes on WhatsApp; OTT test credentials received
 
 OTT issued the payout test credentials (API key + password; username to
