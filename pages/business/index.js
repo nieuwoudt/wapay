@@ -28,13 +28,40 @@ const d = (s) => (s ? new Date(s).toLocaleDateString('en-ZA', { day: 'numeric', 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** Delivery ticks for a link WaPay sent from its own number (webhook receipts). */
 const ticks = (st) => (st === 'read' ? '✓✓ read' : st === 'delivered' ? '✓✓ delivered' : st === 'sent' || st === 'accepted' ? '✓ sent' : st === 'failed' ? '✗ not delivered' : '');
-/** A payment link as a QR image (data URL), rendered in the browser. */
+const loadImage = (src) => new Promise((resolve, reject) => { const i = new window.Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = src; });
+/**
+ * Puts the WaPay W-mark on a white plate in the middle of a QR code. The code
+ * is generated at error-correction level H (recovers up to 30% of modules);
+ * the plate covers about 6% of the area, so phones still scan it. Any failure
+ * (asset missing, canvas blocked) returns the plain code unchanged.
+ */
+async function brandQr(qrUrl) {
+  try {
+    const [qrImg, mark] = await Promise.all([loadImage(qrUrl), loadImage('/brand/wapay-mark-256.png')]);
+    const size = qrImg.naturalWidth || 512;
+    const c = document.createElement('canvas'); c.width = size; c.height = size;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(qrImg, 0, 0, size, size);
+    const plate = Math.round(size * 0.25); const x = Math.round((size - plate) / 2); const r = Math.round(plate * 0.2);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') ctx.roundRect(x, x, plate, plate, r); else ctx.rect(x, x, plate, plate);
+    ctx.fill();
+    const logo = Math.round(plate * 0.8); const lx = Math.round((size - logo) / 2);
+    ctx.drawImage(mark, lx, lx, logo, logo);
+    return c.toDataURL('image/png');
+  } catch { return qrUrl; }
+}
+/** A payment link as a QR image (data URL), rendered in the browser, WaPay mark in the centre. */
 function useQr(text) {
   const [qr, setQr] = useState('');
   useEffect(() => {
     let live = true;
     if (!text) { setQr(''); return undefined; }
-    QRCode.toDataURL(text, { width: 512, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#0b1411', light: '#ffffff' } }).then((u) => { if (live) setQr(u); }).catch(() => { if (live) setQr(''); });
+    QRCode.toDataURL(text, { width: 512, margin: 1, errorCorrectionLevel: 'H', color: { dark: '#0b1411', light: '#ffffff' } })
+      .then((u) => brandQr(u))
+      .then((u) => { if (live) setQr(u); })
+      .catch(() => { if (live) setQr(''); });
     return () => { live = false; };
   }, [text]);
   return qr;

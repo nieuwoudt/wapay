@@ -1043,6 +1043,10 @@ test('processor + webhook + page wiring for the 2026-09-10 features', () => {
   assert.match(page, /as a new customer/, 'a typed name can be added as a customer on the spot');
   assert.match(page, /type="file" accept="\.csv,\.txt,\.vcf/, 'CSV / vCard file drop');
   assert.match(page, /QRCode\.toDataURL\(/, 'QR codes are rendered in the browser');
+  assert.match(page, /errorCorrectionLevel: 'H'/, 'level H so the centre mark cannot break scanning (founder ask 2026-09-13)');
+  assert.match(page, /brandQr\(u\)/, 'the W-mark is composed onto every QR');
+  assert.match(page, /\/brand\/wapay-mark-256\.png/, 'the bare W-mark asset, not the lockup');
+  assert.match(page, /catch \{ return qrUrl; \}/, 'branding failure degrades to the plain code, never to no code');
   assert.match(page, /action: 'logo'/); assert.match(page, /action: 'attach'/); assert.match(page, /ticks\(l\.deliveryStatus\)/);
   assert.match(page, /\['payouts', 'Payouts'\]/, 'the Payouts tab exists');
   assert.match(page, /intentId, method, amountCents, recipient: rec/, 'every pay-out carries its intent id');
