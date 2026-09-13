@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-09-13 (31) — Truth is data: fees the bot can quote, flag-aware cash-out truth, catalogue-built "what can I buy"; W-mark in every QR
+
+Founder review of live chat screenshots (BUGLOG #43, #44, #45): with payouts
+switched on the AI still said cash-out was coming soon, a price question got
+the Add Money menu and then a refusal to quote, and "what can I buy" was a
+three-item VAS list. Fixes: `lib/fee-facts.js` computes every customer-facing
+fee from the charging functions and answers price questions deterministically
+before the keyword router (`handleFeeAsk`), with the same FEES block injected
+into the AI's knowledge; the cash-out position in the knowledge block, the
+spend lines, the MONEY/SEND specialist prompts and PRODUCT_TRUTH (now a
+function) all follow `WAPAY_PAYOUT_ENABLED` at call time; the withdraw matcher
+accepts "cash-out" and "take my money out"; the product list opens with the
+catalogue. The business portal composes the WaPay W-mark onto every
+payment-link QR (level-H error correction, decoder-verified 150 to 512 px;
+new `public/brand/wapay-mark-256.png`). Chat QA harness gains fee, discovery
+and withdraw scenarios and a flag-aware cash-out scenario. Pay-out fees +R2
+(entry 30) land in the portal copy and docs. Recon of the conversational
+architecture: `docs/AGENT_ARCHITECTURE_RECON.md`.
+
 ## 2026-09-11 (30) — Pay-outs switched on in production; +R2 margin on every pay-out fee; OTT sandbox probe
 
 `WAPAY_PAYOUT_ENABLED=true` and the OTT_PAYOUT_* credentials are set in

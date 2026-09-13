@@ -96,7 +96,11 @@ test('bank transfer: account → bank name → confirm; ATM cash: number typed; 
 test('processor + menu + AI truth follow the switch; the PIN case is the only path to executeWithdraw', () => {
   const p = read('../pages/api/webhooks/message-processor-v2.js');
   assert.match(p, /if \(payoutEnabled\(\)\) \{\s*\n\s*const \{ matchWithdrawAsk \} = await import\('\.\.\/\.\.\/\.\.\/lib\/payout-chat\.js'\);/, 'withdraw asks are deterministic only when live');
-  assert.ok(p.indexOf('if (ask) return await handleWithdrawStart({ from, account, ask });') < p.indexOf('const slots = parseSlots(text'), 'before slot parsing');
+  assert.ok(p.indexOf('if (ask) return await handleWithdrawStart({ from, account, ask, text });') < p.indexOf('const slots = parseSlots(text'), 'before slot parsing');
+  assert.match(p, /handleAIChat\(\{ from, text: text \|\| 'withdraw', account \}\)/, 'the AI fallback keeps the customer\'s real words');
+  assert.ok(p.indexOf('const feeTopic = matchFeeAsk(text);') < p.indexOf('if (payoutEnabled()) {\n    const { matchWithdrawAsk }'), 'fee questions are answered before the withdraw flow starts');
+  assert.deepEqual(matchWithdrawAsk('can I take my money out?'), { amountCents: null, method: null });
+  assert.deepEqual(matchWithdrawAsk('how do I cash-out R150'), { amountCents: 15000, method: null });
   for (const st of PAYOUT_STATES.filter((x) => x !== 'PAYOUT_PIN')) assert.match(p, new RegExp(`case '${st}':`), st);
   const pinCase = p.slice(p.indexOf("case 'PAYOUT_PIN': {"), p.indexOf("case 'REQUEST_MONEY_AMOUNT': {"));
   assert.match(pinCase, /verifyPIN\(\{ accountId: account\.id, pin: text\.trim\(\) \}\)/);

@@ -52,6 +52,8 @@ mock.module('@wapay/whatsapp', {
     resolveLanguage: () => ({ code: 'en' }),
     isApproved: () => true,
     buildCtaUrlPayload: (args) => args,
+    // 2026-09-06: OTP pushes build body + copy-code button params through this.
+    authTemplateComponents: (code) => [{ type: 'body', parameters: [{ type: 'text', text: code }] }, { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] }],
   },
 });
 

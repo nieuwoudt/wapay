@@ -144,12 +144,57 @@ async function run() {
     ], s);
   }
   {
+    // Flag-aware (2026-09-13): with payouts live the SAME sentence must start
+    // the withdraw flow (here: the R20 minimum, the QA wallet holds R0); with
+    // payouts off it must get the honest coming-soon script.
+    const live = process.env.WAPAY_PAYOUT_ENABLED === 'true';
     const a = await s.say('How do I withdraw my money to my bank account?');
-    verdict('Questions: cash-out ask gets the coming-soon script, then spend guidance', [
+    verdict(live ? 'Questions: cash-out ask starts the withdraw flow (payouts live)' : 'Questions: cash-out ask gets the coming-soon script, then spend guidance', [
       { level: 'FAIL', ok: !looksLikeMenu(a.replyText), what: 'no bare menu for a cash-out question' },
-      { level: 'FAIL', ok: has(a.replyText, /coming soon|not (yet|available yet)|soon/i), what: 'honest coming-soon position' },
+      live
+        ? { level: 'FAIL', ok: has(a.replyText, /Withdrawals start at R20|identity|PayShap|bank transfer/i) && !has(a.replyText, /coming soon/i), what: 'the withdraw flow answers, never "coming soon"' }
+        : { level: 'FAIL', ok: has(a.replyText, /coming soon|not (yet|available yet)|soon/i), what: 'honest coming-soon position' },
       { level: 'FAIL', ok: !has(a.replyText, /\b(january|february|march|april|june|july|august|september|october|november|december|20\d\d)\b/i), what: 'no date is promised' },
-      { level: 'WARN', ok: has(a.replyText, /airtime|electricity|spend|voucher/i), what: 'redirects to what the money CAN do' },
+      { level: 'WARN', ok: live || has(a.replyText, /airtime|electricity|spend|voucher/i), what: 'redirects to what the money CAN do' },
+    ], s);
+  }
+  {
+    // Founder screenshots 2026-09-13: a price question got the Add Money
+    // menu, then "I don't want to guess". Fees now come from the fee tables.
+    const a = await s.say('How much does it cost to deposit money on here?');
+    const b = await s.say('But how much does it cost?');
+    const c = await s.say('And online card deposits?');
+    verdict('Fees: "how much does it cost to deposit" is answered with the real numbers', [
+      { level: 'FAIL', ok: has(a.replyText, /4\.2% \+ R2\.30/) && has(a.replyText, /R20 costs R24/), what: 'the card fee and a worked example' },
+      { level: 'FAIL', ok: has(a.replyText, /keeps 6%|adds R94/), what: 'the cash-voucher haircut is disclosed up front' },
+      { level: 'FAIL', ok: !has(a.replyText, /Add Money to WaPay/i) && !looksLikeMenu(a.replyText), what: 'no menu for a price question' },
+      { level: 'FAIL', ok: has(b.replyText, /What WaPay costs/i), what: 'a bare "how much does it cost" gets the whole schedule' },
+      { level: 'WARN', ok: has(c.replyText, /4\.2|R2\.30|R24|R107/), what: 'the AI follow-up quotes the card fee from the FEES block' },
+      { level: 'FAIL', ok: !has(c.replyText, /don't want to guess|can't quote/i), what: 'no refusal to quote a fee' },
+    ], s);
+  }
+  {
+    const a = await s.say('What can I buy with this?');
+    verdict('Discovery: "what can I buy" lists everything the money does, not three VAS lines', [
+      { level: 'FAIL', ok: has(a.replyText, /Send money/i) && has(a.replyText, /Get paid/i) && has(a.replyText, /vouchers/i), what: 'catalogue-built list (send, get paid, vouchers)' },
+      { level: 'FAIL', ok: has(a.replyText, /airtime/i) && has(a.replyText, /electricity/i), what: 'prepaid categories still listed' },
+      { level: 'FAIL', ok: !has(a.replyText, /WaPay VAS Products/), what: 'the old three-item dump is gone' },
+    ], s);
+  }
+  {
+    // Withdraw flow wiring with the switch on, no money: the QA wallet holds R0.
+    const prevOn = process.env.WAPAY_PAYOUT_ENABLED; const prevKyc = process.env.WAPAY_PAYOUT_KYC;
+    process.env.WAPAY_PAYOUT_ENABLED = 'true'; process.env.WAPAY_PAYOUT_KYC = 'off';
+    const a = await s.say('withdraw R20');
+    const b = await s.say('can I take my money out?');
+    const c = await s.say('what is the cash-out fee?');
+    if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;
+    if (prevKyc === undefined) delete process.env.WAPAY_PAYOUT_KYC; else process.env.WAPAY_PAYOUT_KYC = prevKyc;
+    verdict('Withdraw: with payouts live the flow starts deterministically and fees are quoted', [
+      { level: 'FAIL', ok: has(a.replyText, /Withdrawals start at R20/i) && has(a.replyText, /R0/), what: '"withdraw R20" reaches the flow and reports the R20 minimum against a R0 wallet' },
+      { level: 'FAIL', ok: !has(a.replyText, /coming soon/i) && !has(b.replyText, /coming soon/i) && !has(c.replyText, /coming soon/i), what: 'never "coming soon" while live' },
+      { level: 'FAIL', ok: has(b.replyText, /Withdrawals start at R20/i), what: '"take my money out" is a withdraw ask' },
+      { level: 'FAIL', ok: has(c.replyText, /R8/) && has(c.replyText, /R10/) && has(c.replyText, /R18/), what: 'the cash-out fee question quotes R8 / R10 / R18' },
     ], s);
   }
   {

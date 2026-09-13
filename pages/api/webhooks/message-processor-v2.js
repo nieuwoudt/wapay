@@ -60,7 +60,9 @@ import {
   fuelComingSoonReply,
   redemptionGuide,
   isWicodeLive,
+  spendDestinationLines,
 } from '../../../lib/spend-catalogue.js';
+import { matchFeeAsk, feeAnswer, feeAskAmountCents } from '../../../lib/fee-facts.js';
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
 import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
@@ -1314,13 +1316,19 @@ async function handlePostOnboarding({ account, from, text }) {
     if (matchBusinessSignupAsk(text)) return await handleBusinessSignupAsk({ from, account });
   }
 
+  // FEES (2026-09-13): "how much does it cost to deposit money?" is a price
+  // question. Answered from the fee tables BEFORE the keyword router (which
+  // read it as a voucher redemption) and before the withdraw matcher.
+  const feeTopic = matchFeeAsk(text);
+  if (feeTopic) return await handleFeeAsk({ from, account, topic: feeTopic, text });
+
   // WITHDRAW (2026-09-11, OTT payout rail live behind WAPAY_PAYOUT_ENABLED):
   // "withdraw R200" / "cash out" / "payshap" starts the in-chat flow; with the
   // switch off the honest coming-soon answer stays with the AI path.
   if (payoutEnabled()) {
     const { matchWithdrawAsk } = await import('../../../lib/payout-chat.js');
     const ask = matchWithdrawAsk(text);
-    if (ask) return await handleWithdrawStart({ from, account, ask });
+    if (ask) return await handleWithdrawStart({ from, account, ask, text });
   }
 
   // Unified slot parsing: MUST happen before routing decisions and before any state transitions.
@@ -2011,12 +2019,13 @@ function detectExplicitIntent(text = '') {
 
   // Deposit / voucher keywords (catch template buttons like "Deposit Money")
   const wantsDeposit =
+    !/\b(fee|fees|cost|costs|charge|charges)\b/.test(squashed) && (
     /(redeem|use|get)\s+(my\s+)?(blu\s+)?voucher/.test(squashed) ||
     /(voucher\s*(code|pin|number))/.test(squashed) ||
     /(deposit|depsit|deposite|diposit|top\s*up|topup|add|load|put)\s+(money|funds|cash|to my wallet|to wallet|into wallet)/.test(squashed) ||
     squashed.includes('deposit money') ||
     squashed.includes('depsit money') ||
-    squashed.includes('blu voucher');
+    squashed.includes('blu voucher'));
 
   if (wantsDeposit) {
     return { intent: 'REDEEM_VOUCHER', confidence: 1.0 };
@@ -2357,10 +2366,17 @@ async function deliverPayoutStep({ from, account, step }) {
   await addToConversationHistory(from, 'assistant', msg);
   return await sendWhatsAppText({ to: from, text: msg });
 }
-async function handleWithdrawStart({ from, account, ask }) {
+async function handleFeeAsk({ from, account, topic, text }) {
+  logStructured('fee_ask', { accountId: account.id, topic });
+  const msg = await localizeOutbound(feeAnswer(topic, feeAskAmountCents(text)), await userLang(account));
+  await addToConversationHistory(from, 'user', text);
+  await addToConversationHistory(from, 'assistant', msg);
+  return await sendWhatsAppText({ to: from, text: msg });
+}
+async function handleWithdrawStart({ from, account, ask, text }) {
   const { startWithdraw } = await import('../../../lib/payout-chat.js');
   const step = await startWithdraw({ account, ask });
-  if (!step) return await handleAIChat({ from, text: 'withdraw', account });
+  if (!step) return await handleAIChat({ from, text: text || 'withdraw', account });
   logStructured('withdraw_started', { accountId: account.id, state: step.state, gated: step.state === 'PAYOUT_KYC' });
   return await deliverPayoutStep({ from, account, step });
 }
@@ -5668,7 +5684,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
         await addToConversationHistory(from, 'assistant', localizedSpend);
         return await sendWhatsAppText({ to: from, text: localizedSpend });
       }
-      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083...", or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n🏪 *Business* - "business account" to get paid by your customers\n\nJust ask me in your own words. Any South African language works!`;
+      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083...", or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n${payoutEnabled() ? '🏧 *Withdraw* - "withdraw R200" to your bank or as cash at an ATM\n' : ''}${fuelLiveFor(from) ? '⛽ *Fuel* - "buy fuel"\n' : ''}🏪 *Business* - "business account" to get paid by your customers\n\nJust ask me in your own words. Any South African language works!`;
       const localizedHelp = await localizeOutbound(helpMsg, await userLang(account));
       await addToConversationHistory(from, 'assistant', localizedHelp);
       return await sendWhatsAppText({ to: from, text: localizedHelp });
@@ -6892,7 +6908,9 @@ async function handleListVasProducts({ from, account }) {
       ELECTRICITY: { name: '💡 Prepaid Electricity', desc: 'Eskom, City Power, and more' },
     };
 
-    let message = `🛒 *WaPay VAS Products*\n\nHere's what you can buy on WaPay:\n\n`;
+    // 2026-09-13: open with the catalogue-built list (vouchers, send, get
+    // paid, withdraw when live, fuel when live), then the prepaid categories.
+    let message = `🛍️ *Here is everything your WaPay money can do right now*\n\n${spendDestinationLines({ wicodeLive: fuelLiveFor(from) })}\n\n🛒 *Prepaid products you can buy here:*\n\n`;
     
     for (const cat of categoryCounts) {
       if (!isCategoryLive(cat.category)) continue;

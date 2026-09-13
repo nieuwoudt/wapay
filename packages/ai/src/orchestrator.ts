@@ -2,10 +2,10 @@
  * WaPay conversational orchestration engine.
  *
  * Two-tier design (founder-approved architecture, 2026-08-18):
- *   Tier 1 — ORCHESTRATOR (gpt-4o): detects language + domain, and may
+ *   Tier 1 — ORCHESTRATOR (gpt-5.5 by default): detects language + domain, and may
  *            complete trivial intents directly (fast path: balance, help,
  *            deposit status, home) so common turns cost one model call.
- *   Tier 2 — CATEGORY AGENTS (gpt-4o-mini): per-domain slot extraction and
+ *   Tier 2 — CATEGORY AGENTS (gpt-5.4-mini by default): per-domain slot extraction and
  *            reply composition, each with a focused prompt.
  *
  * Every model call uses OpenAI STRUCTURED OUTPUTS (json_schema, strict) at
@@ -22,8 +22,8 @@
  *     deterministically by the processor before any flow starts.
  *
  * Model tiers are env-tunable for the later Claude migration:
- *   WAPAY_ORCHESTRATOR_MODEL   (default gpt-4o)
- *   WAPAY_CATEGORY_AGENT_MODEL (default gpt-4o-mini)
+ *   WAPAY_ORCHESTRATOR_MODEL   (default gpt-5.5)
+ *   WAPAY_CATEGORY_AGENT_MODEL (default gpt-5.4-mini)
  */
 
 import OpenAI from 'openai';
@@ -212,13 +212,15 @@ const LANGUAGE_HINTS = `LANGUAGE SIGNALS (hints, not exhaustive; users mix langu
 - isiNdebele (nr): close to isiZulu (ugezi/umbani=electricity, imali=money)
 Typos are the NORM ("balence", "eirtime", "depsit", "electrisity") — resolve them by meaning.`;
 
-const PRODUCT_TRUTH = `WAPAY TODAY (never claim more, never deny these):
+// A function, not a constant: WAPAY_PAYOUT_ENABLED is read on every call, so a
+// flag flip reaches the prompt without a cold start (review 2026-09-13).
+const PRODUCT_TRUTH = (): string => `WAPAY TODAY (never claim more, never deny these):
 - Add money, two ways: (1) CASH — take cash to the till at any major retailer and ask for a Blu Voucher for the amount you want to deposit; the cashier gives a voucher code; send that code to WaPay and the money loads automatically; (2) CARD / BANK — "deposit R100" (R10–R3000) gets a secure PayFast link accepting cards, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan and Zapper.
 - Buy for yourself or ANY number: airtime (R5–R1000), data bundles, prepaid electricity (R10–R5000, needs meter number).
 - Send money: "send R50 to 083…", a saved name ("send R50 to Philly"), or share a contact card — the recipient gets a WaPay voucher (R10–R1000, flat R3 fee).
 ${process.env.WAPAY_PAYOUT_ENABLED === 'true' ? '- Getting money OUT (withdrawals): LIVE. The user types "withdraw" and an amount (from R20): instant to their own bank account via their cellphone number, a bank transfer to their account number, or cash at an Absa/Nedbank ATM; a once-off identity check applies the first time; flat fees are quoted in the flow. For ANY withdrawal ask return fastAction NONE with a one-line reply telling them to type "withdraw R<amount>". Never invent balances, fees or timings.' : `- Getting money OUT (withdrawals): not available YET — balances are SPEND-ONLY today, and cash withdrawals are COMING SOON through our payouts partner (agreement signed, integration underway). NEVER promise a date or name the partner. A WaPay voucher can be spent online at any platform that accepts OTT vouchers as payment; it CANNOT be exchanged for cash or paid into a bank account. When asked about cash-out: say it is coming soon (no date), then warmly walk through everything the money already does (airtime, data, electricity, online voucher spend, sending to others). Identity verification will apply to withdrawals only, when they arrive.`}
 - REQUEST MONEY / "please pay me": LIVE. "request R150" creates a shareable payment link (R5–R3000, 7-day expiry) the user forwards to anyone. THE MECHANICS (answer questions about this precisely): the payer pays EXACTLY the requested amount — free from a WaPay balance, or by card/EFT with NO fee for the payer; on card payments a small card fee is deducted from what the REQUESTER receives (the person asking for money carries the cost, never the payer). The money lands INSTANTLY in the requester's WaPay balance — they can spend it (airtime, data, electricity, vouchers), send it to someone else, or request/receive more. Both sides get WhatsApp confirmations the moment it's paid. "Where does the money go?" = straight into your WaPay balance, and you're told immediately.
-- Check balance; redeem vouchers. NO betting top-ups yet, NO Netflix/DStv yet ("coming soon" is the honest answer for those).`;
+- Check balance; redeem vouchers. NO Netflix/DStv bill payments yet ("coming soon" is the honest answer for those).`;
 
 const MONEY_TRUTH_RULES = `MONEY TRUTH RULES (absolute):
 - NEVER state a balance, amount received, or payment status yourself — you do not know them. Return the matching action (CHECK_BALANCE / DEPOSIT_STATUS) and the system answers from the ledger.
@@ -271,7 +273,7 @@ ${PERSONA}
 
 ${LANGUAGE_HINTS}
 
-${PRODUCT_TRUTH}
+${PRODUCT_TRUTH()}
 
 ${knowledge ? `LIVE PRODUCT KNOWLEDGE (data-driven, already gated to what may be claimed today — answer from it, never beyond it):\n${knowledge}\n` : ''}
 ${MONEY_TRUTH_RULES}
@@ -293,7 +295,7 @@ SLOT RULES:
 - REDEEM_VOUCHER: user has a Blu voucher / voucher PIN to load — INCLUDING "I bought a voucher, how do I load it": when they already have one, start the flow (it explains itself) instead of describing steps.
 - DEPOSIT_STATUS: user asks whether money they paid in has arrived.
 - CHECK_BALANCE: balance questions.
-- NONE with a reply: money questions you can answer from WAPAY TODAY (fees, limits, how deposits work, and the honest withdrawals answer: spend-only, no cash-out).`,
+- NONE with a reply: money questions you can answer from WAPAY TODAY and the FEES block (fees, limits, how deposits work, and the honest withdrawals answer: ${process.env.WAPAY_PAYOUT_ENABLED === 'true' ? 'withdrawals are live, tell them to type "withdraw R<amount>" and quote the flat fees' : 'spend-only, no cash-out'}).`,
     AIRTIME: `YOUR ACTIONS:
 - BUY_AIRTIME: buying airtime for self (self=true) or another number (msisdn set). Gifting airtime IS BUY_AIRTIME with the recipient's msisdn.
 - LIST_CATEGORY with category AIRTIME: browsing options without an amount.
@@ -306,7 +308,7 @@ SLOT RULES:
 - BUY_ELECTRICITY: prepaid electricity. meterNumber when given (digits only, typically 11–13 digits). amountCents when given.
 - NONE with a reply: electricity questions (how tokens arrive, which municipalities work).`,
     SEND: `YOUR ACTIONS:
-- SEND_VOUCHER: sending MONEY to a person/number ("send R50 to 083…", "romela R100", "pay my sister 084…"). msisdn = recipient; a named person with no number goes in recipientName ("send R50 to Philly"). BUYING AN OTT VOUCHER FOR YOURSELF ("buy an OTT voucher", "can I get an ott voucher R50") is also SEND_VOUCHER with self=true and no msisdn — the PIN is delivered in this chat, paid from the WaPay balance. NEVER treat any of this as a bank transfer — WaPay sells a voucher the recipient can spend online where OTT vouchers are accepted (no cash-out); your reply may say exactly that.
+- SEND_VOUCHER: sending MONEY to a person/number ("send R50 to 083…", "romela R100", "pay my sister 084…"). msisdn = recipient; a named person with no number goes in recipientName ("send R50 to Philly"). BUYING AN OTT VOUCHER FOR YOURSELF ("buy an OTT voucher", "can I get an ott voucher R50") is also SEND_VOUCHER with self=true and no msisdn — the PIN is delivered in this chat, paid from the WaPay balance. NEVER treat any of this as a bank transfer — WaPay sells a voucher the recipient can spend online where OTT vouchers are accepted ${process.env.WAPAY_PAYOUT_ENABLED === 'true' ? '(taking cash out is a separate "withdraw" flow, never part of sending)' : '(no cash-out)'}; your reply may say exactly that.
 - BUY_AIRTIME / BUY_DATA: when the user actually names airtime/data as the thing to send.
 - NONE with a reply: questions about sending money (fee R3, limits R10–R1000, how the recipient gets it).`,
     DISCOVER: `YOUR ACTIONS:
