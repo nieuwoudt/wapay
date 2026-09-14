@@ -8,7 +8,7 @@ WaPay balances stop being spend-only. A customer or a business can move money fr
 
 | Method | What the customer gets | Speed | Customer fee (flat, locked model) | Needs |
 |---|---|---|---|---|
-| **PayShap** | money in their own bank account, addressed by their cellphone number (ShapID) | minutes, 24/7 | R8 | a cellphone number registered for PayShap at their bank |
+| **PayShap** | money in their own bank account, instant | minutes, 24/7 | R8 | account number + bank (universal branch code); OTT processes PayShap on account details, not a ShapID (OTT, 2026-09-14) |
 | **Bank transfer (RTC)** | money in a bank account by account number | usually within the hour | R10 | account number + bank (universal branch code) |
 | **Cash at an ATM (CashSend)** | cash from any Absa or Nedbank ATM, no bank account needed | minutes | R18 up to R700, R23 to R1,500, R30 above | a cellphone number to receive the collection code by SMS |
 
@@ -19,7 +19,7 @@ Limits: R20 to R3,000 per pay-out (`WAPAY_PAYOUT_MIN_CENTS` / `WAPAY_PAYOUT_MAX_
 1. They say **"withdraw R200"** (or "cash out", "payshap", "money to my bank"). Not verified yet → *"Withdrawals need a once-off identity check. Reply VERIFY"* → the Didit link arrives; once approved, "withdraw" again.
 2. **How:** 1 PayShap · 2 bank transfer · 3 cash at an ATM, with the fee on each line and their available balance.
 3. **How much:** R20 to R3,000, checked against balance + fee.
-4. **Where:** PayShap and ATM cash ask for the cellphone number ("mine" = this WhatsApp number); bank transfer asks for the account number and the bank (name or universal branch code).
+4. **Where:** PayShap and bank transfer ask for the account number and the bank (name or universal branch code); ATM cash asks for the cellphone number ("mine" = this WhatsApp number). For PayShap the customer's own WhatsApp number is attached for the SMS notification.
 5. **Confirm:** amount, destination, fee, total leaving the balance → YES.
 6. **PIN.** Then the one money call: SPEND → CASH upgrade, hold, OTT PerformPayout, settle (or keep the hold on PENDING, release on failure). Reply: *Done* (instant), *Sent* (pending; the webhook message follows when the bank confirms), or an honest failure with nothing charged.
 7. A mid-flow "buy airtime" parks the withdrawal like every other flow; "cancel" stops it.

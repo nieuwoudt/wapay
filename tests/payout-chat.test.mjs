@@ -41,7 +41,7 @@ test('switch off → null (the coming-soon script stays); unverified → identit
   assert.equal(poor.state, null); assert.match(poor.text, /start at R20/);
 });
 
-test('happy path PayShap: menu → 1 → amount → mine → confirm → YES → PIN state; executes once with the KYC name and the intent id', async () => {
+test('happy path PayShap: menu → 1 → amount → account → bank → confirm → YES → PIN state; executes once with the KYC name and the intent id', async () => {
   env();
   const d = deps();
   const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
@@ -52,11 +52,13 @@ test('happy path PayShap: menu → 1 → amount → mine → confirm → YES →
   assert.equal(tooMuch.state, 'PAYOUT_AMOUNT'); assert.match(tooMuch.text, /more than you have/);
   const tooSmall = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: '5' });
   assert.match(tooSmall.text, /between R20 and R3000/);
-  const mob = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: 'R200' });
-  assert.equal(mob.state, 'PAYOUT_MOBILE'); assert.equal(mob.data.amountCents, 20000);
-  const conf = await handleWithdrawReply({ account: verified, state: 'PAYOUT_MOBILE', data: mob.data, text: 'mine' });
-  assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.equal(conf.data.recipient.mobile, '0731234567'); assert.equal(conf.data.feeCents, 800); assert.equal(conf.data.totalCents, 20800);
-  assert.match(conf.text, /Withdraw \*R200\*/); assert.match(conf.text, /Leaves your balance: \*R208\*/);
+  const acc = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: 'R200' });
+  assert.equal(acc.state, 'PAYOUT_ACCOUNT', 'PayShap is addressed by account number + branch code on OTT (2026-09-14), never a cellphone number'); assert.equal(acc.data.amountCents, 20000);
+  const br = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ACCOUNT', data: acc.data, text: '62012345678' });
+  assert.equal(br.state, 'PAYOUT_BRANCH');
+  const conf = await handleWithdrawReply({ account: verified, state: 'PAYOUT_BRANCH', data: br.data, text: 'FNB' });
+  assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.equal(conf.data.recipient.account_number, '62012345678'); assert.equal(conf.data.recipient.branch_code, '250655'); assert.equal(conf.data.recipient.mobile, '0731234567', 'own number rides along for the SMS'); assert.equal(conf.data.feeCents, 800); assert.equal(conf.data.totalCents, 20800);
+  assert.match(conf.text, /Withdraw \*R200\* to account 62012345678 at FNB by PayShap/); assert.match(conf.text, /Leaves your balance: \*R208\*/);
   const pin = await handleWithdrawReply({ account: verified, state: 'PAYOUT_CONFIRM', data: conf.data, text: 'yes' });
   assert.equal(pin.state, 'PAYOUT_PIN'); assert.match(pin.text, /PIN/);
   const done = await executeWithdraw({ account: verified, data: pin.data, deps: d });
