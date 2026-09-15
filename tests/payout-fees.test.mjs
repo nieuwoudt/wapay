@@ -32,7 +32,7 @@ import {
 
 const MIN_CENTS = 5000; // R50 floor
 const MAX_CENTS = 300000; // R3000 no-KYC ceiling
-const RAILS = [RAIL.PAYAT, 'PAYSHAP', 'RTC', 'CASHSEND'];
+const RAILS = [RAIL.PAYAT, 'PAYSHAP', 'RTC', 'CASHSEND', 'NEDCASH', 'EWALLET'];
 
 test('VAT: rail costs are grossed up, never taken ex-VAT', () => {
   assert.equal(VAT_BPS, 1500);

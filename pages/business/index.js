@@ -1189,7 +1189,7 @@ function Payouts() {
       {!st.enabled || !st.configured ? (
         <div className="card mt">
           <h2>Pay out your balance</h2>
-          <p className="note">Three ways, all from this page: <b>PayShap</b> to your bank account in minutes (R8 flat), a <b>bank transfer</b> to any account (R10 flat, usually within the hour), or <b>cash at an Absa ATM or a Pick n Pay / Boxer till</b> with no bank account needed (from R18). A once-off identity check applies. The rail is integrated and tested and goes live once the pay-out provider's sandbox sign-off and the compliance review are done. Until then your balance keeps working for airtime, data, electricity and WaPay payments, and every rand stays yours.</p>
+          <p className="note">Three ways, all from this page: <b>PayShap</b> to your bank account in minutes (R8 flat), a <b>bank transfer</b> to any account (R10 flat, usually within the hour), or <b>cash</b> at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet, with no bank account needed (from R18). A once-off identity check applies. The rail is integrated and tested and goes live once the pay-out provider's sandbox sign-off and the compliance review are done. Until then your balance keeps working for airtime, data, electricity and WaPay payments, and every rand stays yours.</p>
         </div>
       ) : (
         <div className="card mt">

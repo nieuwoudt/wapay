@@ -19,7 +19,7 @@ Topic id: `withdraw`. Detection: `\b(withdraw\w*|cash ?-?out|take (?:my |the )?m
 🏧 Yes, you can take money out of WaPay. Here is how it works:
 
 1️⃣ Say *withdraw* and the amount, for example "withdraw R200" (between R20 and R3000).
-2️⃣ Choose how: *PayShap* to your own bank account (R8 fee, arrives in minutes), or *cash at an Absa ATM* or a Pick n Pay / Boxer till with no bank account needed (R18 fee up to R700, R23 up to R1500, R30 above).
+2️⃣ Choose how: *PayShap* to your own bank account (R8 fee, arrives in minutes), or *cash* at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet collected at any FNB ATM, no bank account needed (R18 fee up to R700, R23 up to R1500, R30 above).
 3️⃣ Give the details the bank needs: your account number and bank for PayShap, or the cellphone number that will collect the cash, plus your 13-digit SA ID number.
 4️⃣ Confirm, then enter your WaPay PIN. The amount plus the fee leaves your balance, you get a reference straight away, and I message you the moment the bank confirms.
 
@@ -157,7 +157,7 @@ Topic id: `business`. Detection: `\b(business account|for my (?:shop|business|sp
 
 🙏 Please-pay-me links: the person paying never pays a fee. You pay nothing on requests under R50; above that 4.2% + R2.30 comes off what you receive (a R100 request pays you R93.50).
 
-🏧 Withdrawals: R8 to your bank account by PayShap in minutes, R10 for a bank transfer, and cash at an Absa ATM or a Pick n Pay / Boxer till for R18 up to R700, R23 up to R1500, R30 above that. Say "withdraw R200" to start.
+🏧 Withdrawals: R8 to your bank account by PayShap in minutes, R10 for a bank transfer, and cash at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet for R18 up to R700, R23 up to R1500, R30 above that. Say "withdraw R200" to start.
 
 📱 Airtime, data and electricity: no WaPay fee, you pay the product price.
 
