@@ -206,7 +206,7 @@ async function run() {
     verdict('Withdraw: with payouts live the flow starts deterministically and fees are quoted', [
       { level: 'FAIL', ok: has(a.replyText, /Withdrawals start at R20/i) && has(a.replyText, /R0/), what: '"withdraw R20" reaches the flow and reports the R20 minimum against a R0 wallet' },
       { level: 'FAIL', ok: !has(a.replyText, /coming soon/i) && !has(b.replyText, /coming soon/i) && !has(c.replyText, /coming soon/i), what: 'never "coming soon" while live' },
-      { level: 'FAIL', ok: has(b.replyText, /Withdrawals start at R20/i), what: '"take my money out" is a withdraw ask' },
+      { level: 'FAIL', ok: has(b.replyText, /Here is how it works|withdraw R200/i) && !looksLikeMenu(b.replyText), what: '"can I take my money out?" is a QUESTION: the steps are explained, no flow starts (knowledge base, 2026-09-15)' },
       { level: 'FAIL', ok: has(c.replyText, /R8/) && has(c.replyText, /R10/) && has(c.replyText, /R18/), what: 'the cash-out fee question quotes R8 / R10 / R18' },
     ], s);
   }
