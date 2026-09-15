@@ -72,7 +72,7 @@ import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '.
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
-import { payoutEnabled, payoutConfigured, resolveProviders } from '../../../lib/payouts.js';
+import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders } from '../../../lib/payouts.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
 import { searchProducts } from '../../../lib/vas-search.js';
 import {
@@ -736,7 +736,7 @@ async function renderHome({ from, account }) {
     (fuelLiveFor(from)
       ? `⛽ *Fuel*: "buy fuel" for participating stations\n`
       : `⛽ *Fuel vouchers*: coming soon\n`) +
-    (payoutEnabled() ? `🏧 *Withdraw*: "withdraw R200" to your bank, or cash at an ATM\n` : `🏧 *Withdraw*: coming soon\n`) +
+    (payoutAllowedFor(from) ? `🏧 *Withdraw*: "withdraw R200" to your bank, or cash at an ATM\n` : `🏧 *Withdraw*: coming soon\n`) +
     `📄 *Transactions* · ⚙️ *Settings*\n\n` +
     `⚡ Quick: ${quickActions[0]} · ${quickActions[1]} · ${quickActions[2]}\n\n` +
     `Just tell me what you need, in any language.`;
@@ -1353,7 +1353,7 @@ async function handlePostOnboarding({ account, from, text }) {
   // WITHDRAW (2026-09-11, OTT payout rail live behind WAPAY_PAYOUT_ENABLED):
   // "withdraw R200" / "cash out" / "payshap" starts the in-chat flow; with the
   // switch off the honest coming-soon answer stays with the AI path.
-  if (payoutEnabled()) {
+  if (payoutAllowedFor(from)) {
     const { matchWithdrawAsk } = await import('../../../lib/payout-chat.js');
     const ask = matchWithdrawAsk(text);
     if (ask) return await handleWithdrawStart({ from, account, ask, text });
@@ -2249,7 +2249,7 @@ function detectStrongIntentSwitch(text, state) {
     ['FUEL', matchFuelPurchase(t)],
     ['BALANCE', /\b(balance|balans|imali|chelete)\b/i.test(t) && /\b(my|check|what|wat|yami|malini)\b/i.test(t)],
     ['HISTORY', /\b(my|show|list)\b[^\n]{0,20}\bvouchers?\b/i.test(t) && !/\d{6,}/.test(t)],
-    ['WITHDRAW', process.env.WAPAY_PAYOUT_ENABLED === 'true' && /\b(withdraw|cash ?out|payshap)\b/i.test(t)],
+    ['WITHDRAW', payoutAllowedFor(from) && /\b(withdraw|cash ?out|payshap)\b/i.test(t)],
   ];
   for (const [fam, hit] of candidates) {
     if (!hit) continue;
@@ -2395,7 +2395,7 @@ async function deliverPayoutStep({ from, account, step }) {
   return await sendWhatsAppText({ to: from, text: msg });
 }
 function howItWorksContext(from) {
-  return { wicodeLive: fuelLiveFor(from), withdrawLive: payoutEnabled(), fuelPartners: advertisedFuelPartners().map((p) => p.name), ottFacts: ottAcceptedFacts() };
+  return { wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), fuelPartners: advertisedFuelPartners().map((p) => p.name), ottFacts: ottAcceptedFacts() };
 }
 async function howItWorksContextLive(from, text) {
   const providers = payoutEnabled() && payoutConfigured() ? await resolveProviders({}).catch(() => []) : [];
@@ -3297,7 +3297,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       await updateConversationState(from, null);
       if (/^\W*(yes|yebo|ewe|ja|y|yep|yeah|ok|okay|please|sure|start|go|take me through|show me|let'?s go)\W*$/i.test(t) && HOWTO_TOPICS[topic]) {
         logStructured('how_it_works_start', { accountId: account.id, topic, method: data?.method || null });
-        if (topic === 'withdraw' && payoutEnabled()) {
+        if (topic === 'withdraw' && payoutAllowedFor(from)) {
           const method = data?.method && data.method !== 'CASH' ? data.method : null;
           return await handleWithdrawStart({ from, account, ask: { amountCents: null, method }, text: 'withdraw' });
         }
@@ -5756,7 +5756,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
         await addToConversationHistory(from, 'assistant', localizedSpend);
         return await sendWhatsAppText({ to: from, text: localizedSpend });
       }
-      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083...", or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n${payoutEnabled() ? '🏧 *Withdraw* - "withdraw R200" to your bank or as cash at an ATM\n' : ''}${fuelLiveFor(from) ? '⛽ *Fuel* - "buy fuel"\n' : ''}🏪 *Business* - "business account" to get paid by your customers\n\nJust ask me in your own words. Any South African language works!`;
+      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083...", or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n${payoutAllowedFor(from) ? '🏧 *Withdraw* - "withdraw R200" to your bank or as cash at an ATM\n' : ''}${fuelLiveFor(from) ? '⛽ *Fuel* - "buy fuel"\n' : ''}🏪 *Business* - "business account" to get paid by your customers\n\nJust ask me in your own words. Any South African language works!`;
       const localizedHelp = await localizeOutbound(helpMsg, await userLang(account));
       await addToConversationHistory(from, 'assistant', localizedHelp);
       return await sendWhatsAppText({ to: from, text: localizedHelp });
