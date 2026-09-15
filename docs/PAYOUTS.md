@@ -55,3 +55,7 @@ available right now" (`NO_PROVIDER`, no ledger movement) until OTT enables the
 providers on the test account and loads a test float. Ask OTT for: providers
 PayShap + RTC + CashSend active on the TEST account, a test float (R500 is
 plenty), and confirmation that the webhook URL above is registered.
+
+## Status 2026-09-15 (OTT sandbox live)
+
+The founder activated the providers in the OTT test portal (Administration > Payout Providers > Add All) and OTT loaded the float. `GET /api/internal/payout-status` now shows balance 100000 and maps **PayShap Account (code 127)** and **ABSA CashSend (code 112)**; Nedbank Cardless Withdrawal (4) and FNB e-wallet (1) are also active on the merchant but unmapped (no method yet). OTT's `GetActiveProvidersLimits` marks `firstname`, `surname`, `id_number` and `mobile` Required for every provider and `account_Number` + `branch_Code` Required for PayShap; merchant limits are 0 in the API, so the portal's system minimums apply (R50 PayShap and ABSA CashSend, R10 Nedbank; `SYSTEM_LIMITS_CENTS`). PayShap on OTT is addressed by account number and branch code, not a ShapID. There is no RTC provider on the test merchant, so the chat offers PayShap and ATM cash only. Test script: "withdraw R50", PayShap, a real account number (staging moves no money), the bank, the 13-digit ID, YES, PIN.

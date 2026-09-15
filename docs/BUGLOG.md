@@ -4,6 +4,29 @@
 
 ---
 
+## 49. "Are OTT vouchers accepted?" deflected to a website; "Is it accepted at Checkers?" could not be answered
+
+- **Symptom (founder screenshots, 2026-09-15):** "Yes… check ottvoucher.com for the full list" and "I can't confirm Checkers specifically right now". The founder: "we have to be able to give an answer, not direct the user to the website".
+- **Root cause:** `ottAcceptedFacts()` named categories only, by design (policy safety: most OTT partners are betting operators), and no merchant data existed anywhere in the codebase.
+- **Fix:** `lib/ott-acceptance.js`, researched 2026-09-15 from ottvoucher.com (partner wall, FAQ, Voucher and App Terms of 26 Jan 2026) and merchant sites: eleven named non-betting partners (Talk360, fibertime, ikeja, Capitec Connect, megsApp, Simplex, Pay@, Xash, FoondaMate, LAYAWAY, ShopCover), twenty-five named non-acceptors customers ask about (every supermarket till, Takealot, Netflix, Showmax, Spotify, DStv direct, the networks' own sites), the 12-digit PIN (not 16), single-use, change to an OTT Wallet only with some partners, 36-month expiry, no cash-out, partner caps, OTT support WhatsApp. `lookupOttMerchant` answers yes/no by name; the AI knowledge carries the same facts; betting operators are deliberately absent (Meta policy). Locked by `tests/ott-acceptance.test.mjs`; generated reference in `docs/CONVERSATION_KNOWLEDGE_BASE.md`.
+
+## 48. Questions started flows: "Can I buy electricity?" opened the meter ask, "Can they withdraw the OTT voucher for money?" started a withdrawal, a mid-flow question was read as a menu choice
+
+- **Symptom (founder screenshots, 2026-09-15):** capability questions were treated as commands; inside the withdraw flow "If I send someone money, can they withdraw it?" got "Reply 1, 2 or 3", and "Does it work when I send cash to an ATM? How do I withdraw the money?" was parsed as method 3 because it contained "ATM".
+- **Root cause:** nothing in the router distinguished a question from an imperative. `productQueryIndicators` explicitly routed "can I buy…" to the product flow, the withdraw matcher fired on the word "withdraw" in any sentence, and the `PAYOUT_*` states parsed every reply as step input.
+- **Fix:** `lib/how-it-works.js`, a per-transaction knowledge base (withdraw, send, OTT voucher, electricity, airtime, data, deposit, request, fuel, balance, business) with steps, real limits and fees from the same functions the flows use, and the exact words to start. `matchHowItWorksAsk` fires only on question-shaped text without an amount or a number, and runs after the fee hook and before the withdraw command matcher. Inside the withdraw flow a question is answered and the step repeated (`stepInputParses`, `answerAside`, `reprompt`); a name match inside a sentence is no longer a menu choice. The AI knowledge carries the same HOW IT WORKS block. Locked by `tests/how-it-works.test.mjs` and the payout-chat aside test; chat QA scenario "How it works".
+
+## 47. Every OTT payout provider requires the recipient's ID number, and PayShap requires account number + branch code; the chat flow collected neither for PayShap
+
+- **Symptom (probe 2026-09-15, after the providers were activated):** `GetActiveProvidersLimits` marks `id_number` and `mobile` Required for all four providers and `account_Number` + `branch_Code` Required for PayShap Account; the portal shows system minimums of R50 (PayShap, ABSA CashSend) the API omits when the merchant override is 0. Our chat asked PayShap customers for a cellphone number only and allowed R20.
+- **Fix:** `cleanRecipient` enforces the live provider's required fields (with `RECIPIENT_FIELDS` passthrough for the extra OTT fields); `methodLimits` narrows the product limits by the provider's, with `SYSTEM_LIMITS_CENTS` as the fallback for the portal's system minimums; `requestPayout` resolves the provider before validating and refuses below-minimum or incomplete requests before any ledger call; the chat offers only methods with a live provider (no RTC on the test merchant), quotes each method's minimum, collects account number + bank for PayShap, and asks for the 13-digit ID number when the provider requires it (`PAYOUT_ID`). CashSend copy now says Absa ATM or Pick n Pay / Boxer till (the mapped provider is ABSA CashSend).
+
+## 46. OTT's live provider list mapped to nothing because the limits endpoint answers in a different shape
+
+- **Symptom:** with four providers active in the OTT portal, `/api/internal/payout-status` showed `mapped: []`, so every pay-out would have been refused `NO_PROVIDER`.
+- **Root cause:** `resolveProviders` preferred `GetActiveProvidersLimits` and read `body.providers`; that endpoint returns the provider array under `requiredFields`, each entry carrying `providerMinLimit`, `providerMaxLimit` and a `requiredFields` array holding one `{ field: 'Required' | 'Optional' }` object with OTT's own casing (`account_Number`, `branch_Code`, `iD_type`).
+- **Fix:** accept both shapes, normalise field names (`normaliseFieldName`), parse Required entries (`requiredFieldNames`), rand limits to cents. Locked by the OTT-shape test in `tests/payouts.test.mjs`; verified in production: PayShap Account 127 and ABSA CashSend 112 map with R50 to R3,000 and their field lists.
+
 ## 45. "What can I buy with this?" answered with a hard-coded three-item list
 
 - **Symptom (founder screenshots, 2026-09-13):** after a R20 deposit the founder asked "What can I buy with this?" and got "WaPay VAS Products: Mobile Airtime, Data Bundles, Prepaid Electricity" with a Read more fold. No vouchers, no send money, no get paid, no withdrawals, no fuel, while "where can I spend my money" gets the warm catalogue answer.

@@ -61,8 +61,10 @@ import {
   redemptionGuide,
   isWicodeLive,
   spendDestinationLines,
+  ottAcceptedFacts,
 } from '../../../lib/spend-catalogue.js';
 import { matchFeeAsk, feeAnswer, feeAskAmountCents } from '../../../lib/fee-facts.js';
+import { matchHowItWorksAsk, howItWorksAnswer } from '../../../lib/how-it-works.js';
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
 import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
@@ -1322,6 +1324,13 @@ async function handlePostOnboarding({ account, from, text }) {
   const feeTopic = matchFeeAsk(text);
   if (feeTopic) return await handleFeeAsk({ from, account, topic: feeTopic, text });
 
+  // HOW IT WORKS (2026-09-15): a QUESTION about a capability or a process gets
+  // the steps, the limits and the exact words to start. Only commands start
+  // flows ("Can I buy electricity?" used to open the electricity flow;
+  // "Can they withdraw the OTT voucher for money?" used to start a withdrawal).
+  const howTopic = matchHowItWorksAsk(text);
+  if (howTopic) return await handleHowItWorks({ from, account, topic: howTopic, text });
+
   // WITHDRAW (2026-09-11, OTT payout rail live behind WAPAY_PAYOUT_ENABLED):
   // "withdraw R200" / "cash out" / "payshap" starts the in-chat flow; with the
   // switch off the honest coming-soon answer stays with the AI path.
@@ -2363,6 +2372,16 @@ async function deliverPayoutStep({ from, account, step }) {
   }
   await updateConversationState(from, step.state || null, step.data || null);
   const msg = step.raw ? step.text : await localizeOutbound(step.text, await userLang(account));
+  await addToConversationHistory(from, 'assistant', msg);
+  return await sendWhatsAppText({ to: from, text: msg });
+}
+function howItWorksContext(from) {
+  return { wicodeLive: fuelLiveFor(from), withdrawLive: payoutEnabled(), fuelPartners: advertisedFuelPartners().map((p) => p.name), ottFacts: ottAcceptedFacts() };
+}
+async function handleHowItWorks({ from, account, topic, text }) {
+  logStructured('how_it_works_ask', { accountId: account.id, topic });
+  const msg = await localizeOutbound(howItWorksAnswer(topic, { ...howItWorksContext(from), text }), await userLang(account));
+  await addToConversationHistory(from, 'user', text);
   await addToConversationHistory(from, 'assistant', msg);
   return await sendWhatsAppText({ to: from, text: msg });
 }

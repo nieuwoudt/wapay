@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-09-15 (32) — Payouts testable on OTT's sandbox; the bot explains instead of launching; OTT acceptance by name
+
+OTT activated PayShap Account, ABSA CashSend, Nedbank Cardless and FNB
+e-wallet on the test merchant and loaded a float. Our mapping read the
+wrong key and saw nothing (BUGLOG #46); fixed, and the live provider now
+decides the required fields (ID number for every provider, account number
++ branch code for PayShap) and the limits (R50 minimum) before any ledger
+call (#47). The chat offers only methods with a live provider and asks for
+the ID number. Founder review of the conversation: capability questions
+are now answered from a per-transaction knowledge base (`lib/how-it-works.js`)
+instead of starting flows, in-flow questions are answered and the step
+repeated (#48), and "is it accepted at Checkers?" gets a no by name from
+researched acceptance data (`lib/ott-acceptance.js`, #49). Reference document
+generated from the data: `docs/CONVERSATION_KNOWLEDGE_BASE.md`. Suite 616;
+chat QA harness extended with the founder's exact questions.
+
 ## 2026-09-13 (31) — Truth is data: fees the bot can quote, flag-aware cash-out truth, catalogue-built "what can I buy"; W-mark in every QR
 
 Founder review of live chat screenshots (BUGLOG #43, #44, #45): with payouts

@@ -174,6 +174,19 @@ async function run() {
     ], s);
   }
   {
+    // Founder review 2026-09-15: questions are answered, never turned into flows.
+    const a = await s.say('Can I buy electricity?');
+    const b = await s.say('Can they withdraw the OTT voucher for money?');
+    const c = await s.say('Is it accepted at Checkers?');
+    const d = await s.say('Can I send money to someone?');
+    verdict('How it works: capability questions get the steps, not a flow or a menu', [
+      { level: 'FAIL', ok: !has(a.replyText, /How much electricity would you like to buy/i) && has(a.replyText, /R10 to R5000/) && has(a.replyText, /buy R100 electricity/), what: '"Can I buy electricity?" explains and offers the words to start' },
+      { level: 'FAIL', ok: !has(b.replyText, /Withdraw from WaPay|Reply 1, 2 or 3/i) && has(b.replyText, /cannot be exchanged for cash/i), what: 'an OTT cash-out question is answered, not turned into a withdrawal' },
+      { level: 'FAIL', ok: has(c.replyText, /Checkers does not take OTT vouchers/i) && has(c.replyText, /Talk360|Pay@/), what: '"Is it accepted at Checkers?" gets a no by name and the places it does work' },
+      { level: 'FAIL', ok: has(d.replyText, /instantly and it is free/i) && !looksLikeMenu(d.replyText), what: '"Can I send money to someone?" explains sending' },
+    ], s);
+  }
+  {
     const a = await s.say('What can I buy with this?');
     verdict('Discovery: "what can I buy" lists everything the money does, not three VAS lines', [
       { level: 'FAIL', ok: has(a.replyText, /Send money/i) && has(a.replyText, /Get paid/i) && has(a.replyText, /vouchers/i), what: 'catalogue-built list (send, get paid, vouchers)' },

@@ -147,3 +147,19 @@ test('live providers drive the menu, the limits and the ID step (OTT test mercha
   const none = await startWithdraw({ account: verified, ask: {}, deps: { ...deps(), resolveProviders: async () => [] } });
   assert.equal(none.state, null); assert.match(none.text, /not available for a little while/, 'no live provider: an honest pause, never a dead flow');
 });
+
+test('a question in the middle of the withdraw flow is answered, then the step repeats (founder review 2026-09-15)', async () => {
+  env();
+  const d = deps(6600); // the founder's R66
+  const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
+  const q1 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: 'If I send someone money, can they withdraw it?' });
+  assert.equal(q1.state, 'PAYOUT_METHOD', 'the flow is parked, not advanced'); assert.match(q1.text, /instantly and it is free/); assert.match(q1.text, /Back to your withdrawal/); assert.match(q1.text, /1️⃣ \*PayShap\*/);
+  const q2 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: 'Does it work when I send cash to an ATM? How do I withdraw the money?' });
+  assert.equal(q2.state, 'PAYOUT_METHOD', '"ATM" inside a question is not a menu choice'); assert.match(q2.text, /Here is how it works/);
+  const pick = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '3' });
+  assert.equal(pick.data.method, 'CASHSEND', 'plain input still works');
+  const q3 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: pick.data, text: 'what is the fee?' });
+  assert.equal(q3.state, 'PAYOUT_AMOUNT'); assert.match(q3.text, /R18 up to R700/); assert.match(q3.text, /How much would you like to withdraw/);
+  const amt = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: pick.data, text: '66' });
+  assert.equal(amt.state, 'PAYOUT_AMOUNT'); assert.match(amt.text, /more than you have/, 'numbers are still amounts');
+});
