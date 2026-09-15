@@ -117,3 +117,33 @@ test('processor + menu + AI truth follow the switch; the PIN case is the only pa
   const hook = read('../pages/api/webhooks/ott-payout.js');
   assert.ok(hook.indexOf('finalisePayout(') < hook.indexOf('sendWhatsAppText({ to: account.waId'), 'customer told after finalisation');
 });
+
+test('live providers drive the menu, the limits and the ID step (OTT test merchant 2026-09-15)', async () => {
+  env();
+  const live = [
+    { method: 'PAYSHAP', providerCode: '127', providerName: 'PayShap Account', minCents: 5000, maxCents: 15000000, requiredFields: ['firstname', 'surname', 'id_number', 'mobile', 'account_number', 'branch_code'] },
+    { method: 'CASHSEND', providerCode: '112', providerName: 'ABSA CashSend', minCents: 5000, maxCents: 10000000, requiredFields: ['firstname', 'surname', 'id_number', 'mobile'] },
+  ];
+  const d = { ...deps(), resolveProviders: async () => live };
+  const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
+  assert.equal(menu.state, 'PAYOUT_METHOD'); assert.deepEqual(menu.data.options, ['PAYSHAP', 'CASHSEND']);
+  assert.match(menu.text, /1️⃣ \*PayShap\*/); assert.match(menu.text, /2️⃣ \*Cash at an Absa ATM\*/); assert.ok(!/Bank transfer/.test(menu.text), 'no RTC provider, so no bank transfer option'); assert.match(menu.text, /Reply 1 or 2\./);
+  const cash = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
+  assert.equal(cash.data.method, 'CASHSEND', 'menu numbers follow the offered options');
+  const ps = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '1' });
+  assert.equal(ps.state, 'PAYOUT_AMOUNT'); assert.match(ps.text, /Between R50 and R3000/, 'the provider minimum narrows the product limits');
+  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ps.data, text: '30' });
+  assert.equal(low.state, 'PAYOUT_AMOUNT'); assert.match(low.text, /between R50 and R3000/);
+  const acc = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ps.data, text: '50' });
+  assert.equal(acc.state, 'PAYOUT_ACCOUNT');
+  const br = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ACCOUNT', data: acc.data, text: '62012345678' });
+  const idAsk = await handleWithdrawReply({ account: verified, state: 'PAYOUT_BRANCH', data: br.data, text: 'FNB' });
+  assert.equal(idAsk.state, 'PAYOUT_ID', 'the provider requires id_number, so it is asked before confirming'); assert.match(idAsk.text, /13-digit/);
+  const bad = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ID', data: idAsk.data, text: '123' });
+  assert.equal(bad.state, 'PAYOUT_ID');
+  const conf = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ID', data: idAsk.data, text: '9001015009087' });
+  assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.equal(conf.data.recipient.id_number, '9001015009087'); assert.equal(conf.data.feeCents, 800);
+  assert.match(conf.text, /Withdraw \*R50\* to account 62012345678 at FNB by PayShap/);
+  const none = await startWithdraw({ account: verified, ask: {}, deps: { ...deps(), resolveProviders: async () => [] } });
+  assert.equal(none.state, null); assert.match(none.text, /not available for a little while/, 'no live provider: an honest pause, never a dead flow');
+});

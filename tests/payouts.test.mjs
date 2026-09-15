@@ -8,10 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import {
-  requestPayout, finalisePayout, quotePayout, payoutReference, cleanRecipient, resolveProviders, _resetProviderCache,
-  payoutEnabled, accountKycVerified, MIN_PAYOUT_CENTS, MAX_PAYOUT_CENTS, listPayouts,
-} from '../lib/payouts.js';
+import { requestPayout, finalisePayout, quotePayout, payoutReference, cleanRecipient, resolveProviders, _resetProviderCache, payoutEnabled, accountKycVerified, MIN_PAYOUT_CENTS, MAX_PAYOUT_CENTS, listPayouts, methodLimits, normaliseFieldName } from '../lib/payouts.js';
 
 function env(on = true) {
   process.env.WAPAY_PAYOUT_ENABLED = on ? 'true' : '';
@@ -178,4 +175,29 @@ test('routes: the payout API needs a fresh factor on every request and fails clo
   const hook = readFileSync(fileURLToPath(new URL('../pages/api/webhooks/ott-payout.js', import.meta.url)), 'utf8');
   assert.ok(hook.indexOf('verifyPayoutWebhook(payload, apiKey)') < hook.indexOf('finalisePayout('), 'hash verified before finalising');
   assert.match(hook, /res\.status\(401\)\.json\(\{ ok: false, error: 'BAD_HASH' \}\)/);
+});
+
+test('OTT limits shape (2026-09-15): providers map by name, required fields come from the Required/Optional map, system minimums fill in when the merchant override is 0', async () => {
+  env();
+  _resetProviderCache();
+  const c = { async getActiveProviderLimits() { return { errorCode: 0, errorMessage: 'Success', requiredFields: [
+    { providerCode: 1, providerName: 'FNB e-wallet', providerMinLimit: 0, providerMaxLimit: 0, requiredFields: [{ firstname: 'Required', surname: 'Required', id_number: 'Required', mobile: 'Required', account_Number: 'Optional' }] },
+    { providerCode: 112, providerName: 'ABSA CashSend', providerMinLimit: 0, providerMaxLimit: 0, requiredFields: [{ firstname: 'Required', surname: 'Required', id_number: 'Required', mobile: 'Required', branch_Code: 'Optional' }] },
+    { providerCode: 127, providerName: 'PayShap Account', providerMinLimit: 0, providerMaxLimit: 0, requiredFields: [{ title: 'Optional', firstname: 'Required', surname: 'Required', id_number: 'Required', mobile: 'Required', account_Number: 'Required', branch_Code: 'Required', iD_type: 'Optional' }] },
+  ] }; } };
+  const list = await resolveProviders({ client: c, now: 5000 });
+  assert.deepEqual(list.map((p) => [p.method, p.providerCode, p.minCents]), [['PAYSHAP', '127', 5000], ['CASHSEND', '112', 5000]], 'no RTC on the test merchant; system minimum R50 applied');
+  assert.deepEqual(list[0].requiredFields, ['firstname', 'surname', 'id_number', 'mobile', 'account_number', 'branch_code']);
+  assert.deepEqual(methodLimits('PAYSHAP', list), { minCents: 5000, maxCents: 300000 });
+  assert.deepEqual(methodLimits('RTC', list), { minCents: 2000, maxCents: 300000 }, 'unknown provider keeps the product limits');
+  assert.equal(normaliseFieldName('iD_type'), 'id_type'); assert.equal(normaliseFieldName('branch_Code'), 'branch_code'); assert.equal(normaliseFieldName('dob'), 'date_of_birth');
+  assert.throws(() => cleanRecipient('PAYSHAP', { firstname: 'L', surname: 'M', mobile: '0731234567', account_number: '62012345678', branch_code: '250655' }, list[0].requiredFields), /Missing id_number/);
+  const ok = cleanRecipient('PAYSHAP', { firstname: 'L', surname: 'M', mobile: '0731234567', account_number: '62012345678', branch_code: '250655', id_number: '9001015009087' }, list[0].requiredFields);
+  assert.equal(ok.id_number, '9001015009087'); assert.equal(ok.mobile, '27731234567');
+  const l = stubLedger();
+  const r = await requestPayout({ prisma: stubPrisma(), ledger: l, client: c, account: kycd, intentId: 'intent-5000', method: 'PAYSHAP', amountCents: 3000, recipient: { ...recipient, id_number: '9001015009087' }, providers: list });
+  assert.equal(r.error, 'BAD_AMOUNT'); assert.equal(r.minCents, 5000); assert.deepEqual(l.calls, [], 'below the provider minimum: refused before any ledger call');
+  const r2 = await requestPayout({ prisma: stubPrisma(), ledger: stubLedger(), client: c, account: kycd, intentId: 'intent-5001', method: 'PAYSHAP', amountCents: 5000, recipient, providers: list });
+  assert.equal(r2.error, 'BAD_RECIPIENT'); assert.equal(r2.field, 'id_number', 'the live required fields are enforced');
+  _resetProviderCache();
 });
