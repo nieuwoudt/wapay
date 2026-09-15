@@ -2249,7 +2249,12 @@ function detectStrongIntentSwitch(text, state) {
     ['FUEL', matchFuelPurchase(t)],
     ['BALANCE', /\b(balance|balans|imali|chelete)\b/i.test(t) && /\b(my|check|what|wat|yami|malini)\b/i.test(t)],
     ['HISTORY', /\b(my|show|list)\b[^\n]{0,20}\bvouchers?\b/i.test(t) && !/\d{6,}/.test(t)],
-    ['WITHDRAW', payoutAllowedFor(from) && /\b(withdraw|cash ?out|payshap)\b/i.test(t)],
+    // Self-contained BY DESIGN: this function is evaluated in isolation by
+    // the escape tests and has no `from` in scope. It only decides whether
+    // the topic CHANGED; the real per-user gate is payoutAllowedFor(from)
+    // at the withdraw entry point, so a refused customer simply falls
+    // through to the AI instead of a flow.
+    ['WITHDRAW', process.env.WAPAY_PAYOUT_ENABLED === 'true' && /\b(withdraw|cash ?out|payshap)\b/i.test(t)],
   ];
   for (const [fam, hit] of candidates) {
     if (!hit) continue;

@@ -63,7 +63,7 @@ test('the AI knowledge block carries the same facts; the processor answers quest
   assert.match(k, /HOW IT WORKS/); assert.match(k, /Prepaid electricity: /); assert.match(k, /never start a flow yourself/);
   assert.match(howItWorksFacts(ctx), /Withdrawing money \(cash-out\): /);
   const p = read('../pages/api/webhooks/message-processor-v2.js');
-  const fee = p.indexOf('const feeTopic = matchFeeAsk(text);'); const how = p.indexOf('const howTopic = matchHowItWorksAsk(text);'); const wd = p.indexOf('if (payoutEnabled()) {\n    const { matchWithdrawAsk }'); const det = p.indexOf('const detection = detectExplicitIntent(text);');
+  const fee = p.indexOf('const feeTopic = matchFeeAsk(text);'); const how = p.indexOf('const howTopic = matchHowItWorksAsk(text);'); const wd = p.indexOf('if (payoutAllowedFor(from)) {\n    const { matchWithdrawAsk }'); const det = p.indexOf('const detection = detectExplicitIntent(text);');
   assert.ok(fee > -1 && how > fee && wd > how && det > wd, 'order: fees, how it works, withdraw command, keyword router');
   assert.match(p, /async function handleHowItWorks\(\{ from, account, topic, text \}\)/);
   const c = read('../lib/payout-chat.js');

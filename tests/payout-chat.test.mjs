@@ -97,10 +97,10 @@ test('bank transfer: account → bank name → confirm; ATM cash: number typed; 
 
 test('processor + menu + AI truth follow the switch; the PIN case is the only path to executeWithdraw', () => {
   const p = read('../pages/api/webhooks/message-processor-v2.js');
-  assert.match(p, /if \(payoutEnabled\(\)\) \{\s*\n\s*const \{ matchWithdrawAsk \} = await import\('\.\.\/\.\.\/\.\.\/lib\/payout-chat\.js'\);/, 'withdraw asks are deterministic only when live');
+  assert.match(p, /if \(payoutAllowedFor\(from\)\) \{\s*\n\s*const \{ matchWithdrawAsk \} = await import\('\.\.\/\.\.\/\.\.\/lib\/payout-chat\.js'\);/, 'withdraw asks are deterministic only when live AND this user is allowed');
   assert.ok(p.indexOf('if (ask) return await handleWithdrawStart({ from, account, ask, text });') < p.indexOf('const slots = parseSlots(text'), 'before slot parsing');
   assert.match(p, /handleAIChat\(\{ from, text: text \|\| 'withdraw', account \}\)/, 'the AI fallback keeps the customer\'s real words');
-  assert.ok(p.indexOf('const feeTopic = matchFeeAsk(text);') < p.indexOf('if (payoutEnabled()) {\n    const { matchWithdrawAsk }'), 'fee questions are answered before the withdraw flow starts');
+  assert.ok(p.indexOf('const feeTopic = matchFeeAsk(text);') < p.indexOf('if (payoutAllowedFor(from)) {\n    const { matchWithdrawAsk }'), 'fee questions are answered before the withdraw flow starts');
   assert.deepEqual(matchWithdrawAsk('can I take my money out?'), { amountCents: null, method: null });
   assert.deepEqual(matchWithdrawAsk('how do I cash-out R150'), { amountCents: 15000, method: null });
   for (const st of PAYOUT_STATES.filter((x) => x !== 'PAYOUT_PIN')) assert.match(p, new RegExp(`case '${st}':`), st);
@@ -109,7 +109,7 @@ test('processor + menu + AI truth follow the switch; the PIN case is the only pa
   assert.ok(pinCase.indexOf('await updateConversationState(from, null);\n      const { executeWithdraw }') > -1, 'state cleared BEFORE the money call');
   assert.equal((p.match(/executeWithdraw\(/g) || []).length, 1, 'exactly one call site');
   assert.match(p, /state\.startsWith\('PAYOUT'\) \? 'WITHDRAW'/); assert.match(p, /\['WITHDRAW', process\.env\.WAPAY_PAYOUT_ENABLED === 'true' &&/, 'self-contained: the isolated-function tests evaluate it without imports');
-  assert.match(p, /payoutEnabled\(\) \? `🏧 \*Withdraw\*: "withdraw R200"/, 'home menu flips with the switch');
+  assert.match(p, /payoutAllowedFor\(from\) \? `🏧 \*Withdraw\*: "withdraw R200"/, 'home menu flips with the per-user gate');
   const script = read('../lib/spend-catalogue.js');
   assert.match(script, /if \(process\.env\.WAPAY_PAYOUT_ENABLED === 'true'\) \{\s*\n\s*return \(\s*\n\s*`💸 Withdrawals are live!/);
   const ai = read('../packages/ai/src/orchestrator.ts');

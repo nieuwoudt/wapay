@@ -70,7 +70,11 @@ test('whitespace and multiple testers are handled', () => {
 test('every customer-facing withdraw surface asks the PER-USER gate', () => {
   // The entry points that start the flow.
   assert.match(processorSource, /if \(payoutAllowedFor\(from\)\) \{\s*\n\s*const \{ matchWithdrawAsk \}/);
-  assert.match(processorSource, /\['WITHDRAW', payoutAllowedFor\(from\)/);
+  // The strong-intent-switch candidate is deliberately NOT per-user: that
+  // function is evaluated in isolation (no `from` in scope) and only decides
+  // whether the topic changed. A refused customer re-routes and then hits
+  // the per-user gate at the entry point, falling through to the AI.
+  assert.match(processorSource, /\['WITHDRAW', process\.env\.WAPAY_PAYOUT_ENABLED === 'true'/);
   assert.match(processorSource, /topic === 'withdraw' && payoutAllowedFor\(from\)/);
   // The surfaces that ADVERTISE it: promising withdrawal to someone the
   // gate will refuse is the trap the fuel rollout already taught us.

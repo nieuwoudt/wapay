@@ -73,7 +73,9 @@ test('processor wiring: fee hook before the keyword router, deposit trap ignores
   assert.match(p, /addToConversationHistory\(from, 'user', text\);\s*\n\s*await addToConversationHistory\(from, 'assistant', msg\);/, 'both turns land in the AI context');
   assert.match(p, /Here is everything your WaPay money can do right now\*\\n\\n\$\{spendDestinationLines\(\{ wicodeLive: fuelLiveFor\(from\) \}\)\}/, '"what can I buy" opens with the catalogue-built list');
   assert.ok(!/🛒 \*WaPay VAS Products\*/.test(p), 'the three-item dump is gone');
-  assert.equal((p.match(/\$\{payoutEnabled\(\) \? '🏧 \*Withdraw\* - "withdraw R200"/g) || []).length, 1, 'the Help Menu flips with the switch');
+  // Tightened 2026-09-15: the menu follows the PER-USER gate, so it never
+  // advertises withdrawal to a customer the pilot allowlist will refuse.
+  assert.equal((p.match(/\$\{payoutAllowedFor\(from\) \? '🏧 \*Withdraw\* - "withdraw R200"/g) || []).length, 1, 'the Help Menu flips with the per-user gate');
 });
 
 test('the AI prompt never freezes the payout flag and never plants a betting word', () => {
