@@ -4,6 +4,21 @@
 
 ---
 
+## 52. Below the minimum, the same line three times: "Please enter an amount between R50 and R3000"
+
+- **Symptom (founder screenshots, 2026-09-15 evening):** "Withdraw 30", Absa, then "20" three times, each answered with the same line. Absa's minimum is R50 while Nedbank and FNB start at R20, and nothing said so or offered a way to change method ("Home" cancelled the whole withdrawal).
+- **Fix:** the message names the amount, the minimum and the method, lists the methods that DO allow the amount with their menu numbers, and offers *back* to return to the method menu keeping the amount (`validateAmount`, `back|change|options` words in `handleWithdrawReply`, checked before the cancel words). Over-maximum gets its own message. Locked by the payout-chat below-minimum test and the funded harness scenario.
+
+## 51. "Can I withdraw money?" and "Can I withdraw at an Absa ATM?" got the same four-step wall of text
+
+- **Symptom:** the knowledge-base answer (BUGLOG #48) was the full walkthrough for every phrasing. The founder: "it should be specific to my question, then say I can take you through it step by step".
+- **Fix:** every topic has a short, question-aware `brief` (the method named, its fee, its minimum, what is needed; for OTT: a yes/no by merchant, the no-cash answer, or where it works) followed by an offer; "how do I / instructions / once I get the PIN / at the ATM" gets the walkthrough with the collection steps for the named bank (`wantsSteps`, `detectMethod`, `collectionSteps`). A `HOWTO_OFFER` state makes *YES* start the flow (with the named method pre-selected) and *more* give the walkthrough; anything else is routed normally. Locked by `tests/how-it-works.test.mjs` and the harness scenario "Can I withdraw at an Absa ATM?" → YES.
+
+## 50. A withdrawal parked at 08:49 still answered "Just the amount" to "Hello" at 20:33
+
+- **Symptom:** conversation states never expired, and greetings inside a flow were treated as flow input; "Home" only cancelled, a second "Home" was needed to see the home screen.
+- **Fix:** `updateConversationState` stamps `stateSetAt`; the processor expires any state older than `WAPAY_STATE_IDLE_MINUTES` (default 30, and any unstamped legacy state) before routing, and *hi / hello / hey / home / menu / start* (plus common SA greetings) go straight to the home screen from inside any flow, like a banking app's home button. Locked by the harness idle scenario (a state parked 12 hours ago, then "Hello").
+
 ## 49. "Are OTT vouchers accepted?" deflected to a website; "Is it accepted at Checkers?" could not be answered
 
 - **Symptom (founder screenshots, 2026-09-15):** "Yes… check ottvoucher.com for the full list" and "I can't confirm Checkers specifically right now". The founder: "we have to be able to give an answer, not direct the user to the website".

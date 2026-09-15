@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-09-15 evening (33) — Idle states expire, greetings go home, short specific answers with a YES offer, minimum guidance; FNB eWallet + Nedbank cardless; harness drives a real pay-out
+
+Founder review 3 (BUGLOG #50, #51, #52): a flow parked for twelve hours
+answered "Just the amount" to "Hello"; capability questions got the same
+four-step wall; "20" against Absa's R50 minimum got the same line three
+times. Conversation states now carry a timestamp and expire after thirty
+idle minutes; hi / hello / home / menu always go home; every knowledge-base
+topic has a short question-aware answer plus an offer, YES starts the flow
+(`HOWTO_OFFER`), "how do I" gets the walkthrough with per-bank collection
+steps; the below-minimum message names the methods that allow the amount and
+"back" changes method. FNB eWallet (OTT 1) and Nedbank Cardless (OTT 4) are
+payout methods (Nedbank priced per Annexure A, FNB assumed equal to CashSend
+until priced). The chat QA harness now funds the QA wallet through the
+ledger, seeds a PIN and mocks the OTT rail, and drives a complete FNB eWallet
+pay-out end to end, tearing its ledger rows down afterwards.
+
 ## 2026-09-15 (32) — Payouts testable on OTT's sandbox; the bot explains instead of launching; OTT acceptance by name
 
 OTT activated PayShap Account, ABSA CashSend, Nedbank Cardless and FNB

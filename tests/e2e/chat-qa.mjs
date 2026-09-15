@@ -20,6 +20,7 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { seedQaAccount, teardownQaAccount, createSession, QA_WA_ID } from './chat-harness.mjs';
+import { fundQaAccount, parkQaState, QA_PIN, ottCalls } from './chat-harness.mjs';
 
 const results = [];
 
@@ -206,7 +207,7 @@ async function run() {
     verdict('Withdraw: with payouts live the flow starts deterministically and fees are quoted', [
       { level: 'FAIL', ok: has(a.replyText, /Withdrawals start at R20/i) && has(a.replyText, /R0/), what: '"withdraw R20" reaches the flow and reports the R20 minimum against a R0 wallet' },
       { level: 'FAIL', ok: !has(a.replyText, /coming soon/i) && !has(b.replyText, /coming soon/i) && !has(c.replyText, /coming soon/i), what: 'never "coming soon" while live' },
-      { level: 'FAIL', ok: has(b.replyText, /Here is how it works|withdraw R200/i) && !looksLikeMenu(b.replyText), what: '"can I take my money out?" is a QUESTION: the steps are explained, no flow starts (knowledge base, 2026-09-15)' },
+      { level: 'FAIL', ok: has(b.replyText, /Reply \*YES\*|withdraw R50/i) && !looksLikeMenu(b.replyText) && !has(b.replyText, /coming soon/i), what: '"can I take my money out?" is a QUESTION: a short specific answer plus the offer, no flow starts (knowledge base, 2026-09-15)' },
       { level: 'FAIL', ok: has(c.replyText, /R8/) && has(c.replyText, /R10/) && has(c.replyText, /R18/), what: 'the cash-out fee question quotes R8 / R10 / R18' },
     ], s);
   }
@@ -236,6 +237,64 @@ async function run() {
       { level: 'FAIL', ok: !has(b.replyText, /valid (amount|meter)/i), what: 'no validation insult for a real question' },
       { level: 'WARN', ok: has(b.replyText, /fee|cost|charge|free|switching over/i), what: 'the fees question is acknowledged' },
     ], s);
+  }
+
+  // ------------------------------------------------------------------
+  // 6b. Founder review 3 (2026-09-15 evening): idle states, specific short answers, minimums, full pay-out
+  // ------------------------------------------------------------------
+  {
+    const prevOn = process.env.WAPAY_PAYOUT_ENABLED; const prevKyc = process.env.WAPAY_PAYOUT_KYC;
+    process.env.WAPAY_PAYOUT_ENABLED = 'true'; process.env.WAPAY_PAYOUT_KYC = 'off';
+    try {
+      // Idle: a flow parked 12 hours ago is over; "Hello" goes home. A fresh flow + "home" also goes home.
+      await parkQaState('PAYOUT_AMOUNT', { method: 'CASHSEND', options: ['PAYSHAP', 'CASHSEND'], balanceCents: 6600 }, 12 * 60);
+      const a = await s.say('Hello');
+      await parkQaState('PAYOUT_AMOUNT', { method: 'CASHSEND', options: ['PAYSHAP', 'CASHSEND'], balanceCents: 6600 }, 1);
+      const b = await s.say('home');
+      verdict('Idle: a parked flow expires; hi / home always go to the home screen', [
+        { level: 'FAIL', ok: !has(a.replyText, /Just the amount/i) && has(a.replyText, /Balance:/), what: '"Hello" after 12 idle hours gets the home screen, not "Just the amount"' },
+        { level: 'FAIL', ok: has(b.replyText, /Balance:/) && !has(b.replyText, /Just the amount/i), what: '"home" inside a fresh flow goes home' },
+      ], s);
+
+      // Specific, short answer + YES starts the flow.
+      await fundQaAccount({ cents: 10000 });
+      const c = await s.say('Can I withdraw at an ABSA atm?');
+      const d = await s.say('yes');
+      verdict('How it works: "Can I withdraw at an Absa ATM?" gets a specific short answer, and YES starts the flow', [
+        { level: 'FAIL', ok: has(c.replyText, /Absa ATM/) && has(c.replyText, /R18/) && has(c.replyText, /ID number/), what: 'the answer is about Absa: fee, minimum, what is needed' },
+        { level: 'FAIL', ok: !has(c.replyText, /1️⃣ Say \*withdraw\*/), what: 'no four-step wall for a "can I" question' },
+        { level: 'FAIL', ok: has(c.replyText, /Reply \*YES\*/), what: 'offers to take them through it' },
+        { level: 'FAIL', ok: has(d.replyText, /How much would you like to withdraw by Cash at an Absa ATM|Withdraw from WaPay/), what: 'YES starts the withdrawal (Absa pre-selected)' },
+      ], s);
+      await s.say('cancel');
+
+      // Below the minimum: name the alternatives; "menu" changes method; full pay-out with PIN and money.
+      const e = await s.say('Withdraw 30');
+      const f = await s.say('2');
+      const g = await s.say('back');
+      const h = await s.say('4');
+      const i = await s.say('mine');
+      const j = await s.say('9001015009087');
+      const k = await s.say('yes');
+      const l = await s.say(QA_PIN);
+      const m = await s.say('balance');
+      verdict('Withdraw end to end: minimum explained, method changed, FNB eWallet paid with PIN, balance moves', [
+        { level: 'FAIL', ok: has(e.replyText, /Withdraw from WaPay/) && has(e.replyText, /FNB eWallet/), what: '"Withdraw 30" shows the live menu incl. FNB eWallet' },
+        { level: 'FAIL', ok: has(f.replyText, /R30 is below the R50 minimum for cash at an Absa ATM/) && has(f.replyText, /from R20/), what: 'Absa at R30: the minimum and the methods that allow R30 are named' },
+        { level: 'FAIL', ok: has(g.replyText, /Withdraw from WaPay/), what: '"back" returns to the method menu ("menu" goes home, like a banking app)' },
+        { level: 'FAIL', ok: has(h.replyText, /FNB eWallet/) && has(h.replyText, /cellphone number/i), what: 'FNB eWallet keeps the R30 and asks for the cellphone number' },
+        { level: 'FAIL', ok: has(i.replyText, /13-digit/), what: 'the ID number is asked because the provider requires it' },
+        { level: 'FAIL', ok: has(j.replyText, /Withdraw \*R30\* to an FNB eWallet/) && has(j.replyText, /Fee: R18/), what: 'confirmation names the eWallet, the amount and the fee' },
+        { level: 'FAIL', ok: has(k.replyText, /PIN/), what: 'YES asks for the PIN' },
+        { level: 'FAIL', ok: has(l.replyText, /Done\./) && has(l.replyText, /WP[A-Z0-9]{14}/), what: 'the PIN executes exactly one pay-out and returns a reference' },
+        { level: 'FAIL', ok: ottCalls.length === 1 && ottCalls[0].providerCode === '1' && ottCalls[0].amountCents === 3000, what: 'exactly one PerformPayout to FNB e-wallet (code 1) for R30' },
+        { level: 'FAIL', ok: has(m.replyText, /R\s?52[.,]00/), what: 'balance is R100 - R30 - R18 = R52' },
+        { level: 'FAIL', ok: has(j.replyText, /Total leaving your balance: \*R48\*/) && has(j.replyText, /Balance after: \*R52\*/), what: 'the confirmation shows what leaves and what remains' },
+      ], s);
+    } finally {
+      if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;
+      if (prevKyc === undefined) delete process.env.WAPAY_PAYOUT_KYC; else process.env.WAPAY_PAYOUT_KYC = prevKyc;
+    }
   }
 
   // ------------------------------------------------------------------

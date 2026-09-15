@@ -24,6 +24,8 @@ Topic id: `withdraw`. Detection: `\b(withdraw\w*|cash ?-?out|take (?:my |the )?m
 4️⃣ Confirm, then enter your WaPay PIN. The amount plus the fee leaves your balance, you get a reference straight away, and I message you the moment the bank confirms.
 
 A once-off identity check applies before your first withdrawal. The money must go to an account or a person in your own name.
+
+Collecting cash: the SMS tells you exactly which codes to enter. At an Absa ATM choose CashSend, at a Nedbank ATM choose Cardless services, at an FNB ATM choose Cardless services then eWallet; enter the cellphone number that received the SMS and the codes, and take the cash. No card needed.
 ```
 
 When the switch is off:

@@ -64,7 +64,7 @@ import {
   ottAcceptedFacts,
 } from '../../../lib/spend-catalogue.js';
 import { matchFeeAsk, feeAnswer, feeAskAmountCents } from '../../../lib/fee-facts.js';
-import { matchHowItWorksAsk, howItWorksAnswer } from '../../../lib/how-it-works.js';
+import { matchHowItWorksAsk, howItWorksAnswer, howItWorksBrief, wantsSteps, detectMethod, TOPICS as HOWTO_TOPICS } from '../../../lib/how-it-works.js';
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
 import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
@@ -72,7 +72,7 @@ import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '.
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
-import { payoutEnabled } from '../../../lib/payouts.js';
+import { payoutEnabled, payoutConfigured, resolveProviders } from '../../../lib/payouts.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
 import { searchProducts } from '../../../lib/vas-search.js';
 import {
@@ -531,7 +531,8 @@ function withInternalHeaders(extra = {}) {
 
 function isHomeTrigger(text = '') {
   const t = text.trim().toLowerCase();
-  return /^(hi|hello|hey|start|menu|home|help)$/i.test(t);
+  // Greetings in the languages customers actually type; "home"/"menu" like a banking app's home button.
+  return /^(hi|hii+|hello|hallo|hey|heita|howzit|sawubona|molo|dumela|thobela|avuxeni|start|menu|home|help)\W*$/i.test(t);
 }
 
 function formatMoneyZar(amountRandsString = '0.00') {
@@ -1211,7 +1212,25 @@ async function handlePostOnboarding({ account, from, text }) {
   }
 
   // Check if user is in a conversation state (e.g., entering voucher PIN)
-  const { state, data } = await getConversationState(from);
+  let { state, data } = await getConversationState(from);
+
+  if (state) {
+    // Idle expiry (founder 2026-09-15): a flow nobody finished for WAPAY_STATE_IDLE_MINUTES
+    // (default 30) is over. The next message starts fresh, so "hello" goes home instead of
+    // "Just the amount". A state without a stamp (set before this shipped) expires too.
+    const setAt = Date.parse(data?.stateSetAt || '') || 0;
+    const idleMs = Number(process.env.WAPAY_STATE_IDLE_MINUTES ?? 30) * 60 * 1000;
+    if (!setAt || Date.now() - setAt > idleMs) {
+      logStructured('state_expired', { from, state, idleMinutes: setAt ? Math.round((Date.now() - setAt) / 60000) : null });
+      await updateConversationState(from, null);
+      state = null; data = null;
+    } else if (isHomeTrigger(text)) {
+      // hi / hello / home / menu ALWAYS go home, even mid-flow (a banking app's home button).
+      logStructured('state_home_trigger', { from, state });
+      await updateConversationState(from, null);
+      return await renderHome({ from, account });
+    }
+  }
 
   if (state) {
     // Universal intent-switch escape (founder feedback 2026-08-25): a
@@ -2378,9 +2397,21 @@ async function deliverPayoutStep({ from, account, step }) {
 function howItWorksContext(from) {
   return { wicodeLive: fuelLiveFor(from), withdrawLive: payoutEnabled(), fuelPartners: advertisedFuelPartners().map((p) => p.name), ottFacts: ottAcceptedFacts() };
 }
+async function howItWorksContextLive(from, text) {
+  const providers = payoutEnabled() && payoutConfigured() ? await resolveProviders({}).catch(() => []) : [];
+  return { ...howItWorksContext(from), text, providers };
+}
+/**
+ * "Can I…?" gets the short, specific answer plus an offer (HOWTO_OFFER state: YES starts the
+ * flow); "how do I…?" / "instructions" / "once I get the PIN" gets the full walkthrough.
+ */
 async function handleHowItWorks({ from, account, topic, text }) {
-  logStructured('how_it_works_ask', { accountId: account.id, topic });
-  const msg = await localizeOutbound(howItWorksAnswer(topic, { ...howItWorksContext(from), text }), await userLang(account));
+  const steps = wantsSteps(text);
+  logStructured('how_it_works_ask', { accountId: account.id, topic, steps });
+  const ctx = await howItWorksContextLive(from, text);
+  const body = steps ? howItWorksAnswer(topic, ctx) : howItWorksBrief(topic, ctx);
+  const msg = await localizeOutbound(body, await userLang(account));
+  await updateConversationState(from, steps ? null : 'HOWTO_OFFER', steps ? null : { topic, method: detectMethod(text) });
   await addToConversationHistory(from, 'user', text);
   await addToConversationHistory(from, 'assistant', msg);
   return await sendWhatsAppText({ to: from, text: msg });
@@ -3257,6 +3288,28 @@ async function handleConversationState({ from, text, state, data, account }) {
     case 'PAYOUT_ID':
     case 'PAYOUT_CONFIRM':
       return await handleWithdrawState({ from, account, state, data, text });
+
+    case 'HOWTO_OFFER': {
+      // After a short how-it-works answer: YES starts that flow, "more" gives the walkthrough,
+      // anything else is routed as a fresh message.
+      const t = text.trim();
+      const topic = data?.topic;
+      await updateConversationState(from, null);
+      if (/^\W*(yes|yebo|ewe|ja|y|yep|yeah|ok|okay|please|sure|start|go|take me through|show me|let'?s go)\W*$/i.test(t) && HOWTO_TOPICS[topic]) {
+        logStructured('how_it_works_start', { accountId: account.id, topic, method: data?.method || null });
+        if (topic === 'withdraw' && payoutEnabled()) {
+          const method = data?.method && data.method !== 'CASH' ? data.method : null;
+          return await handleWithdrawStart({ from, account, ask: { amountCents: null, method }, text: 'withdraw' });
+        }
+        return await handlePostOnboarding({ account, from, text: HOWTO_TOPICS[topic].startCommand });
+      }
+      if (/^\W*(more|steps|how|explain|details?|tell me more)\W*$/i.test(t) && HOWTO_TOPICS[topic]) {
+        const msg = await localizeOutbound(howItWorksAnswer(topic, await howItWorksContextLive(from, text)), await userLang(account));
+        await addToConversationHistory(from, 'assistant', msg);
+        return await sendWhatsAppText({ to: from, text: msg });
+      }
+      return await handlePostOnboarding({ account, from, text });
+    }
 
     case 'PAYOUT_PIN': {
       // Same discipline as PAYREQ_PIN: only PIN-shaped input reaches verifyPIN.

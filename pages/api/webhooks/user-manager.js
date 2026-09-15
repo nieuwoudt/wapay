@@ -208,12 +208,15 @@ export async function updateConversationState(waId, state, data = null) {
     const prevState = existing?.conversationState || null;
     const prevData = existing?.conversationData || {};
 
-    const nextData = mergeConversationData({
+    const merged = mergeConversationData({
       prevState,
       prevData,
       nextState: state || null,
       nextData: data,
     });
+    // stateSetAt lets the processor expire a flow nobody finished (founder
+    // 2026-09-15: a withdrawal parked at 08:49 still answered "Just the amount" at 20:33).
+    const nextData = state ? { ...merged, stateSetAt: new Date().toISOString() } : (() => { const { stateSetAt, ...rest } = merged || {}; return rest; })();
 
     await prisma.account.update({
       where: { waId },

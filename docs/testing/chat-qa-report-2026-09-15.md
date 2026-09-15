@@ -2,7 +2,7 @@
 
 Conversational end-to-end run against the REAL message processor (live DB, live OpenAI, outbound WhatsApp captured, no money moved). QA account: `27600000901` (seeded and torn down by the run).
 
-**16 pass · 0 warn · 0 fail**
+**19 pass · 0 warn · 0 fail**
 
 ## ✅ Founder repro: "payment link" escapes the meter ask
 
@@ -43,12 +43,12 @@ Please enter your meter number:
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll receive the full *R20* however they pay. No fees on this one. 🎉
-[button:View my payment page -> https://pleasepayme.co.za/PRDHTPHM]
+[button:View my payment page -> https://pleasepayme.co.za/PRXWAEPX]
 ···
 🙏 *Pay WaPay QA Harness now* · R20 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRDHTPHM
+https://pleasepayme.co.za/PRXWAEPX
 ```
 
 </details>
@@ -151,12 +151,12 @@ Reply *1* or *2*, or "cancel".
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll get the full *R250* if they pay from their WaPay (free), or R237.20 if they pay by card.
-[button:View my payment page -> https://pleasepayme.co.za/PRRPPQRC]
+[button:View my payment page -> https://pleasepayme.co.za/PRQJDBPY]
 ···
 🙏 *Pay WaPay QA Harness now* · R250 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRRPPQRC
+https://pleasepayme.co.za/PRQJDBPY
 ```
 
 </details>
@@ -205,7 +205,7 @@ Just tell me what you need, in any language.
 **User:** My name is Thabo and I run a spaza shop in Soweto.
 
 ```
-Nice to meet you, Thabo 😊 That’s helpful, and I’ll keep it in mind.
+Hi Thabo 😊 Nice to meet you. If you want, I can help set up a WaPay for Business profile for your spaza shop.
 ```
 
 **User:** What did I tell you my name was?
@@ -225,7 +225,7 @@ You told me your name was Thabo 😊
 **User:** Please remember that my favourite colour is green.
 
 ```
-Got it, Thabo 😊 I’ll remember that your favourite colour is green.
+Got it, Thabo 💚 I’ll remember that your favourite colour is green.
 ```
 
 **User:** buy electricity
@@ -248,7 +248,7 @@ Reply with an amount (e.g., R50, R100, R500)
 **User:** What is my favourite colour?
 
 ```
-Green 😊
+Green 💚
 ```
 
 </details>
@@ -264,9 +264,8 @@ Green 😊
 **User:** Where can I spend my WaPay money!
 
 ```
-You can use your WaPay money for airtime and data, prepaid electricity, sending money, getting paid, and OTT vouchers online or in apps 💡📱
-
-Say "balance" anytime to see where you stand.
+You can use your WaPay money for airtime and data, prepaid electricity, sending money to friends and family, getting paid with a shareable link, and buying OTT vouchers for online use 💰📱
+If you want, I can also tell you where OTT vouchers are accepted.
 ```
 
 </details>
@@ -332,11 +331,9 @@ No monthly fees, ever. 😊
 **User:** And online card deposits?
 
 ```
-💳 Two ways to add money.
+💳 Two ways: by card, Instant EFT, Apple Pay or Google Pay through a secure link (4.2% + R2.30 on top, rounded up: R20 costs R24, R100 costs R107; R10 to R3000), or with cash by buying a Blu voucher at any major till and sending me the code (the voucher network keeps 6%, so R100 adds R94).
 
-*Card, Instant EFT, Apple Pay or Google Pay:* say "deposit R100" (R10 to R3000) and I send you a secure payment link. The fee is 4.2% + R2.30 on top, rounded up to the next rand (R20 costs R24, R100 costs R107, R500 costs R524); the full amount lands in your balance the moment the payment clears and I message you.
-
-*Cash at a till:* ask any major retailer for a Blu Voucher for the amount you want, then send me the voucher code. The voucher network keeps 6%, so a R100 voucher adds R94.
+Want me to take you through it step by step? Reply *YES* and I will start, or say "deposit R100" any time. 😊
 ```
 
 </details>
@@ -353,19 +350,17 @@ No monthly fees, ever. 😊
 **User:** Can I buy electricity?
 
 ```
-💡 Yes, you can buy prepaid electricity for any meter, from R10 to R5000, with no WaPay fee.
+💡 Yes: prepaid electricity for any meter, R10 to R5000, no WaPay fee. You give the meter number, confirm, enter your PIN, and the 20-digit token arrives here in the chat within about a minute.
 
-Say "buy R100 electricity", give me the meter number (11 to 13 digits, on your meter or an old slip), confirm, and enter your PIN. The 20-digit token arrives here in the chat, usually within a minute; some municipalities take up to about 90 seconds. Type the token into your meter and you are done.
+Want me to take you through it step by step? Reply *YES* and I will start, or say "buy R100 electricity" any time. 😊
 ```
 
 **User:** Can they withdraw the OTT voucher for money?
 
 ```
-🎟️ A WaPay voucher is an OTT voucher: a 12-digit PIN worth the amount you choose (R10 to R1000). Say "buy an OTT voucher for R100", confirm, enter your PIN, and the PIN arrives right here in the chat. Buying one for yourself is free.
+❌ No. An OTT voucher cannot be exchanged for cash or paid into a bank account; it is spent online at partners that take it (Talk360, fibertime, Pay@ bills, Xash and others). Keep the money in your WaPay balance if you may need it as cash later.
 
-Where it works: OTT vouchers are accepted ONLINE and in apps, never at a shop till. Partners that take them as payment include Talk360 (international calling), fibertime and ikeja (township WiFi), Capitec Connect and megsApp (airtime and data), Pay@ and Xash (bills including DStv accounts, municipal accounts and insurance), FoondaMate (study help) and LAYAWAY (online lay-by). Not accepted: supermarket tills (Checkers, Shoprite, Pick n Pay, Spar, Boxer), Takealot, Netflix, Showmax, Spotify, or the mobile networks' own sites. At checkout the customer chooses OTT Voucher and enters the 12-digit PIN. The full live list is on ottvoucher.com.
-
-Good to know: The PIN is single-use and worth exactly the amount bought, so buy the amount you need. Some partners take the whole value, others charge the exact price and put the change into an OTT Wallet you register for with your SA ID number; the change never stays on the PIN. It cannot be exchanged for cash or paid into a bank account, it expires 36 months after purchase, and many partners cap one PIN at R3000. A PIN that will not redeem is an OTT support matter: WhatsApp +27 84 325 5632.
+Want me to take you through it step by step? Reply *YES* and I will start, or say "buy an OTT voucher for R100" any time. 😊
 ```
 
 **User:** Is it accepted at Checkers?
@@ -375,19 +370,15 @@ Good to know: The PIN is single-use and worth exactly the amount bought, so buy 
 
 🎟️ OTT vouchers are accepted ONLINE and in apps, never at a shop till. Partners that take them as payment include Talk360 (international calling), fibertime and ikeja (township WiFi), Capitec Connect and megsApp (airtime and data), Pay@ and Xash (bills including DStv accounts, municipal accounts and insurance), FoondaMate (study help) and LAYAWAY (online lay-by). Not accepted: supermarket tills (Checkers, Shoprite, Pick n Pay, Spar, Boxer), Takealot, Netflix, Showmax, Spotify, or the mobile networks' own sites. At checkout the customer chooses OTT Voucher and enters the 12-digit PIN. The full live list is on ottvoucher.com.
 
-🎟️ A WaPay voucher is an OTT voucher: a 12-digit PIN worth the amount you choose (R10 to R1000). Say "buy an OTT voucher for R100", confirm, enter your PIN, and the PIN arrives right here in the chat. Buying one for yourself is free.
-
-Good to know: The PIN is single-use and worth exactly the amount bought, so buy the amount you need. Some partners take the whole value, others charge the exact price and put the change into an OTT Wallet you register for with your SA ID number; the change never stays on the PIN. It cannot be exchanged for cash or paid into a bank account, it expires 36 months after purchase, and many partners cap one PIN at R3000. A PIN that will not redeem is an OTT support matter: WhatsApp +27 84 325 5632.
+Want me to take you through it step by step? Reply *YES* and I will start, or say "buy an OTT voucher for R100" any time. 😊
 ```
 
 **User:** Can I send money to someone?
 
 ```
-💸 Sending money is simple: say "send R50 to 083 123 4567", use a saved name like "send R50 to Philly", or share a contact card from your phone. Confirm, enter your PIN, done.
+✅ Yes. Say "send R50 to 083 123 4567" or share a contact card; confirm and enter your PIN. If they are on WaPay it lands in their balance instantly and it is free; if not, they get a WaPay voucher PIN by WhatsApp (R3 fee). They can spend it on airtime, data, electricity or vouchers, or send it on.
 
-If the person is on WaPay the money lands in their WaPay balance instantly and it is free. If they are not, they receive a WaPay voucher PIN by WhatsApp (R3 fee, R10 to R1000) which they can spend online wherever OTT vouchers are accepted, or load into WaPay by joining.
-
-What can they do with it? Spend it on airtime, data, electricity or vouchers, or send it on. Cash withdrawals are coming soon.
+Want me to take you through it step by step? Reply *YES* and I will start, or say "send R50 to 083 123 4567" any time. 😊
 ```
 
 </details>
@@ -441,7 +432,7 @@ Just tell me what you need! 🎉
 
 - ✅ "withdraw R20" reaches the flow and reports the R20 minimum against a R0 wallet
 - ✅ never "coming soon" while live
-- ✅ "can I take my money out?" is a QUESTION: the steps are explained, no flow starts (knowledge base, 2026-09-15)
+- ✅ "can I take my money out?" is a QUESTION: a short specific answer plus the offer, no flow starts (knowledge base, 2026-09-15)
 - ✅ the cash-out fee question quotes R8 / R10 / R18
 
 <details><summary>Transcript</summary>
@@ -455,20 +446,15 @@ Just tell me what you need! 🎉
 **User:** can I take my money out?
 
 ```
-🏧 Yes, you can take money out of WaPay. Here is how it works:
+✅ Yes. You can move money to your own bank account by PayShap (R8, minutes) or collect cash at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet (from R18). Withdrawals start at R20 and you need your 13-digit ID number.
 
-1️⃣ Say *withdraw* and the amount, for example "withdraw R200" (between R20 and R3000).
-2️⃣ Choose how: *PayShap* to your own bank account (R8 fee, arrives in minutes), or *cash at an Absa ATM* or a Pick n Pay / Boxer till with no bank account needed (R18 fee up to R700, R23 up to R1500, R30 above).
-3️⃣ Give the details the bank needs: your account number and bank for PayShap, or the cellphone number that will collect the cash, plus your 13-digit SA ID number.
-4️⃣ Confirm, then enter your WaPay PIN. The amount plus the fee leaves your balance, you get a reference straight away, and I message you the moment the bank confirms.
-
-A once-off identity check applies before your first withdrawal. The money must go to an account or a person in your own name.
+Want me to take you through it step by step? Reply *YES* and I will start, or say "withdraw R50" any time. 😊
 ```
 
 **User:** what is the cash-out fee?
 
 ```
-🏧 Withdrawals: R8 to your bank account by PayShap in minutes, R10 for a bank transfer, and cash at an Absa ATM or a Pick n Pay / Boxer till for R18 up to R700, R23 up to R1500, R30 above that. Say "withdraw R200" to start. 😊
+🏧 Withdrawals: R8 to your bank account by PayShap in minutes, R10 for a bank transfer, and cash at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet for R18 up to R700, R23 up to R1500, R30 above that. Say "withdraw R200" to start. 😊
 ```
 
 </details>
@@ -485,6 +471,8 @@ A once-off identity check applies before your first withdrawal. The money must g
 
 ```
 ⛽ Fuel vouchers are coming to WaPay soon, and we are just as excited as you are! I will tell you the moment they go live. In the meantime your money works for airtime, data, electricity, vouchers, sending and getting paid.
+
+Want me to take you through it step by step? Reply *YES* and I will start, or say "buy fuel" any time. 😊
 ```
 
 </details>
@@ -501,11 +489,9 @@ A once-off identity check applies before your first withdrawal. The money must g
 **User:** Where is OTT vouchers accepted?
 
 ```
-🎟️ A WaPay voucher is an OTT voucher: a 12-digit PIN worth the amount you choose (R10 to R1000). Say "buy an OTT voucher for R100", confirm, enter your PIN, and the PIN arrives right here in the chat. Buying one for yourself is free.
+🎟️ OTT vouchers are accepted ONLINE and in apps, never at a shop till. Partners that take them as payment include Talk360 (international calling), fibertime and ikeja (township WiFi), Capitec Connect and megsApp (airtime and data), Pay@ and Xash (bills including DStv accounts, municipal accounts and insurance), FoondaMate (study help) and LAYAWAY (online lay-by). Not accepted: supermarket tills (Checkers, Shoprite, Pick n Pay, Spar, Boxer), Takealot, Netflix, Showmax, Spotify, or the mobile networks' own sites. At checkout the customer chooses OTT Voucher and enters the 12-digit PIN. The full live list is on ottvoucher.com.
 
-Where it works: OTT vouchers are accepted ONLINE and in apps, never at a shop till. Partners that take them as payment include Talk360 (international calling), fibertime and ikeja (township WiFi), Capitec Connect and megsApp (airtime and data), Pay@ and Xash (bills including DStv accounts, municipal accounts and insurance), FoondaMate (study help) and LAYAWAY (online lay-by). Not accepted: supermarket tills (Checkers, Shoprite, Pick n Pay, Spar, Boxer), Takealot, Netflix, Showmax, Spotify, or the mobile networks' own sites. At checkout the customer chooses OTT Voucher and enters the 12-digit PIN. The full live list is on ottvoucher.com.
-
-Good to know: The PIN is single-use and worth exactly the amount bought, so buy the amount you need. Some partners take the whole value, others charge the exact price and put the change into an OTT Wallet you register for with your SA ID number; the change never stays on the PIN. It cannot be exchanged for cash or paid into a bank account, it expires 36 months after purchase, and many partners cap one PIN at R3000. A PIN that will not redeem is an OTT support matter: WhatsApp +27 84 325 5632.
+Want me to take you through it step by step? Reply *YES* and I will start, or say "buy an OTT voucher for R100" any time. 😊
 ```
 
 </details>
@@ -552,7 +538,190 @@ No monthly fees, ever. 😊
 **User:** cancel
 
 ```
-No problem 😊 If you want, just send me the next thing you need.
+No problem 😊 If you need anything else, just message me.
+```
+
+</details>
+
+## ✅ Idle: a parked flow expires; hi / home always go to the home screen
+
+- ✅ "Hello" after 12 idle hours gets the home screen, not "Just the amount"
+- ✅ "home" inside a fresh flow goes home
+
+<details><summary>Transcript</summary>
+
+**User:** Hello
+
+```
+👋 *Hi WaPay QA Harness!*
+💰 Balance: *R0.00*
+━━━━━━━━━━━━━━━
+
+🛒 *Buy*: airtime, data, electricity
+💸 *Send*: "send R10 airtime to 083..."
+🙏 *Get Paid*: "please pay me R50" → share your link
+💳 *Deposit*: "deposit R100" or a Blu voucher
+⛽ *Fuel vouchers*: coming soon
+🏧 *Withdraw*: "withdraw R200" to your bank, or cash at an ATM
+📄 *Transactions* · ⚙️ *Settings*
+
+⚡ Quick: Buy airtime · Buy data · Check balance
+
+Just tell me what you need, in any language.
+```
+
+**User:** home
+
+```
+👋 *Hi WaPay QA Harness!*
+💰 Balance: *R0.00*
+━━━━━━━━━━━━━━━
+
+🛒 *Buy*: airtime, data, electricity
+💸 *Send*: "send R10 airtime to 083..."
+🙏 *Get Paid*: "please pay me R50" → share your link
+💳 *Deposit*: "deposit R100" or a Blu voucher
+⛽ *Fuel vouchers*: coming soon
+🏧 *Withdraw*: "withdraw R200" to your bank, or cash at an ATM
+📄 *Transactions* · ⚙️ *Settings*
+
+⚡ Quick: Buy airtime · Buy data · Check balance
+
+Just tell me what you need, in any language.
+```
+
+</details>
+
+## ✅ How it works: "Can I withdraw at an Absa ATM?" gets a specific short answer, and YES starts the flow
+
+- ✅ the answer is about Absa: fee, minimum, what is needed
+- ✅ no four-step wall for a "can I" question
+- ✅ offers to take them through it
+- ✅ YES starts the withdrawal (Absa pre-selected)
+
+<details><summary>Transcript</summary>
+
+**User:** Can I withdraw at an ABSA atm?
+
+```
+✅ Yes. You can collect cash at any Absa ATM or a Pick n Pay / Boxer till, no bank account needed: R18 fee up to R700, from R50. You need the cellphone number that will get the SMS code and your 13-digit ID number.
+
+Want me to take you through it step by step? Reply *YES* and I will start, or say "withdraw R50" any time. 😊
+```
+
+**User:** yes
+
+```
+How much would you like to withdraw by Cash at an Absa ATM (CashSend)? Between R50 and R3000. You have R100 available; the fee comes off your balance on top of the amount.
+```
+
+</details>
+
+## ✅ Withdraw end to end: minimum explained, method changed, FNB eWallet paid with PIN, balance moves
+
+- ✅ "Withdraw 30" shows the live menu incl. FNB eWallet
+- ✅ Absa at R30: the minimum and the methods that allow R30 are named
+- ✅ "back" returns to the method menu ("menu" goes home, like a banking app)
+- ✅ FNB eWallet keeps the R30 and asks for the cellphone number
+- ✅ the ID number is asked because the provider requires it
+- ✅ confirmation names the eWallet, the amount and the fee
+- ✅ YES asks for the PIN
+- ✅ the PIN executes exactly one pay-out and returns a reference
+- ✅ exactly one PerformPayout to FNB e-wallet (code 1) for R30
+- ✅ balance is R100 - R30 - R18 = R52
+- ✅ the confirmation shows what leaves and what remains
+
+<details><summary>Transcript</summary>
+
+**User:** cancel
+
+```
+👍 Cancelled. Your money stays in your balance.
+```
+
+**User:** Withdraw 30
+
+```
+💸 *Withdraw from WaPay*
+
+You have R100 available. How would you like it?
+
+1️⃣ *PayShap* to your bank account, instant: R8 fee, arrives in minutes (from R50)
+2️⃣ *Cash at an Absa ATM* or a Pick n Pay / Boxer till, no bank account needed: from R18 fee (from R50)
+3️⃣ *Cash at a Nedbank ATM*, code by SMS, no bank account needed: from R18 fee (from R20)
+4️⃣ *FNB eWallet*: cash at any FNB ATM with the code sent by SMS, no bank account needed: from R18 fee (from R20)
+
+Reply 1, 2, 3 or 4. Reply "cancel" to stop.
+```
+
+**User:** 2
+
+```
+R30 is below the R50 minimum for cash at an Absa ATM. Reply *back* and choose *3* (cash at a Nedbank ATM, from R20) or *4* (an FNB eWallet, from R20), or type an amount of R50 or more.
+```
+
+**User:** back
+
+```
+💸 *Withdraw from WaPay*
+
+You have R100 available. How would you like it?
+
+1️⃣ *PayShap* to your bank account, instant: R8 fee, arrives in minutes (from R50)
+2️⃣ *Cash at an Absa ATM* or a Pick n Pay / Boxer till, no bank account needed: from R18 fee (from R50)
+3️⃣ *Cash at a Nedbank ATM*, code by SMS, no bank account needed: from R18 fee (from R20)
+4️⃣ *FNB eWallet*: cash at any FNB ATM with the code sent by SMS, no bank account needed: from R18 fee (from R20)
+
+Reply 1, 2, 3 or 4. Reply "cancel" to stop.
+```
+
+**User:** 4
+
+```
+Which cellphone number should receive the FNB eWallet? Reply *mine* to use this WhatsApp number, or type the number. The eWallet code is sent to it by SMS and the cash is collected at any FNB ATM.
+```
+
+**User:** mine
+
+```
+The bank needs your 13-digit South African ID number for this payout (it must match the account holder). Please type it, or "cancel".
+```
+
+**User:** 9001015009087
+
+```
+Please confirm:
+
+💸 Withdraw *R30* to an FNB eWallet on 0600000901 (cash at any FNB ATM)
+Fee: R18
+Total leaving your balance: *R48* (R30 + R18 fee)
+Balance after: *R52*
+
+Reply *YES* to continue to your PIN, or *NO* to cancel.
+```
+
+**User:** yes
+
+```
+🔐 *Enter your WaPay PIN* to withdraw R30.
+```
+
+**User:** 1934
+
+```
+✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WP819682AAC71D8B. Fee R18.
+```
+
+**User:** balance
+
+```
+💰 *Your WaPay Balance*
+
+Hi WaPay QA Harness!
+
+💵 Current Balance: R 52.00
+
+Need anything else? Just ask me!
 ```
 
 </details>
@@ -580,7 +749,7 @@ No problem 😊 If you want, just send me the next thing you need.
 
 Sawubona WaPay QA Harness!
 
-💵 Ibhalansi yamanje: R 0.00
+💵 Ibhalansi yamanje: R 52.00
 
 Ufunani okunye? Ngicela ungibuze!
 ```
@@ -591,9 +760,10 @@ Ufunani okunye? Ngicela ungibuze!
 💰 *Ibhalansi yakho ye-WaPay*
 
 Sawubona WaPay QA Harness!  
-Ibhalansi yakho yamanje ingu R 0.00
+Ibhalansi yakho yamanje ingu-R 52.00
 
- Yini ofuna ukuyenza ngokulandelayo?
+  
+Uthanda ukwenza ini kulandela?
 ```
 
 **User:** speak english
@@ -647,7 +817,7 @@ Manage customers, payment links and revenue at https://wapay.co.za/business. To 
 **User:** business login
 
 ```
-🔐 *WaPay for Business code: 105816*
+🔐 *WaPay for Business code: 615025*
 
 Type it into the business portal within 10 minutes. One attempt only.
 

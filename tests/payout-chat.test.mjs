@@ -51,14 +51,14 @@ test('happy path PayShap: menu → 1 → amount → account → bank → confirm
   const tooMuch = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: '999' });
   assert.equal(tooMuch.state, 'PAYOUT_AMOUNT'); assert.match(tooMuch.text, /more than you have/);
   const tooSmall = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: '5' });
-  assert.match(tooSmall.text, /between R20 and R3000/);
+  assert.match(tooSmall.text, /R5 is below the R20 minimum for PayShap/);
   const acc = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: 'R200' });
   assert.equal(acc.state, 'PAYOUT_ACCOUNT', 'PayShap is addressed by account number + branch code on OTT (2026-09-14), never a cellphone number'); assert.equal(acc.data.amountCents, 20000);
   const br = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ACCOUNT', data: acc.data, text: '62012345678' });
   assert.equal(br.state, 'PAYOUT_BRANCH');
   const conf = await handleWithdrawReply({ account: verified, state: 'PAYOUT_BRANCH', data: br.data, text: 'FNB' });
   assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.equal(conf.data.recipient.account_number, '62012345678'); assert.equal(conf.data.recipient.branch_code, '250655'); assert.equal(conf.data.recipient.mobile, '0731234567', 'own number rides along for the SMS'); assert.equal(conf.data.feeCents, 800); assert.equal(conf.data.totalCents, 20800);
-  assert.match(conf.text, /Withdraw \*R200\* to account 62012345678 at FNB by PayShap/); assert.match(conf.text, /Leaves your balance: \*R208\*/);
+  assert.match(conf.text, /Withdraw \*R200\* to account 62012345678 at FNB by PayShap/); assert.match(conf.text, /Total leaving your balance: \*R208\* \(R200 \+ R8 fee\)/); assert.match(conf.text, /Balance after: \*R792\*/);
   const pin = await handleWithdrawReply({ account: verified, state: 'PAYOUT_CONFIRM', data: conf.data, text: 'yes' });
   assert.equal(pin.state, 'PAYOUT_PIN'); assert.match(pin.text, /PIN/);
   const done = await executeWithdraw({ account: verified, data: pin.data, deps: d });
@@ -133,7 +133,7 @@ test('live providers drive the menu, the limits and the ID step (OTT test mercha
   const ps = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '1' });
   assert.equal(ps.state, 'PAYOUT_AMOUNT'); assert.match(ps.text, /Between R50 and R3000/, 'the provider minimum narrows the product limits');
   const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ps.data, text: '30' });
-  assert.equal(low.state, 'PAYOUT_AMOUNT'); assert.match(low.text, /between R50 and R3000/);
+  assert.equal(low.state, 'PAYOUT_AMOUNT'); assert.match(low.text, /R30 is below the R50 minimum for PayShap/);
   const acc = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ps.data, text: '50' });
   assert.equal(acc.state, 'PAYOUT_ACCOUNT');
   const br = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ACCOUNT', data: acc.data, text: '62012345678' });
@@ -188,4 +188,24 @@ test('FNB eWallet and Nedbank cardless are methods (founder ask 2026-09-15): men
   assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.match(conf.text, /Withdraw \*R20\* to an FNB eWallet on 0731234567/); assert.equal(conf.data.feeCents, 1800);
   const ned = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '3' });
   assert.equal(ned.data.method, 'NEDCASH'); assert.match(ned.text, /Between R20 and R3000/);
+});
+
+test('below the minimum: the message names the methods that DO allow the amount, and "menu" changes method (founder 2026-09-15)', async () => {
+  env();
+  const live = [
+    { method: 'PAYSHAP', providerCode: '127', providerName: 'PayShap Account', minCents: 5000, maxCents: 15000000, requiredFields: ['firstname', 'surname', 'id_number', 'mobile', 'account_number', 'branch_code'] },
+    { method: 'CASHSEND', providerCode: '112', providerName: 'ABSA CashSend', minCents: 5000, maxCents: 10000000, requiredFields: ['firstname', 'surname', 'id_number', 'mobile'] },
+    { method: 'NEDCASH', providerCode: '4', providerName: 'Nedbank Cardless Withdrawal', minCents: 1000, maxCents: 500000, requiredFields: ['firstname', 'surname', 'id_number', 'mobile'] },
+    { method: 'EWALLET', providerCode: '1', providerName: 'FNB e-wallet', minCents: null, maxCents: 2500000, requiredFields: ['firstname', 'surname', 'id_number', 'mobile'] },
+  ];
+  const d = { ...deps(6600), resolveProviders: async () => live };
+  const menu = await startWithdraw({ account: verified, ask: { amountCents: 3000 }, deps: d });   // "Withdraw 30"
+  assert.equal(menu.state, 'PAYOUT_METHOD');
+  const absa = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
+  assert.equal(absa.state, 'PAYOUT_AMOUNT');
+  assert.match(absa.text, /R30 is below the R50 minimum for cash at an Absa ATM/); assert.match(absa.text, /\*3\* \(cash at a Nedbank ATM, from R20\)/); assert.match(absa.text, /\*4\* \(an FNB eWallet, from R20\)/); assert.match(absa.text, /Reply \*back\*/);
+  const back = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: 'back' });
+  assert.equal(back.state, 'PAYOUT_METHOD'); assert.match(back.text, /Withdraw from WaPay/);
+  const ned = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: back.data, text: '3' });
+  assert.equal(ned.state, 'PAYOUT_MOBILE', 'the R30 given up front is kept and is valid for Nedbank');
 });
