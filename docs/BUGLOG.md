@@ -4,6 +4,20 @@
 
 ---
 
+## 66. "my pin is 1234" in prose reached the model and stayed in memory for seven days
+
+- **Symptom:** found by the Phase 2 pre-ship review (2026-09-16). Outside a PIN state, a sentence like "my pin is 1234", "wallet pin 4321 please" or "the wicode is 12345678" passed every guard: the redactor only labelled `code`/`otp` phrases, bare 4-6 digit messages and 12+ digit runs. The line went to OpenAI as typed, was stored as typed in `conversation_turns`, and was re-fed on every turn until retention deleted it.
+- **Root cause:** the redactor's labelled-secret pattern did not know the words "pin" and "wicode"; the agent sent the raw text rather than the memory form.
+- **Fix:** `LOGIN_CODE_RE` covers `pin` and `wicode`; the agent's current line is the redacted form (amounts and phone numbers survive, so slot filling is unaffected); a bare 12-digit OTT PIN (twelve digits or three groups of four) is a guard like the 16-digit Blu PIN.
+- **Guard:** `tests/phase2-review.test.mjs` (H1).
+
+## 65. Raw inbound text (a voucher PIN included) was written to the Vercel logs before any guard ran
+
+- **Symptom:** found by the same review. The webhook logged the whole Meta payload, and the processor logged the inbound text twice, before the voucher-PIN guard or the redactor saw it. A customer pasting a 16-digit Blu PIN or "voucher pin 1234567890123456" put a bearer secret in the log retention.
+- **Root cause:** debugging logs from the first build, never revisited when the bearer rules were written.
+- **Fix:** every inbound log line passes `redactForMemory` (the webhook body as a JSON string, the processor's two lines).
+- **Guard:** `tests/phase2-review.test.mjs` (H2); the standing rule stays: voucher PINs, wiCodes and STS tokens are never logged.
+
 ## 64. "my pin is 1234" in a PIN state would have escaped to the model, PIN included
 
 - **Symptom (found 2026-09-16 by the pre-ship review of Phase 0, never live):** after #58 made every PIN state strict, a sentence that failed the shape check fell to `isConversationalEscape`, which is true for any two-word sentence; "my pin is 1234" would have cleared the state silently and been routed to the AI with the clear-text PIN, and stored in memory.

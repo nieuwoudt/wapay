@@ -65,7 +65,7 @@ test('withdraw fees follow the payout switch', () => {
 
 test('processor wiring: fee hook before the keyword router, deposit trap ignores cost words, product list reads the catalogue', () => {
   const p = read('../pages/api/webhooks/message-processor-v2.js');
-  assert.match(p, /import \{ matchFeeAsk, feeAnswer, feeAskAmountCents \} from '\.\.\/\.\.\/\.\.\/lib\/fee-facts\.js';/);
+  assert.match(p, /import \{ matchFeeAsk, feeAnswer, feeAskAmountCents, feeFacts \} from '\.\.\/\.\.\/\.\.\/lib\/fee-facts\.js';/);
   const hook = p.indexOf('const feeTopic = matchFeeAsk(text);');
   assert.ok(hook > -1 && hook < p.indexOf('const detection = detectExplicitIntent(text);'), 'fee questions never reach the keyword router');
   assert.match(p, /const wantsDeposit =\s*\n\s*!\/\\b\(fee\|fees\|cost\|costs\|charge\|charges\)\\b\/\.test\(squashed\) && \(/);

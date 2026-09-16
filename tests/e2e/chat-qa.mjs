@@ -338,6 +338,91 @@ async function run() {
     if (!hadSecret) delete process.env.WAPAY_BUSINESS_SESSION_SECRET;
   }
 
+  // ---- The Pay agent (Phase 2, docs/AGENT_ARCHITECTURE_V2.md) under the
+  // shadow list: the same founder review-4 asks, answered by one model call
+  // over the customer record and typed tools. Money flows are unchanged:
+  // a proposal lands in the same confirm/PIN steps the regex router uses.
+  {
+    const prevList = process.env.WAPAY_AGENT_V3_MSISDNS;
+    const prevBudget = process.env.WAPAY_AGENT_TURNS_PER_HOUR;
+    process.env.WAPAY_AGENT_V3_MSISDNS = QA_WA_ID;
+    delete process.env.WAPAY_AGENT_TURNS_PER_HOUR;
+    try {
+      const live = process.env.WAPAY_PAYOUT_ENABLED === 'true';
+      const a = await s.say('How can I withdraw money?');
+      const aLines = String(a.replyText || '').split('\n').filter((l) => l.trim());
+      verdict('Agent: "How can I withdraw money?" is short, honest, and never the menu', [
+        { level: 'FAIL', ok: !looksLikeMenu(a.replyText), what: 'no menu' },
+        { level: 'FAIL', ok: !has(a.replyText, /\b(january|february|march|april|june|july|august|september|october|november|december|20\d\d)\b/i), what: 'no date promised' },
+        { level: 'FAIL', ok: !has(a.replyText, /\bOTT\b/) || live, what: 'the payout partner is not named while withdrawals are off' },
+        { level: 'FAIL', ok: !has(a.replyText, /\bbet|wager|casino|odds\b/i), what: 'no betting word' },
+        { level: 'WARN', ok: aLines.length <= 6, what: 'six lines or fewer (review 4: two lines and a question)' },
+        live
+          ? { level: 'WARN', ok: has(a.replyText, /Withdrawals start at R20|identity|PayShap|bank/i), what: 'live: the withdraw flow or a real how-to answers' }
+          : { level: 'FAIL', ok: has(a.replyText, /soon|not (yet|available)|spend/i), what: 'off: honest position and what the money can do' },
+      ], s);
+
+      const b = await s.say('Where can I spend my OTT voucher?');
+      verdict('Agent: spend question gets real destinations, not the menu', [
+        { level: 'FAIL', ok: !looksLikeMenu(b.replyText), what: 'no menu' },
+        { level: 'FAIL', ok: has(b.replyText, /airtime|data|electricity|voucher|fuel/i), what: 'names real spend destinations' },
+      ], s);
+
+      const c = await s.say('what did I buy last week');
+      verdict('Agent: transaction question is answered from the record', [
+        { level: 'FAIL', ok: !looksLikeMenu(c.replyText), what: 'no menu' },
+        { level: 'FAIL', ok: has(c.replyText, /nothing|no (purchases|transactions|movements)|haven't|R\s?\d|last/i), what: 'a factual answer (the QA wallet has no purchases) or a listed movement' },
+        { level: 'FAIL', ok: !has(c.replyText, /didn't (quite )?(catch|understand)/i), what: 'never the canned fallback' },
+      ], s);
+
+      const d = await s.say('did my payment go through');
+      verdict('Agent: status question is answered from the record, never invented', [
+        { level: 'FAIL', ok: !looksLikeMenu(d.replyText), what: 'no menu' },
+        { level: 'FAIL', ok: !has(d.replyText, /✅.*(paid|success|went through)|has gone through|was successful/i) || has(d.replyText, /no (recent|pending)|nothing|don't see|can't see|haven't/i), what: 'no invented success (the QA wallet has no payment)' },
+      ], s);
+
+      const e = await s.say('Okay');
+      verdict('Agent: "Okay" gets a short human line, not a menu dump', [
+        { level: 'FAIL', ok: !looksLikeMenu(e.replyText), what: 'no menu' },
+        { level: 'WARN', ok: String(e.replyText || '').length <= 240, what: 'short' },
+      ], s);
+
+      // A send with the number would call the voucher preview route over HTTP,
+      // which this harness cannot serve (the regex router has the same limit);
+      // without a number the same gift flow asks for the recipient first.
+      const f = await s.say('send R50 to my brother');
+      verdict('Agent: a send proposal lands in the same gift flow (recipient step)', [
+        { level: 'FAIL', ok: !looksLikeMenu(f.replyText), what: 'no menu' },
+        { level: 'FAIL', ok: has(f.replyText, /number|who|recipient|083|078|balance|fund|top up|add money/i), what: 'the gift flow asks for the recipient (or states the funding position)' },
+        { level: 'FAIL', ok: !has(f.replyText, /✅ Sent|has been sent/i), what: 'nothing is executed without a PIN' },
+      ], s);
+      await s.say('cancel');
+
+      const g = await s.say('buy R30 airtime');
+      verdict('Agent: an airtime proposal lands in the same airtime step', [
+        { level: 'FAIL', ok: !looksLikeMenu(g.replyText), what: 'no menu' },
+        { level: 'FAIL', ok: has(g.replyText, /R\s?30|number|which (phone|number)|confirm|PIN|balance|fund|top up|add money/i), what: 'the airtime flow answers (number/confirm/PIN or the funding position)' },
+        { level: 'FAIL', ok: !has(g.replyText, /✅ .*airtime.*(sent|delivered|loaded)/i), what: 'nothing is executed without a PIN' },
+      ], s);
+      await s.say('cancel');
+
+      // guards: bearer input never reaches the model; the budget stops a loop
+      const h = await s.say('voucher pin 1234');
+      verdict('Agent guard: "voucher pin 1234" goes to the resend flow, not the model', [
+        { level: 'FAIL', ok: !looksLikeMenu(h.replyText), what: 'no menu' },
+        { level: 'FAIL', ok: has(h.replyText, /voucher|serial|1234|find|no voucher/i), what: 'the resend flow answered' },
+      ], s);
+      process.env.WAPAY_AGENT_TURNS_PER_HOUR = '1';
+      const i = await s.say('and now?');
+      verdict('Agent budget: the per-customer cap answers without a model call', [
+        { level: 'FAIL', ok: has(i.replyText, /slow down|few minutes/i), what: 'the budget line' },
+      ], s);
+    } finally {
+      if (prevList === undefined) delete process.env.WAPAY_AGENT_V3_MSISDNS; else process.env.WAPAY_AGENT_V3_MSISDNS = prevList;
+      if (prevBudget === undefined) delete process.env.WAPAY_AGENT_TURNS_PER_HOUR; else process.env.WAPAY_AGENT_TURNS_PER_HOUR = prevBudget;
+    }
+  }
+
   return results;
 }
 

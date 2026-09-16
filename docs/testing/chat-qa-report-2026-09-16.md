@@ -2,7 +2,7 @@
 
 Conversational end-to-end run against the REAL message processor (live DB, live OpenAI, outbound WhatsApp captured, no money moved). QA account: `27600000901` (seeded and torn down by the run).
 
-**19 pass · 0 warn · 0 fail**
+**28 pass · 0 warn · 0 fail**
 
 ## ✅ Founder repro: "payment link" escapes the meter ask
 
@@ -43,12 +43,12 @@ Please enter your meter number:
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll receive the full *R20* however they pay. No fees on this one. 🎉
-[button:View my payment page -> https://pleasepayme.co.za/PRWCEKWP]
+[button:View my payment page -> https://pleasepayme.co.za/PRECGCQN]
 ···
 🙏 *Pay WaPay QA Harness now* · R20 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRWCEKWP
+https://pleasepayme.co.za/PRECGCQN
 ```
 
 </details>
@@ -151,12 +151,12 @@ Reply *1* or *2*, or "cancel".
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll get the full *R250* if they pay from their WaPay (free), or R237.20 if they pay by card.
-[button:View my payment page -> https://pleasepayme.co.za/PRVFXVBP]
+[button:View my payment page -> https://pleasepayme.co.za/PRZADEQZ]
 ···
 🙏 *Pay WaPay QA Harness now* · R250 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRVFXVBP
+https://pleasepayme.co.za/PRZADEQZ
 ```
 
 </details>
@@ -205,13 +205,13 @@ Just tell me what you need, in any language.
 **User:** My name is Thabo and I run a spaza shop in Soweto.
 
 ```
-Nice to meet you, Thabo 😊 A spaza shop in Soweto is serious business. If you ever want to get paid from customers, add money, or buy airtime and electricity, I’m here for you 💡
+Nice to meet you, Thabo 😊 Spaza shops like yours can use WaPay to get paid, add money, and buy airtime, data or electricity when you need it.
 ```
 
 **User:** What did I tell you my name was?
 
 ```
-You told me your name is Thabo 😊
+You told me your name was Thabo 😊
 ```
 
 </details>
@@ -264,8 +264,9 @@ Your favourite colour is green 💚
 **User:** Where can I spend my WaPay money!
 
 ```
-You can spend your WaPay money on airtime, data, prepaid electricity, sending money, getting paid, and OTT vouchers online 💰✨
-If you want, I can also tell you where OTT vouchers are accepted.
+You can use your WaPay money for airtime and data on any SA number, prepaid electricity for any meter, sending money on WhatsApp, getting paid with a link, and WaPay vouchers for online stores. 💰
+
+If you want, I can also show you where OTT vouchers work.
 ```
 
 </details>
@@ -538,7 +539,7 @@ No monthly fees, ever. 😊
 **User:** cancel
 
 ```
-No worries 😊 If you meant stop the electricity purchase, I’ve cancelled that path.
+No problem, cancelled 😊 If you want, you can start again anytime with "buy electricity".
 ```
 
 </details>
@@ -709,7 +710,7 @@ Reply *YES* to continue to your PIN, or *NO* to cancel.
 **User:** 1934
 
 ```
-✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WPD3FA4C4E0365D6. Fee R18.
+✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WP47162F4270E39E. Fee R18.
 ```
 
 **User:** balance
@@ -757,7 +758,7 @@ Ufunani okunye? Ngicela ungibuze!
 **User:** wat is my balans
 
 ```
-💰 *Ibhalansi yakho ye-WaPay*
+💰 *Ibhalansi yakho yeWaPay*
 
 Sawubona WaPay QA Harness!  
 Ibhalansi yakho yamanje ingu R 52.00
@@ -816,11 +817,236 @@ Manage customers, payment links and revenue at https://wapay.co.za/business. To 
 **User:** business login
 
 ```
-🔐 *WaPay for Business code: 838661*
+🔐 *WaPay for Business code: 967539*
 
 Type it into the business portal within 10 minutes. One attempt only.
 
 Not you? Ignore this and tell us right away.
+```
+
+</details>
+
+## ✅ Agent: "How can I withdraw money?" is short, honest, and never the menu
+
+- ✅ no menu
+- ✅ no date promised
+- ✅ the payout partner is not named while withdrawals are off
+- ✅ no betting word
+- ✅ six lines or fewer (review 4: two lines and a question)
+- ✅ off: honest position and what the money can do
+
+<details><summary>Transcript</summary>
+
+**User:** How can I withdraw money?
+
+```
+Withdrawals are not available just yet, but they are coming soon. 🏧
+
+For now, your R52 balance can be used for airtime, data, electricity, WaPay vouchers, sending money, or getting paid. 💡
+```
+
+</details>
+
+## ✅ Agent: spend question gets real destinations, not the menu
+
+- ✅ no menu
+- ✅ names real spend destinations
+
+<details><summary>Transcript</summary>
+
+**User:** Where can I spend my OTT voucher?
+
+```
+OTT vouchers work online and in partner apps, not at shop tills. 💡
+
+Accepted at:
+Talk360
+fibertime
+ikeja
+Capitec Connect
+megsApp
+Pay@
+Xash
+FoondaMate
+LAYAWAY
+
+Not accepted at:
+Supermarket tills like Checkers, Shoprite, Pick n Pay, Spar and Boxer
+Takealot
+Netflix
+Showmax
+Spotify
+Mobile networks' own sites
+
+At checkout, choose OTT Voucher and enter your PIN. ✨
+```
+
+</details>
+
+## ✅ Agent: transaction question is answered from the record
+
+- ✅ no menu
+- ✅ a factual answer (the QA wallet has no purchases) or a listed movement
+- ✅ never the canned fallback
+
+<details><summary>Transcript</summary>
+
+**User:** what did I buy last week
+
+```
+Last week, you did not buy airtime, data, electricity, or vouchers. 💡
+
+Completed movement:
+PAYOUT R30 SUCCESS, fee R18, ref WP47162F4270E39E
+
+Open pay links:
+PRZADEQZ R250 OPEN
+PRECGCQN R20 OPEN
+```
+
+</details>
+
+## ✅ Agent: status question is answered from the record, never invented
+
+- ✅ no menu
+- ✅ no invented success (the QA wallet has no payment)
+
+<details><summary>Transcript</summary>
+
+**User:** did my payment go through
+
+```
+Your newest payment went through successfully. ✅
+
+PAYOUT R30 SUCCESS, ref WP47162F4270E39E. 💰
+```
+
+</details>
+
+## ✅ Agent: "Okay" gets a short human line, not a menu dump
+
+- ✅ no menu
+- ✅ short
+
+<details><summary>Transcript</summary>
+
+**User:** Okay
+
+```
+Anytime 😊
+
+Your balance to spend is R52. 💰
+```
+
+</details>
+
+## ✅ Agent: a send proposal lands in the same gift flow (recipient step)
+
+- ✅ no menu
+- ✅ the gift flow asks for the recipient (or states the funding position)
+- ✅ nothing is executed without a PIN
+
+<details><summary>Transcript</summary>
+
+**User:** send R50 to my brother
+
+```
+Which number should I send it to? Send the recipient's cellphone number.
+
+I'll send them a WaPay voucher they can spend online at any store that accepts OTT vouchers.
+```
+
+</details>
+
+## ✅ Agent: an airtime proposal lands in the same airtime step
+
+- ✅ no menu
+- ✅ the airtime flow answers (number/confirm/PIN or the funding position)
+- ✅ nothing is executed without a PIN
+
+<details><summary>Transcript</summary>
+
+**User:** cancel
+
+```
+👍 Voucher gift cancelled.
+···
+👋 *Hi WaPay QA Harness!*
+💰 Balance: *R52.00*
+━━━━━━━━━━━━━━━
+
+🛒 *Buy*: airtime, data, electricity
+💸 *Send*: "send R10 airtime to 083..."
+🙏 *Get Paid*: "please pay me R50" → share your link
+💳 *Deposit*: "deposit R100" or a Blu voucher
+⛽ *Fuel vouchers*: coming soon
+🏧 *Withdraw*: coming soon
+📄 *Transactions* · ⚙️ *Settings*
+
+⚡ Quick: Buy airtime · Buy data · Check balance
+
+Just tell me what you need, in any language.
+```
+
+**User:** buy R30 airtime
+
+```
+📱 *Buy R30 Airtime*
+
+Which phone number should I send the airtime to?
+
+Reply with the number (e.g., 0781234567) or "me" for your own number.
+```
+
+</details>
+
+## ✅ Agent guard: "voucher pin 1234" goes to the resend flow, not the model
+
+- ✅ no menu
+- ✅ the resend flow answered
+
+<details><summary>Transcript</summary>
+
+**User:** cancel
+
+```
+👍 Airtime purchase cancelled.
+···
+👋 *Hi WaPay QA Harness!*
+💰 Balance: *R52.00*
+━━━━━━━━━━━━━━━
+
+🛒 *Buy*: airtime, data, electricity
+💸 *Send*: "send R10 airtime to 083..."
+🙏 *Get Paid*: "please pay me R50" → share your link
+💳 *Deposit*: "deposit R100" or a Blu voucher
+⛽ *Fuel vouchers*: coming soon
+🏧 *Withdraw*: coming soon
+📄 *Transactions* · ⚙️ *Settings*
+
+⚡ Quick: Buy airtime · Buy data · Check balance
+
+Just tell me what you need, in any language.
+```
+
+**User:** voucher pin 1234
+
+```
+🤔 I couldn't find a voucher of yours ending in "1234". Reply "my vouchers" to see the list.
+```
+
+</details>
+
+## ✅ Agent budget: the per-customer cap answers without a model call
+
+- ✅ the budget line
+
+<details><summary>Transcript</summary>
+
+**User:** and now?
+
+```
+⏸️ Let us slow down a little. Try again in a few minutes, or type "help" for what I can do.
 ```
 
 </details>

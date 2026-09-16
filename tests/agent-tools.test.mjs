@@ -462,9 +462,9 @@ test('start_withdraw proposes WITHDRAW with the amount and method the customer n
   assert.deepEqual(Object.keys(out.proposal.slots).sort(), [...SLOT_KEYS].sort());
 
   const loose = await withEnv({ WAPAY_PAYOUT_ENABLED: 'true', WAPAY_PAYOUT_ALLOWLIST: undefined },
-    () => executeTool({ name: 'start_withdraw', args: '{"amountCents": null, "method": "fnb ewallet"}', ctx: { waId: PILOT } }));
+    () => executeTool({ name: 'start_withdraw', args: '{"amountCents": null, "method": "ewallet"}', ctx: { waId: PILOT } }));
   assert.equal(loose.proposal.slots.amountCents, null);
-  assert.equal(loose.proposal.slots.method, 'FNB_EWALLET');
+  assert.equal(loose.proposal.slots.method, 'EWALLET');
 
   const closed = await withEnv({ WAPAY_PAYOUT_ENABLED: undefined }, () => executeTool({ name: 'start_withdraw', args: { amountCents: 20000, method: null }, ctx: { waId: PILOT } }));
   assert.deepEqual(closed, { ok: false, error: 'NOT_LIVE' });

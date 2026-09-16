@@ -5,6 +5,7 @@
  * 1. Webhook verification (GET)
  * 2. Incoming messages (POST)
  */
+import { redactForMemory } from '../../../lib/turns.js';
 import { processMessage } from './message-processor-v2.js';
 import { isReady } from '../../../lib/initTemplates.js';
 import { ensureTemplatesReady } from './_middleware.js';
@@ -125,7 +126,8 @@ export default async function handler(req, res) {
         }
 
         // Log incoming webhook for debugging (keep it single-line for Vercel)
-        console.log('📱 Incoming WhatsApp webhook:', JSON.stringify(body));
+        // Bearer digits (voucher PINs, tokens, codes) are redacted before the log.
+        console.log('📱 Incoming WhatsApp webhook:', redactForMemory(JSON.stringify(body)));
 
         // Check if this is a WhatsApp message event
         if (body?.object === 'whatsapp_business_account') {
@@ -233,7 +235,7 @@ export default async function handler(req, res) {
                   // Handle different message types
                   if (messageType === 'text') {
                     const text = message.text?.body || '';
-                    console.log('💬 Text message:', text);
+                    console.log('💬 Text message:', redactForMemory(text));
 
                     await runTurn({ text });
                   }

@@ -105,7 +105,7 @@ test('betting and gambling words are blocked, word-bounded, any case', () => {
 });
 
 test('words that merely contain the lexicon are fine', () => {
-  for (const t of ['alphabet soup', 'the Tibetan plateau', 'a better deal', 'Elizabeth sent R50', 'lottery is not a word we use? it is fine here', 'the diabetes clinic']) {
+  for (const t of ['alphabet soup', 'the Tibetan plateau', 'a better deal', 'Elizabeth sent R50', 'the allotment was paid', 'the diabetes clinic']) {
     const r = outputGate(t, { withdrawLive: true });
     assert.equal(r.ok, true, t);
     assert.equal(r.rule, null, t);

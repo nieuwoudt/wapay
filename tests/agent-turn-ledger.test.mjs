@@ -201,6 +201,7 @@ test('agentTurnsInLastHour: counts rows for the account since now-1h', async () 
   assert.equal(prisma.calls.count.length, 1);
   const { where } = prisma.calls.count[0];
   assert.equal(where.accountId, 'acc_1');
+  assert.equal(where.path, 'agent', 'guard and budget rows never count toward the budget');
   assert.equal(where.createdAt.gte.toISOString(), '2026-09-16T09:00:00.000Z');
 });
 

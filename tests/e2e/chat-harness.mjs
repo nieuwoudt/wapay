@@ -181,6 +181,7 @@ export async function teardownQaAccount() {
   await prisma.authFactor.deleteMany({ where: { accountId: account.id } }).catch(() => {});
   // 2026-09-16: both sides of every turn now live in conversation_turns.
   await prisma.conversationTurn.deleteMany({ where: { accountId: account.id } }).catch(() => {});
+  await prisma.agentTurn.deleteMany({ where: { accountId: account.id } }).catch(() => {});
   // The chat sign-up scenario registers a business and asks for a portal
   // code: both rows hang off the account and must go first.
   const businesses = await prisma.business.findMany({ where: { accountId: account.id }, select: { id: true } }).catch(() => []);

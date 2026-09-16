@@ -61,7 +61,10 @@ import {
   MIN_DEPOSIT_CENTS,
   MAX_DEPOSIT_CENTS,
 } from '../../../lib/deposits.js';
-import { orchestrate } from '@wapay/ai';
+import { orchestrate, runAgentTurn, buildAgentSystemPrompt } from '@wapay/ai';
+import { buildToolDefinitions, executeTool } from '../../../lib/agent/tools/index.js';
+import { agentGuard, outputGate } from '../../../lib/agent/guards.js';
+import { recordAgentTurn, agentTurnsInLastHour } from '../../../lib/agent/turn-ledger.js';
 import {
   advertisedFuelPartners,
   buildBrainKnowledge,
@@ -72,7 +75,7 @@ import {
   spendDestinationLines,
   ottAcceptedFacts,
 } from '../../../lib/spend-catalogue.js';
-import { matchFeeAsk, feeAnswer, feeAskAmountCents } from '../../../lib/fee-facts.js';
+import { matchFeeAsk, feeAnswer, feeAskAmountCents, feeFacts } from '../../../lib/fee-facts.js';
 import { matchHowItWorksAsk, howItWorksAnswer, howItWorksBrief, wantsSteps, detectMethod, TOPICS as HOWTO_TOPICS } from '../../../lib/how-it-works.js';
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
 import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
@@ -894,13 +897,13 @@ export async function processMessage({ from, text, messageId, profile, sharedCon
   // Log incoming message
   logStructured('whatsapp_inbound', {
     from,
-    text,
+    text: redactForMemory(text),
     messageId,
     profileName: profile?.name,
     sharedContact: sharedContact ? { name: sharedContact.name || null } : undefined,
   });
 
-  console.log('🔄 Processing message:', { from, text });
+  console.log('🔄 Processing message:', { from, text: redactForMemory(text) });
 
   // Get or create user
   const { account, isNewUser } = await getOrCreateUser(from, profile);
@@ -1010,7 +1013,11 @@ async function handleSharedContact({ from, account, sharedContact }) {
   // Any OTHER active flow (electricity, deposit amount, a pending confirm…)
   // must not be silently hijacked into send-money (QA 2026-08-21). The
   // contact is saved; the user decides what happens next.
-  if (state) {
+  if (state === 'AGENT_CLARIFY') {
+    // The agent asked a question; a shared contact answers "who": the
+    // fresh-share path below asks the amount.
+    await updateConversationState(from, null);
+  } else if (state) {
     const name2 = name ? ` (${name})` : '';
     return await sendWhatsAppText({
       to: from,
@@ -1134,7 +1141,7 @@ function giftClaimText(gift, senderName = null) {
 }
 
 async function handlePostOnboarding({ account, from, text, messageId = null }) {
-  console.log('💬 Post-onboarding message:', text);
+  console.log('💬 Post-onboarding message:', redactForMemory(text));
   const sendsAtEntry = outboundSendCount();
 
   // ==========================================================================
@@ -1222,6 +1229,8 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
         const claimSend = await sendWhatsAppText({
           to: from,
           text: giftClaimText(gift, senderName),
+          kind: 'receipt',
+          recordAs: `🎁 A ${formatRands(gift.amountCents)} WaPay voucher was delivered to the customer (the PIN was sent).`,
         });
         if (claimSend?.ok === false) {
           // The PIN definitively did not reach the recipient — put the gift
@@ -1289,6 +1298,16 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       await updateConversationState(from, null);
       return await renderHome({ from, account });
     }
+  }
+
+  // A clarifying question the agent asked last turn (Phase 2): the answer goes
+  // back to the agent with the pending intent in its record. If the shadow
+  // flag was switched off in between, the message routes normally.
+  if (state === 'AGENT_CLARIFY') {
+    const pendingIntent = data?.pendingIntent || null;
+    await updateConversationState(from, null);
+    if (agentV3For(from)) return await handleAgentTurn({ from, text, account, messageId, pendingIntent });
+    state = null; data = null;
   }
 
   if (state) {
@@ -1400,6 +1419,13 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   // FEES (2026-09-13): "how much does it cost to deposit money?" is a price
   // question. Answered from the fee tables BEFORE the keyword router (which
   // read it as a voucher redemption) and before the withdraw matcher.
+  // The Pay agent (Phase 2) for shadow-listed numbers: everything below this
+  // line (the question hooks, the intent regexes, the two-tier engine) is
+  // skipped; the guards run inside the turn and money flows are unchanged.
+  if (agentV3For(from)) {
+    return await handleAgentTurn({ from, text, account, messageId });
+  }
+
   // "Transactions" (the home-card line that had no handler), "my
   // transactions", "what did I buy", "my withdrawals", "who paid my link":
   // a deterministic list from the customer record (Phase 0 bridge; the
@@ -5813,6 +5839,150 @@ const ACTION_CAPABILITY = {
   REDEEM_VOUCHER: 'DEPOSIT_VOUCHER',
 };
 
+// ============================================================================
+// The Pay agent (docs/AGENT_ARCHITECTURE_V2.md, Phase 2): one model call over
+// the customer record and typed tools, behind the shadow list
+// WAPAY_AGENT_V3_MSISDNS. Shadow numbers skip the regex hooks after the
+// guard hooks; the money flows, confirm, PIN and receipts are unchanged.
+// ============================================================================
+function agentV3For(waId) {
+  const raw = process.env.WAPAY_AGENT_V3_MSISDNS || '';
+  const list = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  return list.includes(String(waId || '').trim());
+}
+
+/** A fact-built line from the record: the fallback when the model fails or a gate blocks. */
+function agentFallbackLine(pack) {
+  const m = pack?.movements?.[0];
+  const last = m
+    ? ' Your last movement: ' + formatSast(m.at) + ', ' + String(m.kind || '').toLowerCase().replace(/_/g, ' ') + ' ' + formatRands(m.amountCents) + ' (' + String(m.status || '').toLowerCase() + ').'
+    : '';
+  return '💰 Balance to spend: ' + formatRands(pack?.balances?.spendCents || 0) + '.' + last + ' Tell me what you need, or type "help" for everything I can do.';
+}
+
+async function handleAgentTurn({ from, text, account, messageId = null, pendingIntent = null }) {
+  const startedAt = Date.now();
+  const gatesFired = [];
+  // The ledger row is written after the customer has their message: a throw
+  // before the send leaves no row, so a redelivered turn is counted once.
+  const ledger = (row) => recordAgentTurn({ prisma, row: { accountId: account.id, waId: from, ms: Date.now() - startedAt, ...row } });
+  // A failed transport surfaces as a throw: nothing was sent, so the webhook
+  // releases the claim and Meta redelivers (docs/AGENT_ARCHITECTURE_V2.md 6).
+  const deliver = async (args) => {
+    const sent = await sendWhatsAppText(args);
+    if (sent && sent.ok === false) throw Object.assign(new Error('AGENT_SEND_FAILED'), { code: 'AGENT_SEND_FAILED', detail: sent.error || null });
+    return sent;
+  };
+
+  // Bearer inputs and codes never reach the model: the existing flows take them.
+  const guard = agentGuard(text);
+  if (guard) {
+    logStructured('agent_guard', { from, accountId: account.id, kind: guard.kind });
+    let handled;
+    if (guard.kind === 'VOUCHER_PIN') {
+      await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
+      handled = await handleVoucherRedemption({ from, pin: guard.pin, account });
+    } else if (guard.kind === 'PAY_REQUEST_CODE') {
+      handled = await handlePayRequestStart({ from, account, code: guard.code, rawText: text });
+    } else {
+      handled = await startVoucherPinResend({ from, account, serialTail: guard.tail });
+    }
+    await ledger({ path: 'guard', outcome: guard.kind });
+    return handled;
+  }
+
+  // Per-customer budget of model turns: a bored customer cannot burn model
+  // calls, and a capped customer is not capped again by asking (guard and
+  // budget rows do not count).
+  const perHour = Number(process.env.WAPAY_AGENT_TURNS_PER_HOUR || 60);
+  const used = await agentTurnsInLastHour({ prisma, accountId: account.id });
+  if (used >= perHour) {
+    const sent = await deliver({ to: from, text: await localizeOutbound('⏸️ Let us slow down a little. Try again in a few minutes, or type "help" for what I can do.', await userLang(account)), kind: 'guard' });
+    await ledger({ path: 'guard', outcome: 'BUDGET' });
+    return sent;
+  }
+
+  // The record, the last 12 turns of both sides, the registry and the fees.
+  const [turnsRaw, profile, pack] = await Promise.all([
+    recentTurns({ prisma, accountId: account.id, limit: 12, excludeWaMessageId: messageId }),
+    getProfile({ accountId: account.id }),
+    loadContextPack({ prisma, account }),
+  ]);
+  const fallback = async () => localizeOutbound(agentFallbackLine(pack), await userLang(account));
+  // The model sees the customer's line the way memory keeps it: labelled
+  // PINs, codes, IDs and account numbers are already redacted; amounts and
+  // phone numbers survive, so slot filling is unaffected.
+  const currentRedacted = redactForMemory(text);
+  const turns = (!messageId && turnsRaw.length && turnsRaw[turnsRaw.length - 1].role === 'user' && turnsRaw[turnsRaw.length - 1].text === currentRedacted)
+    ? turnsRaw.slice(0, -1)
+    : turnsRaw;
+  const withdrawLive = payoutAllowedFor(from);
+  let customerRecord = renderCustomerRecord(pack);
+  if (pendingIntent) {
+    customerRecord += '\nPENDING INTENT (you asked a question last turn and this message answers it; when the answer completes it, call the matching start tool): ' + JSON.stringify(pendingIntent);
+  }
+  const system = buildAgentSystemPrompt({
+    registryLines: promptLines({ waId: from, account }),
+    feesBlock: feeFacts({ withdrawLive }),
+    customerRecord,
+    focusKnowledge: null,
+    language: profile?.language || null,
+  });
+  const messages = [
+    ...turns.map((t) => ({ role: t.role === 'user' ? 'user' : 'assistant', content: t.role === 'event' ? '[event] ' + t.text : t.text })),
+    { role: 'user', content: currentRedacted },
+  ];
+  const tools = buildToolDefinitions({ waId: from, account, pack });
+  const ctx = { prisma, account, waId: from, pack, now: new Date() };
+  // 6 s per model call, two rounds at most: the whole turn stays well
+  // inside Meta's retry window even with a tool round.
+  const result = await runAgentTurn({ system, messages, tools, executeTool: (name, args) => executeTool({ name, args, ctx }), timeoutMs: 6000 });
+  const base = { path: 'agent', model: result.model, toolCalls: result.toolCalls, inputTokens: result.usage?.inputTokens, outputTokens: result.usage?.outputTokens };
+  logStructured('agent_turn', { from, accountId: account.id, outcome: result.outcome, tools: (result.toolCalls || []).map((c) => c.name), ms: result.timings?.totalMs, error: result.error || null });
+
+  if (result.outcome === 'error') {
+    const sent = await deliver({ to: from, text: await fallback(), kind: 'fallback' });
+    await ledger({ ...base, outcome: 'error', error: result.error, gatesFired });
+    return sent;
+  }
+
+  // A proposal hands off to the same PIN-gated flows the regex router uses;
+  // the slots are re-validated there, exactly as for the two-tier engine.
+  if (result.outcome === 'proposal' && result.proposal?.action) {
+    const { action, slots } = result.proposal;
+    const handled = await dispatchOrchestratorAction({
+      from, text, account, pack,
+      result: { action, slots: slots || {}, reply: '', language: profile?.language || 'en', domain: 'AGENT', tier: 'agent' },
+    });
+    await ledger({ ...base, outcome: 'proposal', proposal: result.proposal, gatesFired });
+    return handled;
+  }
+
+  // A reply or a clarifying question: the output gates, then one message.
+  let out = sanitizeUserText(result.text || '') || '';
+  let blocked = false;
+  const gate = outputGate(out, { withdrawLive });
+  if (gate.rule) gatesFired.push(gate.rule);
+  if (!gate.ok) {
+    logStructured('agent_reply_blocked', { from, accountId: account.id, rule: gate.rule });
+    blocked = true;
+  } else {
+    out = gate.text;
+  }
+  if (!blocked && looksLikeReceipt(out, knownAmountsFromPack(pack))) {
+    gatesFired.push('RECEIPT');
+    logStructured('agent_reply_blocked', { from, accountId: account.id, rule: 'RECEIPT' });
+    blocked = true;
+  }
+  if (!blocked && !out.trim()) blocked = true;
+  if (blocked) out = await fallback();
+  const sent = await deliver({ to: from, text: out, kind: blocked ? 'fallback' : 'agent' });
+  // A clarifying question is remembered only when the customer saw it.
+  const parked = !blocked && result.outcome === 'clarify' && !!result.pendingIntent;
+  if (parked) await updateConversationState(from, 'AGENT_CLARIFY', { pendingIntent: result.pendingIntent });
+  await ledger({ ...base, outcome: blocked ? 'fallback' : result.outcome, gatesFired, proposal: parked ? result.pendingIntent : null });
+  return sent;
+}
 async function handleAIChat({ from, text, account, messageId = null }) {
   console.log('🤖 Routing to AI chat:', redactBearerDigits(text));
 
@@ -6150,6 +6320,19 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
       const localizedHelp = await localizeOutbound(helpMsg, await userLang(account));
       await addToConversationHistory(from, 'assistant', localizedHelp);
       return await sendWhatsAppText({ to: from, text: localizedHelp });
+    }
+
+    case 'WITHDRAW': {
+      // Proposed by the agent's start_withdraw tool (never by the two-tier
+      // engine). The withdraw flow owns method, amount, KYC and PIN; the
+      // per-customer gate is checked again here, belt and braces.
+      if (!payoutAllowedFor(from)) {
+        const soon = await localizeOutbound(feeAnswer('withdraw', null, { withdrawLive: false }), await userLang(account));
+        return await sendWhatsAppText({ to: from, text: soon });
+      }
+      const askAmount = Number.isInteger(result.slots?.amountCents) && result.slots.amountCents > 0 ? result.slots.amountCents : null;
+      const askMethod = typeof result.slots?.method === 'string' && /^[A-Z_]{3,20}$/.test(result.slots.method) ? result.slots.method : null;
+      return await handleWithdrawStart({ from, account, ask: { amountCents: askAmount, method: askMethod }, text });
     }
 
     case 'HOME':

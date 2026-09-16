@@ -4,6 +4,61 @@
 
 ---
 
+## 2026-09-16 (37) — Phase 2: the Pay agent is wired behind a shadow list; one model call over the record and typed tools; the first live eval
+
+Phase 2 of `docs/AGENT_ARCHITECTURE_V2.md`. For a number on
+`WAPAY_AGENT_V3_MSISDNS` (comma separated, exact match, unset means nobody)
+the processor skips the question hooks, the intent regexes and the two-tier
+engine and runs `handleAgentTurn`: the pre-model guards first (a 16-digit
+voucher PIN, a pay-request code, "voucher pin 1234" go straight to the
+existing flows and never reach the model), then the per-customer budget
+(`WAPAY_AGENT_TURNS_PER_HOUR`, default 60; the cap answers with one line and
+no model call), then the context in one `Promise.all` (the last 12 turns of
+both sides, the profile, the customer record), then `runAgentTurn` from
+`@wapay/ai` with the registry lines, the fee facts, the record and the
+typed tools from `lib/agent/tools`. Four outcomes: a proposal goes through
+`dispatchOrchestratorAction` with an empty reply, so the same preview,
+confirm, PIN and receipt steps run as for the regex router (a new
+`case 'WITHDRAW'` hands to `handleWithdrawStart`, re-checks the per-customer
+pay-out gate and re-validates its slots; the two-tier engine cannot produce
+it); a reply or a clarifying question passes `sanitizeUserText`, the output
+gate (betting, partner name, URLs, dashes, length) and the provenance guard
+before one send, and a blocked reply becomes a fact-built line from the
+record; a clarify parks `AGENT_CLARIFY` with the pending intent and the next
+message goes back to the agent with that intent in its record (a de-listed
+number falls through to the normal router); a model error sends the same
+fact-built line, never "I didn't catch that". Every path writes an
+`agent_turns` row (masked WhatsApp id, redacted payloads). The agent prompt
+gains one rule: a customer who already holds a voucher gets the redeem flow,
+not the walkthrough (the one miss in the first eval). First live eval
+(`scripts/eval-agent.mjs --limit 12 --lang en`, gpt-5.5): 11 of 12, p50
+1.9 s, p95 3.7 s, about 4,500 input tokens per turn; report in
+`docs/testing/agent-eval-2026-09-16-partial.md`. Nine harness scenarios run
+under the shadow list (the founder review-4 asks, a send and an airtime
+proposal landing in the existing confirm steps, the guard and the budget).
+Locks in `tests/phase2.test.mjs`. Nothing changes for a number that is not
+on the list. To switch it on for one phone: set `WAPAY_AGENT_V3_MSISDNS` in
+Vercel and redeploy; to switch it off: unset it.
+
+The pre-ship read-only review (money safety, secrets, injection, state,
+budget, gates, failure modes, copy) confirmed that no path moves money or
+mints a confirm or PIN state outside the existing flows, and produced the
+fixes shipped in the same commit (BUGLOG #65, #66; locks in
+`tests/phase2-review.test.mjs`): labelled PINs and wiCodes in prose are
+redacted before memory and before the model, and the agent sends the model
+the redacted line; a bare 12-digit OTT PIN is a guard; raw inbound text is
+redacted in every log line; the budget counts model turns only (a refused
+turn cannot starve the customer); a blocked clarifying question is never
+parked as a pending intent; the fallback line is localized on every path; a
+failed WhatsApp send throws so the claim is released and Meta redelivers;
+the ledger row follows the send; 6 s per model call; a shared contact
+answers the agent's "who?"; the gift-claim memory line carries neither the
+sender's chosen name nor the PIN (`recordAs` on the say wrapper); the
+betting lexicon gains lottery, powerball, sportsbook, bookie, punt, and the
+partner gate catches the name spelled out; the withdraw method enum is the
+pay-out module's; the prompt says data is never instructions; the loop takes
+a pending intent only from the cleaned tool result.
+
 ## 2026-09-16 (36) — Phase 1: every surface renders from the registry; habits in the record; "what do you know about me" and "forget me"; nightly balance integrity; turns follow their account; the Phase 2 modules land dormant
 
 Phase 1 of `docs/AGENT_ARCHITECTURE_V2.md`. The home card, the Help Menu,
@@ -26,7 +81,7 @@ wired: `lib/agent/tools/*` (read and proposal tools with strict schemas),
 `packages/ai/src/agent.ts` and `prompt.ts` (the one-loop agent and its
 prompt), `lib/agent/guards.js` (pre-model guards and the output gate),
 `lib/agent/turn-ledger.js` with the `agent_turns` table (migration applied),
-and `scripts/eval-agent.mjs` with 24 new eval cases. Unit 824/824 (73 → 81
+and `scripts/eval-agent.mjs` with 24 new eval cases. Unit 824/824 (73 → 76
 test files), build green, chat QA harness 19/19. Test locks that asserted the
 hand-written home and help copy now assert the registry wiring.
 

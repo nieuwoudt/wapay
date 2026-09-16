@@ -1,0 +1,636 @@
+{
+  "date": "2026-09-16",
+  "model": "gpt-5.5",
+  "smoke": false,
+  "withdrawLive": true,
+  "args": {
+    "limit": 12,
+    "langs": [
+      "en"
+    ],
+    "concurrency": 4,
+    "baseline": null
+  },
+  "regression": {
+    "accuracyPoints": 2,
+    "p95Ratio": 0.25
+  },
+  "summary": {
+    "overall": {
+      "total": 12,
+      "pass": 11,
+      "errors": 0,
+      "passPct": 91.7,
+      "actionPct": 91.7,
+      "outcomePct": 91.7,
+      "shapePct": 100,
+      "p50Ms": 1911,
+      "p95Ms": 3681,
+      "inputTokens": 53600,
+      "outputTokens": 699,
+      "costUsd": 0
+    },
+    "byLanguage": {
+      "en": {
+        "total": 12,
+        "pass": 11,
+        "errors": 0,
+        "passPct": 91.7,
+        "actionPct": 91.7,
+        "outcomePct": 91.7,
+        "shapePct": 100,
+        "p50Ms": 1911,
+        "p95Ms": 3681,
+        "inputTokens": 53600,
+        "outputTokens": 699,
+        "costUsd": 0
+      }
+    },
+    "bySource": {
+      "golden": {
+        "total": 12,
+        "pass": 11,
+        "errors": 0,
+        "passPct": 91.7,
+        "actionPct": 91.7,
+        "outcomePct": 91.7,
+        "shapePct": 100,
+        "p50Ms": 1911,
+        "p95Ms": 3681,
+        "inputTokens": 53600,
+        "outputTokens": 699,
+        "costUsd": 0
+      }
+    },
+    "byGroup": {},
+    "prices": {
+      "inputUsdPerM": 0,
+      "outputUsdPerM": 0
+    }
+  },
+  "baseline": null,
+  "cases": [
+    {
+      "key": "golden/en/balance-plain",
+      "source": "golden",
+      "language": "en",
+      "id": "balance-plain",
+      "group": null,
+      "text": "hey how much do i have in my wallet",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Hi Thabo 😊\n\nYou have R150 available to spend.\n\nFor withdrawals only, your cash balance is R80.\n\nThere is also R55 held for your pending PayShap withdrawal of R50 to Thabo M, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2168,
+      "modelMs": [
+        2168
+      ],
+      "inputTokens": 4106,
+      "outputTokens": 88
+    },
+    {
+      "key": "golden/en/balance-typo",
+      "source": "golden",
+      "language": "en",
+      "id": "balance-typo",
+      "group": null,
+      "text": "wats my balnce quick",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, you have R150 to spend. 💰\nYour cash balance for withdrawals is R80, and R55 is held for your pending PayShap payout.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2602,
+      "modelMs": [
+        2602
+      ],
+      "inputTokens": 4104,
+      "outputTokens": 59
+    },
+    {
+      "key": "golden/en/deposit-100",
+      "source": "golden",
+      "language": "en",
+      "id": "deposit-100",
+      "group": null,
+      "text": "i want to load R100 into my wallet with my card",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1911,
+      "modelMs": [
+        1910
+      ],
+      "inputTokens": 4109,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/en/deposit-status",
+      "source": "golden",
+      "language": "en",
+      "id": "deposit-status",
+      "group": null,
+      "text": "has my money come thru yet? paid it in earlier",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Yes, Thabo. Your R20 deposit from PayFast is marked SUCCESS, ref 2179045. 💰\n\nYou also have a R50 PayShap withdrawal pending from 07:30, ref WPC15800A7BD6637. Did you mean the deposit or the withdrawal? 😊",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2528,
+      "modelMs": [
+        2528
+      ],
+      "inputTokens": 4108,
+      "outputTokens": 89
+    },
+    {
+      "key": "golden/en/airtime-self",
+      "source": "golden",
+      "language": "en",
+      "id": "airtime-self",
+      "group": null,
+      "text": "buy me R20 airtime please",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1546,
+      "modelMs": [
+        1546
+      ],
+      "inputTokens": 4104,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/en/airtime-gift",
+      "source": "golden",
+      "language": "en",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "can you send R20 airtime to 0837654321 for my sister",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1492,
+      "modelMs": [
+        1492
+      ],
+      "inputTokens": 4113,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/en/data-want",
+      "source": "golden",
+      "language": "en",
+      "id": "data-want",
+      "group": null,
+      "text": "eish my data is finished, i need a data bundle",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1627,
+      "modelMs": [
+        1626
+      ],
+      "inputTokens": 4109,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/en/electricity-200",
+      "source": "golden",
+      "language": "en",
+      "id": "electricity-200",
+      "group": null,
+      "text": "need R200 electrisity for meter 01234567890 pls lights are gonna go off",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2168,
+      "modelMs": [
+        2167
+      ],
+      "inputTokens": 4116,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/en/send-money",
+      "source": "golden",
+      "language": "en",
+      "id": "send-money",
+      "group": null,
+      "text": "send R50 to 0841234567 please, its for my brother",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1521,
+      "modelMs": [
+        1521
+      ],
+      "inputTokens": 4112,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/en/redeem-voucher",
+      "source": "golden",
+      "language": "en",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "i bought a blu voucher at the shop, how do i load it",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "To load your Blu voucher, send me the voucher code here. I’ll start the secure redeem flow and it will ask for the PIN. 💡\n\nThe voucher network keeps 6%, so a R100 voucher adds R94 to your WaPay balance.",
+        "toolCalls": [
+          "how_it_works",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": false,
+        "outcome": false,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": false,
+      "error": null,
+      "ms": 3681,
+      "modelMs": [
+        1517,
+        2163
+      ],
+      "inputTokens": 8413,
+      "outputTokens": 97
+    },
+    {
+      "key": "golden/en/help",
+      "source": "golden",
+      "language": "en",
+      "id": "help",
+      "group": null,
+      "text": "howzit, what can this thing actually do?",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Howzit Thabo 😊\n\nWith WaPay, you can check your balance, add money, send money, buy airtime, data or electricity, make a please-pay-me link, redeem vouchers, buy an OTT voucher, and withdraw to bank or cash.\n\nYour spendable balance is R150 right now. 💰\n\nTell me what you want to do, like “buy airtime”, “send money to Mom”, or “withdraw R200”.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3131,
+      "modelMs": [
+        3131
+      ],
+      "inputTokens": 4107,
+      "outputTokens": 121
+    },
+    {
+      "key": "golden/en/greeting",
+      "source": "golden",
+      "language": "en",
+      "id": "greeting",
+      "group": null,
+      "text": "heita",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Heita Thabo 😊\nYou’ve got R150 to spend, and R80 available for withdrawals. How can I help you today?",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1758,
+      "modelMs": [
+        1758
+      ],
+      "inputTokens": 4099,
+      "outputTokens": 53
+    }
+  ]
+}

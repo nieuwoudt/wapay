@@ -305,7 +305,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<AgentTurn
         const args = parseArgs(replied.call?.function?.arguments);
         const kind = (fromTool?.kind ?? args.kind) === 'clarify' ? 'clarify' : 'reply';
         const text = String(fromTool?.text ?? args.text ?? content ?? '').trim();
-        const pending = (fromTool?.pendingIntent ?? args.pendingIntent) as AgentPendingIntent | null | undefined;
+        const pending = (fromTool ? fromTool.pendingIntent : null) as AgentPendingIntent | null | undefined;
         if (!text) return finish({ outcome: 'error', error: 'AI_EMPTY_RESPONSE' });
         return finish({
           outcome: kind,

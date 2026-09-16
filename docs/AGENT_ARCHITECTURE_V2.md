@@ -321,6 +321,21 @@ below is updated on every ship.
   `prompt.ts`), C10 (`lib/agent/tools`), C4 guards and C11 output gate
   (`lib/agent/guards.js`), C17 (`lib/agent/turn-ledger.js`, `agent_turns`),
   C18 (`scripts/eval-agent.mjs`).
+- 2026-09-16, Phase 2 wired (changelog entry 37): the shadow gate
+  `WAPAY_AGENT_V3_MSISDNS` in the processor, `handleAgentTurn` (C4 guards,
+  the per-customer budget from C17, C6 record, C7 registry lines, C9 loop, C10
+  tools, C11 output gate and provenance guard, C17 ledger row on every path),
+  the `AGENT_CLARIFY` state, the `WITHDRAW` dispatch case into the existing
+  withdraw flow. First live eval: 11 of 12 on the English golden subset, p50
+  1.9 s, p95 3.7 s. The pre-ship review (BUGLOG #65, #66) added three rules
+  to keep: the model sees the customer's line in its memory form (redacted),
+  never raw; a refused or guarded turn never counts toward the model budget;
+  a failed send throws so the claim is released. Not yet: promotion beyond
+  the shadow list (Phase 3 gate:
+  the eval on the full set per language at or above the two-tier engine's
+  pass rate, and a week of shadow turns with no gate firing on money copy),
+  the regex-hook deletions, the classifier retirement, Mission Control cards
+  (C19), `agent_jobs` and `notifyCustomer` (Phase 4).
 
 ## 14. Open questions for the founder
 
