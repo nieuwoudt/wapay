@@ -72,7 +72,7 @@ import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '.
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
-import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders } from '../../../lib/payouts.js';
+import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders, getLatestPayout, reconcilePayout, PAYOUT_METHODS } from '../../../lib/payouts.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
 import { searchProducts } from '../../../lib/vas-search.js';
 import {
@@ -1579,7 +1579,7 @@ async function handlePostOnboarding({ account, from, text }) {
       from,
       accountId: account.id,
     });
-    return await handleDepositStatus({ from, account });
+    return await handleDepositStatus({ from, account, rawText: text });
   }
 
   // =====================================================================
@@ -3114,20 +3114,32 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
 }
 
 /**
- * Answer "did my payment go through" from the intent table + wallet — the
- * factual, deterministic reply the founder asked for after the AI improvised
- * "your balance will update shortly" (a promise no code path could honour).
+ * Answer "did my payment go through" from the ledger's own records, never
+ * from the AI — the factual reply the founder asked for after the AI
+ * improvised "your balance will update shortly" (a promise no code path
+ * could honour).
  *
- * SUCCESS -> amount + current balance. PENDING -> "PayFast is still
- * confirming" (the ITN confirmation message IS the promised follow-up).
- * FAILED -> say so plainly and invite a retry. No intent -> explain how to
- * deposit. Every answer carries the live balance so the user never sees a
- * stale number without context.
+ * 2026-09-16 (BUGLOG #54): the customer asked about the R50 PayShap
+ * withdrawal from the night before and was told, twice, that a R20 deposit
+ * from weeks earlier had been received. The lookup now covers every money
+ * movement the account has made (card deposits AND pay-outs), answers about
+ * the one the words point at (or the newest), and a pay-out that is still
+ * PENDING is checked with the bank rail right now instead of guessed at.
+ *
+ * Deposits: SUCCESS -> amount + current balance. PENDING -> "PayFast is
+ * still confirming" (the ITN confirmation message IS the promised
+ * follow-up). FAILED -> say so plainly and invite a retry. No intent ->
+ * explain how to deposit. Every answer carries the live balance so the user
+ * never sees a stale number without context.
  */
-async function handleDepositStatus({ from, account }) {
+async function handleDepositStatus({ from, account, rawText = '' }) {
   let intent;
+  let payout = null;
   try {
-    intent = await getLatestDepositIntent({ accountId: account.id });
+    [intent, payout] = await Promise.all([
+      getLatestDepositIntent({ accountId: account.id }),
+      getLatestPayout({ accountId: account.id }).catch(() => null),
+    ]);
   } catch (error) {
     logStructured('deposit_status_lookup_error', {
       from,
@@ -3138,6 +3150,16 @@ async function handleDepositStatus({ from, account }) {
       to: from,
       text: await localizeOutbound(`⚠️ I can't check your payment status right now. Please try again in a moment.`, await userLang(account)),
     });
+  }
+
+  // Which movement is the customer asking about? Their words first, then
+  // recency: "my payment to my FNB account" is a pay-out even if a deposit
+  // exists; a bare "did my payment go through" means the newest one.
+  const wantsPayout = /\b(withdraw\w*|pay-?outs?|cash-?outs?|bank|account|fnb|absa|nedbank|capitec|standard bank|tyme\w*|payshap|atm|e-?wallet|cash ?send)\b/i.test(rawText);
+  const wantsDeposit = /\b(deposit\w*|card|payfast|top-?up|loaded?|apple pay|google pay|eft)\b/i.test(rawText);
+  const payoutIsNewer = !!payout && (!intent || new Date(payout.createdAt) > new Date(intent.requestTs));
+  if (payout && !wantsDeposit && (wantsPayout || payoutIsNewer)) {
+    return await handlePayoutStatus({ from, account, payout });
   }
 
   const { balance } = await getUserBalance(from);
@@ -3179,6 +3201,54 @@ async function handleDepositStatus({ from, account }) {
   const localizedStatus = await localizeOutbound(text, await userLang(account));
   await addToConversationHistory(from, 'assistant', localizedStatus);
   return await sendWhatsAppText({ to: from, text: localizedStatus });
+}
+
+/**
+ * The pay-out half of "did my payment go through". A PENDING pay-out is
+ * reconciled with OTT first (GetPaymentStatus, never a second PerformPayout):
+ * the webhook may never arrive (BUGLOG #53), and the customer must hear what
+ * the rail says now, not what we hoped last night. The balance is read AFTER
+ * the reconcile so a release shows up in the same reply.
+ */
+async function handlePayoutStatus({ from, account, payout }) {
+  const label = PAYOUT_METHODS[payout.method]?.label || 'your pay-out';
+  const amount = Number.isInteger(payout.amountCents) ? randsShort(payout.amountCents) : 'your withdrawal';
+  let status = payout.status;
+  let checked = null;
+  if (status === 'PENDING') {
+    checked = await reconcilePayout({ reference: payout.reference }).catch(() => null);
+    if (checked?.status === 'SETTLED') status = 'SUCCESS';
+    else if (checked?.status === 'FAILED') status = 'FAILED';
+  }
+  const { balance } = await getUserBalance(from);
+
+  let text;
+  if (status === 'SUCCESS') {
+    text = `✅ Your withdrawal of ${amount} by ${label} was paid (reference ${payout.reference}).\n\n💰 Balance: R${balance}`;
+  } else if (status === 'FAILED') {
+    text =
+      `❌ Your withdrawal of ${amount} by ${label} did not go through (reference ${payout.reference}). The amount and the fee are back in your WaPay balance.\n\n` +
+      `💰 Balance: R${balance}\n\n` +
+      `Say "withdraw ${amount}" to try again.`;
+  } else {
+    const when = payout.createdAt
+      ? ` on ${new Date(payout.createdAt).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+      : '';
+    const railWords = checked?.message && /^[\w .,'()-]{3,80}$/.test(checked.message) ? `"${checked.message}"` : '';
+    const railLine = checked?.checked
+      ? `I checked with the bank rail just now and it is still processing${railWords ? ` (${railWords})` : ''}.`
+      : `I could not reach the bank rail this second, so I will keep checking.`;
+    const held = randsShort(Number(payout.amountCents || 0) + Number(payout.feeCents || 0));
+    const fee = Number.isInteger(payout.feeCents) ? ` plus the ${randsShort(payout.feeCents)} fee` : '';
+    text =
+      `⏳ Your withdrawal of ${amount} by ${label}${when} (reference ${payout.reference}) has not been confirmed by the bank yet. ${railLine}\n\n` +
+      `${held} (the amount${fee}) is held aside for it, not lost: the moment it is paid I will message you, and if the bank rejects it the money comes straight back to your balance.\n\n` +
+      `💰 Balance: R${balance}`;
+  }
+
+  const localized = await localizeOutbound(text, await userLang(account));
+  await addToConversationHistory(from, 'assistant', localized);
+  return await sendWhatsAppText({ to: from, text: localized });
 }
 
 /**
@@ -5584,7 +5654,7 @@ async function dispatchOrchestratorAction({ from, text, account, result }) {
     }
 
     case 'DEPOSIT_STATUS':
-      return await handleDepositStatus({ from, account });
+      return await handleDepositStatus({ from, account, rawText: text });
 
     case 'DEPOSIT_START': {
       if (amountCents) {

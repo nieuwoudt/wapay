@@ -4,6 +4,28 @@
 
 ---
 
+## 55. A syntax error in the message processor passed the whole unit suite
+
+- **Symptom (2026-09-16, caught by the build and the live harness, never by `node --test`):** a new parameter named `text` collided with an existing `let text` inside `handleDepositStatus`; 633 unit tests stayed green.
+- **Root cause:** every lock on the processor reads the file as a string and asserts on regexes. Nothing in the suite ever imported the module, so a file that could not parse was invisible to it.
+- **Fix:** parameter renamed (`rawText`).
+- **Guard:** `tests/processor-loads.test.mjs` imports `pages/api/webhooks/message-processor-v2.js`; a file that does not evaluate now fails the suite, not the deploy.
+
+## 54. "Did my payment go through?" answered a question about last night's R50 withdrawal with a weeks-old R20 deposit, twice
+
+- **Symptom (founder screenshots, 2026-09-16 08:35):** "Did my payment to tbh go through" and then "No my payment to my fnb account I did last night?" were both answered "✅ Your R20 deposit was received. 💰 Balance: R8.00". The R50 PayShap from 21:52 the night before was never mentioned.
+- **Root cause:** the deterministic status matcher and the AI's `DEPOSIT_STATUS` action both land in `handleDepositStatus`, which only ever read the newest PAYFAST deposit intent. No pay-out lookup existed anywhere in the chat (recon §3: "did my withdrawal go through" cannot be answered), so the words "to my fnb account" changed nothing.
+- **Fix:** the handler reads the newest deposit AND the newest pay-out (`getLatestPayout`), answers about the one the customer's words point at (bank / account / FNB / withdraw / PayShap → pay-out; deposit / card / PayFast → deposit) or the newest of the two, and a PENDING pay-out is reconciled with OTT live before the answer is composed (`handlePayoutStatus`); the balance is read after the reconcile. Withdrawal phrasings ("did my withdrawal go through", "withdrawal status") now reach the deterministic lookup too.
+- **Guard:** `tests/payout-reconcile.test.mjs` (matcher phrasings; static: both call sites pass the words, the pay-out branch exists, PENDING calls `reconcilePayout` before `getUserBalance`, every reply carries the live balance).
+
+## 53. A pay-out OTT answered with a code we do not know sat PENDING forever: nothing recorded, no webhook, nothing to reconcile from
+
+- **Symptom (founder's first live PayShap, 2026-09-15 21:52, reference WPC15800A7BD6637, R50 + R8):** the chat said "Sent … I'll message you the moment the bank confirms it, usually within minutes". Fourteen hours later the row was still `PENDING`, `outcome: UNKNOWN`, `reconcileRequired: false`, `responseJson: null`, R58 held in CASH, and no message had gone out.
+- **Root cause:** three gaps. (1) `classifyPayoutStatus` maps an unknown code to PENDING (correct: we may have paid) but `requestPayout` recorded only the outcome word, never OTT's status code or body, so nobody could see what the sandbox said. (2) `reconcileRequired` was set only for transport failures and status 3, so UNKNOWN was not even flagged. (3) `getPaymentStatus` existed in the client with no caller: the webhook was the only finaliser, and OTT's sandbox does not send one.
+- **Fix:** the PENDING record keeps `providerStatus`, `httpStatus` and a masked 300-char `providerBody`, and UNKNOWN sets `reconcileRequired`. `reconcilePayout(reference)` asks `GetPaymentStatus` and applies only a KNOWN terminal answer through `finalisePayout` (100 settles; a failure code releases and returns the money); 98/99/unknown stamp `lastProviderStatus`/`lastCheckedAt` and leave the hold; a transport failure changes nothing; never a second `PerformPayout`. `reconcilePendingPayouts` sweeps rows older than a grace period. `GET /api/internal/payout-reconcile[?reference=…]` (internal key) runs either and tells the customer with the same wording as the webhook (`payoutOutcomeMessage`, now the single source for both). The chat's status answer uses the same reconcile (BUGLOG #54).
+- **Guard:** `tests/payout-reconcile.test.mjs` (unknown code recorded masked + flagged; 100 settles; 97 releases and the money is back; 98/unknown/transport leave the hold ACTIVE; sweep honours the grace period; route gated and unable to start a pay-out; webhook uses the shared wording).
+- **Still open:** no scheduler calls the sweep (Vercel Hobby crons are daily); the internal route is the operator's tool until a cron or the customer's own question triggers it.
+
 ## 52. Below the minimum, the same line three times: "Please enter an amount between R50 and R3000"
 
 - **Symptom (founder screenshots, 2026-09-15 evening):** "Withdraw 30", Absa, then "20" three times, each answered with the same line. Absa's minimum is R50 while Nedbank and FNB start at R20, and nothing said so or offered a way to change method ("Home" cancelled the whole withdrawal).

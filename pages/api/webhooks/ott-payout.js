@@ -7,7 +7,7 @@
 import { sendWhatsAppText } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
 import { verifyPayoutWebhook } from '../../../lib/ott-payout.js';
-import { finalisePayout, PAYOUT_METHODS } from '../../../lib/payouts.js';
+import { finalisePayout, payoutOutcomeMessage } from '../../../lib/payouts.js';
 
 export const config = { maxDuration: 25 };
 
@@ -27,12 +27,7 @@ export default async function handler(req, res) {
     if (out.accountId && (out.status === 'SETTLED' || out.status === 'FAILED') && !out.noop) {
       const account = await prisma.account.findUnique({ where: { id: out.accountId }, select: { waId: true } }).catch(() => null);
       if (account?.waId) {
-        const rands = (c) => `R${(Number(c || 0) / 100).toFixed(2).replace(/\.00$/, '')}`;
-        const label = PAYOUT_METHODS[out.method]?.label || 'your pay-out';
-        const text = out.status === 'SETTLED'
-          ? `✅ Your withdrawal of ${rands(out.amountCents)} by ${label} has been paid (reference ${out.reference}).`
-          : `❌ Your withdrawal of ${rands(out.amountCents)} by ${label} could not be completed by the bank rail (reference ${out.reference}). The full amount and the fee are back in your WaPay balance.`;
-        await sendWhatsAppText({ to: account.waId, text }).catch(() => null);
+        await sendWhatsAppText({ to: account.waId, text: payoutOutcomeMessage(out) }).catch(() => null);
       }
     }
   } catch (error) {

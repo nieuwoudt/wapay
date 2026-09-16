@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-09-16 (34) — Pay-outs can be reconciled with OTT; "did my payment go through" knows about withdrawals; the processor must load
+
+The founder's first live PayShap (R50, 2026-09-15 21:52, reference
+WPC15800A7BD6637) came back from OTT's sandbox with a status code outside
+our table and parked as PENDING with nothing recorded, no webhook and
+nothing that could ever ask OTT again; the next morning "did my payment to
+my FNB account go through" was answered with a weeks-old R20 deposit
+(BUGLOG #53, #54). The PENDING record now keeps OTT's status code and a
+masked excerpt of the body and flags UNKNOWN for reconcile;
+`reconcilePayout` asks GetPaymentStatus and applies only a known terminal
+answer (100 settles, a failure code releases and returns the money; 98/99
+and unknown codes leave the hold and are stamped; transport failures change
+nothing; never a second PerformPayout); `reconcilePendingPayouts` sweeps
+rows older than a grace period; `GET /api/internal/payout-reconcile`
+(internal key, `?reference=` for one) runs either and tells the customer
+with the webhook's own wording, now a single shared function. The chat's
+status handler reads the newest deposit AND the newest pay-out, answers
+about the one the words point at, and reconciles a PENDING pay-out live
+before composing the reply; "did my withdrawal go through" reaches it
+deterministically. A parameter name collision in that handler passed 633
+unit tests and was caught only by the build (BUGLOG #55): the suite now
+imports the processor. Suite 634/634; build green; chat QA harness run
+before push.
+
 ## 2026-09-15 evening (33) — Idle states expire, greetings go home, short specific answers with a YES offer, minimum guidance; FNB eWallet + Nedbank cardless; harness drives a real pay-out
 
 Founder review 3 (BUGLOG #50, #51, #52): a flow parked for twelve hours
