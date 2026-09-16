@@ -41,7 +41,7 @@ that plan shipped on 2026-09-13/15; Phase 1 and Phase 2 are this brief.
 | # | The founder typed | Pay answered | What the founder wants (his words) | Root cause | State |
 |---|---|---|---|---|---|
 | 1 | "How can I withdraw money?" | The four-step walkthrough (`TOPICS.withdraw.answer` in `lib/how-it-works.js`: say withdraw and the amount / choose how / give the details / confirm and PIN, plus the identity-check line and the collection steps), then after YES the method menu | "This is a very simple answer. The user asked and I just gave it such a long answer, which looks like a static menu option. The user didn't ask for steps on how to withdraw money. It's just 'How can I withdraw money?' and say 'We have various options for how you can withdraw money' and just mention the options like you would in a conversation and then say 'How would you like the money to be withdrawn?' and then I'll guide you through the step by step. Instead of giving all this unnecessary information with a simple question, this sort of thing should be prompted to avoid it happening." | `wantsSteps()` treats "how can I" the same as "how do I": both earn the walkthrough. The `brief` (BUGLOG #51) exists and is the right shape, but this phrasing never reaches it. More fundamentally: a template chooses between two fixed strings; nothing composes a two-line answer with one question from the live option list. | **Open. v1.4 Task 3.** |
-| 2 | The PayShap flow: 1, 50, account number, FNB, 13-digit ID, Yes, PIN | "⏳ Sent. R50 has been handed to the bank rail (reference WPC15800A7BD6637). I'll message you the moment the bank confirms it, usually within minutes." Then, at 21:57: "Yes, I will message you here as soon as the bank confirms it" and "if a withdrawal fails, the money is returned to your WaPay balance" | "How can we test that this works? Can we test that it works with the float that's been added to our bank account or to our payouts account? … we'll do a payout to a specific account here based on the float we have available and then we'll just reconcile our systems to have the R58 that we have from the customer here in WaPay stay in an account wherever that is. We need a proper reconciliation ledger in our super business admin portal, of course, where we know: the clients' funds and where they sit; where the payouts sit so that we are always in positive." | The ledger side worked exactly as designed (SPEND to CASH, R58 hold, one PerformPayout). OTT's sandbox answered with a status code outside our table; the intent parked as PENDING/UNKNOWN with nothing recorded, the sandbox sends no webhook, and nothing existed to ask OTT again. The promise "I'll message you" could never be kept (BUGLOG #53). No reconciliation view exists in Mission Control beyond the supplier-float card. | **Reconcile path BUILT and deployed 2026-09-16** (`reconcilePayout`, `GET /api/internal/payout-reconcile`, chat asks the rail live). **Open: a scheduler for the sweep and the Mission Control payouts reconciliation card (v1.4 Task 5).** |
+| 2 | The PayShap flow: 1, 50, account number, FNB, 13-digit ID, Yes, PIN | "⏳ Sent. R50 has been handed to the bank rail (reference WPC15800A7BD6637). I'll message you the moment the bank confirms it, usually within minutes." Then, at 21:57: "Yes, I will message you here as soon as the bank confirms it" and "if a withdrawal fails, the money is returned to your WaPay balance" | "How can we test that this works? Can we test that it works with the float that's been added to our bank account or to our payouts account? … we'll do a payout to a specific account here based on the float we have available and then we'll just reconcile our systems to have the R58 that we have from the customer here in WaPay stay in an account wherever that is. We need a proper reconciliation ledger in our super business admin portal, of course, where we know: the clients' funds and where they sit; where the payouts sit so that we are always in positive." | The ledger side worked exactly as designed (SPEND to CASH, R58 hold, one PerformPayout). OTT's sandbox answered with a status code outside our table; the intent parked as PENDING/UNKNOWN with nothing recorded, the sandbox sends no webhook, and nothing existed to ask OTT again. The promise "I'll message you" could never be kept (BUGLOG #53). No reconciliation view exists in Mission Control beyond the supplier-float card. | **Reconcile path BUILT and deployed 2026-09-16 (`6f449eb`)** (`reconcilePayout`, `GET /api/internal/payout-reconcile`, chat asks the rail live). Run against OTT at 13:02 SAST: `GetPaymentStatus` answered `status 0, "Failed to retrieve record"` (no payout exists at OTT) → hold released, R58 back in SPEND, founder messaged. **Open: a scheduler for the sweep and the Mission Control payouts reconciliation card (v1.4 Task 5); confirm with OTT that status 0 on GetPaymentStatus always means no record (we treat it as terminal).** |
 | 3 | "How does fnb e wallet work?" then "Okay" and "I'll try later" | The eWallet brief; "Cool 😊 If you want to start, just type withdraw R<amount>."; "No stress 😊 When you're ready, just type withdraw R<amount>." | No annotation. Acceptable, but the two acknowledgements are canned strings, not a reply to what was said. | The fallback for a non-intent message is a fixed sentence. | Folds into Task 4 (the agent composes). |
 | 4 | "Where can I spend my OTT voucher?" | One paragraph: accepted online at Talk360, fibertime, ikeja, Capitec Connect, megsApp, Pay@, Xash, FoondaMate, LAYAWAY; not at supermarket tills, Takealot, Netflix, Showmax, Spotify, the networks' own sites; the 12-digit PIN; ottvoucher.com; then the YES offer | "This list should be a nice structured list. It shouldn't be all over the place like this. It should be formatted nicely always, not just this list. Any time a customer asks something and it's a long answer, the agent must try and break up that answer before he gives a long answer, if possible, or just give information (like high-level information at these retailers, blah, blah, blah). Point out where it's not accepted for example. This is just a chunk of text. It just doesn't feel like it's a natural conversation." | `TOPICS.ott.answer` and `lib/ott-acceptance.js` render facts as prose. There is no formatting policy anywhere: nothing says "three or more items become a list", nothing says "accepted / not accepted / how to pay are separate headed lines". | **Open. v1.4 Task 3.** |
 | 5 | 08:35 "Did my payment to tbh go through" and then "No my payment to my fnb account I did last night?" | Twice: "✅ Your R20 deposit was received. 💰 Balance: R8.00" (a card deposit from weeks earlier; the R50 PayShap from 21:52 the night before was never mentioned) | "It doesn't feel like there's a natural understanding of the past transactions inside of WaPay. The whole idea is to build an agentic native layer for the context of all the customer's transactions. When I ask a question as a user, 'Did my payment go through?' even if there was a spelling mistake, it should know what payment the customer is referring to. Look at all the latest payments that were made, bring that into context and say 'This payment, the last payment, are you referring to this? I assume you're referring to this last payment. No or yes, it didn't go through.'" | `handleDepositStatus` only ever read the newest PayFast deposit; no pay-out lookup existed in the chat (recon §3). The first message matched the deterministic status regex, the second was classified `DEPOSIT_STATUS` by the AI; both funnel into the same deposit-only handler (BUGLOG #54). The general capability (every recent movement in context, disambiguation between candidates) is recon Phase 1 and does not exist. | **Deposit-versus-pay-out FIXED and deployed 2026-09-16** (newest deposit AND newest pay-out, the words decide, PENDING reconciled live). **Open: the context pack and disambiguation (v1.4 Task 1).** |
@@ -179,8 +179,10 @@ Model ids stay env-tunable.
 
 ### Task 6 — Memory hygiene (recon §3)
 
-Store both sides of every turn (deterministic turns included); read history before
-writing the current message; redact bearer values (STS tokens, voucher PINs, wiCodes)
+Store both sides of every turn (deterministic turns included), including the messages
+the OTT webhook and the reconcile route send on their own (today they bypass
+`addToConversationHistory`, so the agent cannot see that it already told the customer
+a pay-out failed); read history before writing the current message; redact bearer values (STS tokens, voucher PINs, wiCodes)
 before storage; atomic jsonb merges for `conversationData`; a thirty-day retention job.
 
 ### Suggested order
@@ -306,8 +308,9 @@ Added in this thread:
 
 ## 8. Founder actions (open on 2026-09-16)
 
-1. Read the reconcile result for WPC15800A7BD6637 (in the session report) and decide
-   whether to reverse the test pay-out's journal if OTT never finalises it.
+1. WPC15800A7BD6637 is closed: OTT had no record of it, the hold was released and the
+   founder's balance is R66.00 again. Rerun "withdraw R50" once Keamo has said what the
+   sandbox returns (email 9).
 2. Send `EMAIL_TO_KEAMO_9_PAYOUT_COMMERCIALS.txt` (pay-out commercials per provider,
    production float mechanics, sandbox status codes, IP allowlist, production timeline).
 3. Send `EMAIL_TO_SIPHO_YOYO.txt` (campaign list, retainer, fees, float top-up,
@@ -330,7 +333,10 @@ Added in this thread:
 - The parked pay-out: reference **WPC15800A7BD6637**, idemKey
   `payout-cmi7t758h000dnf0ndpexchob-wa-mu32rl83-c4pbsy71`, PayShap (127), R50 + R8, FNB
   account ending 394, requested 2026-09-15 19:52:05 UTC (21:52 SAST); founder account id
-  `cmi7t758h000dnf0ndpexchob`, waId 27787051175; SPEND R8.00, CASH pending R58.00.
+  `cmi7t758h000dnf0ndpexchob`, waId 27787051175. Reconciled 2026-09-16 11:02:05 UTC:
+  `GetPaymentStatus` → `{status: 0, message: "Failed to retrieve record"}`, row FAILED
+  `PROVIDER_0`, SPEND back to R66.00, CASH 0. The original PerformPayout status code was
+  never recorded (old code); the sandbox sends no webhook.
 - Registered accounts (the allowlist): 27787051175 Nieuwoudt, 27726252243 Shaun Jacobs,
   27833092433 Mike Waller, 27827877781 Alan, 353877863507 ross (Irish number; SA rails
   will reject it at the provider).
@@ -344,8 +350,9 @@ Added in this thread:
   `https://pleasepayme.co.za/api/webhooks/ott-payout`.
 - OTT status codes: 100 paid, 99 pending finalisation, 98 pending, 0 rejected, 3
   reference not unique (reconcile, never release), 97 failed at provider; anything else
-  PENDING + reconcile. The sandbox returned a code outside this table on 2026-09-15
-  (see the reconcile result).
+  PENDING + reconcile. The sandbox returned a code outside this table on 2026-09-15 and
+  later had no record of the payout at all. `classifyPayoutStatus` is shared by
+  PerformPayout and GetPaymentStatus; status 0 on the latter releases the hold.
 - Yoyo `userRef` fails above 45 characters with "General System Error"; our references
   are 38. `getUserGiftCards` returns `data.giftcardList`.
 - OTT contacts: Keamo Modikwe (Senior Sales & Account Manager, keamo@ott-mobile.com,

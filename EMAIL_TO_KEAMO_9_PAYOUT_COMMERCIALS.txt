@@ -1,0 +1,46 @@
+To: Keamogetsoe Modikwe <keamo@ott-mobile.com>
+Subject: Re: OTT Payout: commercials per provider, production float, and two sandbox questions
+
+Hi Keamo,
+
+Thank you again for the help so far. We have now run the full WhatsApp withdrawal journey end to end on the payout sandbox, so this is a short list of what we need from you to plan production.
+
+FIRST TEST PAYOUT ON THE SANDBOX
+
+On 15 September at 21:52 we sent a PayShap Account payout of R50.00 with our reference WPC15800A7BD6637 (provider code 127). PerformPayout accepted the request but returned a status code that is not in the table in the Payout API document, and no status webhook reached our endpoint. When we queried GetPaymentStatus on 16 September it returned status 0 with the message "Failed to retrieve record", which we have read as "no payout exists for this reference" and reversed on our side.
+
+Could you confirm three things:
+
+1. What the sandbox returns for a PayShap Account PerformPayout, and whether the test environment sends the status webhook at all.
+2. Whether status 0 with "Failed to retrieve record" on GetPaymentStatus always means that no payout was created, so that we can safely release the customer's funds when we see it.
+3. Whether the test portal shows the request on your side, and what it shows.
+
+COMMERCIALS PER PROVIDER
+
+We have enabled four providers on the merchant: PayShap Account (127), ABSA CashSend (112), Nedbank Cardless Withdrawal (4) and FNB e-wallet (1). The addendum we hold prices PayShap at R2.50, RTC at R4.50, Nedbank Cardless at R9.96 plus 0.3% switching and ABSA CashSend at R9.96 plus 0.3% switching, with reversals at R10.00. FNB e-wallet is not priced in anything we have.
+
+Please confirm, per provider:
+
+1. The price per transaction in production, and whether it is excluding VAT.
+2. The FNB e-wallet price, and whether it carries the 0.3% switching fee.
+3. Any monthly minimum, platform fee, or SMS charge for the cash collection codes.
+4. Reversal and failed transaction fees, and whether a failed payout is charged.
+5. Whether RTC can be enabled for us, and whether PayShap can be addressed by ShapID at some point (we currently send account number and branch code, as you advised).
+
+PRODUCTION FLOAT
+
+1. How we fund the payout float in production: bank details, the reference to use, lead time from payment to availability, and the minimum top-up.
+2. Whether there is an automated top-up option or a low balance alert, and whether GetBalance in production reflects the float in real time.
+3. How settlement and reconciliation reports reach us (portal export, email, API), and at what frequency.
+
+PRODUCTION READINESS
+
+1. What remains between us and production credentials for payouts: agreement countersignature, IP allowlisting for the payout API, anything else.
+2. A rough timeline, so we can schedule our launch and engineering work around it.
+
+Also still open from my last email: the IP allowlist question on the redemption API, and an indication of when the internal review is likely to conclude.
+
+Thank you Keamo, this is the last set of questions before we can put a date on going live with payouts.
+
+Regards
+Niev
