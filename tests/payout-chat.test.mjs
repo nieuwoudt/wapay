@@ -113,7 +113,8 @@ test('processor + menu + AI truth follow the switch; the PIN case is the only pa
   const script = read('../lib/spend-catalogue.js');
   assert.match(script, /if \(process\.env\.WAPAY_PAYOUT_ENABLED === 'true'\) \{\s*\n\s*return \(\s*\n\s*`💸 Withdrawals are live!/);
   const ai = read('../packages/ai/src/orchestrator.ts');
-  assert.match(ai, /process\.env\.WAPAY_PAYOUT_ENABLED === 'true' \? '- Getting money OUT \(withdrawals\): LIVE\./);
+  // 2026-09-16: the prompt renders from the per-customer withdrawLive argument, not the env.
+  assert.match(ai, /withdrawLive \? '- Getting money OUT \(withdrawals\): LIVE\./);
   const hook = read('../pages/api/webhooks/ott-payout.js');
   assert.ok(hook.indexOf('finalisePayout(') < hook.indexOf('sendWhatsAppText({ to: account.waId'), 'customer told after finalisation');
 });

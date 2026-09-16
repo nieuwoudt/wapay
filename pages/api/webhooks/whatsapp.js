@@ -9,7 +9,9 @@ import { processMessage } from './message-processor-v2.js';
 import { isReady } from '../../../lib/initTemplates.js';
 import { ensureTemplatesReady } from './_middleware.js';
 import { checkInboundWebhook, readRawBody } from '../../../lib/webhook-security.js';
-import { claimMessage } from '../../../lib/ledger-post.js';
+import { claimMessage, releaseClaim } from '../../../lib/ledger-post.js';
+import { unmarkMessageProcessed } from './user-manager.js';
+import { sendTypingIndicator, outboundSendCount } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
 
 // X-Hub-Signature-256 is an HMAC over the EXACT raw bytes Meta sent; Next's
@@ -101,8 +103,14 @@ export default async function handler(req, res) {
     // failure shipped on 2026-08-18 and cost a morning of debugging; the
     // long-running January deployment awaited, which is why it was stable).
     // Meta tolerates several seconds before retrying; typical processing is
-    // 2–10s, within the 60s function budget. Errors still ACK 200 so Meta
-    // does not retry-storm — message dedupe makes replays safe regardless.
+    // 2–10s, within the 60s function budget.
+    //
+    // Response rule: 200 when anything was sent to the customer, or the
+    // message was a duplicate. 500 (so Meta redelivers) ONLY when a turn
+    // threw before sending anything and its dedupe claim was released; a
+    // turn that threw after a send keeps its claim, so the redelivery would
+    // be deduped and the customer is never answered twice.
+    let retryable = false;
     await (async () => {
       try {
         // Best-effort template initialization: never block the webhook ACK on this.
@@ -155,6 +163,7 @@ export default async function handler(req, res) {
                   // not drive a second money flow. claimMessage is a DB-unique
                   // insert — false means this wa message id was already handled.
                   // Status callbacks never enter this loop, so they are unaffected.
+                  let typing = null;
                   if (messageId) {
                     let claimed = true;
                     try {
@@ -175,19 +184,58 @@ export default async function handler(req, res) {
                       console.log(JSON.stringify({ type: 'wa_webhook_duplicate', messageId }));
                       continue;
                     }
+                    // Mark read + show "typing" while the brain works (text
+                    // only). Best-effort: it never throws, bounded by its own
+                    // timeout, and the result does not affect the turn.
+                    if (messageType === 'text') {
+                      typing = sendTypingIndicator({ messageId });
+                    }
                   }
+
+                  // One turn of the brain. If it throws before anything was
+                  // sent, give the claim back and ask Meta to redeliver
+                  // (retryable -> 500 below). If it throws after a send, keep
+                  // the claim: a redelivery would answer the customer twice.
+                  const runTurn = async (turn) => {
+                    try {
+                      // Every send inside this turn is counted in its own scope.
+                      await runWithSendScope(async () => {
+                        try {
+                          await processMessage({ from, messageId, profile, ...turn });
+                        } catch (error) {
+                          error.sentSomething = outboundSendCount() > 0;
+                          throw error;
+                        }
+                      });
+                    } catch (error) {
+                      if (error?.sentSomething) {
+                        console.error(
+                          JSON.stringify({ type: 'wa_turn_failed_after_send', messageId, error: error?.message })
+                        );
+                      } else {
+                        const { released } = await releaseClaim({ waMessageId: messageId });
+                        // The processor's own dedupe ring must forget the id too,
+                        // or the redelivery is swallowed as a duplicate.
+                        await unmarkMessageProcessed(from, messageId);
+                        retryable = true;
+                        console.error(
+                          JSON.stringify({ type: 'wa_turn_failed_before_send', messageId, released, error: error?.message })
+                        );
+                      }
+                    } finally {
+                      // The typing indicator ran alongside the turn; settle it
+                      // before the ACK (it never rejects, so this is not
+                      // fire-and-forget).
+                      if (typing) { await typing; typing = null; }
+                    }
+                  };
 
                   // Handle different message types
                   if (messageType === 'text') {
                     const text = message.text?.body || '';
                     console.log('💬 Text message:', text);
 
-                    await processMessage({
-                      from,
-                      text,
-                      messageId,
-                      profile,
-                    });
+                    await runTurn({ text });
                   }
 
                   // Shared contact card — "send money to this person in my
@@ -211,13 +259,7 @@ export default async function handler(req, res) {
                       JSON.stringify({ hasNumber: Boolean(sharedContact.rawNumber), name: sharedContact.name })
                     );
 
-                    await processMessage({
-                      from,
-                      text: '',
-                      messageId,
-                      profile,
-                      sharedContact,
-                    });
+                    await runTurn({ text: '', sharedContact });
                   }
 
                   // Template quick-reply buttons
@@ -234,12 +276,7 @@ export default async function handler(req, res) {
                       })
                     );
 
-                    await processMessage({
-                      from,
-                      text: buttonText || buttonPayload || 'continue',
-                      messageId,
-                      profile,
-                    });
+                    await runTurn({ text: buttonText || buttonPayload || 'continue' });
                   }
 
                   // Interactive messages (button_reply, list_reply, product selection)
@@ -256,12 +293,7 @@ export default async function handler(req, res) {
                         JSON.stringify({ id: buttonId, title: buttonTitle })
                       );
 
-                      await processMessage({
-                        from,
-                        text: buttonTitle || buttonId || 'continue',
-                        messageId,
-                        profile,
-                      });
+                      await runTurn({ text: buttonTitle || buttonId || 'continue' });
                     }
 
                     if (interactiveType === 'list_reply') {
@@ -274,12 +306,7 @@ export default async function handler(req, res) {
                         JSON.stringify({ id: listId, title: listTitle, description: listDescription })
                       );
 
-                      await processMessage({
-                        from,
-                        text: listTitle || listId || 'continue',
-                        messageId,
-                        profile,
-                      });
+                      await runTurn({ text: listTitle || listId || 'continue' });
                     }
 
                     if (interactiveType === 'product') {
@@ -291,24 +318,14 @@ export default async function handler(req, res) {
                         JSON.stringify({ id: productId, retailerId: productRetailerId })
                       );
 
-                      await processMessage({
-                        from,
-                        text: `Product: ${productRetailerId || productId}`,
-                        messageId,
-                        profile,
-                      });
+                      await runTurn({ text: `Product: ${productRetailerId || productId}` });
                     }
 
                     if (interactiveType === 'nfm_reply') {
                       const nfmReply = message.interactive?.nfm_reply;
                       console.log('📱 Flow reply received:', JSON.stringify(nfmReply));
 
-                      await processMessage({
-                        from,
-                        text: 'Flow completed',
-                        messageId,
-                        profile,
-                      });
+                      await runTurn({ text: 'Flow completed' });
                     }
                   }
                 }
@@ -353,6 +370,7 @@ export default async function handler(req, res) {
       }
     })();
 
+    if (retryable) return res.status(500).json({ ok: false, retry: true });
     res.status(200).json({ ok: true });
     console.log('✅ WA_WEBHOOK_ACK_SENT');
     return;

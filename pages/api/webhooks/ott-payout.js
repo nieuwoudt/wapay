@@ -4,7 +4,7 @@
  * lib/payouts.js finalisePayout (idempotent: a repeat is a no-op). Processing
  * completes BEFORE the 200, as with every webhook on Vercel.
  */
-import { sendWhatsAppText } from '@wapay/whatsapp';
+import { sendWhatsAppText } from '../../../lib/say.js';
 import prisma from '../../../lib/prisma.js';
 import { verifyPayoutWebhook } from '../../../lib/ott-payout.js';
 import { finalisePayout, payoutOutcomeMessage } from '../../../lib/payouts.js';

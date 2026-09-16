@@ -6,6 +6,8 @@
  * - log counts so we can detect if a vendor goes to 0 products
  * - refresh semantic-search embeddings for changed products (best-effort;
  *   an embeddings failure never fails the cron response)
+ * - sweep PENDING/INIT pay-outs and tell finalised customers (best-effort;
+ *   the Hobby plan allows one cron, so this is the sweep's daily floor)
  *
  * Auth:
  * - Vercel Cron header: x-vercel-cron=1 (preferred)
@@ -14,6 +16,8 @@
 
 import { syncBluDataCatalogue } from '../../../lib/vas-catalog-sync.js';
 import { syncProductEmbeddings } from '../../../lib/vas-embeddings.js';
+import { sweepPayoutsAndNotify } from '../../../lib/payouts.js';
+import { purgeOldTurns } from '../../../lib/turns.js';
 import prisma from '../../../lib/prisma.js';
 
 function isCronAuthed(req) {
@@ -49,7 +53,34 @@ export default async function handler(req, res) {
       embeddings = { embedded: 0, skipped: 0, failed: 0, error: e?.message || String(e) };
     }
 
-    return res.status(200).json({ ...out, embeddings });
+    // Best-effort pay-out sweep: must never fail the cron response.
+    let payoutSweep;
+    try {
+      // A daily floor only: five rows, twenty seconds, so the cron's other
+      // work (catalogue, embeddings, retention) is never starved.
+      const sweep = await sweepPayoutsAndNotify({ limit: 5, deadlineMs: 20 * 1000 });
+      payoutSweep = { skipped: sweep.skipped || null, ...sweep.counts };
+      console.log(JSON.stringify({ type: 'cron_payout_sweep', ...payoutSweep, timestamp: new Date().toISOString() }));
+    } catch (e) {
+      console.error(JSON.stringify({
+        type: 'cron_payout_sweep_failed',
+        error: e?.message || String(e),
+        timestamp: new Date().toISOString(),
+      }));
+      payoutSweep = { error: e?.message || String(e) };
+    }
+
+    // Conversation memory retention (docs/AGENT_ARCHITECTURE_V2.md C14): turns
+    // older than 30 days are deleted; best-effort, never fails the cron.
+    let turnsPurged = null;
+    try {
+      turnsPurged = await purgeOldTurns({ prisma, olderThanDays: 30 });
+      console.log(JSON.stringify({ type: 'cron_turns_purged', ...turnsPurged, timestamp: new Date().toISOString() }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_turns_purge_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
+    return res.status(200).json({ ...out, turnsPurged, embeddings, payoutSweep });
   } catch (e) {
     console.error('cron_daily_vas_sync_failed', e);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: e?.message || String(e) });

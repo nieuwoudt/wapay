@@ -48,11 +48,13 @@ test('processor free-text path uses orchestrate, not the legacy single call', ()
   assert.match(processorSource, /import \{[^}]*orchestrate[^}]*\} from '@wapay\/ai'/);
   assert.ok(!/chatWithAI\(/.test(processorSource), 'legacy chatWithAI call must be gone');
   // v1.3: every turn injects the data-driven, claim-gated spend knowledge.
+  // 2026-09-16: gated per CUSTOMER (the pilot allowlist), not the global switch.
   assert.match(
     processorSource,
-    /await orchestrate\(text, contextString, \{\s*knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\) \}\),\s*\}\)/
+    /await orchestrate\(text, contextString, \{\s*knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\) \}\),\s*withdrawLive: payoutAllowedFor\(from\),\s*\}\)/
   );
-  assert.match(processorSource, /dispatchOrchestratorAction\(\{ from, text, account, result \}\)/);
+  // 2026-09-16: the customer record (pack) rides along for the provenance guard and the policy gate.
+  assert.match(processorSource, /dispatchOrchestratorAction\(\{ from, text, account, result, pack \}\)/);
 });
 
 test('every declared action has a dispatch case', () => {
@@ -185,7 +187,13 @@ test('fake-receipt guard: receipt-shaped AI replies are blocked, honest fee talk
   assert.ok(!looksLikeReceipt('You can send R10 to R1000 as a WaPay voucher.'));
   // Wiring: the guard is applied to reply-only turns and observable in logs.
   assert.match(processorSource, /orchestrator_reply_blocked/);
-  assert.match(processorSource, /looksLikeReceipt\(reply\)/);
+  assert.match(processorSource, /looksLikeReceipt\(reply, knownAmounts\)/);
+  // Numeric provenance (2026-09-16): a receipt-shaped sentence whose every
+  // figure came from the ledger this turn is allowed; a figure from nowhere
+  // is still blocked.
+  assert.ok(!looksLikeReceipt('✅ Your R20 deposit was received. Balance is R66.', new Set([2000, 6600])));
+  assert.ok(looksLikeReceipt('✅ Your R20 deposit was received. Balance is R1000.', new Set([2000, 6600])));
+  assert.ok(looksLikeReceipt('✅ Deposit received: R1,000.00', new Set()));
 });
 
 test('bearer-digit redaction: voucher PINs never reach history or logs, phone numbers survive', () => {

@@ -43,12 +43,12 @@ Please enter your meter number:
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll receive the full *R20* however they pay. No fees on this one. 🎉
-[button:View my payment page -> https://pleasepayme.co.za/PRSZTBRG]
+[button:View my payment page -> https://pleasepayme.co.za/PRAAPQAG]
 ···
 🙏 *Pay WaPay QA Harness now* · R20 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRSZTBRG
+https://pleasepayme.co.za/PRAAPQAG
 ```
 
 </details>
@@ -151,12 +151,12 @@ Reply *1* or *2*, or "cancel".
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll get the full *R250* if they pay from their WaPay (free), or R237.20 if they pay by card.
-[button:View my payment page -> https://pleasepayme.co.za/PRFFEGRY]
+[button:View my payment page -> https://pleasepayme.co.za/PRRGHHXM]
 ···
 🙏 *Pay WaPay QA Harness now* · R250 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRFFEGRY
+https://pleasepayme.co.za/PRRGHHXM
 ```
 
 </details>
@@ -205,7 +205,7 @@ Just tell me what you need, in any language.
 **User:** My name is Thabo and I run a spaza shop in Soweto.
 
 ```
-Nice to meet you, Thabo 😊 A spaza shop sounds busy and proper. If you ever want a business account, I can help you set it up.
+Nice to meet you, Thabo 😊 A spaza shop in Soweto sounds busy in the best way. If you ever want, I can help with a business account too.
 ```
 
 **User:** What did I tell you my name was?
@@ -225,7 +225,7 @@ You told me your name was Thabo 😊
 **User:** Please remember that my favourite colour is green.
 
 ```
-Got it, Thabo 💚 I’ll remember that your favourite colour is green.
+Got it, I’ll remember that your favourite colour is green 😊
 ```
 
 **User:** buy electricity
@@ -248,7 +248,7 @@ Reply with an amount (e.g., R50, R100, R500)
 **User:** What is my favourite colour?
 
 ```
-Green 💚
+Your favourite colour is green 😊
 ```
 
 </details>
@@ -264,9 +264,7 @@ Green 💚
 **User:** Where can I spend my WaPay money!
 
 ```
-You can use your WaPay money for airtime and data, prepaid electricity, sending money, getting paid with a request link, and OTT vouchers online or in apps 💰📱
-
-Just say what you want to do, like “buy airtime”, “buy electricity”, or “please pay me”.
+You can spend it on airtime and data for any SA number, prepaid electricity, sending money to friends and family, and WaPay vouchers for online stores and apps. You can also use it to get paid with a please pay me link, or check your balance anytime 💰📱
 ```
 
 </details>
@@ -539,7 +537,7 @@ No monthly fees, ever. 😊
 **User:** cancel
 
 ```
-No problem 😊
+No problem 💡 What would you like to do instead?
 ```
 
 </details>
@@ -710,7 +708,7 @@ Reply *YES* to continue to your PIN, or *NO* to cancel.
 **User:** 1934
 
 ```
-✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WP3FA8EDC2ECC342. Fee R18.
+✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WP59DEEF2554136D. Fee R18.
 ```
 
 **User:** balance
@@ -750,7 +748,7 @@ Need anything else? Just ask me!
 
 Sawubona WaPay QA Harness!
 
-💵 Ibhalansi Yamanje: R 52.00
+💵 Ibhalansi yamanje: R 52.00
 
 Ufunani okunye? Ngicela ungibuze!
 ```
@@ -758,12 +756,12 @@ Ufunani okunye? Ngicela ungibuze!
 **User:** wat is my balans
 
 ```
-💰 *Ibhalansi yakho yeWaPay*
+💰 *Ibhalansi yakho ye-WaPay*
 
 Sawubona WaPay QA Harness!  
-Ibhalansi yakho yamanje ingu R 52.00
+Ibhalansi yakho yamanje ingu-R 52.00
 
- Yini ofuna ukuyenza ngokulandelayo?
+. Uthanda ukwenza ini kulandela?
 ```
 
 **User:** speak english
@@ -817,7 +815,7 @@ Manage customers, payment links and revenue at https://wapay.co.za/business. To 
 **User:** business login
 
 ```
-🔐 *WaPay for Business code: 070472*
+🔐 *WaPay for Business code: 618336*
 
 Type it into the business portal within 10 minutes. One attempt only.
 

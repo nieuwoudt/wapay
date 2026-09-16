@@ -13,7 +13,7 @@
  * customer is told, with the same words the webhook uses.
  */
 import crypto from 'node:crypto';
-import { sendWhatsAppText } from '@wapay/whatsapp';
+import { sendWhatsAppText } from '../../../lib/say.js';
 import prisma from '../../../lib/prisma.js';
 import { reconcilePayout, reconcilePendingPayouts, payoutOutcomeMessage, payoutConfigured } from '../../../lib/payouts.js';
 

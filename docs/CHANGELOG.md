@@ -4,6 +4,57 @@
 
 ---
 
+## 2026-09-16 (35) — The moat, Phase 0: the customer record and both sides of every turn reach the model; the open execute routes closed; pay-outs stuck at INIT reconciled; typing indicator; the registry and the policy engine
+
+The architecture review of 2026-09-16 (`docs/AGENT_ARCHITECTURE_V2.md`: 6
+readers, 4 designers, 3 judges, 1 synthesis, 24 refuters, 1 critic, page
+"Pay Agent Architecture") found the agent on paper right and unbuilt, and
+found live exposure the plan had not listed. This commit is Phase 0 of that
+document. Safety: the airtime, data and electricity execute routes require
+the internal key, check the preview's owner before the PIN, and release the
+hold on a crash unless the provider delivered (BUGLOG #56); every wallet-PIN
+state accepts only PIN-shaped input (#58); balance readers select the SPEND
+wallet (#59); the AI's cash-out position follows the per-customer pilot list
+like every other surface, with `orchestrate()` taking `withdrawLive` (#57);
+a turn that throws before sending releases its message claim and answers 500
+so Meta redelivers, and a typing indicator goes out right after the claim
+(#60); pay-outs stuck at INIT are reconciled with GetPaymentStatus only,
+swept by `GET /api/cron/payout-reconcile`, by a daily floor in the VAS sync,
+and on the customer's next message (#61). The spine: `lib/context-pack.js`
+reads the customer's balances, held amounts, last movements with references
+and states, the pending pay-out, open links and saved people in one batch
+and renders a KNOWN CUSTOMER FACTS block into every AI turn; `lib/turns.js`
+and `lib/say.js` record both sides of every turn (and the out-of-band
+senders) into the new `conversation_turns` table (migration applied to
+production before this deploy), and the model now sees the last 12 turns of
+both sides with the current message excluded (#62); the receipt guard accepts
+a receipt-shaped sentence only when every rand figure in it came from the
+record; "Transactions" (the home-card line with no handler), "my
+transactions", "what did I buy", "my withdrawals" and "who paid my link" are
+answered with ten rows from the ledger; "did my payment go through" names the
+newest movement and offers the other when two happened in the last day.
+Foundations for Phase 1 and 2: `lib/capabilities.js` (the registry, tested
+against the current home and help copy, not yet wired into them) and
+`lib/policy.js` (allow, deny, require; wired before a proposed flow starts and
+before a withdrawal). Before push a five-lens read-only adversarial review (money, privacy,
+runtime, behaviour, tests; 42 findings, each put to a refuter) confirmed 31,
+all fixed in the same commit: request-level OTT status codes never release a
+hold (#63); a PIN typed inside a sentence never escapes to the model (#64);
+login codes are never stored; bank account and ID numbers typed in the
+withdraw flow and grouped voucher PINs are redacted; the released message
+claim also clears the processor's own dedupe ring and a swallowed throw is
+rethrown when nothing was sent, so Meta's redelivery actually happens; the
+typing indicator runs alongside the turn; the send counter is scoped per
+turn; the on-inbound reconcile is throttled to ten minutes, uses a 3 s
+timeout and leaves status questions to the status handler; the pending
+pay-out is looked up directly; received gifts use the index; the customer
+record shows the spend balance and the cash balance separately and names
+saved people by first name only; the receipt guard admits only settled
+amounts and requires a success claim to name one; the withdraw and proposal
+gates leave KYC to the flow's own VERIFY step; a delivered-but-unsettled
+vend is marked RECONCILE. Unit 737/737 (63 → 73 test files), build green,
+chat QA harness 19/19.
+
 ## 2026-09-16 (34) — Pay-outs can be reconciled with OTT; "did my payment go through" knows about withdrawals; the processor must load
 
 The founder's first live PayShap (R50, 2026-09-15 21:52, reference

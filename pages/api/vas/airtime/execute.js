@@ -18,6 +18,7 @@ import { BluVasClient } from '@wapay/providers-blu';
 import { verifyPIN } from '@wapay/auth';
 import { BALANCE, RAIL, buildSpend } from '../../../../lib/ledger-core.js';
 import { reserveHold, settleHold, releaseHold, ensureWallet } from '../../../../lib/ledger-post.js';
+import { requireInternalAuth } from '../../../../lib/internal-auth.js';
 // IMPORTANT: This API route must NEVER send WhatsApp messages directly.
 // User-facing messages are orchestrated by `message-processor-v2` to guarantee exactly-once delivery.
 
@@ -67,7 +68,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
+  // Internal-only route: without this, any caller could burn PIN attempts and
+  // read wallet balances.
+  if (!requireInternalAuth(req, res)) return;
+
   const { previewId, pin, accountId } = req.body;
+
+  // Set the moment a hold is reserved; the outer catch releases it on any
+  // crash before delivery. Once the provider has delivered, the customer has
+  // the product and the hold must NOT be released (reconcile instead).
+  let holdIdemKey = null;
+  let providerDelivered = false;
 
   // Log the execute call
   logStructured('vas_airtime_execute_call', {
@@ -92,49 +103,8 @@ export default async function handler(req, res) {
     }
 
     // =========================================================================
-    // PIN Verification (REQUIRED)
-    // =========================================================================
-    if (!pin) {
-      logStructured('vas_airtime_execute_result', {
-        previewId,
-        accountId,
-        success: false,
-        error: 'MISSING_PIN',
-      });
-      return res.status(400).json({
-        error: 'USER_INPUT',
-        message: 'PIN is required for VAS purchases',
-      });
-    }
-
-    const pinResult = await verifyPIN({ accountId, pin });
-    
-    if (!pinResult.ok) {
-      logStructured('vas_airtime_execute_result', {
-        previewId,
-        accountId,
-        success: false,
-        error: 'PIN_FAILED',
-        pinError: pinResult.error,
-      });
-      logMetric('vas.airtime.pin_failure', 1, { error: pinResult.error });
-      
-      if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
-        return res.status(403).json({
-          error: 'AUTH',
-          message: 'Account is locked due to too many failed attempts',
-          lockedUntil: pinResult.lockedUntil?.toISOString(),
-        });
-      }
-      
-      return res.status(401).json({
-        error: 'AUTH',
-        message: 'Invalid PIN',
-      });
-    }
-
-    // =========================================================================
-    // Get and Validate Preview
+    // Get and Validate Preview (BEFORE the PIN: a caller must own the preview
+    // before they may spend a PIN attempt against it)
     // =========================================================================
     const preview = await prisma.providerRequest.findUnique({
       where: { id: previewId }
@@ -185,6 +155,48 @@ export default async function handler(req, res) {
     }
 
     // =========================================================================
+    // PIN Verification (REQUIRED)
+    // =========================================================================
+    if (!pin) {
+      logStructured('vas_airtime_execute_result', {
+        previewId,
+        accountId,
+        success: false,
+        error: 'MISSING_PIN',
+      });
+      return res.status(400).json({
+        error: 'USER_INPUT',
+        message: 'PIN is required for VAS purchases',
+      });
+    }
+
+    const pinResult = await verifyPIN({ accountId, pin });
+
+    if (!pinResult.ok) {
+      logStructured('vas_airtime_execute_result', {
+        previewId,
+        accountId,
+        success: false,
+        error: 'PIN_FAILED',
+        pinError: pinResult.error,
+      });
+      logMetric('vas.airtime.pin_failure', 1, { error: pinResult.error });
+
+      if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
+        return res.status(403).json({
+          error: 'AUTH',
+          message: 'Account is locked due to too many failed attempts',
+          lockedUntil: pinResult.lockedUntil?.toISOString(),
+        });
+      }
+
+      return res.status(401).json({
+        error: 'AUTH',
+        message: 'Invalid PIN',
+      });
+    }
+
+    // =========================================================================
     // Get Account (the SPEND wallet is ensured below, not required to pre-exist)
     // =========================================================================
     const account = await prisma.account.findUnique({ where: { id: accountId } });
@@ -225,6 +237,7 @@ export default async function handler(req, res) {
         balanceType: BALANCE.SPEND,
         reason: `airtime ${msisdn}`,
       });
+      holdIdemKey = idemKey;
     } catch (error) {
       if (error.code === 'INSUFFICIENT_FUNDS') {
         logStructured('vas_airtime_execute_result', {
@@ -254,6 +267,9 @@ export default async function handler(req, res) {
         idemKey,
         accountId,
       });
+      // The customer now has the airtime: a crash from here on must NOT
+      // release the hold (that would give the money back for a delivered product).
+      providerDelivered = true;
 
       const bluLatency = Date.now() - bluStartTime;
       logMetric('vas.airtime.blu_latency_ms', bluLatency, { vendorId, success: true });
@@ -353,7 +369,39 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    captureError(error, { 
+    // NEVER strand the customer's money: if a hold was reserved and this
+    // crash skipped the taxonomy paths, give the money back now. releaseHold
+    // is status-guarded (no-op on SETTLED/RELEASED), so this is safe even
+    // when the crash happened after a successful settle.
+    if (holdIdemKey && !providerDelivered) {
+      try {
+        await releaseHold({
+          idemKey: holdIdemKey,
+          reason: `execute_crashed:${String(error?.message || error).slice(0, 80)}`,
+        });
+      } catch (releaseError) {
+        logStructured('vas_airtime_crash_release_failed', {
+          previewId,
+          idemKey: holdIdemKey,
+          error: releaseError?.message,
+        });
+      }
+    } else if (holdIdemKey && providerDelivered) {
+      // The provider delivered but settle (or the bookkeeping after it)
+      // crashed. The customer HAS the product, so the hold must stay: an
+      // operator reconciles this by hand.
+      logStructured('vas_airtime_settle_failed_after_delivery', {
+        previewId,
+        idemKey: holdIdemKey,
+        error: error?.message,
+      });
+      // The product was delivered but the ledger did not settle: leave the
+      // hold, mark the row so the pack and an operator can see it (Phase 1
+      // adds the nightly settle of RECONCILE rows through the same idemKeys).
+      await prisma.providerRequest.update({ where: { id: previewId }, data: { status: 'RECONCILE' } }).catch(() => {});
+    }
+
+    captureError(error, {
       handler: 'vas/airtime/execute',
       body: { ...req.body, pin: '[REDACTED]' },
     });

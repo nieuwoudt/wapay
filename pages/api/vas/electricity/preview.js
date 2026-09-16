@@ -132,7 +132,9 @@ export default async function handler(req, res) {
       });
     }
 
-    const wallet = account.wallets?.[0];
+    // The SPEND wallet, never whichever wallet Prisma returned first (a
+    // CASH wallet exists after the first withdrawal attempt).
+    const wallet = account.wallets?.find((w) => w.balanceType === 'SPEND') || account.wallets?.[0];
     if (!wallet) {
       logStructured('vas_electricity_preview_result', {
         accountId,

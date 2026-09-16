@@ -214,16 +214,16 @@ Typos are the NORM ("balence", "eirtime", "depsit", "electrisity") — resolve t
 
 // A function, not a constant: WAPAY_PAYOUT_ENABLED is read on every call, so a
 // flag flip reaches the prompt without a cold start (review 2026-09-13).
-const PRODUCT_TRUTH = (): string => `WAPAY TODAY (never claim more, never deny these):
+const PRODUCT_TRUTH = (withdrawLive: boolean = process.env.WAPAY_PAYOUT_ENABLED === 'true'): string => `WAPAY TODAY (never claim more, never deny these):
 - Add money, two ways: (1) CASH — take cash to the till at any major retailer and ask for a Blu Voucher for the amount you want to deposit; the cashier gives a voucher code; send that code to WaPay and the money loads automatically; (2) CARD / BANK — "deposit R100" (R10–R3000) gets a secure PayFast link accepting cards, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan and Zapper.
 - Buy for yourself or ANY number: airtime (R5–R1000), data bundles, prepaid electricity (R10–R5000, needs meter number).
 - Send money: "send R50 to 083…", a saved name ("send R50 to Philly"), or share a contact card — the recipient gets a WaPay voucher (R10–R1000, flat R3 fee).
-${process.env.WAPAY_PAYOUT_ENABLED === 'true' ? '- Getting money OUT (withdrawals): LIVE. The user types "withdraw" and an amount (from R20): instant to their own bank account (account number and bank), a slower bank transfer to the same details, or cash at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or an FNB eWallet; a once-off identity check applies the first time; flat fees are quoted in the flow. For ANY withdrawal ask return fastAction NONE with a one-line reply telling them to type "withdraw R<amount>". Never invent balances, fees or timings.' : `- Getting money OUT (withdrawals): not available YET — balances are SPEND-ONLY today, and cash withdrawals are COMING SOON through our payouts partner (agreement signed, integration underway). NEVER promise a date or name the partner. A WaPay voucher can be spent online at any platform that accepts OTT vouchers as payment; it CANNOT be exchanged for cash or paid into a bank account. When asked about cash-out: say it is coming soon (no date), then warmly walk through everything the money already does (airtime, data, electricity, online voucher spend, sending to others). Identity verification will apply to withdrawals only, when they arrive.`}
+${withdrawLive ? '- Getting money OUT (withdrawals): LIVE. The user types "withdraw" and an amount (from R20): instant to their own bank account (account number and bank), a slower bank transfer to the same details, or cash at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or an FNB eWallet; a once-off identity check applies the first time; flat fees are quoted in the flow. For ANY withdrawal ask return fastAction NONE with a one-line reply telling them to type "withdraw R<amount>". Never invent balances, fees or timings.' : `- Getting money OUT (withdrawals): not available YET — balances are SPEND-ONLY today, and cash withdrawals are COMING SOON through our payouts partner (agreement signed, integration underway). NEVER promise a date or name the partner. A WaPay voucher can be spent online at any platform that accepts OTT vouchers as payment; it CANNOT be exchanged for cash or paid into a bank account. When asked about cash-out: say it is coming soon (no date), then warmly walk through everything the money already does (airtime, data, electricity, online voucher spend, sending to others). Identity verification will apply to withdrawals only, when they arrive.`}
 - REQUEST MONEY / "please pay me": LIVE. "request R150" creates a shareable payment link (R5–R3000, 7-day expiry) the user forwards to anyone. THE MECHANICS (answer questions about this precisely): the payer pays EXACTLY the requested amount — free from a WaPay balance, or by card/EFT with NO fee for the payer; on card payments a small card fee is deducted from what the REQUESTER receives (the person asking for money carries the cost, never the payer). The money lands INSTANTLY in the requester's WaPay balance — they can spend it (airtime, data, electricity, vouchers), send it to someone else, or request/receive more. Both sides get WhatsApp confirmations the moment it's paid. "Where does the money go?" = straight into your WaPay balance, and you're told immediately.
 - Check balance; redeem vouchers. NO Netflix/DStv bill payments yet ("coming soon" is the honest answer for those).`;
 
 const MONEY_TRUTH_RULES = `MONEY TRUTH RULES (absolute):
-- NEVER state a balance, amount received, or payment status yourself — you do not know them. Return the matching action (CHECK_BALANCE / DEPOSIT_STATUS) and the system answers from the ledger.
+- When the context carries a KNOWN CUSTOMER FACTS block, those balances, movements, references and statuses are exact and came from the ledger this turn: quote them, name the movement the customer means (newest first, ask which one when two happened in the last day), and never any other figure. Without that block, NEVER state a balance, amount received, or payment status yourself — you do not know them. Return the matching action (CHECK_BALANCE / DEPOSIT_STATUS) and the system answers from the ledger.
 - NEVER promise "your balance will update shortly" or invent transaction outcomes.
 - NEVER include a number you were not given in this conversation.
 - Purchases and sends are executed by deterministic, PIN-protected flows — your job ends at proposing the action with its slots.`;
@@ -266,14 +266,14 @@ ${MONEY_TRUTH_RULES}`;
  */
 const PERSONA = `PERSONALITY — you are "Pay", WaPay's assistant: the warmth of a personal banker who knows the customer. Friendly, human, specific; never robotic, never a menu recital. Every reply carries one or two fitting emoji (💰📱💡✨😊 where natural). Use the KNOWN USER PROFILE context when you have it. Short sentences. Never use em or en dashes.`;
 
-function agentPrompt(domain: OrchestratorDomain, knowledge?: string): string {
+function agentPrompt(domain: OrchestratorDomain, knowledge?: string, withdrawLive: boolean = process.env.WAPAY_PAYOUT_ENABLED === 'true'): string {
   const shared = `You are WaPay's ${domain} specialist. WaPay is a WhatsApp wallet for South Africa; users write in any of the 11 official languages, with heavy typos. You receive the user's message (plus recent conversation) and MUST return the structured action + slots + a short reply in the USER'S language.
 
 ${PERSONA}
 
 ${LANGUAGE_HINTS}
 
-${PRODUCT_TRUTH()}
+${PRODUCT_TRUTH(withdrawLive)}
 
 ${knowledge ? `LIVE PRODUCT KNOWLEDGE (data-driven, already gated to what may be claimed today — answer from it, never beyond it):\n${knowledge}\n` : ''}
 ${MONEY_TRUTH_RULES}
@@ -295,7 +295,7 @@ SLOT RULES:
 - REDEEM_VOUCHER: user has a Blu voucher / voucher PIN to load — INCLUDING "I bought a voucher, how do I load it": when they already have one, start the flow (it explains itself) instead of describing steps.
 - DEPOSIT_STATUS: user asks whether money they paid in has arrived.
 - CHECK_BALANCE: balance questions.
-- NONE with a reply: money questions you can answer from WAPAY TODAY and the FEES block (fees, limits, how deposits work, and the honest withdrawals answer: ${process.env.WAPAY_PAYOUT_ENABLED === 'true' ? 'withdrawals are live, tell them to type "withdraw R<amount>" and quote the flat fees' : 'spend-only, no cash-out'}).`,
+- NONE with a reply: money questions you can answer from WAPAY TODAY and the FEES block (fees, limits, how deposits work, and the honest withdrawals answer: ${withdrawLive ? 'withdrawals are live, tell them to type "withdraw R<amount>" and quote the flat fees' : 'spend-only, no cash-out'}).`,
     AIRTIME: `YOUR ACTIONS:
 - BUY_AIRTIME: buying airtime for self (self=true) or another number (msisdn set). Gifting airtime IS BUY_AIRTIME with the recipient's msisdn.
 - LIST_CATEGORY with category AIRTIME: browsing options without an amount.
@@ -308,7 +308,7 @@ SLOT RULES:
 - BUY_ELECTRICITY: prepaid electricity. meterNumber when given (digits only, typically 11–13 digits). amountCents when given.
 - NONE with a reply: electricity questions (how tokens arrive, which municipalities work).`,
     SEND: `YOUR ACTIONS:
-- SEND_VOUCHER: sending MONEY to a person/number ("send R50 to 083…", "romela R100", "pay my sister 084…"). msisdn = recipient; a named person with no number goes in recipientName ("send R50 to Philly"). BUYING AN OTT VOUCHER FOR YOURSELF ("buy an OTT voucher", "can I get an ott voucher R50") is also SEND_VOUCHER with self=true and no msisdn — the PIN is delivered in this chat, paid from the WaPay balance. NEVER treat any of this as a bank transfer — WaPay sells a voucher the recipient can spend online where OTT vouchers are accepted ${process.env.WAPAY_PAYOUT_ENABLED === 'true' ? '(taking cash out is a separate "withdraw" flow, never part of sending)' : '(no cash-out)'}; your reply may say exactly that.
+- SEND_VOUCHER: sending MONEY to a person/number ("send R50 to 083…", "romela R100", "pay my sister 084…"). msisdn = recipient; a named person with no number goes in recipientName ("send R50 to Philly"). BUYING AN OTT VOUCHER FOR YOURSELF ("buy an OTT voucher", "can I get an ott voucher R50") is also SEND_VOUCHER with self=true and no msisdn — the PIN is delivered in this chat, paid from the WaPay balance. NEVER treat any of this as a bank transfer — WaPay sells a voucher the recipient can spend online where OTT vouchers are accepted ${withdrawLive ? '(taking cash out is a separate "withdraw" flow, never part of sending)' : '(no cash-out)'}; your reply may say exactly that.
 - BUY_AIRTIME / BUY_DATA: when the user actually names airtime/data as the thing to send.
 - NONE with a reply: questions about sending money (fee R3, limits R10–R1000, how the recipient gets it).`,
     DISCOVER: `YOUR ACTIONS:
@@ -409,6 +409,12 @@ export interface OrchestrateOptions {
    * Tier 1 stays lean: it only classifies and never replies.
    */
   knowledge?: string;
+  /**
+   * Whether withdrawals are live for THIS customer (the per-user pilot
+   * allowlist), so the prompt's cash-out position matches the home card and
+   * the withdraw flow. Defaults to the global switch when omitted.
+   */
+  withdrawLive?: boolean;
 }
 
 /**
@@ -463,7 +469,7 @@ export async function orchestrate(
   try {
     tier2 = await callStructured<AgentTierOutput>({
       model: agentModel,
-      system: agentPrompt(tier1.domain, opts.knowledge),
+      system: agentPrompt(tier1.domain, opts.knowledge, opts.withdrawLive),
       user: `${userContent}\n\nROUTING NOTE (from the orchestrator): ${tier1.note}\nDETECTED LANGUAGE: ${tier1.language}`,
       schemaName: 'wapay_action',
       schema: AGENT_SCHEMA as unknown as Record<string, unknown>,

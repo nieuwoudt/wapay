@@ -109,7 +109,9 @@ export default async function handler(req, res) {
     }
     logStructured('vas_airtime_preview_account_ok', { accountId });
 
-    const wallet = account.wallets?.[0];
+    // The SPEND wallet, never whichever wallet Prisma returned first (a
+    // CASH wallet exists after the first withdrawal attempt).
+    const wallet = account.wallets?.find((w) => w.balanceType === 'SPEND') || account.wallets?.[0];
     if (!wallet) {
       logStructured('vas_airtime_preview_result', {
         accountId,

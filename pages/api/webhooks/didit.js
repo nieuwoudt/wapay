@@ -14,7 +14,7 @@
  */
 
 import prisma from '../../../lib/prisma.js';
-import { sendWhatsAppText } from '@wapay/whatsapp';
+import { sendWhatsAppText } from '../../../lib/say.js';
 import { localizeOutbound } from '../../../lib/localize.js';
 import {
   diditConfigured,

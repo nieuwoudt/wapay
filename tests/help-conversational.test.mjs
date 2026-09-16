@@ -68,7 +68,7 @@ test('the Pay persona mandates warmth and emoji in every reply', () => {
 
 test('the engine accepts injected knowledge and threads it into tier-2 prompts', () => {
   assert.match(engineSource, /OrchestrateOptions/);
-  assert.match(engineSource, /agentPrompt\(tier1\.domain, opts\.knowledge\)/);
+  assert.match(engineSource, /agentPrompt\(tier1\.domain, opts\.knowledge, opts\.withdrawLive\)/);
   assert.match(engineSource, /LIVE PRODUCT KNOWLEDGE/);
 });
 
@@ -90,10 +90,10 @@ test('HELP dispatch: question-shaped input gets the spend answer, not the menu',
   assert.match(helpCase, /explicitMenuAsk/, 'the explicit-menu gate exists');
   assert.match(
     helpCase,
-    /buildSpendDestinationsReply\(\{ wicodeLive: fuelLiveFor\(from\) \}\)/,
+    /buildSpendDestinationsReply\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\) \}\)/,
     'the fallback answer is the data-driven spend reply, claim-gated per user'
   );
-  assert.match(helpCase, /looksLikeReceipt\(reply\)/, 'a composed reply still passes the receipt guard');
+  assert.match(helpCase, /looksLikeReceipt\(reply, knownAmounts\)/, 'a composed reply still passes the receipt guard, with the record as provenance');
   // The menu must be gated BEHIND the explicit-ask check, not before it.
   const gateAt = helpCase.indexOf('explicitMenuAsk');
   const menuAt = helpCase.indexOf('WaPay Help Menu');
@@ -114,7 +114,7 @@ test('HELP dispatch: question-shaped input gets the spend answer, not the menu',
 test('the brain is fed the claim-gated spend knowledge on every AI turn, per user', () => {
   assert.match(
     processorSource,
-    /knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\) \}\)/
+    /knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\) \}\)/
   );
   // The helper composes the production flag with the pilot allowlist.
   assert.match(processorSource, /function fuelLiveFor\(waId\) \{\s*return isCategoryEnabledForWaId\('FUEL', waId\);/);

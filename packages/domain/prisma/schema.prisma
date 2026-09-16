@@ -416,3 +416,21 @@ model PendingGift {
 }
 
 
+/// Both sides of every chat turn, append-only (2026-09-16). Replaces the
+/// 10-message JSON ring in Account.conversationData.history. Text is
+/// redacted before insert (lib/turns.js) — no bearer digits ever land here.
+model ConversationTurn {
+  id          String   @id @default(cuid())
+  accountId   String
+  role        String // user | assistant | event
+  kind        String? // agent | flow | guard | home | receipt | payout_webhook | reconcile | itn
+  text        String
+  lang        String?
+  waMessageId String?
+  refs        Json?
+  createdAt   DateTime @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([waMessageId])
+  @@map("conversation_turns")
+}

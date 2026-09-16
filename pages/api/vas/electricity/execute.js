@@ -18,6 +18,7 @@ import { isCategoryEnabledForWaId } from '../../../../lib/vas-config.js';
 import { buildElectricitySalePayload } from '../../../../lib/electricity-utils.js';
 import { BALANCE, RAIL, buildSpend } from '../../../../lib/ledger-core.js';
 import { reserveHold, settleHold, releaseHold, ensureWallet } from '../../../../lib/ledger-post.js';
+import { requireInternalAuth } from '../../../../lib/internal-auth.js';
 
 /**
  * Structured logging helper
@@ -38,7 +39,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
+  // Internal-only route: without this, any caller could burn PIN attempts and
+  // read wallet balances.
+  if (!requireInternalAuth(req, res)) return;
+
   const { previewId, pin, accountId } = req.body;
+
+  // Set the moment a hold is reserved; the outer catch releases it on any
+  // crash before delivery. Once Blu has vended the token, the customer has
+  // the product and the hold must NOT be released (reconcile instead).
+  let holdIdemKey = null;
+  let providerDelivered = false;
 
   // Log the execute call
   logStructured('vas_electricity_execute_call', {
@@ -73,6 +84,50 @@ export default async function handler(req, res) {
       return res.status(400).json({
         error: 'USER_INPUT',
         message: 'Missing required fields: previewId, accountId'
+      });
+    }
+
+    // Get and Validate Preview (BEFORE the PIN: a caller must own the preview
+    // before they may spend a PIN attempt against it)
+    const preview = await prisma.providerRequest.findUnique({
+      where: { id: previewId }
+    });
+
+    if (!preview || preview.status !== 'PENDING') {
+      logStructured('vas_electricity_execute_result', {
+        previewId,
+        accountId,
+        success: false,
+        error: 'PREVIEW_NOT_FOUND',
+      });
+      return res.status(404).json({
+        error: 'USER_INPUT',
+        message: 'Preview not found or already processed'
+      });
+    }
+
+    // Check if preview expired (5 minutes)
+    const metadata = preview.metadata || {};
+    const expiresAt = new Date(metadata.expiresAt);
+    if (new Date() > expiresAt) {
+      logStructured('vas_electricity_execute_result', {
+        previewId,
+        accountId,
+        success: false,
+        error: 'PREVIEW_EXPIRED',
+      });
+      return res.status(400).json({
+        error: 'USER_INPUT',
+        message: 'Preview expired. Please start again.'
+      });
+    }
+
+    // Verify account ownership
+    const previewAccountId = preview.accountId || metadata.accountId;
+    if (previewAccountId !== accountId) {
+      return res.status(403).json({
+        error: 'AUTH',
+        message: 'Not authorized to execute this preview'
       });
     }
 
@@ -115,48 +170,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Get and Validate Preview
-    const preview = await prisma.providerRequest.findUnique({
-      where: { id: previewId }
-    });
-
-    if (!preview || preview.status !== 'PENDING') {
-      logStructured('vas_electricity_execute_result', {
-        previewId,
-        accountId,
-        success: false,
-        error: 'PREVIEW_NOT_FOUND',
-      });
-      return res.status(404).json({
-        error: 'USER_INPUT',
-        message: 'Preview not found or already processed'
-      });
-    }
-
-    // Check if preview expired (5 minutes)
-    const metadata = preview.metadata || {};
-    const expiresAt = new Date(metadata.expiresAt);
-    if (new Date() > expiresAt) {
-      logStructured('vas_electricity_execute_result', {
-        previewId,
-        accountId,
-        success: false,
-        error: 'PREVIEW_EXPIRED',
-      });
-      return res.status(400).json({
-        error: 'USER_INPUT',
-        message: 'Preview expired. Please start again.'
-      });
-    }
-
-    // Verify account ownership
-    if (metadata.accountId !== accountId) {
-      return res.status(403).json({
-        error: 'AUTH',
-        message: 'Not authorized to execute this preview'
-      });
-    }
-
     // Extract purchase details from preview
     const { meterNumber, amountCents, serviceFee, totalCents, reference, transactionTypeId, utility, consumer } = metadata;
 
@@ -178,6 +191,7 @@ export default async function handler(req, res) {
         balanceType: BALANCE.SPEND,
         reason: `electricity ${meterNumber}`,
       });
+      holdIdemKey = idemKey;
     } catch (error) {
       if (error.code === 'INSUFFICIENT_FUNDS') {
         logStructured('vas_electricity_execute_result', {
@@ -234,6 +248,9 @@ export default async function handler(req, res) {
         });
         bluResult = await bluClient.purchaseElectricity(payload);
       }
+      // The token has been vended: a crash from here on must NOT release the
+      // hold (that would give the money back for a delivered product).
+      providerDelivered = true;
 
       const bluLatency = Date.now() - bluStartTime;
       logStructured('vas_electricity_blu_success', {
@@ -342,6 +359,38 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
+    // NEVER strand the customer's money: if a hold was reserved and this
+    // crash skipped the taxonomy paths, give the money back now. releaseHold
+    // is status-guarded (no-op on SETTLED/RELEASED), so this is safe even
+    // when the crash happened after a successful settle.
+    if (holdIdemKey && !providerDelivered) {
+      try {
+        await releaseHold({
+          idemKey: holdIdemKey,
+          reason: `execute_crashed:${String(error?.message || error).slice(0, 80)}`,
+        });
+      } catch (releaseError) {
+        logStructured('vas_electricity_crash_release_failed', {
+          previewId,
+          idemKey: holdIdemKey,
+          error: releaseError?.message,
+        });
+      }
+    } else if (holdIdemKey && providerDelivered) {
+      // Blu vended the token but settle (or the bookkeeping after it)
+      // crashed. The customer HAS the token, so the hold must stay: an
+      // operator reconciles this by hand.
+      logStructured('vas_electricity_settle_failed_after_delivery', {
+        previewId,
+        idemKey: holdIdemKey,
+        error: error?.message,
+      });
+      // The product was delivered but the ledger did not settle: leave the
+      // hold, mark the row so the pack and an operator can see it (Phase 1
+      // adds the nightly settle of RECONCILE rows through the same idemKeys).
+      await prisma.providerRequest.update({ where: { id: previewId }, data: { status: 'RECONCILE' } }).catch(() => {});
+    }
+
     console.error('Electricity execute error:', error);
     logStructured('vas_electricity_execute_error', {
       previewId,

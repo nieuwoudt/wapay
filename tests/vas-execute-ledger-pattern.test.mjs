@@ -59,6 +59,34 @@ test('VAS execute routes never put Date.now() in idempotency material', async ()
   }
 });
 
+test('VAS execute routes are internal-only, verify ownership before the PIN, and release the hold on a crash before delivery', async () => {
+  for (const [name, relPath] of ROUTES.filter(([n]) => ['airtime', 'data', 'electricity'].includes(n))) {
+    const text = await fileText(relPath);
+
+    // Internal-only: without the guard any caller could burn PIN attempts
+    // against someone else's account and read wallet balances.
+    assert.ok(text.includes('requireInternalAuth('), `${name}: must call requireInternalAuth()`);
+
+    // Ownership before the PIN: the preview must be loaded, checked and
+    // verified as the caller's BEFORE a PIN attempt is spent on it.
+    const previewIdx = text.indexOf('providerRequest.findUnique');
+    const pinIdx = text.indexOf('verifyPIN(');
+    const ownershipIdx = text.indexOf('preview.accountId || metadata.accountId');
+    assert.ok(previewIdx > -1, `${name}: must load the preview via providerRequest.findUnique`);
+    assert.ok(pinIdx > -1, `${name}: must call verifyPIN`);
+    assert.ok(ownershipIdx > -1, `${name}: must verify preview ownership via preview.accountId || metadata.accountId`);
+    assert.ok(previewIdx < pinIdx, `${name}: preview must be loaded before verifyPIN`);
+    assert.ok(ownershipIdx < pinIdx, `${name}: ownership check must precede verifyPIN`);
+
+    // Crash safety: a hold reserved before the provider call is released by
+    // the outer catch if the crash happened before delivery, and NOT released
+    // (reconciled instead) once the customer has the product.
+    for (const marker of ['holdIdemKey', 'providerDelivered', 'execute_crashed', '_settle_failed_after_delivery']) {
+      assert.ok(text.includes(marker), `${name}: must include ${marker}`);
+    }
+  }
+});
+
 /**
  * Extract the full argument span of every call to the named functions,
  * scanning with balanced parentheses and skipping parens inside '…', "…" and

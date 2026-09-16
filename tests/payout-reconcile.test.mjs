@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { requestPayout, reconcilePayout, reconcilePendingPayouts, getLatestPayout, payoutOutcomeMessage } from '../lib/payouts.js';
+import { requestPayout, reconcilePayout, reconcilePendingPayouts, reconcileInitPayout, sweepPayoutsAndNotify, getLatestPayout, payoutOutcomeMessage, payoutReference } from '../lib/payouts.js';
 import { matchDepositStatusRequest } from '../lib/deposits.js';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
@@ -30,9 +30,12 @@ function env() {
   delete process.env.WAPAY_PAYOUT_KYC;
 }
 function stubPrisma() {
-  const prs = [];
+  const prs = []; const journal = new Map(); const holds = new Map(); const accounts = new Map([['acc-1', { id: 'acc-1', waId: '27731234567' }]]);
   return {
-    _prs: prs,
+    _prs: prs, _journal: journal, _holds: holds, _accounts: accounts,
+    journalEntry: { async findUnique({ where }) { return journal.get(where.idemKey) ? { ...journal.get(where.idemKey) } : null; } },
+    hold: { async findUnique({ where }) { return holds.get(where.idemKey) ? { ...holds.get(where.idemKey) } : null; } },
+    account: { async findUnique({ where }) { return accounts.get(where.id) || null; } },
     providerRequest: {
       async findUnique({ where }) { const r = prs.find((x) => x.idemKey === where.idemKey); return r ? { ...r } : null; },
       async findFirst({ where = {} }) {
@@ -50,20 +53,22 @@ function stubPrisma() {
     },
   };
 }
-function stubLedger({ spendCents = 100000 } = {}) {
-  const calls = []; const holds = new Map(); let spend = spendCents; let cash = 0;
+function stubLedger({ spendCents = 100000, prisma = null } = {}) {
+  const calls = []; const holds = prisma?._holds || new Map(); const journal = prisma?._journal || new Map(); let spend = spendCents; let cash = 0;
   return {
-    calls, holds, get spend() { return spend; }, get cash() { return cash; },
+    calls, holds, journal, get spend() { return spend; }, get cash() { return cash; },
     async ensureWallet() { calls.push('ensureWallet'); },
     async postEntry(e) {
       calls.push(`post:${e.source}`);
+      if (journal.has(e.idemKey)) return { idemKey: e.idemKey, replayed: true };
+      journal.set(e.idemKey, { idemKey: e.idemKey, source: e.source });
       if (e.source === 'BALANCE_UPGRADE') { const amt = e.postings[0].debitCents; spend -= amt; cash += amt; }
       if (e.source === 'BALANCE_DOWNGRADE') { const amt = e.postings[0].debitCents; cash -= amt; spend += amt; }
       return { idemKey: e.idemKey };
     },
-    async reserveHold({ idemKey, amountCents }) { calls.push('reserveHold'); holds.set(idemKey, { amountCents, status: 'ACTIVE' }); cash -= amountCents; return { holdId: idemKey, status: 'ACTIVE' }; },
-    async settleHold({ idemKey, entry }) { calls.push(`settleHold:${entry.source}`); holds.get(idemKey).status = 'SETTLED'; },
-    async releaseHold({ idemKey }) { calls.push('releaseHold'); const h = holds.get(idemKey); h.status = 'RELEASED'; cash += h.amountCents; },
+    async reserveHold({ idemKey, amountCents }) { calls.push('reserveHold'); holds.set(idemKey, { idemKey, amountCents, status: 'ACTIVE' }); cash -= amountCents; return { holdId: idemKey, status: 'ACTIVE' }; },
+    async settleHold({ idemKey, entry }) { calls.push(`settleHold:${entry.source}`); const h = holds.get(idemKey); if (!h) throw new Error(`No hold for idemKey ${idemKey}`); h.status = 'SETTLED'; },
+    async releaseHold({ idemKey }) { calls.push('releaseHold'); const h = holds.get(idemKey); if (!h) throw new Error(`No hold for idemKey ${idemKey}`); if (h.status !== 'ACTIVE') return { released: false, status: h.status }; h.status = 'RELEASED'; cash += h.amountCents; return { released: true }; },
   };
 }
 const providers = [{ method: 'PAYSHAP', label: 'PayShap', providerCode: '127', providerName: 'PayShap Account' }];
@@ -187,6 +192,172 @@ test('withdrawal phrasings reach the deterministic status lookup', () => {
   }
 });
 
+/**
+ * An INIT row exactly as requestPayout leaves it when the process dies before
+ * PerformPayout answers: the row, then (optionally) the upgrade, then
+ * (optionally) the hold, each posted through the same stubs the live flow uses.
+ */
+async function stranded({ prisma, ledger, intentId = 'intent-9000', upgrade = true, hold = true, ageMs = 60 * 60 * 1000, amountCents = 5000, feeCents = 800 }) {
+  const idemKey = `payout-acc-1-${intentId}`;
+  const reference = payoutReference(idemKey);
+  const meta = { method: 'PAYSHAP', amountCents, feeCents, reference, recipient: { name: 'N G', mobile: '•••175', account: '•••394' }, businessId: null, intentId };
+  const row = await prisma.providerRequest.create({ data: { provider: 'OTT', route: 'ott-payout', idemKey, status: 'INIT', accountId: 'acc-1', metadata: meta } });
+  prisma._prs.find((x) => x.idemKey === idemKey).requestTs = new Date(Date.now() - ageMs);
+  if (upgrade) await ledger.postEntry({ idemKey: `${idemKey}-upgrade`, source: 'BALANCE_UPGRADE', postings: [{ debitCents: amountCents + feeCents }] });
+  if (hold) await ledger.reserveHold({ accountId: 'acc-1', amountCents: amountCents + feeCents, idemKey: `${idemKey}-hold` });
+  ledger.calls.length = 0;
+  return { ...row, idemKey, reference };
+}
+const noRecord = { status: 0, settlement: 'RELEASE', outcome: 'PAYOUT_REJECTED', body: { status: 0, message: 'Failed to retrieve record' } };
+const holdOf = (prisma, k) => prisma._holds.get(`${k}-hold`);
+
+test('INIT + OTT has no record + upgrade and hold posted: hold released, downgrade posted, row FAILED, customer fields returned', async () => {
+  env();
+  const prisma = stubPrisma(); const ledger = stubLedger({ prisma });
+  const c = client(unknownCode, noRecord);
+  const pr = await stranded({ prisma, ledger });
+  assert.equal(ledger.spend, 100000 - 5800); assert.equal(ledger.cash, 0, 'R58 sits in the hold');
+  const out = await reconcileInitPayout({ prisma, ledger, client: c, pr });
+  assert.equal(out.ok, true); assert.equal(out.status, 'FAILED'); assert.equal(out.checked, true);
+  assert.equal(out.accountId, 'acc-1'); assert.equal(out.amountCents, 5000); assert.equal(out.feeCents, 800); assert.equal(out.method, 'PAYSHAP'); assert.equal(out.reference, pr.reference);
+  assert.deepEqual(ledger.calls, ['releaseHold', 'post:BALANCE_DOWNGRADE']);
+  assert.equal(holdOf(prisma, pr.idemKey).status, 'RELEASED');
+  assert.ok(prisma._journal.has(`${pr.idemKey}-downgrade`), 'the downgrade is keyed deterministically off the intent');
+  assert.equal(ledger.spend, 100000, 'R50 + R8 fee back where they were'); assert.equal(ledger.cash, 0);
+  const row = prisma._prs[0];
+  assert.equal(row.status, 'FAILED'); assert.equal(row.metadata.outcome, 'INIT_ABANDONED_0'); assert.ok(row.metadata.finalisedAt); assert.ok(row.metadata.lastCheckedAt);
+  assert.match(payoutOutcomeMessage(out), /❌ Your withdrawal of R50 by PayShap could not be completed/);
+  assert.equal(c.calls.filter((x) => x[0] === 'perform').length, 0, 'never a PerformPayout from a reconcile');
+  assert.equal(c.calls.at(-1)[1].yourUniqueReference, pr.reference, 'OTT asked with OUR reference');
+  // a repeat is a no-op: the row is no longer INIT
+  assert.equal((await reconcileInitPayout({ prisma, ledger, client: c, pr: prisma._prs[0] })).noop, true);
+});
+
+test('INIT + only the upgrade posted (died before reserveHold): downgrade posted, no release attempted', async () => {
+  env();
+  const prisma = stubPrisma(); const ledger = stubLedger({ prisma });
+  const pr = await stranded({ prisma, ledger, hold: false });
+  const out = await reconcileInitPayout({ prisma, ledger, client: client(unknownCode, noRecord), pr });
+  assert.equal(out.status, 'FAILED'); assert.equal(out.released, false); assert.equal(out.downgraded, true);
+  assert.deepEqual(ledger.calls, ['post:BALANCE_DOWNGRADE']);
+  assert.equal(ledger.spend, 100000); assert.equal(ledger.cash, 0);
+  assert.equal(prisma._prs[0].status, 'FAILED');
+});
+
+test('INIT with nothing posted (died before the upgrade): row FAILED, the ledger is never touched', async () => {
+  env();
+  const prisma = stubPrisma(); const ledger = stubLedger({ prisma });
+  const pr = await stranded({ prisma, ledger, upgrade: false, hold: false });
+  const out = await reconcileInitPayout({ prisma, ledger, client: client(unknownCode, { status: '97', settlement: 'RELEASE', outcome: 'PROVIDER_FAILURE', body: { status: 97, message: 'Failed at provider' } }), pr });
+  assert.equal(out.status, 'FAILED'); assert.equal(out.released, false); assert.equal(out.downgraded, false);
+  assert.deepEqual(ledger.calls, []);
+  assert.equal(ledger.spend, 100000);
+  assert.equal(prisma._prs[0].status, 'FAILED'); assert.equal(prisma._prs[0].metadata.outcome, 'INIT_ABANDONED_97');
+});
+
+test('INIT + OTT says 100 + hold present: the row settles through finalisePayout', async () => {
+  env();
+  const prisma = stubPrisma(); const ledger = stubLedger({ prisma });
+  const pr = await stranded({ prisma, ledger });
+  const out = await reconcileInitPayout({ prisma, ledger, client: client(unknownCode, { status: '100', settlement: 'SETTLE', outcome: 'SUCCESS', body: { status: 100, message: 'Payment successful' } }), pr });
+  assert.equal(out.status, 'SETTLED'); assert.equal(out.accountId, 'acc-1'); assert.equal(out.amountCents, 5000); assert.equal(out.reference, pr.reference);
+  assert.equal(prisma._prs[0].status, 'SUCCESS'); assert.equal(prisma._prs[0].metadata.outcome, 'SUCCESS');
+  assert.equal(holdOf(prisma, pr.idemKey).status, 'SETTLED');
+  assert.deepEqual(ledger.calls, ['settleHold:CASHOUT_PAYSHAP', 'post:CASHOUT_COST_PAYSHAP']);
+  assert.equal(ledger.calls.includes('releaseHold'), false);
+  assert.match(payoutOutcomeMessage(out), /✅ Your withdrawal of R50 by PayShap has been paid/);
+});
+
+test('INIT + OTT says 100 but no hold exists: NEEDS_OPERATOR, nothing moves', async () => {
+  env();
+  const prisma = stubPrisma(); const ledger = stubLedger({ prisma });
+  const pr = await stranded({ prisma, ledger, hold: false });
+  const out = await reconcileInitPayout({ prisma, ledger, client: client(unknownCode, { status: '100', settlement: 'SETTLE', outcome: 'SUCCESS', body: { status: 100, message: 'Payment successful' } }), pr });
+  assert.equal(out.ok, false); assert.equal(out.status, 'NEEDS_OPERATOR');
+  assert.equal(prisma._prs[0].status, 'NEEDS_OPERATOR'); assert.equal(prisma._prs[0].metadata.outcome, 'PAYOUT_INIT_SETTLED_WITHOUT_HOLD');
+  assert.match(prisma._prs[0].metadata.providerBody, /Payment successful/);
+  assert.deepEqual(ledger.calls, [], 'no settle without a hold, no release of what was paid');
+});
+
+test('INIT + OTT says 98: the row becomes PENDING with what OTT said and the hold stays', async () => {
+  env();
+  const prisma = stubPrisma(); const ledger = stubLedger({ prisma });
+  const pr = await stranded({ prisma, ledger });
+  const out = await reconcileInitPayout({ prisma, ledger, client: client(unknownCode, { status: '98', settlement: 'PENDING', outcome: 'PENDING', body: { status: 98, message: 'Pending transaction' } }), pr });
+  assert.equal(out.status, 'PENDING'); assert.equal(out.checked, true); assert.equal(out.providerStatus, '98');
+  assert.equal(prisma._prs[0].status, 'PENDING'); assert.equal(prisma._prs[0].metadata.lastProviderStatus, '98'); assert.equal(prisma._prs[0].metadata.reconcileRequired, true);
+  assert.equal(holdOf(prisma, pr.idemKey).status, 'ACTIVE'); assert.deepEqual(ledger.calls, []);
+  // the normal sweep now owns it
+  const later = await reconcilePayout({ prisma, ledger, client: client(unknownCode, { status: '100', settlement: 'SETTLE', outcome: 'SUCCESS', body: { status: 100 } }), reference: pr.reference });
+  assert.equal(later.status, 'SETTLED'); assert.equal(holdOf(prisma, pr.idemKey).status, 'SETTLED');
+});
+
+test('INIT + transport failure: indeterminate, nothing changes', async () => {
+  env();
+  const prisma = stubPrisma(); const ledger = stubLedger({ prisma });
+  const boom = new Error('timeout'); boom.code = 'TRANSPORT_INDETERMINATE';
+  const pr = await stranded({ prisma, ledger });
+  const out = await reconcileInitPayout({ prisma, ledger, client: client(unknownCode, boom), pr });
+  assert.equal(out.checked, false); assert.equal(out.status, 'INIT');
+  assert.equal(prisma._prs[0].status, 'INIT'); assert.equal(holdOf(prisma, pr.idemKey).status, 'ACTIVE'); assert.deepEqual(ledger.calls, []);
+});
+
+test('the sweep picks INIT rows only past initOlderThanMs, routes them through the INIT recovery, and never calls performPayout', async () => {
+  env();
+  const prisma = stubPrisma(); const ledger = stubLedger({ prisma });
+  const c = client(unknownCode, noRecord);
+  const young = await stranded({ prisma, ledger, intentId: 'intent-9101', ageMs: 60 * 1000 });
+  const old = await stranded({ prisma, ledger, intentId: 'intent-9102', ageMs: 30 * 60 * 1000 });
+  const swept = await reconcilePendingPayouts({ prisma, ledger, client: c, olderThanMs: 0, initOlderThanMs: 10 * 60 * 1000 });
+  assert.deepEqual(swept.map((x) => [x.reference, x.status]), [[old.reference, 'FAILED']]);
+  assert.equal(prisma._prs.find((x) => x.idemKey === young.idemKey).status, 'INIT', 'a young INIT row is still mid-flight: untouched');
+  assert.equal(holdOf(prisma, young.idemKey).status, 'ACTIVE');
+  assert.equal(prisma._prs.find((x) => x.idemKey === old.idemKey).status, 'FAILED');
+  assert.equal(c.calls.filter((x) => x[0] === 'perform').length, 0, 'the sweep never performs a pay-out');
+  assert.equal(c.calls.filter((x) => x[0] === 'status').length, 1);
+  // default grace is 10 minutes: the young row is still skipped without the option
+  assert.deepEqual(await reconcilePendingPayouts({ prisma, ledger, client: c, olderThanMs: 0 }), []);
+});
+
+test('sweepPayoutsAndNotify reconciles PENDING + INIT rows and tells each finalised customer with the shared wording', async () => {
+  env();
+  const prisma = stubPrisma(); const ledger = stubLedger({ prisma });
+  const c = client(unknownCode, ({ yourUniqueReference }) => (yourUniqueReference === pendingRef ? { status: '100', settlement: 'SETTLE', outcome: 'SUCCESS', body: { status: 100 } } : noRecord));
+  const p = await parked({ prisma, ledger, c, intentId: 'intent-9201' });
+  const pendingRef = p.reference;
+  const i = await stranded({ prisma, ledger, intentId: 'intent-9202' });
+  const sent = []; const send = async ({ to, text }) => { sent.push({ to, text }); };
+  const out = await sweepPayoutsAndNotify({ prisma, ledger, client: c, send, olderThanMs: 0, initOlderThanMs: 0, now: Date.now() + 5000 });
+  assert.equal(out.results.length, 2);
+  assert.deepEqual(out.counts, { swept: 2, settled: 1, failed: 1, pending: 0, needsOperator: 0, unchecked: 0, errors: 0, notified: 2, notifyFailed: 0 });
+  assert.deepEqual(out.notified.sort(), [i.reference, pendingRef].sort());
+  assert.equal(sent.length, 2); assert.ok(sent.every((s) => s.to === '27731234567'));
+  assert.ok(sent.some((s) => /✅ .*has been paid/.test(s.text))); assert.ok(sent.some((s) => /❌ .*could not be completed/.test(s.text)));
+  assert.equal(c.calls.filter((x) => x[0] === 'perform').length, 1, 'only the original PerformPayout, never one from the sweep');
+  const again = await sweepPayoutsAndNotify({ prisma, ledger, client: c, send, olderThanMs: 0, initOlderThanMs: 0, now: Date.now() + 5000 });
+  assert.deepEqual(again.results, []); assert.equal(sent.length, 2, 'nobody is told twice');
+});
+
+test('static: the cron route is cron/secret/internal-key gated, calls the sweep, never a pay-out; daily-vas-sync sweeps best-effort', () => {
+  const cron = read('../pages/api/cron/payout-reconcile.js');
+  assert.match(cron, /x-vercel-cron'\] === '1'/); assert.match(cron, /process\.env\.CRON_SECRET && key === process\.env\.CRON_SECRET/);
+  assert.match(cron, /requireInternalAuth\(req, res\)/); assert.match(cron, /import \{ requireInternalAuth \} from '\.\.\/\.\.\/\.\.\/lib\/internal-auth\.js'/);
+  assert.match(cron, /if \(!isAuthed\(req, res\)\) return;/);
+  assert.match(cron, /await sweepPayoutsAndNotify\(\{ olderThanMs, initOlderThanMs, limit \}\)/);
+  assert.match(cron, /type: 'cron_payout_reconcile'/);
+  assert.match(cron, /if \(req\.method !== 'GET'\)/);
+  assert.ok(!/performPayout|requestPayout|\.payout\(/.test(cron), 'the cron can never start a pay-out');
+  const vas = read('../pages/api/cron/daily-vas-sync.js');
+  const at = vas.indexOf('await sweepPayoutsAndNotify(');
+  assert.ok(at > -1, 'daily-vas-sync runs the sweep');
+  assert.ok(at > vas.indexOf('await syncProductEmbeddings('), 'after the embeddings step');
+  const before = vas.slice(0, at);
+  assert.ok(before.lastIndexOf('try {') > before.lastIndexOf('catch'), 'the sweep call sits inside its own try');
+  assert.match(vas.slice(at), /catch \(e\) \{[\s\S]*cron_payout_sweep_failed/);
+  assert.match(vas, /type: 'cron_payout_sweep'/);
+  assert.match(vas, /return res\.status\(200\)\.json\(\{ \.\.\.out, turnsPurged, embeddings, payoutSweep \}\)/, 'the cron response never depends on the sweep');
+});
+
 test('static: the reconcile route is internal-key gated, asks OTT only GetPaymentStatus, and uses the shared customer wording', () => {
   const src = read('../pages/api/internal/payout-reconcile.js');
   assert.match(src, /if \(!keyOk\(req\)\) return res\.status\(401\)/);
@@ -207,7 +378,7 @@ test('static: the chat status handler consults the newest pay-out and reconciles
   const body = p.slice(start, p.indexOf('\nasync function ', start));
   assert.match(body, /getLatestPayout\(\{ accountId: account\.id \}\)/, 'pay-outs are looked up alongside deposits');
   assert.match(body, /const wantsPayout = /); assert.match(body, /const wantsDeposit = /); assert.match(body, /payoutIsNewer/);
-  assert.match(body, /return await handlePayoutStatus\(\{ from, account, payout \}\)/);
+  assert.match(body, /return await handlePayoutStatus\(\{ from, account, payout, altLine \}\)/);
   const ps = p.indexOf('async function handlePayoutStatus');
   assert.ok(ps > -1, 'the pay-out branch exists');
   const pbody = p.slice(ps, p.indexOf('\n/**', ps));

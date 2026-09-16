@@ -119,6 +119,44 @@ test('webhook claims each inbound message id before processing it', async () => 
   );
 });
 
+test('typing indicator after the claim, claim release + 500 only for turns that sent nothing', async () => {
+  const src = await fileText(WEBHOOK);
+
+  // Typing indicator: imported from the package, called after the dedupe
+  // claim (a duplicate must not show "typing") and before the first dispatch.
+  assert.ok(
+    /import \{[^}]*sendTypingIndicator[^}]*\} from '@wapay\/whatsapp'/.test(src),
+    'must import sendTypingIndicator from @wapay/whatsapp'
+  );
+  const claimIdx = src.indexOf('claimMessage({ waMessageId: messageId');
+  const typingIdx = src.indexOf('sendTypingIndicator({ messageId })');
+  const firstDispatchIdx = src.indexOf('processMessage({');
+  assert.ok(claimIdx > -1 && typingIdx > -1 && firstDispatchIdx > -1);
+  assert.ok(claimIdx < typingIdx, 'typing indicator must come after claimMessage');
+  assert.ok(typingIdx < firstDispatchIdx, 'typing indicator must come before the first processMessage');
+
+  // Claim release is gated on the outbound send counter.
+  assert.ok(src.includes('releaseClaim('), 'must call releaseClaim');
+  assert.ok(src.includes('outboundSendCount()'), 'must read outboundSendCount()');
+  assert.ok(
+    src.includes("import { claimMessage, releaseClaim } from '../../../lib/ledger-post.js'"),
+    'releaseClaim must come from lib/ledger-post.js'
+  );
+
+  // 500 (Meta redelivers) is decided AFTER the awaited processing and BEFORE
+  // the 200 ACK; the ACK literal itself is unchanged.
+  const retryIdx = src.indexOf("return res.status(500).json({ ok: false, retry: true })");
+  const ackIdx = src.indexOf('res.status(200).json({ ok: true })');
+  assert.ok(retryIdx > -1, 'must have the 500 retry branch');
+  assert.ok(ackIdx > -1, 'the 200 ACK literal must be intact');
+  assert.ok(firstDispatchIdx < retryIdx, 'the retry decision must come after processing');
+  assert.ok(retryIdx < ackIdx, 'the 500 branch must precede the 200 ACK');
+  assert.ok(src.includes('let retryable = false'), 'retryable flag must default to false');
+
+  // Still no fire-and-forget.
+  assert.ok(!src.includes('void (async'), 'no fire-and-forget async blocks in the webhook');
+});
+
 test('env.template documents META_APP_SECRET', async () => {
   const tpl = await fileText('env.template');
   assert.match(tpl, /^META_APP_SECRET=/m, 'env.template must carry a META_APP_SECRET line');

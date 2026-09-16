@@ -250,6 +250,8 @@ async function main() {
     await prisma.journalLine.deleteMany({ where: { entryId: { in: entries.map((e) => e.id) } } });
     await prisma.journalEntry.deleteMany({ where: { idemKey: { startsWith: RUN } } });
     await prisma.wallet.deleteMany({ where: { accountId: { in: accountIds } } });
+    // conversation_turns has no FK yet (Phase 1 adds the cascade); erase by hand.
+    await prisma.conversationTurn.deleteMany({ where: { accountId: { in: accountIds } } }).catch(() => {});
     await prisma.account.deleteMany({ where: { id: { in: accountIds } } });
     console.log('  removed all verification data');
   }

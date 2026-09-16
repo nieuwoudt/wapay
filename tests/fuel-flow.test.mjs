@@ -121,7 +121,7 @@ test('FUEL_CONFIRM accepts the multilingual YES words; FUEL_PIN only PIN-shaped 
     processorSource.indexOf("case 'FUEL_PIN'"),
     processorSource.indexOf("case 'VOUCHER_GIFT_CONFIRM'")
   );
-  assert.match(pinCase, /digitsOnly\.length < 4 \|\| digitsOnly\.length > 6/);
+  assert.match(pinCase, /\^\\d\{4,6\}\$/);
   assert.match(pinCase, /PENDING_CONFIRMATION/, 'the indeterminate outcome has its own reassurance path');
 });
 

@@ -30,10 +30,24 @@ process.env.APP_BASE_URL ||= 'https://wapay.co.za';
 
 export const outbox = [];
 
+// 2026-09-16: the processor counts sends per turn (claim release on a
+// silent throw) and the webhook scopes them; the mock keeps the same shape.
+let qaSends = 0;
+
 mock.module('@wapay/whatsapp', {
   namedExports: {
     sendWhatsAppText: async ({ to, text }) => {
       outbox.push({ kind: 'text', to, text });
+      qaSends += 1;
+      return { ok: true, data: { id: `qa-${outbox.length}`, messages: [{ id: `qa-${outbox.length}` }] } };
+    },
+    outboundSendCount: () => qaSends,
+    runWithSendScope: (fn) => fn(),
+    sendTypingIndicator: async () => ({ ok: true }),
+    directSendEnabled: () => false,
+    sendWhatsAppUtilityDirect: async ({ to, text }) => {
+      outbox.push({ kind: 'text', to, text });
+      qaSends += 1;
       return { ok: true, data: { id: `qa-${outbox.length}` } };
     },
     sendWhatsAppTemplate: async ({ to, templateName, language }) => {
@@ -165,6 +179,8 @@ export async function teardownQaAccount() {
   await prisma.paymentRequest.deleteMany({ where: { accountId: account.id } });
   await prisma.providerRequest.deleteMany({ where: { accountId: account.id } }).catch(() => {});
   await prisma.authFactor.deleteMany({ where: { accountId: account.id } }).catch(() => {});
+  // 2026-09-16: both sides of every turn now live in conversation_turns.
+  await prisma.conversationTurn.deleteMany({ where: { accountId: account.id } }).catch(() => {});
   // The chat sign-up scenario registers a business and asks for a portal
   // code: both rows hang off the account and must go first.
   const businesses = await prisma.business.findMany({ where: { accountId: account.id }, select: { id: true } }).catch(() => []);

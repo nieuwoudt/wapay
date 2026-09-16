@@ -83,6 +83,18 @@ known answer from the rail (BUGLOG #28, #53).
 
 ## 3. The v1.4 work order
 
+> **Addendum 2026-09-16 (later the same day).** The tasks below were re-planned by the
+> architecture review recorded in `docs/AGENT_ARCHITECTURE_V2.md`; that file's section 10
+> says, task by task, what is kept, changed, added or dropped, and section 8 gives the
+> phases. Phase 0 shipped the same day (see `docs/CHANGELOG.md` 2026-09-16 (35) and
+> BUGLOG #56 to #62): the three open execute routes hardened, strict PIN input in every
+> PIN state, balance by wallet type, the per-customer withdrawal truth in the AI prompt,
+> the customer record and both-sides history in every AI turn, a real Transactions
+> handler, status disambiguation, the INIT pay-out reconciler with a cron route and a
+> daily floor, the typing indicator, claim release, the capability registry and the policy
+> engine (registry wiring into home and help is Phase 1). Read V2 first; use this file for
+> the founder's review 4 evidence (section 1) and the rail facts (sections 5 to 9).
+
 ### Task 1 — The context pack and the read path from the ledger to the conversation (recon Phase 1)
 
 Build `lib/context-pack.js`: **one database round trip per turn** returning, for the

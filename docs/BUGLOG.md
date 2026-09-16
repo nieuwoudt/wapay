@@ -4,6 +4,69 @@
 
 ---
 
+## 64. "my pin is 1234" in a PIN state would have escaped to the model, PIN included
+
+- **Symptom (found 2026-09-16 by the pre-ship review of Phase 0, never live):** after #58 made every PIN state strict, a sentence that failed the shape check fell to `isConversationalEscape`, which is true for any two-word sentence; "my pin is 1234" would have cleared the state silently and been routed to the AI with the clear-text PIN, and stored in memory.
+- **Root cause:** the escape check did not consider that the sentence might be carrying the secret it was waiting for.
+- **Fix:** in all eight PIN states a message that contains a 4 to 6 digit run never escapes; the customer is asked for just the digits. `redactForMemory` also treats a message that is nothing but 4 to 6 digits as a PIN wherever it lands (a lockout clears the state, then the customer sends the PIN again), and login codes in outbound copy are masked.
+- **Guard:** `tests/phase0-review.test.mjs` (redaction cases; every PIN state's escape is guarded), `tests/turns.test.mjs`.
+
+## 63. GetPaymentStatus request errors would have released every parked pay-out
+
+- **Symptom (found 2026-09-16 by the pre-ship review of Phase 0, never live):** `classifyPayoutStatus` maps OTT status -1 (auth), 1 (invalid logon) and 2 (invalid hash) to RELEASE, which is right for PerformPayout (nothing was paid) and wrong for GetPaymentStatus (our query failed; the pay-out may be in flight or paid). The new automatic sweeps (cron route, daily floor, on-inbound reconcile) and `reconcileInitPayout` fed those codes into the release path: a rotated or mistyped API key at 03:00 would have released every held pay-out and told every customer the money was back while the bank rail paid them.
+- **Root cause:** one status table shared by two endpoints with different semantics for request-level errors.
+- **Fix:** `reconcilePayout` and `reconcileInitPayout` treat -1, 1 and 2 as indeterminate (`checked: false`, `REQUEST_ERROR`), touch nothing and log `payout_reconcile_request_error`. The INIT grace period is clamped to at least five minutes inside `reconcilePendingPayouts` and in the cron route (PerformPayout can take 20 s). The sweep also has a deadline (35 s default, 20 s and five rows inside the daily cron) so a slow rail can never push the function past its 60 s cap, and a failed customer notification is counted as `notifyFailed`, not as told.
+- **Guard:** `tests/phase0-review.test.mjs` (deadline; notify accounting), `tests/payout-reconcile.test.mjs`; the request-error rule is exercised by the sweep tests' status stubs and locked by the constant `REQUEST_ERROR_STATUSES`.
+
+## 62. The model never saw the customer's side of the conversation, and the current message was in its prompt twice
+
+- **Symptom (founder review 4, 2026-09-16; recon §3):** only 3 code paths stored the customer's own words (the AI path, the fee hook, the how-it-works hook) against 59 that stored the bot's, so the five history lines the model saw were mostly its own earlier replies; the current message was written to the ring before the ring was read, so it appeared in the prompt twice and effective recall was four turns; every write was a non-atomic rewrite of the whole `conversationData` JSON column.
+- **Root cause:** history lived in a 10-entry JSON ring written ad hoc at each call site.
+- **Fix:** an append-only `conversation_turns` table (migration `20260916_conversation_turns`, applied to production 2026-09-16), `lib/turns.js` (redaction before storage, recent turns oldest-first with the current message excluded by its WhatsApp message id, age markers, 30-day purge in the daily cron, erase), and `lib/say.js`, a drop-in for `sendWhatsAppText` that records the assistant side by construction; the processor and every out-of-band sender (OTT pay-out webhook, reconcile route, ITN, card settlement, Didit, request notify) import it. The customer's side is recorded once per inbound in `handlePostOnboarding` (onboarding turns never; PIN-state turns with digits hidden). The model now gets the last 12 turns of both sides.
+- **Guard:** `tests/turns.test.mjs` (22 cases: every redaction pattern including the withdraw confirm text with an account and ID number, exclusion of the current message, oldest-first order, say records only on a successful send and splits over 4,000 chars); `tests/orchestrator-routing.test.mjs` wiring locks.
+
+## 61. A pay-out that crashed between the balance upgrade and the rail call sat at INIT forever with the customer's money held
+
+- **Symptom (found 2026-09-16 by the architecture review):** `requestPayout` creates the row as INIT, posts SPEND to CASH, reserves the CASH hold, then calls `performPayout`; a function death or throw anywhere in between left an INIT row that `reconcilePendingPayouts` (PENDING only) never looked at, and a replay of the same intent returned `{ ok: true, status: 'FAILED' }`.
+- **Root cause:** the reconcile sweep was written for the PENDING case (BUGLOG #53) only.
+- **Fix:** `reconcileInitPayout` in `lib/payouts.js`: asks OTT GetPaymentStatus by our reference (never a second PerformPayout); a settle answer with a hold present finalises through `finalisePayout`; a pending answer moves the row to PENDING for the normal sweep; no record or a failure answer releases the hold only if it exists and is ACTIVE, posts the downgrade only if the upgrade entry exists, and marks the row FAILED `INIT_ABANDONED_<status>`; anything inconsistent (settle without a hold, hold already settled but the rail says release) is parked as `NEEDS_OPERATOR` and nothing moves. `reconcilePendingPayouts` now sweeps PENDING and INIT rows older than their grace periods and isolates a throwing row. `sweepPayoutsAndNotify` tells each finalised customer with the shared wording; it runs from `GET /api/cron/payout-reconcile` (cron header, CRON_SECRET or the internal key), as a daily floor inside `daily-vas-sync`, and opportunistically on a customer's next inbound message when a PENDING pay-out is older than two minutes.
+- **Guard:** `tests/payout-reconcile.test.mjs` (10 new cases over a stub ledger that mirrors journal and hold state; the sweep never calls performPayout); `tests/truth-per-user.test.mjs` (the inbound hook uses GetPaymentStatus only).
+
+## 60. A turn that threw before replying lost the message for good
+
+- **Symptom (found 2026-09-16 by the architecture review):** the webhook claimed the WhatsApp message id BEFORE processing, never released the claim, and acknowledged every error to Meta with 200, so a turn that threw (or was killed at the 60-second cap) was never redelivered and the customer got silence.
+- **Root cause:** the dedupe claim (BUGLOG #7, #5) had no failure path; "errors still ACK 200 so Meta does not retry-storm" was the deliberate rule.
+- **Fix:** `releaseClaim` in `lib/ledger-post.js`; the webhook wraps each turn, and when a turn throws with the outbound send counter unchanged it releases the claim and answers 500 so Meta redelivers; a throw after something was sent keeps the claim (200) so the customer is never answered twice. The typing indicator (`sendTypingIndicator`, read receipt plus typing for up to 25 s) is sent right after the claim for text messages, so the customer sees activity within half a second.
+- **Guard:** `tests/webhook-wiring.test.mjs` (ordering claim < typing < process, the 500 branch before the intact 200 ACK, no fire-and-forget) and `tests/typing-indicator.test.mjs` (payload fields, abort timeout, counter increments only on customer sends).
+
+## 56. Three VAS execute routes were public and verified the PIN before checking who owned the preview
+
+- **Symptom (found 2026-09-16 by the architecture review, no incident known):** `/api/vas/airtime|data|electricity/execute` never called `requireInternalAuth` (only the voucher and fuel routes and the five previews did), so anyone with a customer's account id could POST to them; they called `verifyPIN` before loading the preview and checking ownership, so ten wrong guesses hard-locked a victim's PIN; and their outer catch had no `releaseHold`, so a crash between `reserveHold` and the provider call stranded the customer's money (the BUGLOG #15 discipline had been applied only to the two newest routes). `docs/CAPABILITIES.md` claimed all execute routes required the key.
+- **Root cause:** the internal-auth guard and the crash-release pattern were retrofitted route by route and the three oldest were missed.
+- **Fix:** all three routes require the internal key, load and validate the preview and its owner before `verifyPIN`, hoist the hold idemKey and release it in the outer catch when the provider did not deliver; when the provider delivered and the settle failed the hold is left in place and `vas_<route>_settle_failed_after_delivery` is logged for an operator (money is never returned for a delivered product).
+- **Guard:** `tests/vas-execute-ledger-pattern.test.mjs` (internal-only, ownership before PIN, crash release present in all three).
+
+## 59. "Balance" could show the CASH wallet once a customer had tried to withdraw
+
+- **Symptom (found 2026-09-16 by the architecture review, not yet seen live):** `getUserBalance` and the airtime, data and electricity preview routes read `account.wallets[0]` with no `balanceType` filter. The first withdrawal attempt creates a CASH wallet (`lib/payouts.js` ensureWallet CASH), after which Prisma returns the two wallets in undefined order, so "balance" and the preview's balance check could silently use the wrong wallet.
+- **Root cause:** the readers predate the two-wallet model; the schema comment on `Wallet` names this exact bug as the reason for the `(accountId, balanceType)` unique constraint, but the readers were never updated.
+- **Fix:** `getUserBalance` includes wallets `where: { balanceType: 'SPEND' }`; the three preview routes pick the SPEND wallet explicitly.
+- **Guard:** `tests/truth-per-user.test.mjs` ("balance readers select the SPEND wallet").
+
+## 58. Six of nine wallet-PIN states fed stripped digits to verifyPIN, so a sentence with incidental digits burned an attempt
+
+- **Symptom (found 2026-09-16 by the architecture review):** `DATA_PIN`, `AIRTIME_PIN`, `ELECTRICITY_PIN`, `FUEL_PIN`, `VOUCHER_GIFT_PIN` did `text.replace(/[^\d]/g, '')` and accepted any 4 to 6 digit residue; `VOUCHER_PIN_RESEND_AUTH` accepted any 4+ digit residue. "send R50 to 0831" inside a PIN state became the attempt "500831" and counted toward the lockout (invariant 9, BUGLOG #19 fixed only `PAYOUT_PIN` and `PAYREQ_PIN`).
+- **Root cause:** the fix for #19 was applied to the two newest states, not to the seven older ones.
+- **Fix:** every PIN state now requires `/^\d{4,6}$/` on the trimmed text before `verifyPIN`; a real sentence escapes to the router through `isConversationalEscape`, a bare word re-prompts, and the existing "no digits at all cancels the purchase" behaviour is kept.
+- **Guard:** `tests/truth-per-user.test.mjs` ("every wallet-PIN state accepts only PIN-shaped input") asserts the strict regex in all eight states and that `const pin = digitsOnly` no longer exists; `tests/fuel-flow.test.mjs` lock updated.
+
+## 57. The AI told non-pilot customers withdrawals were live while the home card said "coming soon"
+
+- **Symptom (found 2026-09-16 by the architecture review; live exposure since `3a40272` set `WAPAY_PAYOUT_ALLOWLIST`):** `renderHome`, the withdraw matcher gate and `howItWorksContext` use the per-customer `payoutAllowedFor(from)`, but `handleAIChat` called `buildBrainKnowledge({ wicodeLive })` without `withdrawLive`, so the knowledge block defaulted to the GLOBAL `payoutLive()` ("WITHDRAWALS ARE LIVE ... tell them to type withdraw R<amount> ... NEVER say coming soon"), and `PRODUCT_TRUTH` in the orchestrator read `process.env.WAPAY_PAYOUT_ENABLED` raw. `handleFeeAsk`, `buildSpendDestinationsReply` (the HELP fallback) and `handleListVasProducts` had the same gap. A non-pilot customer typing "withdraw R200" skipped the gated matcher and landed in the AI again, which repeated the instruction.
+- **Root cause:** the pilot gate (`3a40272`) was retrofitted at the flow entry and the home card only; the guard test grepped for `payoutEnabled()` and passed.
+- **Fix:** `withdrawLive: payoutAllowedFor(from)` threaded into `buildBrainKnowledge`, `buildSpendDestinationsReply`, `spendDestinationLines`, `feeAnswer` and `feeFacts`; `orchestrate()` takes `withdrawLive` in its options and `PRODUCT_TRUTH(withdrawLive)` and the MONEY/SEND domain prompts render from the argument (default: the global switch, so nothing else changes).
+- **Guard:** `tests/truth-per-user.test.mjs` (knowledge, fee answer, spend reply and prompt follow the per-customer flag; no prompt string reads the env); locks in `tests/fee-facts.test.mjs`, `tests/help-conversational.test.mjs`, `tests/orchestrator-routing.test.mjs` updated to the gated call shapes. The structural fix is the registry (`docs/AGENT_ARCHITECTURE_V2.md` C7): one `liveFor(waId)` per capability that every surface and the tool list read.
+
 ## 55. A syntax error in the message processor passed the whole unit suite
 
 - **Symptom (2026-09-16, caught by the build and the live harness, never by `node --test`):** a new parameter named `text` collided with an existing `let text` inside `handleDepositStatus`; 633 unit tests stayed green.

@@ -71,7 +71,7 @@ test('processor wiring: fee hook before the keyword router, deposit trap ignores
   assert.match(p, /const wantsDeposit =\s*\n\s*!\/\\b\(fee\|fees\|cost\|costs\|charge\|charges\)\\b\/\.test\(squashed\) && \(/);
   assert.match(p, /async function handleFeeAsk\(\{ from, account, topic, text \}\)/);
   assert.match(p, /addToConversationHistory\(from, 'user', text\);\s*\n\s*await addToConversationHistory\(from, 'assistant', msg\);/, 'both turns land in the AI context');
-  assert.match(p, /Here is everything your WaPay money can do right now\*\\n\\n\$\{spendDestinationLines\(\{ wicodeLive: fuelLiveFor\(from\) \}\)\}/, '"what can I buy" opens with the catalogue-built list');
+  assert.match(p, /Here is everything your WaPay money can do right now\*\\n\\n\$\{spendDestinationLines\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\) \}\)\}/, '"what can I buy" opens with the catalogue-built list, gated per customer');
   assert.ok(!/🛒 \*WaPay VAS Products\*/.test(p), 'the three-item dump is gone');
   // Tightened 2026-09-15: the menu follows the PER-USER gate, so it never
   // advertises withdrawal to a customer the pilot allowlist will refuse.
@@ -80,8 +80,9 @@ test('processor wiring: fee hook before the keyword router, deposit trap ignores
 
 test('the AI prompt never freezes the payout flag and never plants a betting word', () => {
   const ai = read('../packages/ai/src/orchestrator.ts');
-  assert.match(ai, /const PRODUCT_TRUTH = \(\): string =>/, 'evaluated per call');
-  assert.match(ai, /\$\{PRODUCT_TRUTH\(\)\}/);
+  // 2026-09-16: evaluated per call AND per customer (withdrawLive from the pilot allowlist).
+  assert.match(ai, /const PRODUCT_TRUTH = \(withdrawLive: boolean = process\.env\.WAPAY_PAYOUT_ENABLED === 'true'\): string =>/, 'evaluated per call, per customer');
+  assert.match(ai, /\$\{PRODUCT_TRUTH\(withdrawLive\)\}/);
   assert.ok(!/betting/i.test(ai), 'Meta policy: no betting words in the prompt');
   assert.match(ai, /withdrawals are live, tell them to type/);
   assert.match(feeFacts(), /FEES YOU CAN QUOTE/);

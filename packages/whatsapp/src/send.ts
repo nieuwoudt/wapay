@@ -9,6 +9,95 @@ import { resolveLanguage } from './templateCatalog.js';
 
 const WHATSAPP_API_BASE = 'https://graph.facebook.com/v21.0';
 
+/**
+ * Count of customer-visible sends that returned ok:true in this process
+ * (text, template, CTA-URL). The webhook compares it before and after a turn:
+ * a turn that threw without moving it can safely have its dedupe claim
+ * released for Meta to redeliver; one that already sent must keep the claim
+ * so the customer is never answered twice. Typing indicators do not count.
+ */
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+let outboundSends = 0;
+// Per-turn scope (2026-09-16): under Fluid Compute one Node instance can
+// serve several webhook invocations at once, so a process-global counter
+// would let customer B's send make customer A's failed turn look answered.
+// The webhook runs each turn inside runWithSendScope; outboundSendCount()
+// then reports that turn's sends only.
+const sendScope = new AsyncLocalStorage<{ count: number }>();
+
+export function runWithSendScope<T>(fn: () => Promise<T>): Promise<T> {
+  return sendScope.run({ count: 0 }, fn);
+}
+
+function bumpSends(): void {
+  const scope = sendScope.getStore();
+  if (scope) scope.count += 1;
+  outboundSends += 1;
+}
+
+export function outboundSendCount(): number {
+  const scope = sendScope.getStore();
+  return scope ? scope.count : outboundSends;
+}
+
+function resolveCredentials(): { accessToken: string; phoneNumberId: string } {
+  const accessToken = process.env.META_WHATSAPP_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!accessToken || !phoneNumberId) {
+    throw new Error('META_WHATSAPP_TOKEN or META_WHATSAPP_PHONE_NUMBER_ID not set');
+  }
+  return { accessToken, phoneNumberId };
+}
+
+/**
+ * Mark an inbound message read and show the typing indicator while the reply
+ * is prepared (Meta: developers.facebook.com/docs/whatsapp/cloud-api/typing-indicators;
+ * the indicator lasts up to 25 s or until we send). Strictly best-effort:
+ * never throws, never counts as a send, gives up after `timeoutMs`.
+ */
+export async function sendTypingIndicator(args: {
+  messageId: string;
+  timeoutMs?: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { messageId, timeoutMs = 1500 } = args;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    if (!messageId) throw new Error('messageId is required');
+    const { accessToken, phoneNumberId } = resolveCredentials();
+    const url = `${WHATSAPP_API_BASE}/${phoneNumberId}/messages`;
+    const payload = {
+      messaging_product: 'whatsapp',
+      status: 'read',
+      message_id: messageId,
+      typing_indicator: { type: 'text' },
+    };
+    const { statusCode, body } = await request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const data = await body.json() as any;
+    if (statusCode >= 400) {
+      const error = data?.error?.message || `HTTP ${statusCode}`;
+      console.warn(JSON.stringify({ type: 'wa_typing_indicator_failed', messageId, error }));
+      return { ok: false, error };
+    }
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.warn(JSON.stringify({ type: 'wa_typing_indicator_failed', messageId, error: message }));
+    return { ok: false, error: message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export interface SendTemplateArgs {
   to: string;
   templateName: string;
@@ -190,7 +279,8 @@ export async function sendWhatsAppTemplate(args: SendTemplateArgs): Promise<{
     }
     
     console.log(`✅ WhatsApp template sent: ${data.messages?.[0]?.id}`);
-    
+    bumpSends();
+
     return {
       ok: true,
       data,
@@ -249,6 +339,7 @@ export async function sendWhatsAppCtaUrl(args: SendCtaUrlArgs): Promise<{
     }
 
     console.log(`✅ WhatsApp CTA-URL sent: ${data.messages?.[0]?.id}`);
+    bumpSends();
 
     return {
       ok: true,
@@ -316,7 +407,8 @@ export async function sendWhatsAppText(args: SendTextArgs): Promise<{
     }
     
     console.log(`✅ WhatsApp text sent: ${data.messages?.[0]?.id}`);
-    
+    bumpSends();
+
     return {
       ok: true,
       data,

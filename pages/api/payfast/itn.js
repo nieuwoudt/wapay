@@ -28,7 +28,8 @@
  */
 
 import { verifyItn } from '@wapay/providers-payfast';
-import { sendWhatsAppText, sendWhatsAppTemplate } from '@wapay/whatsapp';
+import { sendWhatsAppTemplate } from '@wapay/whatsapp';
+import { sendWhatsAppText } from '../../../lib/say.js';
 
 import prisma from '../../../lib/prisma.js';
 import { readRawBody } from '../../../lib/webhook-security.js';

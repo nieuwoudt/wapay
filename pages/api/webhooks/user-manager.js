@@ -258,6 +258,28 @@ export async function getConversationState(waId) {
 }
 
 /**
+ * Forget a message id that was marked processed but whose turn threw before
+ * anything was sent (2026-09-16): the webhook released the DB claim and asked
+ * Meta to redeliver, so this second dedupe ring must not swallow the retry.
+ */
+export async function unmarkMessageProcessed(waId, messageId) {
+  try {
+    const account = await prisma.account.findFirst({ where: { waId }, select: { conversationData: true } });
+    const existingData = account?.conversationData || {};
+    const ids = Array.isArray(existingData.processedMessageIds) ? existingData.processedMessageIds : [];
+    if (!ids.includes(messageId)) return { ok: true, removed: false };
+    await prisma.account.update({
+      where: { waId },
+      data: { conversationData: { ...existingData, processedMessageIds: ids.filter((id) => id !== messageId) } },
+    });
+    return { ok: true, removed: true };
+  } catch (error) {
+    console.error('❌ Error unmarking processed message:', error);
+    return { ok: false, error: error.message };
+  }
+}
+
+/**
  * Add message to conversation history
  * Stores last 10 messages for context
  */
@@ -444,7 +466,10 @@ export async function getUserBalance(waId) {
     const account = await prisma.account.findFirst({
       where: { waId: waId },
       include: {
-        wallets: true,
+        // The SPEND wallet only: once a customer has attempted a withdrawal
+        // a CASH wallet exists too, and wallets[0] was whichever Prisma
+        // returned first (schema comment on Wallet; found 2026-09-16).
+        wallets: { where: { balanceType: 'SPEND' } },
       },
     });
 
