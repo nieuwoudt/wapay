@@ -1,0 +1,39 @@
+To: Yaku <[OTT technical contact email]>
+Cc: Keamogetsoe Modikwe <keamo@ott-mobile.com>
+Subject: OTT Payout sandbox: first PayShap test, status codes, webhook and IP allowlisting
+
+Hi Yaku,
+
+I am Niev from WaPay. We are integrated with the OTT Payout API on the test environment and have just run our first end to end PayShap payout from our WhatsApp product. A few technical questions came out of it.
+
+WHAT WE SENT
+
+On 15 September 2026 at 21:52 SAST we called PerformPayout on the test environment with:
+
+- Provider code 127 (PayShap Account)
+- Amount 50.00
+- Recipient account number and branch code (FNB, universal branch code 250655), plus ID number, mobile, first name and surname, as GetActiveProvidersLimits marks them Required
+- Our reference: WPC15800A7BD6637
+
+WHAT WE GOT BACK
+
+1. PerformPayout returned HTTP 200 with a status code that is not in the status table of the Payout API document (100, 99, 98, 0, -1, 1, 2, 3, 4, 9, 10, 11, 12, 97). We treated it as pending and kept the customer's funds on hold.
+2. No status webhook arrived at our endpoint (https://pleasepayme.co.za/api/webhooks/ott-payout, which is configured on the merchant).
+3. On 16 September at 13:02 SAST, GetPaymentStatus for the same reference returned status 0 with the message "Failed to retrieve record". We read that as "no payout exists for this reference" and released the customer's funds.
+
+QUESTIONS
+
+1. Could you look up reference WPC15800A7BD6637 on your side and tell us what PerformPayout actually returned, and why?
+2. Does the test environment send the status webhook at all? If it does, is there anything we must enable on the merchant for it to fire?
+3. On GetPaymentStatus, does status 0 with "Failed to retrieve record" always mean that no payout was created? We need to be certain before we release a customer's funds on that answer.
+4. Do GetPaymentStatus and PerformPayout share the same status code list? If there are codes beyond the ones in the document, could you send us the full list with their meanings?
+5. Does the test portal show this request anywhere, and what does it show?
+6. IP allowlisting: does the payout API restrict calling IPs? We ask because the Redemption API document (point 8) says we must give OTT the IP address we call from, while your account team told us no whitelisting applies. Our earlier calls to the merchant endpoints returned HTTP 403, which looked like an IP restriction. If an allowlist applies to either API, please tell us the registration process and we will send a static outbound IP.
+7. PayShap addressing: we currently send account number plus branch code, as advised. Is addressing by ShapID (cellphone number) supported or planned?
+
+Our merchant username on the test environment starts with WA. Happy to share request and response logs, with the recipient details masked, if that helps.
+
+Thank you
+
+Niev
+WaPay

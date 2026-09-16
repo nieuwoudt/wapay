@@ -311,7 +311,7 @@ Added in this thread:
 1. WPC15800A7BD6637 is closed: OTT had no record of it, the hold was released and the
    founder's balance is R66.00 again. Rerun "withdraw R50" once Keamo has said what the
    sandbox returns (email 9).
-2. Send `EMAIL_TO_KEAMO_9_PAYOUT_COMMERCIALS.txt` (pay-out commercials per provider,
+2. Send `EMAIL_TO_KEAMO_9_COMMERCIALS.txt + EMAIL_TO_OTT_TECH_YAKU_SANDBOX.txt` (pay-out commercials per provider,
    production float mechanics, sandbox status codes, IP allowlist, production timeline).
 3. Send `EMAIL_TO_SIPHO_YOYO.txt` (campaign list, retainer, fees, float top-up,
    production path).
