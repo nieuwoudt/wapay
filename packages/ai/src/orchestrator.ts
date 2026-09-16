@@ -519,3 +519,8 @@ function normalizeAiError(error: any): Error {
   if (error instanceof Error && /^AI_/.test(error.message)) return error;
   return new Error('AI_UNAVAILABLE');
 }
+
+// Shared with the v1.4 agent (packages/ai/src/agent.ts, prompt.ts): the same
+// voice, money rules and language table, and the same client (timeouts, no
+// retries). Named exports only; the text above is unchanged.
+export { PERSONA, MONEY_TRUTH_RULES, LANGUAGE_HINTS, getOpenAI };

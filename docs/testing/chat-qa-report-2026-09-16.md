@@ -43,12 +43,12 @@ Please enter your meter number:
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll receive the full *R20* however they pay. No fees on this one. 🎉
-[button:View my payment page -> https://pleasepayme.co.za/PRAAPQAG]
+[button:View my payment page -> https://pleasepayme.co.za/PRWCEKWP]
 ···
 🙏 *Pay WaPay QA Harness now* · R20 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRAAPQAG
+https://pleasepayme.co.za/PRWCEKWP
 ```
 
 </details>
@@ -151,12 +151,12 @@ Reply *1* or *2*, or "cancel".
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll get the full *R250* if they pay from their WaPay (free), or R237.20 if they pay by card.
-[button:View my payment page -> https://pleasepayme.co.za/PRRGHHXM]
+[button:View my payment page -> https://pleasepayme.co.za/PRVFXVBP]
 ···
 🙏 *Pay WaPay QA Harness now* · R250 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRRGHHXM
+https://pleasepayme.co.za/PRVFXVBP
 ```
 
 </details>
@@ -205,13 +205,13 @@ Just tell me what you need, in any language.
 **User:** My name is Thabo and I run a spaza shop in Soweto.
 
 ```
-Nice to meet you, Thabo 😊 A spaza shop in Soweto sounds busy in the best way. If you ever want, I can help with a business account too.
+Nice to meet you, Thabo 😊 A spaza shop in Soweto is serious business. If you ever want to get paid from customers, add money, or buy airtime and electricity, I’m here for you 💡
 ```
 
 **User:** What did I tell you my name was?
 
 ```
-You told me your name was Thabo 😊
+You told me your name is Thabo 😊
 ```
 
 </details>
@@ -225,7 +225,7 @@ You told me your name was Thabo 😊
 **User:** Please remember that my favourite colour is green.
 
 ```
-Got it, I’ll remember that your favourite colour is green 😊
+Got it, I’ll remember that your favourite colour is green 💚
 ```
 
 **User:** buy electricity
@@ -248,7 +248,7 @@ Reply with an amount (e.g., R50, R100, R500)
 **User:** What is my favourite colour?
 
 ```
-Your favourite colour is green 😊
+Your favourite colour is green 💚
 ```
 
 </details>
@@ -264,7 +264,8 @@ Your favourite colour is green 😊
 **User:** Where can I spend my WaPay money!
 
 ```
-You can spend it on airtime and data for any SA number, prepaid electricity, sending money to friends and family, and WaPay vouchers for online stores and apps. You can also use it to get paid with a please pay me link, or check your balance anytime 💰📱
+You can spend your WaPay money on airtime, data, prepaid electricity, sending money, getting paid, and OTT vouchers online 💰✨
+If you want, I can also tell you where OTT vouchers are accepted.
 ```
 
 </details>
@@ -405,14 +406,14 @@ Want me to take you through it step by step? Reply *YES* and I will start, or sa
 
 🛒 *Prepaid products you can buy here:*
 
-📱 Mobile Airtime
-   _Vodacom, MTN, Cell C, Telkom_
+📱 Airtime
+   _Buy airtime for your number or any other SA number, paid from your balance._
 
-📶 Data Bundles
-   _Daily, Weekly, Monthly bundles_
+📶 Data
+   _Buy a data bundle for any SA number on any network._
 
-💡 Prepaid Electricity
-   _Eskom, City Power, and more_
+💡 Electricity
+   _Buy prepaid electricity for any meter and get the token right here._
 
 ━━━━━━━━━━━━━━━━━━
 
@@ -537,7 +538,7 @@ No monthly fees, ever. 😊
 **User:** cancel
 
 ```
-No problem 💡 What would you like to do instead?
+No worries 😊 If you meant stop the electricity purchase, I’ve cancelled that path.
 ```
 
 </details>
@@ -708,7 +709,7 @@ Reply *YES* to continue to your PIN, or *NO* to cancel.
 **User:** 1934
 
 ```
-✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WP59DEEF2554136D. Fee R18.
+✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WPD3FA4C4E0365D6. Fee R18.
 ```
 
 **User:** balance
@@ -748,7 +749,7 @@ Need anything else? Just ask me!
 
 Sawubona WaPay QA Harness!
 
-💵 Ibhalansi yamanje: R 52.00
+💵 Ibhalansi Yamanje: R 52.00
 
 Ufunani okunye? Ngicela ungibuze!
 ```
@@ -759,7 +760,7 @@ Ufunani okunye? Ngicela ungibuze!
 💰 *Ibhalansi yakho ye-WaPay*
 
 Sawubona WaPay QA Harness!  
-Ibhalansi yakho yamanje ingu-R 52.00
+Ibhalansi yakho yamanje ingu R 52.00
 
 . Uthanda ukwenza ini kulandela?
 ```
@@ -815,7 +816,7 @@ Manage customers, payment links and revenue at https://wapay.co.za/business. To 
 **User:** business login
 
 ```
-🔐 *WaPay for Business code: 618336*
+🔐 *WaPay for Business code: 838661*
 
 Type it into the business portal within 10 minutes. One attempt only.
 

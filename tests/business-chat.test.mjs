@@ -185,7 +185,8 @@ test('processor: the question is asked exactly when onboarding completes, both s
   const slots = processor.indexOf('const slots = parseSlots(text');
   assert.ok(loginHook < signupHook && signupHook < slots, 'command order: portal code, then sign-up, then slot parsing');
   assert.match(processor, /state\.startsWith\('BIZ_SIGNUP'\) \? 'your business sign-up'/, 'the intent-switch escape names the parked flow');
-  assert.match(processor, /🏪 \*Business\* - "business account"/, 'the help menu mentions the command');
+  assert.match(processor, /helpLines\(\{ waId: from, account \}\)/, 'the help menu renders from the registry');
+  assert.match(readFileSync(fileURLToPath(new URL('../lib/capabilities.js', import.meta.url)), 'utf8'), /🏪 \*Business\* - "business account"/, 'the registry carries the command');
   assert.match(processor, /const msg = step\.raw \? step\.text : await localizeOutbound\(step\.text/, 'steps with a command or URL are never localised');
 });
 

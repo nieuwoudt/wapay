@@ -18,6 +18,7 @@ import { syncBluDataCatalogue } from '../../../lib/vas-catalog-sync.js';
 import { syncProductEmbeddings } from '../../../lib/vas-embeddings.js';
 import { sweepPayoutsAndNotify } from '../../../lib/payouts.js';
 import { purgeOldTurns } from '../../../lib/turns.js';
+import { checkWalletIntegrity } from '../../../lib/ledger-integrity.js';
 import prisma from '../../../lib/prisma.js';
 
 function isCronAuthed(req) {
@@ -80,7 +81,17 @@ export default async function handler(req, res) {
       console.error(JSON.stringify({ type: 'cron_turns_purge_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
     }
 
-    return res.status(200).json({ ...out, turnsPurged, embeddings, payoutSweep });
+    // Balance integrity (docs/AGENT_ARCHITECTURE_V2.md C17): stored vs derived
+    // for every wallet; drift is logged for Mission Control, never corrected here.
+    let integrity = null;
+    try {
+      integrity = await checkWalletIntegrity({ prisma });
+      console.log(JSON.stringify({ type: 'cron_ledger_integrity', checked: integrity.checked, mismatches: integrity.mismatches.length, stopped: integrity.stopped, drift: integrity.mismatches.slice(0, 20), timestamp: new Date().toISOString() }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_ledger_integrity_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
+    return res.status(200).json({ ...out, turnsPurged, integrity: integrity ? { checked: integrity.checked, mismatches: integrity.mismatches.length } : null, embeddings, payoutSweep });
   } catch (e) {
     console.error('cron_daily_vas_sync_failed', e);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: e?.message || String(e) });

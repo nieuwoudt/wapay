@@ -51,7 +51,7 @@ test('processor free-text path uses orchestrate, not the legacy single call', ()
   // 2026-09-16: gated per CUSTOMER (the pilot allowlist), not the global switch.
   assert.match(
     processorSource,
-    /await orchestrate\(text, contextString, \{\s*knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\) \}\),\s*withdrawLive: payoutAllowedFor\(from\),\s*\}\)/
+    /await orchestrate\(text, contextString, \{\s*knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), capabilityLines: promptLines\(\{ waId: from, account \}\) \}\),\s*withdrawLive: payoutAllowedFor\(from\),\s*\}\)/
   );
   // 2026-09-16: the customer record (pack) rides along for the provenance guard and the policy gate.
   assert.match(processorSource, /dispatchOrchestratorAction\(\{ from, text, account, result, pack \}\)/);

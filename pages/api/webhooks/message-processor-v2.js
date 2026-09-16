@@ -13,7 +13,9 @@ import { sendWhatsAppText, recordInbound } from '../../../lib/say.js';
 import { recentTurns, renderTurns, redactForMemory } from '../../../lib/turns.js';
 import { loadContextPack, renderCustomerRecord, statusCandidates, rankCandidates, preferredKind, formatRands, formatSast } from '../../../lib/context-pack.js';
 import { evaluatePolicy, requirementMessage } from '../../../lib/policy.js';
-import { capabilityById } from '../../../lib/capabilities.js';
+import { capabilityById, homeLines, helpLines, welcomeLines, promptLines, fuelLiveFor as registryFuelLiveFor } from '../../../lib/capabilities.js';
+import { eraseTurns } from '../../../lib/turns.js';
+import { updateProfile } from '../../../lib/user-profile.js';
 import prisma from '../../../lib/prisma.js';
 import { resolveGift, buildRecipientNotification, buildVoucherClaimMessage, buildWicodeClaimMessage, maskMsisdn } from '../../../lib/gifting.js';
 import { hasPendingGifts, hasPriorSendTo, claimPendingGifts, revertGiftDelivery } from '../../../lib/pending-gifts.js';
@@ -419,7 +421,9 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
  * full go-live = flag true, allowlist unset.
  */
 function fuelLiveFor(waId) {
-  return isCategoryEnabledForWaId('FUEL', waId);
+  // One gate for every surface (docs/AGENT_ARCHITECTURE_V2.md C7): the
+  // registry's, which reads WAPAY_WICODE_LIVE and VAS_ALLOWLIST_FUEL.
+  return registryFuelLiveFor(waId);
 }
 
 async function startFuelPurchase({ from, account, amountCents = null, rawText = '' }) {
@@ -737,15 +741,9 @@ async function renderHome({ from, account }) {
       ? `🎟️ Voucher Balance: *${randsShort(vouchers.totalCents)}* (${vouchers.count} OTT voucher${vouchers.count === 1 ? '' : 's'}). Reply "my vouchers"\n`
       : '') +
     `━━━━━━━━━━━━━━━\n\n` +
-    `🛒 *Buy*: airtime, data, electricity\n` +
-    `💸 *Send*: "send R10 airtime to 083..."\n` +
-    `🙏 *Get Paid*: "please pay me R50" → share your link\n` +
-    `💳 *Deposit*: "deposit R100" or a Blu voucher\n` +
-    (fuelLiveFor(from)
-      ? `⛽ *Fuel*: "buy fuel" for participating stations\n`
-      : `⛽ *Fuel vouchers*: coming soon\n`) +
-    (payoutAllowedFor(from) ? `🏧 *Withdraw*: "withdraw R200" to your bank, or cash at an ATM\n` : `🏧 *Withdraw*: coming soon\n`) +
-    `📄 *Transactions* · ⚙️ *Settings*\n\n` +
+    // The product lines come from the capability registry (one liveFor per
+    // capability; docs/AGENT_ARCHITECTURE_V2.md C7), never hand-written here.
+    `${homeLines({ waId: from, account }).join('\n')}\n\n` +
     `⚡ Quick: ${quickActions[0]} · ${quickActions[1]} · ${quickActions[2]}\n\n` +
     `Just tell me what you need, in any language.`;
 
@@ -1408,6 +1406,16 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   // agent composes these in Phase 2).
   if (matchTransactionsAsk(text)) {
     return await handleTransactions({ from, account, text });
+  }
+
+  // "What do you know about me" renders the customer's own record in their
+  // words; "forget me" erases the conversation memory and the notes
+  // (POPIA: the ledger and provider rows stay, they are financial records).
+  if (matchAboutMeAsk(text)) {
+    return await handleAboutMe({ from, account });
+  }
+  if (matchForgetMe(text)) {
+    return await handleForgetMe({ from, account });
   }
 
   const feeTopic = matchFeeAsk(text);
@@ -3336,6 +3344,45 @@ function transactionLine(m) {
   const who = m.counterparty && m.counterparty !== 'yourself' ? `  ${m.counterparty}` : '';
   const cap = label.charAt(0).toUpperCase() + label.slice(1);
   return `• ${formatSast(m.at)}  ${cap}  ${formatRands(m.amountCents)}  ${STATUS_WORDS[m.status] || String(m.status).toLowerCase()}${who}`;
+}
+
+const ABOUT_ME_ASK = /^\W*(?:what (?:do you|do u|does wapay) (?:know|remember) about me|what (?:have you|do you have) (?:got |stored )?(?:on|about) me|my (?:data|info|information|profile|memory)|what do you know)\W*$/i;
+function matchAboutMeAsk(text = '') { return ABOUT_ME_ASK.test(String(text || '').trim()); }
+const FORGET_ME = /^\W*(?:forget (?:me|that|everything|our chats?|my (?:data|history|info))|delete my (?:data|history|memory|chats?)|erase (?:me|my (?:data|history|memory)))\W*$/i;
+function matchForgetMe(text = '') { return FORGET_ME.test(String(text || '').trim()); }
+
+/** The customer's record, in their own words: what WaPay knows and uses. */
+async function handleAboutMe({ from, account }) {
+  const pack = await loadContextPack({ prisma, account, movementLimit: 10 });
+  const profile = await getProfile({ accountId: account.id }).catch(() => ({}));
+  const people = (pack.beneficiaries || []).map((b) => String(b.name || '').trim().split(/\s+/)[0]).filter(Boolean);
+  const notes = Array.isArray(profile?.notes) ? profile.notes.map((n) => n.text).filter(Boolean) : [];
+  const lines = [
+    '🧠 *What I know about you*',
+    '• Name and number: ' + (pack.displayName || 'you') + ', ' + maskMsisdn(account.msisdn || from),
+    '• Language: ' + (pack.language || 'English') + (pack.kyc ? ' · Identity check: ' + (pack.kyc === 'VERIFIED' ? 'done' : 'not done') : ''),
+    '• Balance to spend: ' + formatRands(pack.balances?.spendCents || 0),
+    '• Your last ' + Math.min(10, pack.movements?.length || 0) + ' money movements (deposits, purchases, sends, pay-outs) and any open payment links',
+    people.length ? '• People you send to: ' + [...new Set(people)].slice(0, 5).join(', ') : '• People you send to: none saved yet',
+    pack.habits?.summary ? '• Habits: ' + pack.habits.summary : null,
+    notes.length ? '• Things you told me: ' + notes.slice(0, 5).join('; ') : null,
+    '• Our last 30 days of chat, so I can follow the conversation',
+    '',
+    'I never store your PIN, voucher PINs or card details. Reply "forget me" and I erase our chat memory and the things you told me; your transactions stay on record.',
+  ].filter((l) => l !== null);
+  logStructured('about_me', { from, accountId: account.id });
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(lines.join('\n'), await userLang(account)), kind: 'flow' });
+}
+
+async function handleForgetMe({ from, account }) {
+  const erased = await eraseTurns({ prisma, accountId: account.id });
+  await updateProfile({ accountId: account.id, patch: { notes: [], interests: [] } }).catch(() => {});
+  logStructured('forget_me', { from, accountId: account.id, turnsErased: erased?.count ?? null });
+  return await sendWhatsAppText({
+    to: from,
+    text: await localizeOutbound('🧹 Done. I have erased our chat memory and the things you told me. Your transactions stay on record, as the law requires. Your balance and your account are untouched.', await userLang(account)),
+    kind: 'flow',
+  });
 }
 
 /** The home card's Transactions line, finally answered: ten rows from the ledger, newest first. */
@@ -5776,7 +5823,7 @@ async function handleAIChat({ from, text, account, messageId = null }) {
   // Check if OpenAI is configured
   if (!process.env.OPENAI_API_KEY) {
     console.log('⚠️ OpenAI not configured, using fallback');
-    const fallbackMsg = `👋 Hi there!\n\nI didn't quite understand that. Here's what I can help you with:\n\n💰 Check balance\n📱 Buy airtime\n📶 Buy data\n💡 Buy electricity\n💸 Send money\n💳 Deposit\n🎟️ Redeem voucher\n\nType "help" to see more options!`;
+    const fallbackMsg = `👋 Hi there!\n\nI didn't quite understand that. Here's what I can help you with:\n\n${welcomeLines().join('\n')}\n\nType "help" to see more options!`;
     await addToConversationHistory(from, 'assistant', fallbackMsg);
     return await sendWhatsAppText({
       to: from,
@@ -5815,7 +5862,7 @@ async function handleAIChat({ from, text, account, messageId = null }) {
     // claims pre-gated on the wiCode production flag so the model can never
     // promise redemption that is not live (v1.3 amendment 2).
     const result = await orchestrate(text, contextString, {
-      knowledge: buildBrainKnowledge({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from) }),
+      knowledge: buildBrainKnowledge({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), capabilityLines: promptLines({ waId: from, account }) }),
       withdrawLive: payoutAllowedFor(from),
     });
 
@@ -6097,7 +6144,9 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
         await addToConversationHistory(from, 'assistant', localizedSpend);
         return await sendWhatsAppText({ to: from, text: localizedSpend });
       }
-      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n💰 *Balance* - "What's my balance?"\n📱 *Airtime* - "Buy R50 airtime"\n📶 *Data* - "Buy 1GB data"\n💡 *Electricity* - "Buy R100 electricity"\n💸 *Send money* - "Send R50 to 083...", or just share a contact from your phone\n💳 *Deposit* - "Deposit R100"\n🎟️ *Voucher* - "Redeem voucher"\n${payoutAllowedFor(from) ? '🏧 *Withdraw* - "withdraw R200" to your bank or as cash at an ATM\n' : ''}${fuelLiveFor(from) ? '⛽ *Fuel* - "buy fuel"\n' : ''}🏪 *Business* - "business account" to get paid by your customers\n\nJust ask me in your own words. Any South African language works!`;
+      // Every line comes from the capability registry (one gate per
+      // capability), never hand-written here.
+      const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n${helpLines({ waId: from, account }).join('\n')}\n\nJust ask me in your own words. Any South African language works!`;
       const localizedHelp = await localizeOutbound(helpMsg, await userLang(account));
       await addToConversationHistory(from, 'assistant', localizedHelp);
       return await sendWhatsAppText({ to: from, text: localizedHelp });
@@ -7315,11 +7364,12 @@ async function handleListVasProducts({ from, account }) {
 
     // Build friendly category list — LIVE categories only. Off categories
     // are not advertised at all (and betting words never appear in chat).
-    const categoryNames = {
-      AIRTIME: { name: '📱 Mobile Airtime', desc: 'Vodacom, MTN, Cell C, Telkom' },
-      DATA: { name: '📶 Data Bundles', desc: 'Daily, Weekly, Monthly bundles' },
-      ELECTRICITY: { name: '💡 Prepaid Electricity', desc: 'Eskom, City Power, and more' },
-    };
+    // Names and one-liners from the capability registry; a category the
+    // registry does not know is not advertised.
+    const categoryNames = Object.fromEntries(['AIRTIME', 'DATA', 'ELECTRICITY']
+      .map((id) => [id, capabilityById(id)])
+      .filter(([, c]) => c)
+      .map(([id, c]) => [id, { name: `${c.emoji} ${c.label}`, desc: c.oneLiner }]));
 
     // 2026-09-13: open with the catalogue-built list (vouchers, send, get
     // paid, withdraw when live, fuel when live), then the prepaid categories.

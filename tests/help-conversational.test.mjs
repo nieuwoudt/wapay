@@ -114,10 +114,11 @@ test('HELP dispatch: question-shaped input gets the spend answer, not the menu',
 test('the brain is fed the claim-gated spend knowledge on every AI turn, per user', () => {
   assert.match(
     processorSource,
-    /knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\) \}\)/
+    /knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), capabilityLines: promptLines\(\{ waId: from, account \}\) \}\)/
   );
   // The helper composes the production flag with the pilot allowlist.
-  assert.match(processorSource, /function fuelLiveFor\(waId\) \{\s*return isCategoryEnabledForWaId\('FUEL', waId\);/);
+  // 2026-09-16: one gate for every surface, the registry's (lib/capabilities.js).
+  assert.match(processorSource, /function fuelLiveFor\(waId\) \{[\s\S]*?return registryFuelLiveFor\(waId\);/);
 });
 
 test('how-to-SPEND voucher questions reach the AI; list asks stay on deterministic history', () => {

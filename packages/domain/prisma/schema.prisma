@@ -28,6 +28,7 @@ model Account {
   authFactors        AuthFactor[]
   consents           Consent[]
   auditLogs          AuditLog[]
+  turns              ConversationTurn[]
 }
 
 // A customer holds one wallet PER balance type:
@@ -422,6 +423,7 @@ model PendingGift {
 model ConversationTurn {
   id          String   @id @default(cuid())
   accountId   String
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   role        String // user | assistant | event
   kind        String? // agent | flow | guard | home | receipt | payout_webhook | reconcile | itn
   text        String
@@ -433,4 +435,31 @@ model ConversationTurn {
   @@index([accountId, createdAt])
   @@index([waMessageId])
   @@map("conversation_turns")
+}
+
+// Turn ledger, 2026-09-16 (AGENT_ARCHITECTURE_V2 C17): one append-only row per
+// agent turn. waId is stored masked (last 4 digits); toolCalls / proposal are
+// msisdn-masked and capped by lib/agent/turn-ledger.js before insert. No
+// relation to Account on purpose: a turn row must outlive nothing and block
+// nothing (best-effort write, never throws).
+model AgentTurn {
+  id             String   @id @default(cuid())
+  accountId      String
+  waId           String? // masked: …4567
+  path           String // agent | guard | fallback
+  outcome        String // reply | clarify | proposal | error | ...
+  promptHash     String?
+  model          String?
+  toolCalls      Json?
+  proposal       Json?
+  policyDecision String?
+  gatesFired     Json?
+  ms             Int?
+  inputTokens    Int?
+  outputTokens   Int?
+  error          String?
+  createdAt      DateTime @default(now())
+
+  @@index([accountId, createdAt])
+  @@map("agent_turns")
 }

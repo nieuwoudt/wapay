@@ -78,8 +78,10 @@ test('every customer-facing withdraw surface asks the PER-USER gate', () => {
   assert.match(processorSource, /topic === 'withdraw' && payoutAllowedFor\(from\)/);
   // The surfaces that ADVERTISE it: promising withdrawal to someone the
   // gate will refuse is the trap the fuel rollout already taught us.
-  assert.match(processorSource, /payoutAllowedFor\(from\) \? `🏧 \*Withdraw\*/, 'home screen');
-  assert.match(processorSource, /\$\{payoutAllowedFor\(from\) \? '🏧 \*Withdraw\*/, 'help menu');
+  // Phase 1 (2026-09-16): home and help render from the registry, whose WITHDRAW gate is payoutAllowedFor.
+  assert.match(processorSource, /homeLines\(\{ waId: from, account \}\)/, 'home screen');
+  assert.match(processorSource, /helpLines\(\{ waId: from, account \}\)/, 'help menu');
+  assert.match(readFileSync(fileURLToPath(new URL('../lib/capabilities.js', import.meta.url)), 'utf8'), /payoutAllowedFor\(/, 'the registry gate');
   assert.match(processorSource, /withdrawLive: payoutAllowedFor\(from\)/, 'what the AI may claim');
 });
 

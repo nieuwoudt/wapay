@@ -109,7 +109,8 @@ test('processor + menu + AI truth follow the switch; the PIN case is the only pa
   assert.ok(pinCase.indexOf('await updateConversationState(from, null);\n      const { executeWithdraw }') > -1, 'state cleared BEFORE the money call');
   assert.equal((p.match(/executeWithdraw\(/g) || []).length, 1, 'exactly one call site');
   assert.match(p, /state\.startsWith\('PAYOUT'\) \? 'WITHDRAW'/); assert.match(p, /\['WITHDRAW', process\.env\.WAPAY_PAYOUT_ENABLED === 'true' &&/, 'self-contained: the isolated-function tests evaluate it without imports');
-  assert.match(p, /payoutAllowedFor\(from\) \? `🏧 \*Withdraw\*: "withdraw R200"/, 'home menu flips with the per-user gate');
+  assert.match(p, /homeLines\(\{ waId: from, account \}\)/, 'home menu renders from the registry (whose withdraw gate is the per-user one)');
+  assert.match(read('../lib/capabilities.js'), /payoutAllowedFor\(/);
   const script = read('../lib/spend-catalogue.js');
   assert.match(script, /if \(process\.env\.WAPAY_PAYOUT_ENABLED === 'true'\) \{\s*\n\s*return \(\s*\n\s*`💸 Withdrawals are live!/);
   const ai = read('../packages/ai/src/orchestrator.ts');

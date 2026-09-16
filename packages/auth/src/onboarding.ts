@@ -515,7 +515,9 @@ export async function handleS4PinSet(args: {
       // Fallback to text
       await sendWhatsAppText({
         to: waId,
-        text: `🎉 Welcome to WaPay, ${displayName}!\n\n✅ Your account is now active!\n\n💰 Current Balance: R ${balance}\n\nI'm here to help you:\n• Redeem vouchers\n• Buy airtime & data\n• Send money\n• Check your balance\n\nJust ask me anything! 😊`,
+        // No hand-written product list here: the home card and "help" render
+        // what is live for this customer from the capability registry.
+        text: `🎉 Welcome to WaPay, ${displayName}!\n\n✅ Your account is now active!\n\n💰 Current Balance: R ${balance}\n\nJust tell me what you need, in any language, or type "help" to see everything I can do. 😊`,
       });
     }
     
@@ -777,7 +779,7 @@ export async function completePINReset(args: {
     // Send success message
     await sendWhatsAppText({
       to: waId,
-      text: `✅ *PIN Reset Successful!*\n\nYour new PIN has been set and your account is unlocked.\n\nYou can now use WaPay normally. What would you like to do?\n• Check balance\n• Redeem voucher\n• Buy airtime\n\nJust ask me!`,
+      text: `✅ *PIN Reset Successful!*\n\nYour new PIN has been set and your account is unlocked.\n\nYou can now use WaPay normally. Just tell me what you need, or type "help".`,
     });
     
     return { ok: true };

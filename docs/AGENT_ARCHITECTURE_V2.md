@@ -313,6 +313,14 @@ below is updated on every ship.
   findings, 31 confirmed and fixed; BUGLOG #63, #64 and the changelog entry)
   added two rules to keep: GetPaymentStatus request errors never release a
   hold, and the receipt guard's provenance is settled money only.
+- 2026-09-16, Phase 1 shipped (changelog entry 36): C7 wired into home, help,
+  the fallback, the product list and the AI knowledge (one fuel gate); C16
+  habits in the record plus "what do you know about me" and "forget me"; the
+  nightly integrity check of C17; C14 cascade. Phase 2 modules built and
+  tested, dormant until the shadow gate lands: C9/C8 (`packages/ai/src/agent.ts`,
+  `prompt.ts`), C10 (`lib/agent/tools`), C4 guards and C11 output gate
+  (`lib/agent/guards.js`), C17 (`lib/agent/turn-ledger.js`, `agent_turns`),
+  C18 (`scripts/eval-agent.mjs`).
 
 ## 14. Open questions for the founder
 

@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-09-16 (36) — Phase 1: every surface renders from the registry; habits in the record; "what do you know about me" and "forget me"; nightly balance integrity; turns follow their account; the Phase 2 modules land dormant
+
+Phase 1 of `docs/AGENT_ARCHITECTURE_V2.md`. The home card, the Help Menu,
+the no-model fallback and the product list render their product lines from
+`lib/capabilities.js` (one `liveFor` per capability; the processor's
+`fuelLiveFor` delegates to the registry's), and the onboarding welcome and
+PIN-reset copy no longer carry a hand-written product list. Every AI turn's
+knowledge block gains WHAT THIS CUSTOMER CAN DO TODAY, one line per live
+capability with the exact start command and fee. The customer record gains
+habits computed from the ledger rows (usual airtime number and amount, last
+meter tail, deposit rail, activity in 30 days; masked, never a full number).
+"What do you know about me" renders the record in the customer's words;
+"forget me" erases the conversation memory and notes and keeps the financial
+records. A nightly integrity check re-derives every wallet from the journal
+and logs drift (`lib/ledger-integrity.js`, inside the daily cron with a
+deadline). `conversation_turns` now cascades from its account (migration
+`20260916_conversation_turns_fk`, applied to production first; orphans from
+earlier harness runs removed). The Phase 2 modules are in the tree but not
+wired: `lib/agent/tools/*` (read and proposal tools with strict schemas),
+`packages/ai/src/agent.ts` and `prompt.ts` (the one-loop agent and its
+prompt), `lib/agent/guards.js` (pre-model guards and the output gate),
+`lib/agent/turn-ledger.js` with the `agent_turns` table (migration applied),
+and `scripts/eval-agent.mjs` with 24 new eval cases. Unit 824/824 (73 → 81
+test files), build green, chat QA harness 19/19. Test locks that asserted the
+hand-written home and help copy now assert the registry wiring.
+
 ## 2026-09-16 (35) — The moat, Phase 0: the customer record and both sides of every turn reach the model; the open execute routes closed; pay-outs stuck at INIT reconciled; typing indicator; the registry and the policy engine
 
 The architecture review of 2026-09-16 (`docs/AGENT_ARCHITECTURE_V2.md`: 6

@@ -75,7 +75,9 @@ test('processor wiring: fee hook before the keyword router, deposit trap ignores
   assert.ok(!/🛒 \*WaPay VAS Products\*/.test(p), 'the three-item dump is gone');
   // Tightened 2026-09-15: the menu follows the PER-USER gate, so it never
   // advertises withdrawal to a customer the pilot allowlist will refuse.
-  assert.equal((p.match(/\$\{payoutAllowedFor\(from\) \? '🏧 \*Withdraw\* - "withdraw R200"/g) || []).length, 1, 'the Help Menu flips with the per-user gate');
+  // Phase 1 (2026-09-16): the Help Menu renders from the registry, whose WITHDRAW gate is payoutAllowedFor.
+  assert.match(p, /helpLines\(\{ waId: from, account \}\)/, 'the Help Menu renders from the registry');
+  assert.match(read('../lib/capabilities.js'), /payoutAllowedFor\(/, 'the registry withdraw gate is the per-user one');
 });
 
 test('the AI prompt never freezes the payout flag and never plants a betting word', () => {

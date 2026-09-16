@@ -49,7 +49,7 @@ test('the AI knowledge, the fee answer and the spend reply follow the per-custom
 test('every processor call site passes withdrawLive: payoutAllowedFor(from) and the orchestrator honours it', () => {
   const sites = processor.match(/withdrawLive: payoutAllowedFor\(from\)/g) || [];
   assert.ok(sites.length >= 5, `expected the flag at the knowledge, prompt, spend-reply, product-list and fee-answer sites; found ${sites.length}`);
-  assert.match(processor, /buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\) \}\)/);
+  assert.match(processor, /buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), capabilityLines: promptLines\(\{ waId: from, account \}\) \}\)/);
   assert.match(processor, /feeAnswer\(topic, feeAskAmountCents\(text\), \{ withdrawLive: payoutAllowedFor\(from\) \}\)/);
   assert.match(orchestrator, /withdrawLive\?: boolean;/);
   assert.match(orchestrator, /agentPrompt\(tier1\.domain, opts\.knowledge, opts\.withdrawLive\)/);

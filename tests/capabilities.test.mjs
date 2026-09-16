@@ -151,9 +151,10 @@ test('homeLines equals renderHome for a non-pilot number and for a pilot number'
     assert.deepEqual(homeLines({ waId: PILOT }), [...HOME_FIXED_HEAD, FUEL_ON, WITHDRAW_ON, HOME_TAIL]);
     assert.deepEqual(homeLines({ waId: OTHER }), [...HOME_FIXED_HEAD, FUEL_OFF, WITHDRAW_OFF, HOME_TAIL]);
   });
-  // Every home line is a string the processor prints today.
+  // Phase 1 (2026-09-16): renderHome prints these lines BY CALLING the registry.
+  assert.ok(processorSource.includes("${homeLines({ waId: from, account }).join('\\n')}"), 'renderHome renders homeLines');
   for (const line of [...HOME_FIXED_HEAD, FUEL_ON, FUEL_OFF, WITHDRAW_ON, WITHDRAW_OFF, HOME_TAIL]) {
-    assert.ok(processorSource.includes(line), `renderHome prints: ${line}`);
+    assert.ok(!processorSource.includes(line) || line === HOME_TAIL, `no hand-written copy of: ${line}`);
   }
 });
 
@@ -178,9 +179,11 @@ test('helpLines equals the Help Menu lines, with withdraw and fuel only when liv
     assert.deepEqual(helpLines({ waId: PILOT }), [...HELP_HEAD, HELP_WITHDRAW, HELP_FUEL, HELP_TAIL]);
     assert.deepEqual(helpLines({ waId: OTHER }), [...HELP_HEAD, HELP_TAIL]);
   });
-  const helpSrc = processorSource.slice(processorSource.indexOf('const helpMsg = `📋 *WaPay Help Menu*'));
+  // Phase 1 (2026-09-16): the Help Menu prints these lines BY CALLING the registry.
+  const helpSrc = processorSource.slice(processorSource.indexOf('const helpMsg = `📋 *WaPay Help Menu*'), processorSource.indexOf('const helpMsg = `📋 *WaPay Help Menu*') + 400);
+  assert.ok(helpSrc.includes("${helpLines({ waId: from, account }).join('\\n')}"), 'the help menu renders helpLines');
   for (const line of [...HELP_HEAD, HELP_WITHDRAW, HELP_FUEL, HELP_TAIL]) {
-    assert.ok(helpSrc.includes(line), `help menu prints: ${line}`);
+    assert.ok(!helpSrc.includes(line), `no hand-written copy of: ${line}`);
   }
 });
 
