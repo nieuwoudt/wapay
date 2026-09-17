@@ -4,6 +4,13 @@
 
 ---
 
+## 67. The bot was mute for 14 hours: the webhook used `runWithSendScope` without importing it
+
+- **Symptom:** founder report 2026-09-17 morning: "they just stopped responding today". Every text message since the Phase 0 deploy (`3915d81`, 2026-09-16 evening) showed "typing" and then nothing. `processed_messages` had only `webhook-ok` pulses and no claimed `wamid` rows since 06:36 UTC on the 16th, no delivery-status pulses, and `conversation_turns` had never received a production row. Meta's retries (three pulses a minute apart, then four minutes) were the same message dying the same way.
+- **Root cause:** Phase 0 added the send-scope wrapper to the webhook's turn (`runWithSendScope(...)` in `pages/api/webhooks/whatsapp.js`) and imported only `sendTypingIndicator` and `outboundSendCount` from `@wapay/whatsapp`. The `ReferenceError` was thrown inside the turn's try, caught as "threw before sending", the claim released, the response 500, and Meta redelivered into the same error. `node --check` and `next build` both accept an identifier that is never imported; every webhook test read the route as text; the chat harness calls `processMessage` directly and never loads the route.
+- **Fix:** the missing name in the import (one line). Verified on the shipped build by a runtime test that fails on the broken file (500, nothing processed, typing shown) and passes on the fixed one.
+- **Guard:** `tests/webhook-route-runtime.test.mjs` loads and RUNS the route in a child process with its collaborators mocked and a real HMAC signature: a signed text message must reach `processMessage` and be acknowledged 200; a turn that throws before sending must release the claim and answer 500. A TypeScript `checkJs` sweep of every JS file changed since the last known-good build found no other undeclared identifier. Standing rule: a webhook change ships only with the route test green, and the first production message after any deploy that touches the webhook is watched in `processed_messages` (a claimed `wamid` row plus a `status-sent` pulse) before the deploy is called done.
+
 ## 66. "my pin is 1234" in prose reached the model and stayed in memory for seven days
 
 - **Symptom:** found by the Phase 2 pre-ship review (2026-09-16). Outside a PIN state, a sentence like "my pin is 1234", "wallet pin 4321 please" or "the wicode is 12345678" passed every guard: the redactor only labelled `code`/`otp` phrases, bare 4-6 digit messages and 12+ digit runs. The line went to OpenAI as typed, was stored as typed in `conversation_turns`, and was re-fed on every turn until retention deleted it.

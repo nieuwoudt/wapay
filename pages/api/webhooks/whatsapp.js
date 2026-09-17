@@ -12,7 +12,7 @@ import { ensureTemplatesReady } from './_middleware.js';
 import { checkInboundWebhook, readRawBody } from '../../../lib/webhook-security.js';
 import { claimMessage, releaseClaim } from '../../../lib/ledger-post.js';
 import { unmarkMessageProcessed } from './user-manager.js';
-import { sendTypingIndicator, outboundSendCount } from '@wapay/whatsapp';
+import { sendTypingIndicator, outboundSendCount, runWithSendScope } from '@wapay/whatsapp';
 import prisma from '../../../lib/prisma.js';
 
 // X-Hub-Signature-256 is an HMAC over the EXACT raw bytes Meta sent; Next's

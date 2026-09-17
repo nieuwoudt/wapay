@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-09-17 (38) — Hotfix: the mute bot (BUGLOG #67); the webhook route is now loaded and run by a test
+
+One line: `runWithSendScope` added to the webhook's import from `@wapay/whatsapp`.
+Since the Phase 0 deploy the wrapper had been used without being imported,
+so every text turn threw a `ReferenceError` before its first send, released
+its claim, answered 500 and was redelivered into the same error; customers
+saw "typing" and nothing else. A new test (`tests/webhook-route-runtime.test.mjs`)
+signs a real payload and runs the route with its collaborators mocked, and
+fails on the broken file. A `checkJs` sweep of every JS file changed since
+`6f449eb` found no other undeclared identifier. Unit 840/840, build green.
+The Phase 0, 1 and 2 changes themselves are unaffected: the harness had
+exercised them end to end against the live database; only the route wrapper
+around them was never executed before production.
+
 ## 2026-09-16 (37) — Phase 2: the Pay agent is wired behind a shadow list; one model call over the record and typed tools; the first live eval
 
 Phase 2 of `docs/AGENT_ARCHITECTURE_V2.md`. For a number on
