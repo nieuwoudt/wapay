@@ -1,0 +1,280 @@
+<title>Pay Agent Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Public+Sans:wght@400;600&display=swap">
+<style>
+  :root{
+    --bg:#F6F8F6; --surface:#FFFFFF; --ink:#16211A; --muted:#5B6A60; --line:#D5DDD7;
+    --accent:#359853; --accent-ink:#1F6B39; --accent-bg:#EAF5EE;
+    --warn:#B3541E; --warn-bg:#FBF1EA; --code-bg:#EEF2EF;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#101613; --surface:#17201B; --ink:#E7EEE9; --muted:#9FB0A5; --line:#2A3630;
+      --accent:#4FB86E; --accent-ink:#8BD3A0; --accent-bg:#17281D;
+      --warn:#E08A5A; --warn-bg:#2A1E16; --code-bg:#1E2924;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#101613; --surface:#17201B; --ink:#E7EEE9; --muted:#9FB0A5; --line:#2A3630;
+    --accent:#4FB86E; --accent-ink:#8BD3A0; --accent-bg:#17281D;
+    --warn:#E08A5A; --warn-bg:#2A1E16; --code-bg:#1E2924;
+  }
+  body{background:var(--bg); color:var(--ink); font-family:'Public Sans',system-ui,-apple-system,sans-serif; font-size:16px; line-height:1.55; padding-inline:20px; padding-block:0 64px; margin:0;}
+  .wrap{max-width:980px; margin-inline:auto;}
+  h1,h2,h3{font-family:'Archivo','Public Sans',system-ui,sans-serif; text-wrap:balance; margin:0;}
+  h1{font-size:2.4rem; font-weight:700; line-height:1.1; letter-spacing:-.01em;}
+  h2{font-size:1.45rem; font-weight:600; margin-block:56px 12px; padding-top:20px; border-top:1px solid var(--line);}
+  h3{font-size:1.05rem; font-weight:600; margin-block:22px 8px;}
+  p{margin-block:0 14px; max-width:70ch;}
+  .eyebrow{font-size:.74rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-block:40px 14px; font-weight:600;}
+  .stand{font-size:1.12rem; max-width:64ch; color:var(--ink); margin-block:18px 0;}
+  .verdict{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-block:22px 0;}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:18px 20px;}
+  .card h3{margin-top:0;}
+  .card p:last-child{margin-bottom:0;}
+  .card.accent{border-color:var(--accent); background:var(--accent-bg);}
+  .card.warn{border-color:var(--warn); background:var(--warn-bg);}
+  .kicker{font-size:.74rem; letter-spacing:.1em; text-transform:uppercase; font-weight:600; color:var(--muted); display:block; margin-bottom:6px;}
+  .card.accent .kicker{color:var(--accent-ink);}
+  .card.warn .kicker{color:var(--warn);}
+  figure{margin:22px 0 8px;}
+  .diagram{overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--surface); padding:14px;}
+  .diagram svg{display:block; min-width:1000px; width:100%; height:auto; color:var(--ink);}
+  figcaption{font-size:.9rem; color:var(--muted); margin-top:10px; max-width:80ch;}
+  table{border-collapse:collapse; width:100%; font-size:.93rem; margin-block:14px 6px;}
+  th,td{text-align:left; vertical-align:top; padding:9px 10px; border-bottom:1px solid var(--line);}
+  th{font-size:.74rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600;}
+  td.num{font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .tablewrap{overflow-x:auto;}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.86em; background:var(--code-bg); padding:1px 5px; border-radius:4px;}
+  ul{padding-left:20px; margin-block:0 14px; max-width:78ch;}
+  li{margin-block:4px;}
+  li b,p b{font-weight:600;}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-block:14px 0;}
+  .pill{display:inline-block; font-size:.72rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); white-space:nowrap;}
+  .pill.keep{border-color:var(--accent); color:var(--accent-ink);}
+  .pill.change{border-color:var(--warn); color:var(--warn);}
+  .pill.add{border-color:var(--accent); color:var(--accent-ink); background:var(--accent-bg);}
+  .pill.drop{border-color:var(--muted);}
+  .foot{font-size:.86rem; color:var(--muted); margin-top:48px; padding-top:16px; border-top:1px solid var(--line); max-width:80ch;}
+  @media (max-width:720px){
+    h1{font-size:1.9rem;}
+    .verdict,.grid3{grid-template-columns:1fr;}
+  }
+  @media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto;} }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">WaPay · engineering decision · 16 September 2026</div>
+  <h1>Pay Agent Architecture</h1>
+  <p class="stand">The chat feels like a menu because the customer is talking to the pre-agent runtime: 29 deterministic intercepts, two serial classifier calls, and a model that has never been shown a single fact about the customer. The agent described in the recon was never built. This page shows what runs today, the target that six read-only readers, four independent designers, three judges and two refuters per claim converged on, and the order to build it in.</p>
+
+  <div class="verdict">
+    <div class="card accent">
+      <span class="kicker">Architecture or implementation?</span>
+      <h3>The plan on paper is right. The runtime is the old one.</h3>
+      <p>When this page was first written (16 September, morning) only Phase 0 and 0.5 of the recon had shipped; the context pack, the registry and the tool-using loop had not started, and what the founder was reviewing was regex and templates with a two-tier classifier behind them. By the same night Phases 0, 1 and 2 were in production: the record and both sides of memory reach every turn, every surface renders from the registry, and the one-loop Pay agent runs for numbers on the shadow list. The intercept layer is still there for everyone else; Phase 3 removes it group by group with the eval as the gate.</p>
+    </div>
+    <div class="card warn">
+      <span class="kicker">Where we disagree</span>
+      <h3>One brain, many hands. Not a main agent talking to specialist agents.</h3>
+      <p>The founder's picture is right about ownership (each product owns its truth, tools and flow) and wrong about inference. Every extra model on a WhatsApp turn costs one to three seconds, a second prompt to keep truthful, and a second place to be wrong. The current two-tier engine already is "an orchestrator talking to category agents", and it is the thing being complained about. Specialists become modules, tools and off-path workers; one model composes.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <span class="kicker">What the moat is</span>
+    <p>Not the model, and not the number of agents. FNB already runs eWallet on WhatsApp, and any bank can rent the same model. The defensible asset is the per-customer record under one WhatsApp identity: every deposit, send, purchase, pay-out and pay link across every product, read on every turn, plus a policy-gated registry that any partner product (a bank link, a credit check, an insurance quote) plugs into as a module. That is what a bank cannot bolt onto a menu quickly, and it is the cheaper thing to build. So the order is plumbing first, brain second.</p>
+  </div>
+
+  <h2>Status: Phases 0, 1 and 2 shipped on 16 September 2026 (builds 3915d81, ea48cd4, a803950); hotfix 398475f on 17 September</h2>
+  <p>The target diagram below carries a badge on every component: ✓ shipped, ◐ partly or live only behind the shadow list, ○ next. Unit tests 839 of 839 across 78 files, build green, chat harness 28 of 28, three read-only adversarial reviews before the three pushes, and three migrations applied to production before the code that reads them. Design record in the repo: docs/AGENT_ARCHITECTURE_V2.md (section 13 is the shipped log); BUGLOG #56 to #64; CHANGELOG entries 35, 36 and 37.</p>
+  <div class="verdict">
+    <div class="card accent">
+      <span class="kicker">What changed in this architecture since the first version of this page</span>
+      <ul>
+        <li><b>Phase 0 (3915d81).</b> The customer record and both sides of every turn reach the model; Transactions and status questions answer from the ledger; the three public execute routes closed; strict PIN states; claim release and the typing indicator; pay-outs stuck at INIT reconciled; the registry and the policy engine built.</li>
+        <li><b>Phase 1 (ea48cd4).</b> Home, help, the fallback, the product list and the AI knowledge render from the registry; habits in the record; "what do you know about me" and "forget me"; the nightly balance integrity check; turns cascade from the account; the Phase 2 modules landed dormant.</li>
+        <li><b>Phase 2 (a803950).</b> The Pay agent is wired: one model call over the record and typed tools, guards before the model, a per-customer budget, proposals through the same confirm and PIN steps, output gates and the provenance guard before every send, a clarify state, a ledger row per turn. Live for the numbers on WAPAY_AGENT_V3_MSISDNS only. First eval: 11 of 12 on the English golden subset, p50 1.9 s, p95 3.7 s.</li>
+        <li><b>Hotfix 398475f (17 September).</b> The bot was mute from the Phase 0 deploy until the next morning: the webhook used its send-scope wrapper without importing it, so every text turn threw before its first send and Meta was told to retry (BUGLOG #67). One import fixed it; a new test now loads and runs the route with a signed payload, and the first real message after any webhook deploy is watched in the database before a deploy is called done.</li>
+        <li><b>Two design corrections from the refuters, kept.</b> The context pack reads the source tables in one batch (an events table keyed by ledger idemKey cannot represent holds or pending pay-outs). Flow starters stay in the processor until Phase 3 (relocating breaks about 27 test locks; exporting in place breaks none).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="kicker">Not yet</span>
+      <ul>
+        <li>Promotion beyond the shadow list (Phase 3 gate: the full eval per language at or above the two-tier engine's pass rate, and a week of shadow turns with no gate firing on money copy).</li>
+        <li>Deleting the regex hooks and retiring the two-tier classifier (Phase 3, two batches).</li>
+        <li>Mission Control cards for conversations, gates fired, cost and pay-out drift (Phase 3).</li>
+        <li>The jobs table, notifyCustomer, journal index columns, a second model provider, the first partner module (Phase 4).</li>
+        <li>A Vercel schedule for the 10-minute pay-out sweep (needs the plan decision).</li>
+      </ul>
+    </div>
+  </div>
+  <div class="verdict">
+    <div class="card accent">
+      <span class="kicker">Shipped and live for every customer</span>
+      <ul>
+        <li>Home, help, the fallback and the product list render from one capability registry; every surface says the same thing about every product for this number.</li>
+        <li>The customer record in every AI turn: balances, held amounts, the last ten movements with references and states, the pending pay-out, open pay links, saved people, habits (usual airtime number and amount, last meter, deposit rail).</li>
+        <li>Both sides of every turn recorded (out-of-band senders included); the model sees the last 12 turns of both sides, with the current message excluded.</li>
+        <li>Transactions, "what did I buy", "my withdrawals", "who paid my link" answered from the ledger; status questions disambiguate between a deposit and a withdrawal.</li>
+        <li>The three public execute routes closed; every PIN state strict; a PIN in a sentence never reaches the model; balance by wallet type; one withdrawal truth per customer; claim release and redelivery; typing indicator.</li>
+        <li>Pay-outs stuck at INIT reconciled; the sweep runs from a cron route, a daily floor and the customer's next message; request-level rail errors never release a hold.</li>
+        <li>The policy gate runs before a proposed flow and before a withdrawal; "what do you know about me" and "forget me"; a nightly integrity check re-derives every wallet from the journal.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="kicker">Test it on your phone now</span>
+      <ul>
+        <li>"Home" and "help": the product lines come from the registry; ask "what do you know about me" and then "forget me".</li>
+        <li>"Transactions" (also from the home card), "what did I buy", "my withdrawals", "who paid my link".</li>
+        <li>"Did my payment go through" after a deposit and a withdrawal on the same day: it names the newest and offers the other.</li>
+        <li>Any free question about your own money ("how much did I deposit this month", "what was that R50 last night"): the AI answers from the record and quotes only its numbers.</li>
+        <li>Send any message and watch for "typing" within about a second.</li>
+        <li>In a PIN prompt, type "my pin is 1234": it asks for just the digits and does not abandon the purchase.</li>
+        <li>Ask about withdrawing from a number that is not on the pilot list: home, help and the AI now say the same thing.</li>
+        <li><b>With your number on WAPAY_AGENT_V3_MSISDNS</b> (set in Vercel, redeploy): "How can I withdraw money?", "Where can I spend my OTT voucher?", "what did I buy last week", "did my payment go through", "Okay", "send R50 to 083…", "buy R30 airtime". Expect two lines and a question, headed lists, your history quoted with references, and the same confirm and PIN steps for money.</li>
+      </ul>
+    </div>
+  </div>
+  <p>For a number that is not on the shadow list, capability questions still use the review-4 bridge answers and the two-tier engine; that is the Phase 3 deletion.</p>
+
+  <h2>The phase map: where the build stands</h2>
+  <p>The one picture to open each week. Five phases in build order, each component with its badge (✓ shipped for every customer, ◐ partly or behind the shadow list, ○ next), the gate that opens Phase 3, and the you-are-here marker. It is regenerated from the verified status table on every ship; the design record (docs/AGENT_ARCHITECTURE_V2.md, section 13) is the territory, this is the map.</p>
+  <figure>
+    <div class="diagram">
+<!--PHASE_MAP_SVG-->
+    </div>
+    <figcaption><!--PHASE_MAP_CAPTION--></figcaption>
+  </figure>
+<!--WHERE_WE_ARE-->
+  <h2>What the founder can test now</h2>
+  <p>One line per component that is on the phone today. Nothing below promises a number: the reply must quote your own record, and any money action must still end in the same confirm and PIN steps.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Phase</th><th>Component</th><th>Do this and expect</th><th>Status</th><th>Needs</th></tr></thead>
+    <tbody>
+<!--FOUNDER_TEST_ROWS-->
+    </tbody>
+  </table></div>
+  <h2>One WhatsApp turn today</h2>
+  <p>Every box below runs inside the webhook before Meta gets its acknowledgement. Rust marks the parts that produce the menu feel or a customer-visible wrong answer.</p>
+  <figure>
+    <div class="diagram">
+<!--TODAY_SVG-->
+    </div>
+    <figcaption>Of 29 intercept points, 27 answer with a template before the model is consulted. The model, when reached, is given four profile facts and five history lines that are mostly its own earlier replies. It can trigger two point lookups it never sees the result of (balance, and the latest deposit or pay-out status); there is no transaction list, statement or history read anywhere in the chat.</figcaption>
+  </figure>
+
+  <h3>The founder's screenshots, traced to the diagram</h3>
+  <div class="tablewrap"><table>
+    <tr><th>He typed</th><th>What answered</th><th>Why</th></tr>
+    <tr><td>"How can I withdraw money?"</td><td>The how-it-works intercept, a four-step template</td><td>A regex chose between two fixed strings. No component composes two lines and a question from the live option list.</td></tr>
+    <tr><td>"Where can I spend my OTT voucher?"</td><td>The same intercept, one paragraph</td><td>Facts rendered as prose. There is no composition policy anywhere, in code or in a prompt.</td></tr>
+    <tr><td>"Did my payment to tbh go through"</td><td>The deposit-status intercept, a weeks-old card deposit</td><td>At the time the status handler read only the newest card deposit; pay-outs were added on 16 September. The model itself never sees any movement, so it could not have named the R50 PayShap or asked which payment was meant.</td></tr>
+    <tr><td>"Home"</td><td>The home card, with a Transactions line</td><td>Transactions has no handler. The home card is the only shape the bot has for "what can I do".</td></tr>
+    <tr><td>"Okay", "I'll try later"</td><td>Two canned sentences</td><td>A non-intent message gets a fixed fallback. The model was not asked.</td></tr>
+  </table></div>
+
+  <h2>One WhatsApp turn in the target</h2>
+  <p>Green marks what is new. The money boundary (preview, confirm, PIN, idempotent execute) is unchanged and the model never sees a PIN turn.</p>
+  <figure>
+    <div class="diagram">
+<!--TARGET_SVG-->
+    </div>
+    <figcaption>One model call per turn is the common case because the context pack pre-answers balance, recent movements, the pending pay-out, open links and saved people. A read tool adds a second call; a proposal ends the loop; a clarify outcome ends the turn with a question and a pending intent that the next turn picks up. The streaming feel is built from three WhatsApp-native moves: the typing indicator within about half a second, one composed message in two to four seconds, and, only when a tool round is needed, a one-line fact-built acknowledgement first. The second bubble is conditional because Meta bills in-window replies from 1 October 2026; the cost target per turn is model plus Meta, tracked in the turn ledger.</figcaption>
+  </figure>
+
+  <h3>The turn, step by step</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Step</th><th>Component</th><th>What happens</th><th>Budget (targets)</th></tr>
+<!--SEQUENCE_ROWS-->
+  </table></div>
+
+  <h2>"A main agent that talks to specialist agents"</h2>
+  <p>The picture the founder described, drawn honestly next to the recommendation. The difference is where the specialists run, not whether they exist.</p>
+  <figure>
+    <div class="diagram">
+<!--COMPARE_SVG-->
+    </div>
+    <figcaption>Left: each specialist is a model call on the reply path, serial because WhatsApp cannot stream a partial answer, each with its own prompt that must state the same product truth. Right: the same specialists as tools and data on one model's hot path, and as workers off it that message the customer back when a slow job (a pay-out reconcile, a quote) completes.</figcaption>
+  </figure>
+  <div class="grid3">
+    <div class="card"><span class="kicker">Products specialist</span><p>A read tool over the catalogue and embeddings, plus one proposal tool per product. Its knowledge block is attached to the prompt only when the capability is live for this customer and in focus.</p></div>
+    <div class="card"><span class="kicker">Pay-outs specialist</span><p>The context pack carries the pending pay-out; a status tool asks the rail live; the reconcile sweep runs off-path every ten minutes and writes what it told the customer into the same history the agent reads.</p></div>
+    <div class="card"><span class="kicker">Memory specialist</span><p>A query, not a model. The pack, the transactions tool and a curated customer record. A second model reading the same rows can only paraphrase them or invent, and the numeric-provenance guard exists precisely so numbers come from rows.</p></div>
+  </div>
+  <h3>Sending money as easily as a text</h3>
+  <p>Today "send" mints a voucher. In the target, the send proposal resolves the recipient from the record (a saved name, a shared contact card, or a number) and the registry picks the rail by who the recipient is: a WaPay customer gets a balance transfer, anyone else gets a voucher today and a pay-out once cash-out is open. The model names the person and the amount; it never chooses the rail. "Send R50 to mom" works from a saved name, and the confirm, PIN and receipt stay exactly as they are.</p>
+
+  <h2>How "gets to know me over time" works</h2>
+  <p>Three memory tiers, each with a named writer and a named reader. The model reads all three and may propose exactly one kind of write: a customer-stated note. Money facts are never written by the model.</p>
+  <figure>
+    <div class="diagram">
+<!--MEMORY_SVG-->
+    </div>
+    <figcaption>Working memory is the turn and the flow. Episodic memory is what happened, read straight from the ledger, the holds and the provider tables so there is no second copy to drift. Semantic memory is who the customer is: habits computed from those same tables, and notes the customer stated. All three render into one CUSTOMER RECORD block in the system prompt every turn.</figcaption>
+  </figure>
+  <ul>
+    <li><b>Status questions</b> ("did my payment go through") become a composition over the pack's recent movements: the newest candidate is named with its reference and state, and a second candidate is offered when two happened in the last day. Spelling and "to tbh" stop mattering because the candidate set comes from rows and the words only rank it.</li>
+    <li><b>Disambiguation and follow-up questions</b> fall out of the same block: the model sees the R50 PayShap and the R20 deposit side by side and asks which one. Clarify is a first-class outcome, not a slot ask: the question and the pending intent are stored in flow state, and the next turn's answer is routed back to the agent with that intent in the record ("R50 airtime: for you, or for the number ending 4421 you usually buy for?").</li>
+    <li><b>Things the customer tells it</b> ("I always buy for my mother", "call me Sipho") become notes through a propose_note tool: the runtime stores a note only when it contains no digits and is a direct statement about the customer, otherwise it asks once to confirm. The standing rule that the model writes no customer facts stays true; the feature ships in Phase 2.</li>
+    <li><b>Habits</b> (usual airtime number and amount, the meter, the deposit rail, who gets sent money) are computed in SQL from the same tables, not remembered by the model, so "the usual?" is exact.</li>
+    <li><b>Retention and erasure</b> become one delete on the turns table; the ledger and events stay as financial records. "What do you know about me" and "forget that" are ordinary tools.</li>
+  </ul>
+
+  <h2>The enterprise spine</h2>
+  <p>"Robust and enterprise" here means fewer moving parts with more instrumentation, not more agents. Six deterministic components carry it.</p>
+  <div class="grid3">
+    <div class="card"><span class="kicker">Policy engine</span><p>Sits between a proposal and a flow start: allow, deny, or require a KYC tier, a consent version, a PIN or a limit. Reads per-capability policy blocks and the existing Consent and Limit tables. This is where counsel-approved wording for credit, insurance and bank linking lives, and it keeps them dark until cleared.</p></div>
+    <div class="card"><span class="kicker">Output guards</span><p>Receipt shape, numeric provenance scoped to what matters (a balance, a status or a total stated as fact must come from the record or a tool result; limits, fee examples and echoed amounts pass), bearer digits, the partner and betting lexicon, message length. Totals over many rows come from the transactions tool's server-side sums, never from model arithmetic. A blocked reply degrades to a fact-built line, never to silence and never to "didn't catch that".</p></div>
+    <div class="card"><span class="kicker">Audit trail</span><p>One append-only turn table with a JSON payload per message: prompt hash, tools called, proposal, policy decision, guard blocks, latency and cost. Proposals that reach a preview also go to the existing AuditLog keyed by the WhatsApp message id, so message to proposal to preview to idemKey to ledger entry is one query. A nightly job re-derives every wallet balance from the journal and raises drift in Mission Control.</p></div>
+    <div class="card"><span class="kicker">Delivery and degraded mode</span><p>The webhook claims the message as in-flight and releases the claim on failure, with outbound sends idempotent per message id, so a killed turn is retried instead of silently lost. A typing indicator is sent before any work starts. A per-customer budget of model calls per hour stops a bored customer burning tokens. When the model is down, the guard list and the record still answer balance, status, help and the open flow deterministically; a second model provider is a later item, not a Phase 2 claim. Tool results and customer text are data in the prompt, never instructions.</p></div>
+    <div class="card"><span class="kicker">Async jobs</span><p>One jobs table drained on a schedule: the pay-out reconcile sweep, the customer summary, retention, and every future slow job (a credit check, insurance quotes). Workers message the customer back through one helper that picks in-window text, direct send or a template, and writes into the same history the agent reads.</p></div>
+    <div class="card"><span class="kicker">Evals</span><p>The golden corpus re-run through the agent with the pack and tools, scoring action, reply shape, language, latency and cost; the chat harness rewritten from exact copy to shape-and-fact assertions. English plus two languages first, the rest as promotion proceeds, and the translator kept as a fallback for the low-resource languages until their eval passes. Promotion per language is gated on both. Model ids stay env-tunable; "model-agnostic" is claimed only after a second provider has run the corpus.</p></div>
+  </div>
+
+  <h2>Adding a financial product</h2>
+  <p>Fuel cost 35 files and about 4,600 inserted lines across four commits because its truth and gates were copied into nine surfaces by hand. In the target, a product is one capability module and nothing in the agent, the prompt or the processor changes.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Part</th><th>What it holds</th><th>Bank-account linking example</th></tr>
+    <tr><td>Descriptor</td><td>id, label, one-liner, start command, <code>liveFor(waId)</code>, limits, fee line, policy block (KYC tier, consents, advice class)</td><td>live for an allowlist; requires a versioned open-banking consent; advice class "factual only"</td></tr>
+    <tr><td>Tools</td><td>read tools and one proposal tool with strict schemas</td><td><code>get_linked_accounts</code>, <code>start_link_bank</code></td></tr>
+    <tr><td>Flow</td><td>deterministic steps in the pure-step shape the withdraw flow already uses</td><td>consent text, a link button to the aggregator's hosted page, a webhook that records the link</td></tr>
+    <tr><td>Knowledge</td><td>brief and walkthrough, attached only when live and in focus</td><td>what is shared, what is not, how to unlink</td></tr>
+    <tr><td>Pack source</td><td>the table its flow writes, registered so the context pack and the transactions tool read it</td><td>a LinkedAccount table: provider, masked number, status, consent date</td></tr>
+  </table></div>
+  <p><b>Counsel first for three of them.</b> Recommending "the best insurance" is FAIS intermediary activity, a credit check needs NCA-grade consent and purpose, and bank linking runs through an aggregator with its own terms and a sponsor-bank question. The registry keeps each dark until cleared and the architecture makes each a module when it is. None of this design work is permission to advertise them. <b>Which first:</b> bank-account verification and linking, because it is the least regulated of the three, it is needed anyway to verify pay-out recipients, and it is the proof that a partner product is a folder. Credit follows once consent wording exists; insurance needs a licensed partner's journey, with the chat collecting needs and presenting quotes as facts, never "the best for you".</p>
+
+  <h2>The order to build it in</h2>
+  <p>Foundations first, because the agent cannot be built on a history that records one side, three public execute routes, and a message claim that is never released. The founder sees a change in the conversation at the end of every phase. Sizing is in working days for one Claude session at a time; on a calendar with one founder reviewing, that is six to eight weeks, with the founder's own number on the new brain in week two or three.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Phase</th><th>Sizing</th><th>What lands</th><th>What the founder sees in WhatsApp</th></tr>
+<!--PLAN_ROWS-->
+  </table></div>
+
+  <h3>Mapped onto the v1.4 handover tasks</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Task</th><th>Disposition</th><th>Why</th></tr>
+<!--HANDOVER_ROWS-->
+  </table></div>
+
+  <h2>Fixed in 3915d81, whichever architecture</h2>
+  <p>Verified in the code before the build, all closed in the shipped commit (BUGLOG #56 to #64).</p>
+  <ul>
+<!--FIX_NOW-->
+  </ul>
+
+  <h2>Where the recommendation disagrees with the brief</h2>
+  <ul>
+<!--DISAGREE-->
+  </ul>
+
+  <h2>How this was checked</h2>
+  <p>Six read-only readers mapped routing, the brain, memory, the money boundary, the truth surfaces and the channel at the current build with file and line evidence. Four designers proposed independently from different angles (one brain, orchestrator plus specialists, memory first, financial platform). Three judges (founder, engineer, risk) scored all four on eight criteria; all three chose the one-brain design and grafted the same items from the others. One synthesis produced the recommendation; each of its twelve load-bearing claims was then attacked by two refuters, one against the code and one against Meta, Vercel and regulatory facts. Seven claims stood, four were corrected in wording, and one was refuted outright and changed the design (the events read model). A completeness critic then read the founder's message sentence by sentence against the result; its additions are on this page (the clarify outcome, the two-bubble rule, server-side totals, the note path, degraded mode, the moat, the send rail rule, the narrower provenance guard, fewer tables, and the calendar).</p>
+  <div class="tablewrap"><table>
+    <tr><th>Claim</th><th>Result</th><th>Note</th></tr>
+<!--CLAIM_ROWS-->
+  </table></div>
+
+  <p class="foot">Sources: the WaPay repo at commit 240526c (pages/api/webhooks/message-processor-v2.js, packages/ai/src/orchestrator.ts, lib/*), docs/AGENT_ARCHITECTURE_RECON.md, docs/HANDOVER_V1.4.md, WAPAY_STATUS.md v1.4.0, and Meta's WhatsApp Cloud API documentation for the typing indicator. Latency figures in the target are targets to be measured by the eval runner, not measurements.</p>
+</div>

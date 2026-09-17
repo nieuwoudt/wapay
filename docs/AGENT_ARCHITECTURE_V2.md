@@ -1,5 +1,34 @@
 # The Pay agent: architecture v2 (the moat)
 
+**Version 1.6 · 2026-09-17 · build 9bc355e** (the version table is section 15; the visual map is docs/architecture/pay-agent-architecture.html, published at https://claude.ai/artifact/LzMx7uSJLfbyJeRftpPuMB)
+
+## How this document is used
+
+This file is the architecture of record for the WaPay chat. It says what we build towards. The code says what has shipped. When they differ, the code is behind, not the document.
+
+Every ship that changes what is true here updates section 13 and the visual map in the same commit. The map is `docs/architecture/pay-agent-architecture.html`, assembled from the sources beside it with `node docs/architecture/assemble.js` and republished to https://claude.ai/artifact/LzMx7uSJLfbyJeRftpPuMB so the link never changes. This record is the territory. The page is the map.
+
+Nobody diverges from the target silently. A session that finds the target wrong, or cannot build it as written, adds a section 11 entry in its form: claim, verdict (stands, corrected, refuted), evidence. The target changes only through such an entry.
+
+The version line sits at the top of this file and in the map's status heading:
+
+`Version <major>.<ship> · <date> · build <sha>`
+
+The major number changes when the target (sections 1 to 12) changes. The ship number changes with every section 13 entry. History: the version table below.
+
+## Where we are (2026-09-17)
+
+**Phase 2 is wired behind the shadow list. Phase 3 has not started.** Latest code build `9bc355e`.
+
+Complete for every customer (Phases 0 and 1): the customer record and the last 12 turns, both sides, in every model turn; execute routes closed; strict PIN states; claim release, typing indicator; INIT pay-out reconcile; registry-rendered surfaces; habits, "what do you know about me" and "forget me"; nightly balance integrity; policy engine before proposals and withdrawals.
+
+For the shadow list `WAPAY_AGENT_V3_MSISDNS` only (Phase 2): one model call over the record and typed tools; pre-model guards; per-customer budget; proposals through the same confirm and PIN steps; output gates, provenance guard; clarify state; an `agent_turns` row per turn. First live eval: 11 of 12, p50 1.9 s, p95 3.7 s. Everyone else: regex hooks and the two-tier engine.
+
+Phase 3 gate (section 13, verbatim): the eval on the full set per language at or above the two-tier engine's pass rate, and a week of shadow turns with no gate firing on money copy.
+
+Incident: the bot was mute from the Phase 0 deploy (2026-09-16) to hotfix `398475f` (2026-09-17) because the webhook used `runWithSendScope` without importing it (BUGLOG #67). Rule: a webhook change ships only with the route runtime test green, and the first production message is watched in `processed_messages` before the deploy is called done.
+
+
 *Decision record and engineering reference, written 2026-09-16 from a 39-agent
 review (6 read-only readers, 4 independent designers, 3 judges, 1 synthesis, 24
 refuters, 1 completeness critic) run against commit `240526c`. The founder's
@@ -337,6 +366,30 @@ below is updated on every ship.
   the regex-hook deletions, the classifier retirement, Mission Control cards
   (C19), `agent_jobs` and `notifyCustomer` (Phase 4).
 
+- 2026-09-17, hotfix `398475f` (changelog 38, BUGLOG #67): the webhook used
+  `runWithSendScope` without importing it since `3915d81`, so nothing in
+  Phases 0 to 2 had answered a customer before this build; the route is now
+  loaded and run by a test. `4b3f478` (changelog 39, BUGLOG #68): the withdraw
+  flow names a method the balance cannot cover and never states an
+  unreachable ceiling. `9bc355e` (changelog 40, BUGLOG #69): fuel and
+  voucher execute routes prove ownership before the PIN, the voucher crash
+  guard is disarmed once OTT has issued, the output gate runs for every
+  customer's model reply, the on-inbound reconcile covers INIT.
+- 2026-09-17, verification pass (four read-only verifiers, file and line
+  evidence at HEAD; the table drives the phase map). Backlog they opened,
+  kept here as the Phase 3 and 4 list: C4 is three code guards, not the
+  design's ordered table of ten; C8 loads no focus knowledge yet; C9 has no
+  per-tool timeout; C10's propose_note writes without the confirm turn; C12's
+  WITHDRAW case is shadow-only; C14 writes no event rows for money outcomes
+  without a message; C16 habits are computed in JavaScript over the last 40
+  rows, not SQL; C18 evaluates English only and does not fail the build; C19
+  has neither card; C20 has no 10-minute schedule and only five rows per daily
+  sweep; C21 (notifyCustomer) is unbuilt, so a pay-out that finalises outside
+  the 24-hour window is told by a template; the localizer has no per-language
+  eval; no partner module exists; the shadow gate sits after the reconcile,
+  gift-claim, state and business hooks rather than at the very top; the
+  policy engine has nothing configured that can return anything but allow.
+
 ## 14. Open questions for the founder
 
 1. Vercel plan (Hobby or Pro): decides whether the 10-minute reconcile cron is
@@ -344,3 +397,15 @@ below is updated on every ship.
    on-inbound reconcile are in place either way.
 2. Counsel and Didit before cash-out opens beyond the allowlist (unchanged).
 3. Which partner product is first (recommendation: bank-account verification).
+
+## 15. Version history
+
+| Version | Date | Build | What changed |
+|---|---|---|---|
+| 1.0 | 2026-09-16 morning | none; review run against `240526c` | The decision: one composing model over the per-customer record and typed tools; specialists as tools, knowledge modules and off-path workers; the money flows untouched. Sections 1 to 12 written from the 39-agent review. The section 11 corrections, including the refuted idemKey read model. Supersedes the recon §5.3 phasing and amends HANDOVER_V1.4 tasks 1 to 6. |
+| 1.1 | 2026-09-16 evening | `3915d81` | Phase 0 shipped (changelog 35, BUGLOG #56 to #64): C1 typing indicator and claim release, C2 `say()`, C5 strict PIN states, C6 context pack into the two-tier engine, C7 built, C11 wired, C13 execute routes hardened, C14 `conversation_turns`, C20 in part, the Transactions handler. Two rules kept: GetPaymentStatus request errors never release a hold; receipt provenance is settled money only. |
+| 1.2 | 2026-09-16 night | `ea48cd4` | Phase 1 shipped (changelog 36): C7 wired into home, help, the fallback, the product list and the AI knowledge; C16 habits, "what do you know about me", "forget me"; the nightly integrity check; C14 cascade from the account. Phase 2 modules (C4, C8, C9, C10, C11 output gate, C17, C18) in the tree, dormant. |
+| 1.3 | 2026-09-16 late night | `a803950` | Phase 2 wired (changelog 37, BUGLOG #65, #66): the shadow gate `WAPAY_AGENT_V3_MSISDNS`, `handleAgentTurn`, the `AGENT_CLARIFY` state, the WITHDRAW dispatch case; first live eval 11 of 12. Three rules kept: the model sees the redacted line, never raw; a refused or guarded turn never counts toward the budget; a failed send throws so the claim is released. |
+| 1.4 | 2026-09-17 morning | `398475f` | Hotfix (changelog 38, BUGLOG #67): the missing `runWithSendScope` import that muted the bot since `3915d81`. No change to the target. C1's delivery contract is now proven by a runtime route test. Rule added: a webhook change ships only with that test green, and the first production message after a webhook deploy is watched before the deploy is called done. |
+| 1.5 | 2026-09-17 morning | `4b3f478` | Withdraw affordability (changelog 39, BUGLOG #68) from the founder's first live test after the hotfix. No change to the target. |
+| 1.6 | 2026-09-17 | `9bc355e` | Verification pass and three gaps closed (changelog 40, BUGLOG #69); the phase map, the preface, this table and section 13's backlog added; the page sources move into the repo under docs/architecture. |

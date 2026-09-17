@@ -1,0 +1,49 @@
+<svg viewBox="0 0 1200 350" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three memory tiers, working, episodic and semantic, each with its writer and reader, all rendered into one customer record block in the system prompt; the model reads them and never writes money facts">
+  <defs>
+    <marker id="m-arr-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#359853"/></marker>
+  </defs>
+  <g font-family="'Public Sans', system-ui, sans-serif" font-size="11" fill="currentColor">
+    <g stroke="#359853" stroke-width="1.6" fill="none">
+      <rect x="20" y="40" width="370" height="196" rx="8"/>
+      <rect x="415" y="40" width="370" height="196" rx="8"/>
+      <rect x="810" y="40" width="370" height="196" rx="8"/>
+    </g>
+    <text x="36" y="64" letter-spacing="1.2" fill="#359853" font-weight="600">WORKING · this turn and this flow</text>
+    <text x="36" y="88" opacity=".9">conversation_turns: both sides of every turn,</text>
+    <text x="36" y="104" opacity=".9">plus event rows for things that happened with</text>
+    <text x="36" y="120" opacity=".9">no message (pay-out failed, deposit landed)</text>
+    <text x="36" y="140" opacity=".9">flow state and slots (conversationData, kept)</text>
+    <text x="36" y="156" opacity=".9">this turn's pack and tool results, in process</text>
+    <text x="36" y="184" font-size="10" opacity=".7">written by: the memory writer at the end of every turn;</text>
+    <text x="36" y="198" font-size="10" opacity=".7">out-of-band senders through one helper</text>
+    <text x="36" y="216" font-size="10" opacity=".7">redacted before storage · dated · 30-day retention</text>
+
+    <text x="431" y="64" letter-spacing="1.2" fill="#359853" font-weight="600">EPISODIC · what happened, read from the source</text>
+    <text x="431" y="88" opacity=".9">one batch per turn over the tables that already exist:</text>
+    <text x="431" y="104" opacity=".9">journal lines by wallet (settled money) · active holds</text>
+    <text x="431" y="120" opacity=".9">(pending pay-outs) · provider requests (deposits, VAS,</text>
+    <text x="431" y="136" opacity=".9">fuel, pay-outs with rail status) · pay links · gifts</text>
+    <text x="431" y="160" opacity=".9">rendered as movements: kind, amount, state, reference, time</text>
+    <text x="431" y="184" font-size="10" opacity=".7">written by: the money flows, exactly as today; no second copy to drift</text>
+    <text x="431" y="198" font-size="10" opacity=".7">later: per-account columns on journal lines so the read is indexed</text>
+    <text x="431" y="216" font-size="10" opacity=".7">read by: the pack (newest 10), get_transactions, Mission Control</text>
+
+    <text x="826" y="64" letter-spacing="1.2" fill="#359853" font-weight="600">SEMANTIC · who the customer is</text>
+    <text x="826" y="88" opacity=".9">habits computed in SQL from events: usual airtime</text>
+    <text x="826" y="104" opacity=".9">number and amount, meter, deposit rail, cadence,</text>
+    <text x="826" y="120" opacity=".9">who gets sent money</text>
+    <text x="826" y="140" opacity=".9">notes the customer stated, each with provenance</text>
+    <text x="826" y="156" opacity=".9">language, KYC, pilot flags, opt-outs (kept as today)</text>
+    <text x="826" y="184" font-size="10" opacity=".7">written by: the nightly job and a validated "remember" tool;</text>
+    <text x="826" y="198" font-size="10" opacity=".7">no model-written memory in v1.4; a number-free summary is a later option</text>
+    <text x="826" y="216" font-size="10" opacity=".7">"what do you know about me" and "forget that" are ordinary tools</text>
+
+    <line x1="205" y1="236" x2="205" y2="272" stroke="#359853" stroke-width="1.4" marker-end="url(#m-arr-acc)"/>
+    <line x1="600" y1="236" x2="600" y2="272" stroke="#359853" stroke-width="1.4" marker-end="url(#m-arr-acc)"/>
+    <line x1="995" y1="236" x2="995" y2="272" stroke="#359853" stroke-width="1.4" marker-end="url(#m-arr-acc)"/>
+
+    <rect x="20" y="274" width="1160" height="60" rx="8" fill="none" stroke="#359853" stroke-width="2.2"/>
+    <text x="600" y="298" text-anchor="middle" font-weight="700" font-size="12" fill="#359853">CUSTOMER RECORD · one block in the system prompt, every turn</text>
+    <text x="600" y="318" text-anchor="middle" opacity=".9">the model may quote these numbers and nothing else; the provenance guard checks every figure it speaks against this block and this turn's tool results</text>
+  </g>
+</svg>

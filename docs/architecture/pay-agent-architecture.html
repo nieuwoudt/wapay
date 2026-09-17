@@ -1,0 +1,1077 @@
+<title>Pay Agent Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Public+Sans:wght@400;600&display=swap">
+<style>
+  :root{
+    --bg:#F6F8F6; --surface:#FFFFFF; --ink:#16211A; --muted:#5B6A60; --line:#D5DDD7;
+    --accent:#359853; --accent-ink:#1F6B39; --accent-bg:#EAF5EE;
+    --warn:#B3541E; --warn-bg:#FBF1EA; --code-bg:#EEF2EF;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#101613; --surface:#17201B; --ink:#E7EEE9; --muted:#9FB0A5; --line:#2A3630;
+      --accent:#4FB86E; --accent-ink:#8BD3A0; --accent-bg:#17281D;
+      --warn:#E08A5A; --warn-bg:#2A1E16; --code-bg:#1E2924;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#101613; --surface:#17201B; --ink:#E7EEE9; --muted:#9FB0A5; --line:#2A3630;
+    --accent:#4FB86E; --accent-ink:#8BD3A0; --accent-bg:#17281D;
+    --warn:#E08A5A; --warn-bg:#2A1E16; --code-bg:#1E2924;
+  }
+  body{background:var(--bg); color:var(--ink); font-family:'Public Sans',system-ui,-apple-system,sans-serif; font-size:16px; line-height:1.55; padding-inline:20px; padding-block:0 64px; margin:0;}
+  .wrap{max-width:980px; margin-inline:auto;}
+  h1,h2,h3{font-family:'Archivo','Public Sans',system-ui,sans-serif; text-wrap:balance; margin:0;}
+  h1{font-size:2.4rem; font-weight:700; line-height:1.1; letter-spacing:-.01em;}
+  h2{font-size:1.45rem; font-weight:600; margin-block:56px 12px; padding-top:20px; border-top:1px solid var(--line);}
+  h3{font-size:1.05rem; font-weight:600; margin-block:22px 8px;}
+  p{margin-block:0 14px; max-width:70ch;}
+  .eyebrow{font-size:.74rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-block:40px 14px; font-weight:600;}
+  .stand{font-size:1.12rem; max-width:64ch; color:var(--ink); margin-block:18px 0;}
+  .verdict{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-block:22px 0;}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:18px 20px;}
+  .card h3{margin-top:0;}
+  .card p:last-child{margin-bottom:0;}
+  .card.accent{border-color:var(--accent); background:var(--accent-bg);}
+  .card.warn{border-color:var(--warn); background:var(--warn-bg);}
+  .kicker{font-size:.74rem; letter-spacing:.1em; text-transform:uppercase; font-weight:600; color:var(--muted); display:block; margin-bottom:6px;}
+  .card.accent .kicker{color:var(--accent-ink);}
+  .card.warn .kicker{color:var(--warn);}
+  figure{margin:22px 0 8px;}
+  .diagram{overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--surface); padding:14px;}
+  .diagram svg{display:block; min-width:1000px; width:100%; height:auto; color:var(--ink);}
+  figcaption{font-size:.9rem; color:var(--muted); margin-top:10px; max-width:80ch;}
+  table{border-collapse:collapse; width:100%; font-size:.93rem; margin-block:14px 6px;}
+  th,td{text-align:left; vertical-align:top; padding:9px 10px; border-bottom:1px solid var(--line);}
+  th{font-size:.74rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600;}
+  td.num{font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .tablewrap{overflow-x:auto;}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.86em; background:var(--code-bg); padding:1px 5px; border-radius:4px;}
+  ul{padding-left:20px; margin-block:0 14px; max-width:78ch;}
+  li{margin-block:4px;}
+  li b,p b{font-weight:600;}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-block:14px 0;}
+  .pill{display:inline-block; font-size:.72rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); white-space:nowrap;}
+  .pill.keep{border-color:var(--accent); color:var(--accent-ink);}
+  .pill.change{border-color:var(--warn); color:var(--warn);}
+  .pill.add{border-color:var(--accent); color:var(--accent-ink); background:var(--accent-bg);}
+  .pill.drop{border-color:var(--muted);}
+  .foot{font-size:.86rem; color:var(--muted); margin-top:48px; padding-top:16px; border-top:1px solid var(--line); max-width:80ch;}
+  @media (max-width:720px){
+    h1{font-size:1.9rem;}
+    .verdict,.grid3{grid-template-columns:1fr;}
+  }
+  @media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto;} }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">WaPay · engineering decision · 16 September 2026</div>
+  <h1>Pay Agent Architecture</h1>
+  <p class="stand">The chat feels like a menu because the customer is talking to the pre-agent runtime: 29 deterministic intercepts, two serial classifier calls, and a model that has never been shown a single fact about the customer. The agent described in the recon was never built. This page shows what runs today, the target that six read-only readers, four independent designers, three judges and two refuters per claim converged on, and the order to build it in.</p>
+
+  <div class="verdict">
+    <div class="card accent">
+      <span class="kicker">Architecture or implementation?</span>
+      <h3>The plan on paper is right. The runtime is the old one.</h3>
+      <p>When this page was first written (16 September, morning) only Phase 0 and 0.5 of the recon had shipped; the context pack, the registry and the tool-using loop had not started, and what the founder was reviewing was regex and templates with a two-tier classifier behind them. By the same night Phases 0, 1 and 2 were in production: the record and both sides of memory reach every turn, every surface renders from the registry, and the one-loop Pay agent runs for numbers on the shadow list. The intercept layer is still there for everyone else; Phase 3 removes it group by group with the eval as the gate.</p>
+    </div>
+    <div class="card warn">
+      <span class="kicker">Where we disagree</span>
+      <h3>One brain, many hands. Not a main agent talking to specialist agents.</h3>
+      <p>The founder's picture is right about ownership (each product owns its truth, tools and flow) and wrong about inference. Every extra model on a WhatsApp turn costs one to three seconds, a second prompt to keep truthful, and a second place to be wrong. The current two-tier engine already is "an orchestrator talking to category agents", and it is the thing being complained about. Specialists become modules, tools and off-path workers; one model composes.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <span class="kicker">What the moat is</span>
+    <p>Not the model, and not the number of agents. FNB already runs eWallet on WhatsApp, and any bank can rent the same model. The defensible asset is the per-customer record under one WhatsApp identity: every deposit, send, purchase, pay-out and pay link across every product, read on every turn, plus a policy-gated registry that any partner product (a bank link, a credit check, an insurance quote) plugs into as a module. That is what a bank cannot bolt onto a menu quickly, and it is the cheaper thing to build. So the order is plumbing first, brain second.</p>
+  </div>
+
+  <h2>Status: Phases 0, 1 and 2 shipped on 16 September 2026 (builds 3915d81, ea48cd4, a803950); hotfix 398475f on 17 September</h2>
+  <p>The target diagram below carries a badge on every component: ✓ shipped, ◐ partly or live only behind the shadow list, ○ next. Unit tests 839 of 839 across 78 files, build green, chat harness 28 of 28, three read-only adversarial reviews before the three pushes, and three migrations applied to production before the code that reads them. Design record in the repo: docs/AGENT_ARCHITECTURE_V2.md (section 13 is the shipped log); BUGLOG #56 to #64; CHANGELOG entries 35, 36 and 37.</p>
+  <div class="verdict">
+    <div class="card accent">
+      <span class="kicker">What changed in this architecture since the first version of this page</span>
+      <ul>
+        <li><b>Phase 0 (3915d81).</b> The customer record and both sides of every turn reach the model; Transactions and status questions answer from the ledger; the three public execute routes closed; strict PIN states; claim release and the typing indicator; pay-outs stuck at INIT reconciled; the registry and the policy engine built.</li>
+        <li><b>Phase 1 (ea48cd4).</b> Home, help, the fallback, the product list and the AI knowledge render from the registry; habits in the record; "what do you know about me" and "forget me"; the nightly balance integrity check; turns cascade from the account; the Phase 2 modules landed dormant.</li>
+        <li><b>Phase 2 (a803950).</b> The Pay agent is wired: one model call over the record and typed tools, guards before the model, a per-customer budget, proposals through the same confirm and PIN steps, output gates and the provenance guard before every send, a clarify state, a ledger row per turn. Live for the numbers on WAPAY_AGENT_V3_MSISDNS only. First eval: 11 of 12 on the English golden subset, p50 1.9 s, p95 3.7 s.</li>
+        <li><b>Hotfix 398475f (17 September).</b> The bot was mute from the Phase 0 deploy until the next morning: the webhook used its send-scope wrapper without importing it, so every text turn threw before its first send and Meta was told to retry (BUGLOG #67). One import fixed it; a new test now loads and runs the route with a signed payload, and the first real message after any webhook deploy is watched in the database before a deploy is called done.</li>
+        <li><b>Two design corrections from the refuters, kept.</b> The context pack reads the source tables in one batch (an events table keyed by ledger idemKey cannot represent holds or pending pay-outs). Flow starters stay in the processor until Phase 3 (relocating breaks about 27 test locks; exporting in place breaks none).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="kicker">Not yet</span>
+      <ul>
+        <li>Promotion beyond the shadow list (Phase 3 gate: the full eval per language at or above the two-tier engine's pass rate, and a week of shadow turns with no gate firing on money copy).</li>
+        <li>Deleting the regex hooks and retiring the two-tier classifier (Phase 3, two batches).</li>
+        <li>Mission Control cards for conversations, gates fired, cost and pay-out drift (Phase 3).</li>
+        <li>The jobs table, notifyCustomer, journal index columns, a second model provider, the first partner module (Phase 4).</li>
+        <li>A Vercel schedule for the 10-minute pay-out sweep (needs the plan decision).</li>
+      </ul>
+    </div>
+  </div>
+  <div class="verdict">
+    <div class="card accent">
+      <span class="kicker">Shipped and live for every customer</span>
+      <ul>
+        <li>Home, help, the fallback and the product list render from one capability registry; every surface says the same thing about every product for this number.</li>
+        <li>The customer record in every AI turn: balances, held amounts, the last ten movements with references and states, the pending pay-out, open pay links, saved people, habits (usual airtime number and amount, last meter, deposit rail).</li>
+        <li>Both sides of every turn recorded (out-of-band senders included); the model sees the last 12 turns of both sides, with the current message excluded.</li>
+        <li>Transactions, "what did I buy", "my withdrawals", "who paid my link" answered from the ledger; status questions disambiguate between a deposit and a withdrawal.</li>
+        <li>The three public execute routes closed; every PIN state strict; a PIN in a sentence never reaches the model; balance by wallet type; one withdrawal truth per customer; claim release and redelivery; typing indicator.</li>
+        <li>Pay-outs stuck at INIT reconciled; the sweep runs from a cron route, a daily floor and the customer's next message; request-level rail errors never release a hold.</li>
+        <li>The policy gate runs before a proposed flow and before a withdrawal; "what do you know about me" and "forget me"; a nightly integrity check re-derives every wallet from the journal.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="kicker">Test it on your phone now</span>
+      <ul>
+        <li>"Home" and "help": the product lines come from the registry; ask "what do you know about me" and then "forget me".</li>
+        <li>"Transactions" (also from the home card), "what did I buy", "my withdrawals", "who paid my link".</li>
+        <li>"Did my payment go through" after a deposit and a withdrawal on the same day: it names the newest and offers the other.</li>
+        <li>Any free question about your own money ("how much did I deposit this month", "what was that R50 last night"): the AI answers from the record and quotes only its numbers.</li>
+        <li>Send any message and watch for "typing" within about a second.</li>
+        <li>In a PIN prompt, type "my pin is 1234": it asks for just the digits and does not abandon the purchase.</li>
+        <li>Ask about withdrawing from a number that is not on the pilot list: home, help and the AI now say the same thing.</li>
+        <li><b>With your number on WAPAY_AGENT_V3_MSISDNS</b> (set in Vercel, redeploy): "How can I withdraw money?", "Where can I spend my OTT voucher?", "what did I buy last week", "did my payment go through", "Okay", "send R50 to 083…", "buy R30 airtime". Expect two lines and a question, headed lists, your history quoted with references, and the same confirm and PIN steps for money.</li>
+      </ul>
+    </div>
+  </div>
+  <p>For a number that is not on the shadow list, capability questions still use the review-4 bridge answers and the two-tier engine; that is the Phase 3 deletion.</p>
+
+  <h2>The phase map: where the build stands</h2>
+  <p>The one picture to open each week. Five phases in build order, each component with its badge (✓ shipped for every customer, ◐ partly or behind the shadow list, ○ next), the gate that opens Phase 3, and the you-are-here marker. It is regenerated from the verified status table on every ship; the design record (docs/AGENT_ARCHITECTURE_V2.md, section 13) is the territory, this is the map.</p>
+  <figure>
+    <div class="diagram">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 846" width="1400" height="846" role="img" aria-label="Phase map of the WaPay Pay agent build at HEAD 398475f on 2026-09-17. 39 components: 8 shipped, 7 partial, 10 shadow, 14 next. Phases 0 and 1 are shipped (builds 3915d81 and ea48cd4), Phase 2 (a803950) is deployed but answers only the empty shadow list, the promotion gate into Phase 3 has not started, and Phases 3 and 4 are next." font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="currentColor" stroke="none">
+<title>WaPay Pay agent phase map</title>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+<text x="24" y="32" font-size="18" font-weight="600">WaPay Pay agent · phase map</text>
+<text x="1372" y="32" font-size="12" text-anchor="end" opacity="0.85">Status at HEAD 9bc355e · 2026-09-17 · design record docs/AGENT_ARCHITECTURE_V2.md §3 to §8, §13</text>
+<text x="24" y="54" font-size="12" opacity="0.8">39 components in build order: ✓ 8 shipped · ◐ 7 partial · ◌ 10 shadow · ○ 14 next. The rust bar is the promotion gate; the dashed green line is where the build stands today.</text>
+<line x1="24" y1="96" x2="782" y2="96" stroke="currentColor" stroke-width="1.5" opacity="0.7" marker-end="url(#ah)"/>
+<text x="24" y="80" font-size="11" opacity="0.85">Build order → Phases 0, 1 shipped; Phase 2 deployed, shadow only (each on the previous one)</text>
+<line x1="858" y1="96" x2="1372" y2="96" stroke="currentColor" stroke-width="1.5" opacity="0.7" marker-end="url(#ah)"/>
+<text x="858" y="80" font-size="11" opacity="0.85">→ after the gate: Phase 3, then Phase 4 (not started)</text>
+<rect x="619" y="66" width="171" height="18" rx="9" fill="#359853"/>
+<text x="704.5" y="79" font-size="11" text-anchor="middle" font-weight="600" fill="#fff">YOU ARE HERE · 398475f</text>
+<line x1="790" y1="84" x2="790" y2="598" stroke="#359853" stroke-width="2" stroke-dasharray="5 4"/>
+<path d="M785 598 l10 0 l-5 8 z" fill="#359853"/>
+<rect x="798" y="88" width="56" height="510" rx="6" fill="#B3541E" fill-opacity="0.14" stroke="#B3541E" stroke-width="1.5"/>
+<text x="815" y="588" font-size="11" font-weight="600" fill="#B3541E" transform="rotate(-90 815 588)">GATE · Phase 2 → 3 · NOT STARTED · eval 12/156 run, en only</text>
+<text x="829" y="588" font-size="11" transform="rotate(-90 829 588)">1. full eval per language at or above the two-tier engine pass rate</text>
+<text x="843" y="588" font-size="11" transform="rotate(-90 843 588)">2. one week of shadow turns with no gate firing on money copy</text>
+<rect x="24" y="110" width="246" height="488" rx="8" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+<path d="M32 110 h230 a8 8 0 0 1 8 8 v72 h-246 v-72 a8 8 0 0 1 8 -8 z" fill="#359853" fill-opacity="0.13"/>
+<text x="34" y="132" font-size="16" font-weight="600" fill="#359853">Phase 0</text>
+<text x="260" y="132" font-size="11" text-anchor="end" font-weight="600" fill="#359853" opacity="1">SHIPPED</text>
+<text x="34" y="150" font-size="12" font-weight="600">Safety and spine</text>
+<text x="34" y="166" font-size="11" opacity="0.8">build 3915d81 · hotfix 398475f</text>
+<text x="34" y="182" font-size="11" opacity="0.85">✓ 5 · ◐ 3 · ○ 1</text>
+<circle cx="40" cy="210" r="6" fill="#359853"/>
+<path d="M37 210 l2.3 2.3 l4.2 -4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="52" y="214" font-size="11" opacity="1">C1 Webhook edge</text>
+<text x="260" y="214" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shipped</text>
+<rect x="28" y="224" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="40" cy="236" r="6" fill="#359853"/>
+<path d="M37 236 l2.3 2.3 l4.2 -4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="52" y="240" font-size="11" opacity="1">C2 Sender (lib/say.js)</text>
+<text x="260" y="240" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shipped</text>
+<circle cx="40" cy="262" r="6" fill="#359853"/>
+<path d="M37 262 l2.3 2.3 l4.2 -4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="52" y="266" font-size="11" opacity="1">C5 Strict PIN states</text>
+<text x="260" y="266" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shipped</text>
+<rect x="28" y="276" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="40" cy="288" r="6" fill="#359853"/>
+<path d="M37 288 l2.3 2.3 l4.2 -4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="52" y="292" font-size="11" opacity="1">C6 Context pack</text>
+<text x="260" y="292" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shipped</text>
+<circle cx="40" cy="314" r="6" fill="#359853"/>
+<path d="M37 314 l2.3 2.3 l4.2 -4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="52" y="318" font-size="11" opacity="1">C21 Localizer</text>
+<text x="260" y="318" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shipped</text>
+<rect x="28" y="328" width="238" height="37" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="40" cy="340" r="6" fill="none" stroke="#B3541E" stroke-width="1.5"/>
+<path d="M40 334 A6 6 0 0 0 40 346 Z" fill="#B3541E"/>
+<text x="52" y="344" font-size="11" opacity="1">C13 Execute routes</text>
+<text x="260" y="344" font-size="11" text-anchor="end" fill="currentColor" opacity="1">partial</text>
+<text x="52" y="361" font-size="11" opacity="0.7">airtime, data, electricity closed</text>
+<circle cx="40" cy="379" r="6" fill="none" stroke="#B3541E" stroke-width="1.5"/>
+<path d="M40 373 A6 6 0 0 0 40 385 Z" fill="#B3541E"/>
+<text x="52" y="383" font-size="11" opacity="1">C14 Conversation store</text>
+<text x="260" y="383" font-size="11" text-anchor="end" fill="currentColor" opacity="1">partial</text>
+<text x="52" y="400" font-size="11" opacity="0.7">both sides live; no event rows yet</text>
+<rect x="28" y="406" width="238" height="37" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="40" cy="418" r="6" fill="none" stroke="#B3541E" stroke-width="1.5"/>
+<path d="M40 412 A6 6 0 0 0 40 424 Z" fill="#B3541E"/>
+<text x="52" y="422" font-size="11" opacity="1">C20 Pay-out sweep, daily</text>
+<text x="260" y="422" font-size="11" text-anchor="end" fill="currentColor" opacity="1">partial</text>
+<text x="52" y="439" font-size="11" opacity="0.7">daily floor live; 10-min sweep: no cron</text>
+<circle cx="40" cy="457" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="52" y="461" font-size="11" opacity="0.75">VERCEL plan decision</text>
+<text x="260" y="461" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<line x1="32" y1="542" x2="262" y2="542" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+<text x="34" y="558" font-size="11" font-weight="600" fill="#359853">Founder test</text>
+<text x="34" y="572" font-size="11" opacity="0.9">Send hi: blue ticks, typing,</text>
+<text x="34" y="586" font-size="11" opacity="0.9">then one home card. No flag.</text>
+<rect x="280" y="110" width="246" height="488" rx="8" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+<path d="M288 110 h230 a8 8 0 0 1 8 8 v72 h-246 v-72 a8 8 0 0 1 8 -8 z" fill="#359853" fill-opacity="0.13"/>
+<text x="290" y="132" font-size="16" font-weight="600" fill="#359853">Phase 1</text>
+<text x="516" y="132" font-size="11" text-anchor="end" font-weight="600" fill="#359853" opacity="1">SHIPPED</text>
+<text x="290" y="150" font-size="12" font-weight="600">Registry, movements, policy</text>
+<text x="290" y="166" font-size="11" opacity="0.8">build ea48cd4</text>
+<text x="290" y="182" font-size="11" opacity="0.85">✓ 2 · ◐ 2</text>
+<circle cx="296" cy="210" r="6" fill="#359853"/>
+<path d="M293 210 l2.3 2.3 l4.2 -4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="308" y="214" font-size="11" opacity="1">C7 Capability registry</text>
+<text x="516" y="214" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shipped</text>
+<rect x="284" y="224" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="296" cy="236" r="6" fill="#359853"/>
+<path d="M293 236 l2.3 2.3 l4.2 -4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="308" y="240" font-size="11" opacity="1">C15 Movements read</text>
+<text x="516" y="240" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shipped</text>
+<circle cx="296" cy="262" r="6" fill="none" stroke="#B3541E" stroke-width="1.5"/>
+<path d="M296 256 A6 6 0 0 0 296 268 Z" fill="#B3541E"/>
+<text x="308" y="266" font-size="11" opacity="1">C16 Customer model</text>
+<text x="516" y="266" font-size="11" text-anchor="end" fill="currentColor" opacity="1">partial</text>
+<text x="308" y="283" font-size="11" opacity="0.7">forget me live; no erase script yet</text>
+<rect x="284" y="289" width="238" height="51" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="296" cy="301" r="6" fill="none" stroke="#B3541E" stroke-width="1.5"/>
+<path d="M296 295 A6 6 0 0 0 296 307 Z" fill="#B3541E"/>
+<text x="308" y="305" font-size="11" opacity="1">C11 Policy, output gates</text>
+<text x="516" y="305" font-size="11" text-anchor="end" fill="currentColor" opacity="1">partial</text>
+<text x="308" y="322" font-size="11" opacity="0.7">policy wired, nothing to require yet;</text>
+<text x="308" y="336" font-size="11" opacity="0.7">lexicon gate shadow-only</text>
+<line x1="288" y1="542" x2="518" y2="542" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+<text x="290" y="558" font-size="11" font-weight="600" fill="#359853">Founder test</text>
+<text x="290" y="572" font-size="11" opacity="0.9">Send help, then Transactions:</text>
+<text x="290" y="586" font-size="11" opacity="0.9">registry lines, your own rows.</text>
+<rect x="536" y="110" width="246" height="488" rx="8" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+<path d="M544 110 h230 a8 8 0 0 1 8 8 v72 h-246 v-72 a8 8 0 0 1 8 -8 z" fill="#B3541E" fill-opacity="0.11"/>
+<text x="546" y="132" font-size="16" font-weight="600" fill="#B3541E">Phase 2</text>
+<text x="772" y="132" font-size="11" text-anchor="end" font-weight="600" fill="#B3541E" opacity="1">SHADOW ONLY</text>
+<text x="546" y="150" font-size="12" font-weight="600">Pay agent behind shadow list</text>
+<text x="546" y="166" font-size="11" opacity="0.8">build a803950</text>
+<text x="546" y="182" font-size="11" opacity="0.85">◌ 9 · ◐ 2 · list empty today</text>
+<circle cx="552" cy="210" r="6" fill="none" stroke="#B3541E" stroke-width="1.5" stroke-dasharray="2.4 1.8"/>
+<path d="M552 204 A6 6 0 0 0 552 216 Z" fill="#B3541E"/>
+<text x="564" y="214" font-size="11" opacity="1">Shadow gate (agentV3For flag)</text>
+<text x="772" y="214" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shadow</text>
+<text x="564" y="231" font-size="11" opacity="0.7">flag unset: nobody yet</text>
+<rect x="540" y="237" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="552" cy="249" r="6" fill="none" stroke="#B3541E" stroke-width="1.5" stroke-dasharray="2.4 1.8"/>
+<path d="M552 243 A6 6 0 0 0 552 255 Z" fill="#B3541E"/>
+<text x="564" y="253" font-size="11" opacity="1">C3 Turn runtime</text>
+<text x="772" y="253" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shadow</text>
+<circle cx="552" cy="275" r="6" fill="none" stroke="#B3541E" stroke-width="1.5" stroke-dasharray="2.4 1.8"/>
+<path d="M552 269 A6 6 0 0 0 552 281 Z" fill="#B3541E"/>
+<text x="564" y="279" font-size="11" opacity="1">C4 Guard list (3 of 10)</text>
+<text x="772" y="279" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shadow</text>
+<rect x="540" y="289" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="552" cy="301" r="6" fill="none" stroke="#B3541E" stroke-width="1.5" stroke-dasharray="2.4 1.8"/>
+<path d="M552 295 A6 6 0 0 0 552 307 Z" fill="#B3541E"/>
+<text x="564" y="305" font-size="11" opacity="1">C8 Prompt assembler</text>
+<text x="772" y="305" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shadow</text>
+<circle cx="552" cy="327" r="6" fill="none" stroke="#B3541E" stroke-width="1.5" stroke-dasharray="2.4 1.8"/>
+<path d="M552 321 A6 6 0 0 0 552 333 Z" fill="#B3541E"/>
+<text x="564" y="331" font-size="11" opacity="1">C9 Pay agent loop</text>
+<text x="772" y="331" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shadow</text>
+<rect x="540" y="341" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="552" cy="353" r="6" fill="none" stroke="#B3541E" stroke-width="1.5" stroke-dasharray="2.4 1.8"/>
+<path d="M552 347 A6 6 0 0 0 552 359 Z" fill="#B3541E"/>
+<text x="564" y="357" font-size="11" opacity="1">C10 Tool registry</text>
+<text x="772" y="357" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shadow</text>
+<circle cx="552" cy="379" r="6" fill="none" stroke="#B3541E" stroke-width="1.5" stroke-dasharray="2.4 1.8"/>
+<path d="M552 373 A6 6 0 0 0 552 385 Z" fill="#B3541E"/>
+<text x="564" y="383" font-size="11" opacity="1">C17 Turn ledger + audit</text>
+<text x="772" y="383" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shadow</text>
+<text x="564" y="400" font-size="11" opacity="0.7">nightly check live; rows shadow-only</text>
+<rect x="540" y="406" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="552" cy="418" r="6" fill="none" stroke="#B3541E" stroke-width="1.5" stroke-dasharray="2.4 1.8"/>
+<path d="M552 412 A6 6 0 0 0 552 424 Z" fill="#B3541E"/>
+<text x="564" y="422" font-size="11" opacity="1">CLARIFY pending intent</text>
+<text x="772" y="422" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shadow</text>
+<circle cx="552" cy="444" r="6" fill="none" stroke="#B3541E" stroke-width="1.5" stroke-dasharray="2.4 1.8"/>
+<path d="M552 438 A6 6 0 0 0 552 450 Z" fill="#B3541E"/>
+<text x="564" y="448" font-size="11" opacity="1">BUDGET calls per hour</text>
+<text x="772" y="448" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shadow</text>
+<rect x="540" y="458" width="238" height="37" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="552" cy="470" r="6" fill="none" stroke="#B3541E" stroke-width="1.5"/>
+<path d="M552 464 A6 6 0 0 0 552 476 Z" fill="#B3541E"/>
+<text x="564" y="474" font-size="11" opacity="1">C12 Proposal dispatcher</text>
+<text x="772" y="474" font-size="11" text-anchor="end" fill="currentColor" opacity="1">partial</text>
+<text x="564" y="491" font-size="11" opacity="0.7">existing dispatcher + WITHDRAW case</text>
+<circle cx="552" cy="509" r="6" fill="none" stroke="#B3541E" stroke-width="1.5"/>
+<path d="M552 503 A6 6 0 0 0 552 515 Z" fill="#B3541E"/>
+<text x="564" y="513" font-size="11" opacity="1">C18 Eval runner (12/156)</text>
+<text x="772" y="513" font-size="11" text-anchor="end" fill="currentColor" opacity="1">partial</text>
+<text x="564" y="530" font-size="11" opacity="0.7">12/156 cases, en only, no baseline</text>
+<line x1="544" y1="542" x2="774" y2="542" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+<text x="546" y="558" font-size="11" font-weight="600" fill="#359853">Founder test</text>
+<text x="546" y="572" font-size="11" opacity="0.9">Needs WAPAY_AGENT_V3_MSISDNS:</text>
+<text x="546" y="586" font-size="11" opacity="0.9">send: what did I buy last week</text>
+<rect x="870" y="110" width="246" height="488" rx="8" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+<path d="M878 110 h230 a8 8 0 0 1 8 8 v72 h-246 v-72 a8 8 0 0 1 8 -8 z" fill="currentColor" fill-opacity="0.06"/>
+<text x="880" y="132" font-size="16" font-weight="600">Phase 3</text>
+<text x="1106" y="132" font-size="11" text-anchor="end" font-weight="600" opacity="0.7">NEXT · AFTER THE GATE</text>
+<text x="880" y="150" font-size="12" font-weight="600">Promote and delete</text>
+<text x="880" y="166" font-size="11" opacity="0.8">build: not started</text>
+<text x="880" y="182" font-size="11" opacity="0.85">✓ 1 · ◌ 1 · ○ 5</text>
+<circle cx="886" cy="210" r="6" fill="#359853"/>
+<path d="M883 210 l2.3 2.3 l4.2 -4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="898" y="214" font-size="11" opacity="1">ENGINE two-tier engine</text>
+<text x="1106" y="214" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shipped</text>
+<text x="898" y="231" font-size="11" opacity="0.7">live for all today; to be retired in P3</text>
+<rect x="874" y="237" width="238" height="37" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="886" cy="249" r="6" fill="none" stroke="#B3541E" stroke-width="1.5" stroke-dasharray="2.4 1.8"/>
+<path d="M886 243 A6 6 0 0 0 886 255 Z" fill="#B3541E"/>
+<text x="898" y="253" font-size="11" opacity="1">P3 Promote per language</text>
+<text x="1106" y="253" font-size="11" text-anchor="end" fill="currentColor" opacity="1">shadow</text>
+<text x="898" y="270" font-size="11" opacity="0.7">blocked by the gate (left)</text>
+<circle cx="886" cy="288" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="898" y="292" font-size="11" opacity="0.75">P3 Delete 26 regex hooks</text>
+<text x="1106" y="292" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<rect x="874" y="302" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="886" cy="314" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="898" y="318" font-size="11" opacity="0.75">P3 Retire the classifier</text>
+<text x="1106" y="318" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<circle cx="886" cy="340" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="898" y="344" font-size="11" opacity="0.75">P3 Retire dead code</text>
+<text x="1106" y="344" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<rect x="874" y="354" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="886" cy="366" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="898" y="370" font-size="11" opacity="0.75">P3 Rewrite 34 text locks</text>
+<text x="1106" y="370" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<circle cx="886" cy="392" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="898" y="396" font-size="11" opacity="0.75">C19 Mission Control cards</text>
+<text x="1106" y="396" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<line x1="878" y1="542" x2="1108" y2="542" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+<text x="880" y="558" font-size="11" font-weight="600" fill="#359853">Founder test</text>
+<text x="880" y="572" font-size="11" opacity="0.9">Admin dashboard: no Conversations</text>
+<text x="880" y="586" font-size="11" opacity="0.9">or Pay-outs card yet.</text>
+<rect x="1126" y="110" width="246" height="488" rx="8" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+<path d="M1134 110 h230 a8 8 0 0 1 8 8 v72 h-246 v-72 a8 8 0 0 1 8 -8 z" fill="currentColor" fill-opacity="0.06"/>
+<text x="1136" y="132" font-size="16" font-weight="600">Phase 4</text>
+<text x="1362" y="132" font-size="11" text-anchor="end" font-weight="600" opacity="0.7">NEXT</text>
+<text x="1136" y="150" font-size="12" font-weight="600">The async tier and memory depth</text>
+<text x="1136" y="166" font-size="11" opacity="0.8">build: not started</text>
+<text x="1136" y="182" font-size="11" opacity="0.85">○ 8</text>
+<circle cx="1142" cy="210" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="1154" y="214" font-size="11" opacity="0.75">P4 agent_jobs + drain</text>
+<text x="1362" y="214" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<rect x="1130" y="224" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="1142" cy="236" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="1154" y="240" font-size="11" opacity="0.75">C20 notifyCustomer</text>
+<text x="1362" y="240" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<circle cx="1142" cy="262" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="1154" y="266" font-size="11" opacity="0.75">P4 Fuel reconcile off-turn</text>
+<text x="1362" y="266" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<rect x="1130" y="276" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="1142" cy="288" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="1154" y="292" font-size="11" opacity="0.75">P4 Journal columns</text>
+<text x="1362" y="292" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<circle cx="1142" cy="314" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="1154" y="318" font-size="11" opacity="0.75">P4 Second model provider</text>
+<text x="1362" y="318" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<rect x="1130" y="328" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="1142" cy="340" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="1154" y="344" font-size="11" opacity="0.75">P4 Memory summary (flag)</text>
+<text x="1362" y="344" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<circle cx="1142" cy="366" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="1154" y="370" font-size="11" opacity="0.75">P4 Voice notes, photos</text>
+<text x="1362" y="370" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<rect x="1130" y="380" width="238" height="24" rx="4" fill="currentColor" fill-opacity="0.035"/>
+<circle cx="1142" cy="392" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="1154" y="396" font-size="11" opacity="0.75">P7 Partner module proof</text>
+<text x="1362" y="396" font-size="11" text-anchor="end" fill="currentColor" opacity="0.5">next</text>
+<line x1="1134" y1="542" x2="1364" y2="542" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+<text x="1136" y="558" font-size="11" font-weight="600" fill="#359853">Founder test</text>
+<text x="1136" y="572" font-size="11" opacity="0.9">Nothing to test on the phone yet</text>
+<text x="1136" y="586" font-size="11" opacity="0.9">(every item is next).</text>
+<rect x="24" y="620" width="1348" height="74" rx="8" fill="currentColor" fill-opacity="0.04" stroke="currentColor" stroke-width="1" opacity="0.9"/>
+<text x="34" y="636" font-size="11" font-weight="600">Tests that lock each phase (tests/)</text>
+<text x="34" y="652" font-size="11" opacity="0.85">webhook-route-runtime, truth-per-user</text>
+<text x="34" y="666" font-size="11" opacity="0.85">turns (22), typing-indicator, phase0-review</text>
+<text x="34" y="680" font-size="11" opacity="0.85">context-pack, vas-execute-ledger-pattern</text>
+<text x="290" y="652" font-size="11" opacity="0.85">capabilities, policy, phase1</text>
+<text x="290" y="666" font-size="11" opacity="0.85">help-conversational</text>
+<text x="546" y="652" font-size="11" opacity="0.85">phase2, phase2-review, agent-guards</text>
+<text x="546" y="666" font-size="11" opacity="0.85">agent-loop (11), agent-tools</text>
+<text x="546" y="680" font-size="11" opacity="0.85">agent-turn-ledger (12), chat-qa x9</text>
+<text x="880" y="652" font-size="11" opacity="0.85">none yet; 34 of 80 test files are</text>
+<text x="880" y="666" font-size="11" opacity="0.85">text locks on the processor</text>
+<text x="880" y="680" font-size="11" opacity="0.85">(design baseline was 27 of 63)</text>
+<text x="1136" y="652" font-size="11" opacity="0.85">none yet</text>
+<text x="826" y="652" font-size="11" text-anchor="middle" font-weight="600" fill="#B3541E">eval 12/156</text>
+<text x="826" y="666" font-size="11" text-anchor="middle" font-weight="600" fill="#B3541E">en only</text>
+<text x="826" y="680" font-size="11" text-anchor="middle" font-weight="600" fill="#B3541E">no baseline</text>
+<circle cx="30" cy="716" r="6" fill="#359853"/>
+<path d="M27 716 l2.3 2.3 l4.2 -4.6" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="42" y="720" font-size="11" opacity="0.9">✓ shipped: live for every customer at HEAD</text>
+<circle cx="338.88" cy="716" r="6" fill="none" stroke="#B3541E" stroke-width="1.5"/>
+<path d="M338.88 710 A6 6 0 0 0 338.88 722 Z" fill="#B3541E"/>
+<text x="350.88" y="720" font-size="11" opacity="0.9">◐ partial: built, gap noted under the row</text>
+<circle cx="641.6" cy="716" r="6" fill="none" stroke="#B3541E" stroke-width="1.5" stroke-dasharray="2.4 1.8"/>
+<path d="M641.6 710 A6 6 0 0 0 641.6 722 Z" fill="#B3541E"/>
+<text x="653.6" y="720" font-size="11" opacity="0.9">◌ shadow: built, answers only numbers on WAPAY_AGENT_V3_MSISDNS (list empty today)</text>
+<circle cx="1196.88" cy="716" r="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+<text x="1208.88" y="720" font-size="11" opacity="0.9">○ next: not built</text>
+<rect x="24" y="729" width="14" height="14" rx="3" fill="#B3541E" fill-opacity="0.14" stroke="#B3541E" stroke-width="1.5"/>
+<text x="46" y="740" font-size="11" opacity="0.9">GATE bar: Phase 2 → 3 promotion test, not started (box below)</text>
+<line x1="453.92" y1="728" x2="453.92" y2="744" stroke="#359853" stroke-width="2" stroke-dasharray="4 3"/>
+<text x="465.92" y="740" font-size="11" opacity="0.9">You are here: HEAD 398475f, Phase 2 deployed, shadow list empty</text>
+<path d="M880 736 h12" stroke="currentColor" stroke-width="1.5" opacity="0.7" marker-end="url(#ah)"/>
+<text x="902" y="740" font-size="11" opacity="0.9">Build order (ids): 3915d81 P0 · ea48cd4 P1 · a803950 P2 · 398475f hotfix</text>
+<rect x="24" y="752" width="1348" height="78" rx="8" fill="#B3541E" fill-opacity="0.06" stroke="#B3541E" stroke-width="1.5"/>
+<text x="34" y="769" font-size="12" font-weight="600" fill="#B3541E">The gate between Phase 2 and Phase 3 · NOT STARTED · both conditions must hold before anyone is promoted off the shadow list</text>
+<text x="34" y="787" font-size="11" opacity="0.95">1. Full eval per language at or above the two-tier engine pass rate.   Today: 12 of 156 cases run, English only, no baseline.</text>
+<text x="34" y="802" font-size="11" opacity="0.95">2. One week of shadow turns with no gate firing on money copy.   Today: WAPAY_AGENT_V3_MSISDNS is unset in production, so the shadow week has not begun.</text>
+<text x="34" y="817" font-size="11" opacity="0.75">BUGLOG #67: from 3915d81 (16 Sep) to hotfix 398475f (17 Sep) every text turn threw before its first send; Phases 0 and 1 went live for customers only on 17 Sep; Phase 2 remains shadow-only.</text>
+</svg>
+    </div>
+    <figcaption>Five phase columns in build order; every component carries the badge the verifiers gave it at HEAD 9bc355e with file and line evidence; the rust bar is the Phase 3 gate; the dashed line is where the build stands. The bottom strip names the test files that lock each phase. Regenerated on every ship.</figcaption>
+  </figure>
+  <div class="card accent"><span class="kicker">Where we are</span><p>Phase 2 is wired behind the shadow list. Phase 3 has not started. Latest code build 9bc355e.</p><p>Complete for every customer (Phases 0 and 1): the customer record and the last 12 turns, both sides, in every model turn; execute routes closed; strict PIN states; claim release, typing indicator; INIT pay-out reconcile; registry-rendered surfaces; habits, "what do you know about me" and "forget me"; nightly balance integrity; policy engine before proposals and withdrawals.</p><p>For the shadow list WAPAY_AGENT_V3_MSISDNS only (Phase 2): one model call over the record and typed tools; pre-model guards; per-customer budget; proposals through the same confirm and PIN steps; output gates, provenance guard; clarify state; an agent_turns row per turn. First live eval: 11 of 12, p50 1.9 s, p95 3.7 s. Everyone else: regex hooks and the two-tier engine.</p><p>Phase 3 gate (section 13, verbatim): the eval on the full set per language at or above the two-tier engine's pass rate, and a week of shadow turns with no gate firing on money copy.</p><p>Incident: the bot was mute from the Phase 0 deploy (2026-09-16) to hotfix 398475f (2026-09-17) because the webhook used runWithSendScope without importing it (BUGLOG #67). Rule: a webhook change ships only with the route runtime test green, and the first production message is watched in processed_messages before the deploy is called done.</p></div>
+
+  <h2>What the founder can test now</h2>
+  <p>One line per component that is on the phone today. Nothing below promises a number: the reply must quote your own record, and any money action must still end in the same confirm and PIN steps.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Phase</th><th>Component</th><th>Do this and expect</th><th>Status</th><th>Needs</th></tr></thead>
+    <tbody>
+    <tr><td class="num">0</td><td>C1 Webhook edge (claim, release, typing indicator, 500 on throw before send)</td><td>From any registered number send: hi. Expect blue ticks and the typing indicator within about a second, then the home card as one message. No flag needed. (A message that arrives while the bot is down should now be answered on Meta's retry instead of being lost; not testable by hand.)</td><td>shipped</td><td>nothing</td></tr>
+    <tr><td class="num">0</td><td>C2 Sender lib/say.js</td><td>Send: how do I buy airtime?  then: and electricity?  Expect the second reply to follow on from the first (the model now sees its own previous answer) instead of a generic menu; two short lines plus a question each. No flag needed. Note that WaPay replies were not being recorded in production until the 2026-09-17 hotfix, so history starts from then.</td><td>shipped</td><td>nothing</td></tr>
+    <tr><td class="num">0</td><td>C5 State machine and money flows: strict PIN states</td><td>Send "buy R10 airtime" for your own number (any amount you can afford), answer the confirm with "yes", and at the PIN prompt send "12345678". Expect exactly "❌ Invalid PIN. Please enter your 4-6 digit WaPay PIN. Reply \"cancel\" to stop." and never "❌ Incorrect PIN" (that would mean a PIN attempt was spent). Sending "my pin is 1234" at the same prompt gets the same re-prompt and is never routed to the AI. Then send "cancel" and expect "👍 Airtime purchase cancelled." followed by the home card.</td><td>shipped</td><td>nothing</td></tr>
+    <tr><td class="num">0</td><td>C6 Context pack (lib/context-pack.js)</td><td>Send "what do you know about me". Expect "🧠 *What I know about you*" with bullets: your name and masked number, language plus identity check, "Balance to spend: R…" (your real figure from the ledger), "Your last N money movements…", "People you send to: …", "Habits: …", "Our last 30 days of chat". Then send "Transactions": expect "📄 *Your last N movements*", one line per row shaped "• &lt;date&gt; &lt;kind&gt; R… &lt;status&gt;", then "💰 Balance: R…". Both are built straight from the pack; no flag needed.</td><td>shipped</td><td>nothing</td></tr>
+    <tr><td class="num">0</td><td>C21L Localizer (design table C21: gpt-4o-mini on canned money strings only)</td><td>Send 'Sawubona' (or any isiZulu greeting): the home card arrives in isiZulu with every rand amount unchanged; no flag needed.</td><td>shipped</td><td>nothing</td></tr>
+    <tr><td class="num">0</td><td>C14 Conversation store (conversation_turns, lib/turns.js, redaction, retention)</td><td>Send: I want to buy airtime for my brother  then: how much does that cost?  Expect the second answer to be about airtime fees, showing the previous line was remembered; then send: forget me  and expect '🧹 Done. I have erased our chat memory and the things you told me. Your transactions stay on record...'. No flag needed (if your number is on WAPAY_AGENT_V3_MSISDNS, 'forget me' goes to the agent instead, see C16).</td><td>partial</td><td>the shadow flag</td></tr>
+    <tr><td class="num">0</td><td>C13 Preview and execute routes (internal auth, ownership before PIN, crash release)</td><td>On the phone: complete any small purchase end to end (for example "buy R10 airtime" through PIN) and expect the normal receipt, which proves the processor sends the internal key. The decisive check needs a shell: `curl -s -o /dev/null -w '%{http_code}' -X POST https://pleasepayme.co.za/api/vas/airtime/execute -H 'content-type: application/json' -d '{}'` must print 401; a 400 ("Missing required fields") means WAPAY_INTERNAL_API_KEY is not set in Vercel and the route is fail-open.</td><td>partial</td><td>a shell</td></tr>
+    <tr><td class="num">0</td><td>C20 Jobs runner and the pay-out sweep</td><td>He is on WAPAY_PAYOUT_ALLOWLIST. Send 'withdraw R50', choose a method and finish with the PIN (OTT sandbox, test float; nothing reaches a bank). If OTT parks it, wait longer than two minutes and send 'hi': before the home card one line arrives in the pay-out wording, either '✅ Your withdrawal of R50 by &lt;method&gt; has been paid (reference WP…).' or '❌ Your withdrawal of R50 by &lt;method&gt; could not be completed by the bank rail (reference WP…). The full amount and the fee are back in your WaPay balance.' If OTT still answers pending, 'hi' shows only the home card.</td><td>partial</td><td>the pay-out allowlist</td></tr>
+    <tr><td class="num">1</td><td>C15 Movements read (the pack reads the source tables directly)</td><td>Send: Transactions  Expect up to ten rows newest first, each '• &lt;date/time&gt; &lt;Kind&gt; R&lt;amount&gt; &lt;status&gt;' (with a counterparty where there is one) and a held-amount line if anything is held; 'my withdrawals' and 'what did I buy' filter the same list. No flag needed. Numbers come from your own ledger rows.</td><td>shipped</td><td>nothing</td></tr>
+    <tr><td class="num">1</td><td>C7 Capability registry (lib/capabilities.js)</td><td>Send "help". Expect "📋 *WaPay Help Menu*" with one line per capability live for your number; because you are on WAPAY_PAYOUT_ALLOWLIST the line "🏧 *Withdraw* - \"withdraw R200\" to your bank or as cash at an ATM" must be present, a Fuel line only if fuel is live for your number, the Business line always. Then send "hi": the home card's product lines come from the same list ("🏧 *Withdraw*: \"withdraw R200\"…"); a phone not on the allowlist sees "🏧 *Withdraw*: coming soon" on both.</td><td>shipped</td><td>the pay-out allowlist</td></tr>
+    <tr><td class="num">1</td><td>C16 Customer model (habits, notes, 'what do you know about me', 'forget me', erase script)</td><td>Send: what do you know about me  Expect a '🧠 What I know about you' block: name and masked number, language, balance to spend, the count of recent movements, saved people, a 'Habits:' line only if you have completed purchases, and the closing line about 'forget me'. Then send: forget me  and expect the '🧹 Done...' confirmation. No flag needed; if your number is on WAPAY_AGENT_V3_MSISDNS, take it off first, these two commands do not reach the deterministic handlers there.</td><td>partial</td><td>the shadow flag</td></tr>
+    <tr><td class="num">1</td><td>C11 Policy engine and output gates (lib/policy.js, lib/agent/guards.js, looksLikeReceipt)</td><td>Without the flag nothing on the phone can trip the policy gate (it has nothing configured to require) and the receipt guard only shows when the model tries to write a receipt. Needs WAPAY_AGENT_V3_MSISDNS: send "can I use my WaPay money for betting?" and expect a reply that never contains a betting word; if the model echoes one, the gate swaps the reply for the fact line "💰 Balance to spend: R… Tell me what you need, or type \"help\"…" and the agent_turns row for that turn carries gatesFired ['BETTING'] (the partner gate cannot fire for your number because withdrawals are live for it).</td><td>partial</td><td>the shadow flag</td></tr>
+    <tr><td class="num">2</td><td>C12 Proposal dispatcher (dispatchOrchestratorAction incl. case WITHDRAW)</td><td>No flag needed for the engine's proposals: send a phrasing the regex router misses, for example: I'd like to top up my own phone with thirty rand. Expect the existing airtime flow's own first step (a preview or the number ask), then the normal confirm and PIN. The WITHDRAW case needs WAPAY_AGENT_V3_MSISDNS plus your number on the pay-out allowlist: send: withdraw some money; expect the withdraw flow's first step (method or amount ask), never a preview or a PIN ask.</td><td>partial</td><td>the shadow flag</td></tr>
+    <tr><td class="num">2</td><td>C4 Guard list (pre-model answers) as wired today</td><td>needs WAPAY_AGENT_V3_MSISDNS. Send: voucher pin 0000  Expect the resend flow to answer with no model call: either '🤔 I couldn't find a voucher of yours ending in "0000". Reply "my vouchers" to see the list.' or, if a voucher with that serial tail exists, a prompt for the WaPay PIN (processor :3549-3572). In the database an agent_turns row with path 'guard' and outcome 'VOUCHER_PIN_RESEND' appears.</td><td>shadow</td><td>the shadow flag</td></tr>
+    <tr><td class="num">2</td><td>C17 Turn ledger and audit (agent_turns; nightly ledger-integrity check)</td><td>needs WAPAY_AGENT_V3_MSISDNS. Nothing shows on the phone. After sending one message on a listed number, check the database: select path, outcome, ms, "gatesFired" from agent_turns order by "createdAt" desc limit 3; expect one row per message with path 'agent' or 'guard' and waId stored as the last four digits only. The nightly check is visible only as the Vercel log line cron_ledger_integrity after 02:00 UTC (04:00 SAST); mismatches should read 0.</td><td>shadow</td><td>the shadow flag</td></tr>
+    <tr><td class="num">2</td><td>C3 Turn runtime (handleAgentTurn)</td><td>needs WAPAY_AGENT_V3_MSISDNS. Send: what did I buy last week. Expect one short composed message listing your own recent purchases with a total, in your language, no menu; the Vercel log line agent_turn shows tools [get_transactions] and one agent_turns row appears with path agent.</td><td>shadow</td><td>the shadow flag</td></tr>
+    <tr><td class="num">2</td><td>C4 Guard list (agentGuard, lib/agent/guards.js)</td><td>needs WAPAY_AGENT_V3_MSISDNS. Send: voucher pin 1234. Expect the existing PIN-gated voucher resend prompt (it asks for your wallet PIN), never a composed reply; the log shows agent_guard kind VOUCHER_PIN_RESEND and an agent_turns row with path guard.</td><td>shadow</td><td>the shadow flag</td></tr>
+    <tr><td class="num">2</td><td>C8 Prompt assembler (packages/ai/src/prompt.ts)</td><td>needs WAPAY_AGENT_V3_MSISDNS. Send: How can I withdraw money? Expect two lines plus ONE question naming the options, no menu, and the fee wording identical to what the fee hook quotes for everyone else; if withdrawals are not open for your number the pay-out partner is never named.</td><td>shadow</td><td>the shadow flag</td></tr>
+    <tr><td class="num">2</td><td>C9 Pay agent loop (packages/ai/src/agent.ts runAgentTurn)</td><td>needs WAPAY_AGENT_V3_MSISDNS. Send: how much is 1GB on Vodacom. Expect one tool round then a short list of bundles with prices from the live catalogue, never a menu; the log line agent_turn shows tools [get_products] and the timings carry two model calls.</td><td>shadow</td><td>the shadow flag</td></tr>
+    <tr><td class="num">2</td><td>C10 Tool registry (lib/agent/tools)</td><td>needs WAPAY_AGENT_V3_MSISDNS. Send: how much does it cost to send R50. Expect the exact fee from the live fee table in one or two lines (log tools [get_fee_quote]). Then send: did my withdrawal go through. Expect the status of your newest withdrawal read from your own record, or the line that there is no withdrawal on this account yet (log tools [get_payout_status]).</td><td>shadow</td><td>the shadow flag</td></tr>
+    <tr><td class="num">2</td><td>GATE Shadow gate (agentV3For + WAPAY_AGENT_V3_MSISDNS)</td><td>needs WAPAY_AGENT_V3_MSISDNS (set it to your own number in Vercel and redeploy). Send: Where can I spend my OTT voucher? Expect one composed message with separate accepted and not-accepted blocks, no menu; then check the agent_turns table for a row with path agent and your last four digits.</td><td>shadow</td><td>the shadow flag</td></tr>
+    <tr><td class="num">2</td><td>CLARIFY AGENT_CLARIFY state (clarify outcome + pending intent)</td><td>needs WAPAY_AGENT_V3_MSISDNS. Send: I want to send some money. Expect ONE question (who or how much) and nothing else; reply with the answer, for example a saved name or an amount; expect the send flow's next step (recipient ask or preview), not a fresh 'what would you like to do'.</td><td>shadow</td><td>the shadow flag</td></tr>
+    <tr><td class="num">2</td><td>BUDGET Per-customer model-call budget (WAPAY_AGENT_TURNS_PER_HOUR)</td><td>needs WAPAY_AGENT_V3_MSISDNS and WAPAY_AGENT_TURNS_PER_HOUR=1 in Vercel. Send any two questions a minute apart: the second gets the single line starting '⏸️ Let us slow down a little' with no model call; 'voucher pin 1234' still answers normally because guard turns are free.</td><td>shadow</td><td>the shadow flag</td></tr>
+    <tr><td class="num">3</td><td>ENGINE Two-tier engine (orchestrate) for everyone not on the list</td><td>No flag needed. Send a free-form question no hook owns, for example: is my money safe with you? Expect a short warm answer with one or two emoji, not the Help menu; the Vercel log line orchestrator_result shows the tier (1 or 2) and the action.</td><td>shipped</td><td>nothing</td></tr>
+    <tr><td class="num">3</td><td>P3-promotion Phase 3: promote the agent per language beyond the shadow list</td><td>needs WAPAY_AGENT_V3_MSISDNS: put his number on the list in Vercel, redeploy, then send 'How can I withdraw money?' and expect two lines plus one question naming the options rather than the four-step walkthrough.</td><td>shadow</td><td>the shadow flag</td></tr>
+    </tbody>
+  </table></div>
+  <h2>One WhatsApp turn today</h2>
+  <p>Every box below runs inside the webhook before Meta gets its acknowledgement. Rust marks the parts that produce the menu feel or a customer-visible wrong answer.</p>
+  <figure>
+    <div class="diagram">
+<svg viewBox="0 0 1200 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One WhatsApp turn today: 29 deterministic intercepts answer before the model, two serial classifier calls and a translation call, and no read path from the ledger to the model">
+  <defs>
+    <marker id="t-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+    <marker id="t-arr-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B3541E"/></marker>
+  </defs>
+  <g font-family="'Public Sans', system-ui, sans-serif" font-size="11" fill="currentColor">
+    <text x="20" y="28" letter-spacing="1.2" opacity=".65">HOT PATH, LEFT TO RIGHT · every box runs before the ACK</text>
+
+    <rect x="20" y="52" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="70" y="82" text-anchor="middle" font-weight="600" font-size="12">WhatsApp</text>
+    <text x="70" y="100" text-anchor="middle" opacity=".75">one message</text>
+    <line x1="120" y1="87" x2="150" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+
+    <rect x="152" y="40" width="176" height="94" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="240" y="62" text-anchor="middle" font-weight="600" font-size="12">Webhook</text>
+    <text x="240" y="80" text-anchor="middle" opacity=".8">HMAC · pulse row</text>
+    <text x="240" y="96" text-anchor="middle" fill="#B3541E">claims wamid, never releases it</text>
+    <text x="240" y="112" text-anchor="middle" opacity=".8">ACK only after everything</text>
+    <line x1="328" y1="87" x2="358" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+
+    <rect x="360" y="40" width="160" height="94" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="440" y="62" text-anchor="middle" font-weight="600" font-size="12">processMessage</text>
+    <text x="440" y="80" text-anchor="middle" opacity=".8">~10 sequential reads</text>
+    <text x="440" y="96" text-anchor="middle" opacity=".8">on one Account row</text>
+    <text x="440" y="112" text-anchor="middle" opacity=".8">second dedupe ring</text>
+    <line x1="520" y1="87" x2="550" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+
+    <rect x="552" y="40" width="250" height="190" rx="6" fill="none" stroke="#B3541E" stroke-width="1.6"/>
+    <text x="677" y="62" text-anchor="middle" font-weight="600" font-size="12" fill="#B3541E">29 intercept points</text>
+    <text x="677" y="80" text-anchor="middle" fill="#B3541E">27 answer before the model</text>
+    <text x="566" y="104" opacity=".85">· fee ask, how-it-works, withdraw matcher</text>
+    <text x="566" y="121" opacity=".85">· slot-parser short-circuits (airtime, deposit)</text>
+    <text x="566" y="138" opacity=".85">· 38 regexes in detectExplicitIntent</text>
+    <text x="566" y="155" opacity=".85">· 5-minute category context</text>
+    <text x="566" y="172" opacity=".85">· 41-case conversation-state machine</text>
+    <text x="566" y="196" opacity=".85">reply = a template, then translated</text>
+    <text x="566" y="213" opacity=".85">history records the bot's side only</text>
+
+    <line x1="802" y1="87" x2="832" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+    <text x="817" y="76" text-anchor="middle" font-size="10" opacity=".7">AI_CHAT only</text>
+
+    <rect x="834" y="40" width="160" height="94" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="914" y="62" text-anchor="middle" font-weight="600" font-size="12">Tier 1 · gpt-5.5</text>
+    <text x="914" y="80" text-anchor="middle" opacity=".8">classifies the domain</text>
+    <text x="914" y="96" text-anchor="middle" opacity=".8">10 s timeout · 0 retries</text>
+    <text x="914" y="112" text-anchor="middle" opacity=".8">never replies</text>
+    <line x1="994" y1="87" x2="1024" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+
+    <rect x="1026" y="40" width="160" height="94" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="1106" y="62" text-anchor="middle" font-weight="600" font-size="12">Tier 2 · gpt-5.4-mini</text>
+    <text x="1106" y="80" text-anchor="middle" opacity=".8">slots + a short reply</text>
+    <text x="1106" y="96" text-anchor="middle" opacity=".8">10 s · 4.4k-token prompt</text>
+    <text x="1106" y="112" text-anchor="middle" opacity=".8">a timeout discards tier 1</text>
+
+    <line x1="1106" y1="134" x2="1106" y2="166" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+    <rect x="1026" y="168" width="160" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="1106" y="190" text-anchor="middle" font-weight="600" font-size="12">dispatch → flows</text>
+    <text x="1106" y="207" text-anchor="middle" opacity=".8">re-validates the slots</text>
+    <text x="1106" y="222" text-anchor="middle" opacity=".8">preview · confirm · PIN</text>
+
+    <line x1="677" y1="230" x2="677" y2="262" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+    <line x1="1106" y1="230" x2="1106" y2="262" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+    <rect x="552" y="264" width="250" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="677" y="286" text-anchor="middle" font-weight="600" font-size="12">Localizer · gpt-4o-mini</text>
+    <text x="677" y="303" text-anchor="middle" opacity=".8">translates each canned string, 2.5 s each</text>
+    <text x="677" y="318" text-anchor="middle" opacity=".8">227 call sites · falls back to English</text>
+    <rect x="1026" y="264" width="160" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="1106" y="290" text-anchor="middle" font-weight="600" font-size="12">send</text>
+    <text x="1106" y="308" text-anchor="middle" opacity=".8">no typing indicator</text>
+    <line x1="802" y1="295" x2="1024" y2="295" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+
+    <text x="20" y="176" letter-spacing="1.2" opacity=".65">WHAT REACHES THE MODEL EACH TURN</text>
+    <rect x="20" y="188" width="250" height="138" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="34" y="212" opacity=".9">· 4 profile facts (language, deposit</text>
+    <text x="34" y="228" opacity=".9">  method, last meter, interests)</text>
+    <text x="34" y="246" opacity=".9">· 5 history lines, one of them the</text>
+    <text x="34" y="262" opacity=".9">  current message again</text>
+    <text x="34" y="280" opacity=".9">· ~10k chars of product truth, the</text>
+    <text x="34" y="296" opacity=".9">  same facts in four wordings</text>
+    <text x="34" y="314" opacity=".9">· 3 customer-side writes vs 59 bot-side</text>
+
+    <rect x="290" y="188" width="240" height="138" rx="6" fill="none" stroke="#B3541E" stroke-width="1.6"/>
+    <text x="304" y="212" font-weight="600" fill="#B3541E">NEVER REACHES THE MODEL</text>
+    <text x="304" y="232" opacity=".9">balance · transactions</text>
+    <text x="304" y="248" opacity=".9">pending pay-out · open pay links</text>
+    <text x="304" y="264" opacity=".9">vouchers · KYC status · saved people</text>
+    <text x="304" y="280" opacity=".9">the customer's name</text>
+    <text x="304" y="296" opacity=".9">what the customer said inside a flow</text>
+    <text x="304" y="312" opacity=".9">what the pay-out webhook told them</text>
+
+    <text x="20" y="370" letter-spacing="1.2" opacity=".65">WHERE THE FACTS ALREADY LIVE</text>
+    <g stroke="currentColor" stroke-width="1.2" fill="none">
+      <rect x="20" y="382" width="175" height="56" rx="6"/>
+      <rect x="215" y="382" width="175" height="56" rx="6"/>
+      <rect x="410" y="382" width="175" height="56" rx="6"/>
+      <rect x="605" y="382" width="175" height="56" rx="6"/>
+      <rect x="800" y="382" width="175" height="56" rx="6"/>
+      <rect x="995" y="382" width="185" height="56" rx="6"/>
+    </g>
+    <text x="107" y="404" text-anchor="middle" font-weight="600" font-size="12">Ledger</text>
+    <text x="107" y="421" text-anchor="middle" opacity=".8">JournalEntry / Line, Hold</text>
+    <text x="302" y="404" text-anchor="middle" font-weight="600" font-size="12">ProviderRequest</text>
+    <text x="302" y="421" text-anchor="middle" opacity=".8">deposits, VAS, fuel, pay-outs</text>
+    <text x="497" y="404" text-anchor="middle" font-weight="600" font-size="12">PaymentRequest</text>
+    <text x="497" y="421" text-anchor="middle" opacity=".8">pay links</text>
+    <text x="692" y="404" text-anchor="middle" font-weight="600" font-size="12">PendingGift</text>
+    <text x="692" y="421" text-anchor="middle" opacity=".8">sends and vouchers</text>
+    <text x="887" y="404" text-anchor="middle" font-weight="600" font-size="12">Beneficiary · profile</text>
+    <text x="887" y="421" text-anchor="middle" opacity=".8">people, KYC, language</text>
+    <text x="1087" y="404" text-anchor="middle" font-weight="600" font-size="12">conversationData</text>
+    <text x="1087" y="421" text-anchor="middle" opacity=".8">10-line ring, non-atomic</text>
+
+    <path d="M500,438 C500,500 700,500 834,140" fill="none" stroke="#B3541E" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#t-arr-warn)"/>
+    <text x="620" y="488" text-anchor="middle" fill="#B3541E" font-weight="600">no read path from any of these to the model</text>
+    <text x="620" y="505" text-anchor="middle" fill="#B3541E">the admin CRM already runs a 7-query customer pack; the chat never calls it</text>
+
+    <rect x="20" y="540" width="1160" height="76" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+    <text x="36" y="562" letter-spacing="1.2" opacity=".65">PRODUCT TRUTH, WRITTEN BY HAND</text>
+    <text x="36" y="582" opacity=".9">9 static copies of "what WaPay can do" (prompt, home card, help menu, fallback, welcome, PIN reset, VAS list, category message, spend lines)</text>
+    <text x="36" y="598" opacity=".9">the withdrawal position alone is written in 8 places</text>
+    <text x="620" y="598" fill="#B3541E">the prompt reads the global cash-out switch, the home card reads the per-customer pilot list: two truths in one conversation</text>
+  </g>
+</svg>
+    </div>
+    <figcaption>Of 29 intercept points, 27 answer with a template before the model is consulted. The model, when reached, is given four profile facts and five history lines that are mostly its own earlier replies. It can trigger two point lookups it never sees the result of (balance, and the latest deposit or pay-out status); there is no transaction list, statement or history read anywhere in the chat.</figcaption>
+  </figure>
+
+  <h3>The founder's screenshots, traced to the diagram</h3>
+  <div class="tablewrap"><table>
+    <tr><th>He typed</th><th>What answered</th><th>Why</th></tr>
+    <tr><td>"How can I withdraw money?"</td><td>The how-it-works intercept, a four-step template</td><td>A regex chose between two fixed strings. No component composes two lines and a question from the live option list.</td></tr>
+    <tr><td>"Where can I spend my OTT voucher?"</td><td>The same intercept, one paragraph</td><td>Facts rendered as prose. There is no composition policy anywhere, in code or in a prompt.</td></tr>
+    <tr><td>"Did my payment to tbh go through"</td><td>The deposit-status intercept, a weeks-old card deposit</td><td>At the time the status handler read only the newest card deposit; pay-outs were added on 16 September. The model itself never sees any movement, so it could not have named the R50 PayShap or asked which payment was meant.</td></tr>
+    <tr><td>"Home"</td><td>The home card, with a Transactions line</td><td>Transactions has no handler. The home card is the only shape the bot has for "what can I do".</td></tr>
+    <tr><td>"Okay", "I'll try later"</td><td>Two canned sentences</td><td>A non-intent message gets a fixed fallback. The model was not asked.</td></tr>
+  </table></div>
+
+  <h2>One WhatsApp turn in the target</h2>
+  <p>Green marks what is new. The money boundary (preview, confirm, PIN, idempotent execute) is unchanged and the model never sees a PIN turn.</p>
+  <figure>
+    <div class="diagram">
+<svg viewBox="0 0 1320 760" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One WhatsApp turn in the target: a typing indicator at the webhook, a short guard list, one context pack and one registry feeding a single Pay model call with read and proposal tools, a policy engine in front of the unchanged money flows, output guards, one in-language send, and a memory writer; slow work runs off the request path">
+  <defs>
+    <marker id="g-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+    <marker id="g-arr-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#359853"/></marker>
+  </defs>
+  <g font-family="'Public Sans', system-ui, sans-serif" font-size="11" fill="currentColor">
+    <text x="20" y="28" letter-spacing="1.2" opacity=".65">HOT PATH · green = new · plain = unchanged · status after Phase 2 (16 Sep 2026): ✓ shipped, ◐ partly or behind the shadow list, ○ next</text>
+
+    <rect x="20" y="52" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="70" y="82" text-anchor="middle" font-weight="600" font-size="12">WhatsApp</text>
+    <text x="70" y="100" text-anchor="middle" opacity=".75">one message</text>
+    <line x1="120" y1="87" x2="148" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#g-arr)"/>
+
+    <rect x="150" y="40" width="190" height="94" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="245" y="62" text-anchor="middle" font-weight="600" font-size="12">Webhook</text>
+    <text x="336" y="52" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="245" y="80" text-anchor="middle" opacity=".8">HMAC · claim as in-flight</text>
+    <text x="245" y="96" text-anchor="middle" fill="#359853" font-weight="600">typing indicator ≈0.5 s</text>
+    <text x="245" y="112" text-anchor="middle" fill="#359853">claim released on failure</text>
+    <line x1="340" y1="87" x2="368" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#g-arr)"/>
+
+    <rect x="370" y="40" width="190" height="94" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="465" y="62" text-anchor="middle" font-weight="600" font-size="12">Guard list</text>
+    <text x="556" y="52" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="465" y="80" text-anchor="middle" opacity=".8">about ten deterministic checks</text>
+    <text x="465" y="96" text-anchor="middle" opacity=".8">OTP · PIN · YES steps · codes</text>
+    <text x="465" y="112" text-anchor="middle" opacity=".8">STOP · onboarding · open flow</text>
+    <line x1="560" y1="87" x2="588" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#g-arr)"/>
+    <text x="465" y="150" text-anchor="middle" font-size="10" opacity=".7">a guard answer ends the turn: 0 model calls</text>
+
+    <rect x="590" y="40" width="230" height="110" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="705" y="62" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Context pack · one round trip</text>
+    <text x="816" y="52" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="705" y="80" text-anchor="middle" opacity=".85">balances by type · last 10 movements</text>
+    <text x="705" y="96" text-anchor="middle" opacity=".85">pending pay-out · open pay links</text>
+    <text x="705" y="112" text-anchor="middle" opacity=".85">KYC · saved people · habits</text>
+    <text x="705" y="128" text-anchor="middle" opacity=".85">last 12 turns, both sides</text>
+
+    <rect x="590" y="176" width="230" height="82" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="705" y="198" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Capability registry</text>
+    <text x="816" y="188" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="705" y="216" text-anchor="middle" opacity=".85">what is live for THIS customer</text>
+    <text x="705" y="232" text-anchor="middle" opacity=".85">prompt lines · tool list · policy</text>
+    <text x="705" y="248" text-anchor="middle" opacity=".85">also renders home, help, welcome</text>
+
+    <line x1="820" y1="95" x2="848" y2="95" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <text x="834" y="86" text-anchor="middle" font-size="10" fill="#359853">facts</text>
+    <line x1="820" y1="217" x2="848" y2="190" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <text x="838" y="216" text-anchor="middle" font-size="10" fill="#359853">tools</text>
+
+    <rect x="850" y="40" width="210" height="220" rx="8" fill="none" stroke="#359853" stroke-width="2.4"/>
+    <text x="955" y="66" text-anchor="middle" font-weight="700" font-size="14" fill="#359853">Pay</text>
+    <text x="1056" y="52" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="955" y="86" text-anchor="middle" opacity=".9">one model call, rarely two</text>
+    <text x="955" y="104" text-anchor="middle" opacity=".9">system prompt: persona, rules,</text>
+    <text x="955" y="120" text-anchor="middle" opacity=".9">registry, fees, CUSTOMER RECORD</text>
+    <text x="955" y="144" text-anchor="middle" opacity=".9">composes in the customer's language</text>
+    <text x="955" y="160" text-anchor="middle" opacity=".9">asks the follow-up question itself</text>
+    <text x="955" y="184" text-anchor="middle" opacity=".9">three outcomes: reply · clarify · proposal</text>
+    <text x="955" y="200" text-anchor="middle" opacity=".9">calls a read tool when it needs depth</text>
+    <text x="955" y="216" text-anchor="middle" opacity=".9">proposes an action, never executes</text>
+    <text x="955" y="240" text-anchor="middle" opacity=".9">8 s per call · 2 rounds · no PIN turns</text>
+
+    <rect x="1090" y="40" width="210" height="100" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="1195" y="62" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Read tools</text>
+    <text x="1296" y="52" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="1195" y="80" text-anchor="middle" opacity=".85">get_transactions (with totals)</text>
+    <text x="1195" y="96" text-anchor="middle" opacity=".85">get_products · get_fee_quote</text>
+    <text x="1195" y="112" text-anchor="middle" opacity=".85">where_accepted · get_payout_status</text>
+    <text x="1195" y="128" text-anchor="middle" opacity=".85">get_pay_links · how_it_works(topic)</text>
+    <line x1="1060" y1="90" x2="1088" y2="90" stroke="#359853" stroke-width="1.4" marker-start="url(#g-arr-acc)" marker-end="url(#g-arr-acc)"/>
+
+    <rect x="1090" y="160" width="210" height="100" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="1195" y="182" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Proposal tools</text>
+    <text x="1296" y="172" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="1195" y="200" text-anchor="middle" opacity=".85">start_send · start_withdraw</text>
+    <text x="1195" y="216" text-anchor="middle" opacity=".85">start_buy_airtime · data · electricity</text>
+    <text x="1195" y="232" text-anchor="middle" opacity=".85">start_deposit · start_pay_link</text>
+    <text x="1195" y="248" text-anchor="middle" opacity=".85">start_fuel · start_voucher_load</text>
+    <line x1="1060" y1="210" x2="1088" y2="210" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+
+    <line x1="1195" y1="260" x2="1195" y2="292" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <text x="1205" y="281" font-size="10" fill="#359853">slots re-validated</text>
+    <rect x="1090" y="294" width="210" height="82" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="1195" y="316" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Policy engine</text>
+    <text x="1296" y="306" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="1195" y="334" text-anchor="middle" opacity=".85">allow · deny · require</text>
+    <text x="1195" y="350" text-anchor="middle" opacity=".85">KYC tier · consent version</text>
+    <text x="1195" y="366" text-anchor="middle" opacity=".85">PIN · limits · per-customer gate</text>
+    <line x1="1195" y1="376" x2="1195" y2="408" stroke="currentColor" stroke-width="1.2" marker-end="url(#g-arr)"/>
+    <text x="1205" y="397" font-size="10" opacity=".7">allow</text>
+    <rect x="1090" y="410" width="210" height="96" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="1195" y="432" text-anchor="middle" font-weight="600" font-size="12">Money flows, unchanged</text>
+    <text x="1296" y="422" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="1195" y="450" text-anchor="middle" opacity=".85">preview → confirm → PIN → execute</text>
+    <text x="1195" y="466" text-anchor="middle" opacity=".85">two-phase holds · idemKeys</text>
+    <text x="1195" y="482" text-anchor="middle" opacity=".85">quotes binding · PIN checked server-side</text>
+    <text x="1195" y="498" text-anchor="middle" opacity=".85">receipts and PIN prompts stay templates</text>
+
+    <line x1="955" y1="260" x2="955" y2="292" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <text x="965" y="281" font-size="10" fill="#359853">reply</text>
+    <rect x="850" y="294" width="210" height="82" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="955" y="316" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Output guards</text>
+    <text x="1056" y="306" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="955" y="334" text-anchor="middle" opacity=".85">receipt shape · number provenance</text>
+    <text x="955" y="350" text-anchor="middle" opacity=".85">bearer digits · banned words · length</text>
+    <text x="955" y="366" text-anchor="middle" opacity=".85">a block becomes a fact-built line</text>
+    <line x1="850" y1="335" x2="822" y2="335" stroke="currentColor" stroke-width="1.2" marker-end="url(#g-arr)"/>
+
+    <rect x="590" y="294" width="230" height="82" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="705" y="316" text-anchor="middle" font-weight="600" font-size="12">send</text>
+    <text x="816" y="306" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="705" y="334" text-anchor="middle" opacity=".85">one message per turn by default</text>
+    <text x="705" y="350" text-anchor="middle" opacity=".85">a fast fact line first only when a tool round runs</text>
+    <text x="705" y="366" text-anchor="middle" opacity=".85">in-language · length guard · result checked</text>
+
+    <line x1="705" y1="376" x2="705" y2="408" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <line x1="1090" y1="458" x2="1062" y2="458" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <text x="1076" y="449" text-anchor="middle" font-size="10" fill="#359853">settle</text>
+    <rect x="590" y="410" width="470" height="96" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="825" y="432" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Memory writer</text>
+    <text x="1056" y="422" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="825" y="450" text-anchor="middle" opacity=".85">both sides of every turn → conversation_turns (redacted, dated, 30-day retention)</text>
+    <text x="825" y="466" text-anchor="middle" opacity=".85">money facts stay where they are written: the ledger, holds, provider requests, links, gifts</text>
+    <text x="825" y="482" text-anchor="middle" opacity=".85">agent_turns audit: tools, proposal, policy decision, guards fired, ms, cost</text>
+    <text x="825" y="498" text-anchor="middle" opacity=".85">the next turn's pack reads all of it in one batch, nothing to drift</text>
+
+    <rect x="20" y="176" width="540" height="82" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+    <text x="36" y="198" letter-spacing="1.2" opacity=".65">BUDGET PER TURN · targets, to be measured by the eval runner</text>
+    <text x="36" y="218" opacity=".9">guard turn under 1 s · reply-only p50 ≈2.3 s · one tool round p50 ≈3.5 s</text>
+    <text x="36" y="234" opacity=".9">proposal p50 ≈3.2 s · hard stop at 20 s with a fact-built fallback from the pack</text>
+    <text x="36" y="250" opacity=".9">the 60 s function cap is never approached · ACK after the turn, as today</text>
+
+    <rect x="20" y="294" width="540" height="212" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+    <text x="36" y="316" letter-spacing="1.2" opacity=".65">WHAT THE MODEL IS GIVEN, EVERY TURN</text>
+    <text x="36" y="338" opacity=".9">· CUSTOMER RECORD: balances, the last movements with references and states,</text>
+    <text x="36" y="354" opacity=".9">  the pending pay-out, open links, saved people, habits, KYC, name, language</text>
+    <text x="36" y="374" opacity=".9">· the last 12 turns as real user and assistant messages, both sides</text>
+    <text x="36" y="394" opacity=".9">· the registry: one line per live capability, full knowledge only when in focus</text>
+    <text x="36" y="414" opacity=".9">· the fee table · composition rules (two lines and a question; lists for 3+)</text>
+    <text x="36" y="434" opacity=".9">· a tool list scoped to what is live for this customer: a capability that is</text>
+    <text x="36" y="450" opacity=".9">  off for this number cannot be proposed at all</text>
+    <text x="36" y="474" fill="#359853" font-weight="600">· every balance, status or total it states as fact must come from the record or a tool</text>
+    <text x="36" y="492" opacity=".9">  (limits, fee examples and echoed amounts are fine; a block is logged and replaced by a fact line)</text>
+
+    <rect x="20" y="540" width="1280" height="196" rx="8" fill="none" stroke="#359853" stroke-width="1.6" stroke-dasharray="7 5"/>
+    <text x="36" y="562" letter-spacing="1.2" fill="#359853" font-weight="600">OFF THE REQUEST PATH · one jobs table, drained every 10 minutes (Vercel Pro cron, or UniFuel's runner with the shared key)</text>
+    <g stroke="currentColor" stroke-width="1.2" fill="none">
+      <rect x="36" y="580" width="236" height="66" rx="6"/>
+      <rect x="288" y="580" width="236" height="66" rx="6"/>
+      <rect x="540" y="580" width="236" height="66" rx="6"/>
+      <rect x="792" y="580" width="236" height="66" rx="6"/>
+      <rect x="1044" y="580" width="236" height="66" rx="6"/>
+    </g>
+    <text x="154" y="602" text-anchor="middle" font-weight="600" font-size="12">Pay-out reconcile sweep</text>
+    <text x="268" y="592" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="154" y="619" text-anchor="middle" opacity=".85">asks the rail about every pending</text>
+    <text x="154" y="635" text-anchor="middle" opacity=".85">pay-out; settles or releases the hold</text>
+    <text x="406" y="602" text-anchor="middle" font-weight="600" font-size="12">Nightly integrity check</text>
+    <text x="520" y="592" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="406" y="619" text-anchor="middle" opacity=".85">wallet balances re-derived from the</text>
+    <text x="406" y="635" text-anchor="middle" opacity=".85">journal; drift raised in Mission Control</text>
+    <text x="658" y="602" text-anchor="middle" font-weight="600" font-size="12">Habits and retention</text>
+    <text x="772" y="592" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="658" y="619" text-anchor="middle" opacity=".85">regulars computed in SQL</text>
+    <text x="658" y="635" text-anchor="middle" opacity=".85">turns older than 30 days deleted</text>
+    <text x="910" y="602" text-anchor="middle" font-weight="600" font-size="12">Future slow specialists</text>
+    <text x="1024" y="592" text-anchor="end" font-size="10" font-weight="700" fill="currentColor">○</text>
+    <text x="910" y="619" text-anchor="middle" opacity=".85">credit enquiry · insurance quotes</text>
+    <text x="910" y="635" text-anchor="middle" opacity=".85">bank-link callbacks (counsel first)</text>
+    <text x="1162" y="602" text-anchor="middle" font-weight="600" font-size="12">notifyCustomer</text>
+    <text x="1276" y="592" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="1162" y="619" text-anchor="middle" opacity=".85">in-window text, direct send, template</text>
+    <text x="1162" y="635" text-anchor="middle" opacity=".85">writes into the turns the agent reads</text>
+    <text x="640" y="680" text-anchor="middle" opacity=".85">"I'll message you the moment the bank confirms" becomes a promise the system keeps without the customer asking, and the next turn's Pay already knows it was sent.</text>
+    <line x1="1162" y1="646" x2="1162" y2="704" stroke="#359853" stroke-width="1.4" stroke-dasharray="4 3"/>
+    <line x1="1162" y1="704" x2="840" y2="704" stroke="#359853" stroke-width="1.4" stroke-dasharray="4 3"/>
+    <text x="1000" y="720" text-anchor="middle" font-size="10" fill="#359853">→ memory writer, then WhatsApp</text>
+  </g>
+</svg>
+    </div>
+    <figcaption>One model call per turn is the common case because the context pack pre-answers balance, recent movements, the pending pay-out, open links and saved people. A read tool adds a second call; a proposal ends the loop; a clarify outcome ends the turn with a question and a pending intent that the next turn picks up. The streaming feel is built from three WhatsApp-native moves: the typing indicator within about half a second, one composed message in two to four seconds, and, only when a tool round is needed, a one-line fact-built acknowledgement first. The second bubble is conditional because Meta bills in-window replies from 1 October 2026; the cost target per turn is model plus Meta, tracked in the turn ledger.</figcaption>
+  </figure>
+
+  <h3>The turn, step by step</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Step</th><th>Component</th><th>What happens</th><th>Budget (targets)</th></tr>
+    <tr><td class="num">1</td><td>Webhook</td><td>Verify the signature, write the pulse row, claim the message as in-flight. A duplicate that already finished is acknowledged; a turn that throws before any send releases its claim so Meta's retry is processed.</td><td class="num">≈20 ms</td></tr>
+    <tr><td class="num">2</td><td>Webhook</td><td>Send the read receipt and typing indicator in the background. The customer sees "typing" within about half a second.</td><td class="num">0 on path</td></tr>
+    <tr><td class="num">3</td><td>Context pack</td><td>One round trip: account, profile, flow state, balances by type with holds, the last 10 movements, the pending pay-out, open links, waiting gifts, KYC, saved people, habits, the last 12 turns.</td><td class="num">40–80 ms</td></tr>
+    <tr><td class="num">4</td><td>Memory writer</td><td>Record the customer's message once, redacted, after the history read so it never appears in the prompt twice.</td><td class="num">≈15 ms</td></tr>
+    <tr><td class="num">5</td><td>Guard list</td><td>About ten pure checks: receipt code, language switch, onboarding, shared contact, STOP, codes, a 16-digit voucher PIN, a pay-request code, an open money state. A guard answer ends the turn with no model call.</td><td class="num">under 1 ms; a state turn 50–900 ms</td></tr>
+    <tr><td class="num">6</td><td>Registry + prompt</td><td>Capabilities live for this customer; the stable prefix, the CUSTOMER RECORD, the 12 turns as real messages, the message once. A capability's full knowledge only when in focus.</td><td class="num">≈2 ms</td></tr>
+    <tr><td class="num">7</td><td>Pay</td><td>Model call 1 with capability-scoped tools. Outcome: a reply, a clarify (a question plus a pending intent stored in flow state for the next turn), tool calls, or a proposal.</td><td class="num">p50 ≈1.2 s · p95 ≈3 s</td></tr>
+    <tr><td class="num">8</td><td>Tools</td><td>If tools were called: run them in parallel with per-tool timeouts, then model call 2 composes. Two rounds at most; a third request is answered from what is already held.</td><td class="num">30–800 ms + ≈1 s</td></tr>
+    <tr><td class="num">9</td><td>Policy + dispatcher</td><td>If a proposal: re-validate the slots, evaluate policy (allow, deny, require), call the flow starter at its first step. The flow's own preview mints the confirm state; the dispatcher never sets a confirm or PIN state and never touches the ledger. The confirm text is built from the preview, not by the model.</td><td class="num">under 1 ms + 300–800 ms preview</td></tr>
+    <tr><td class="num">10</td><td>Output guards</td><td>Receipt shape, number provenance, bearer digits, partner and betting words, URL allowlist, length, em dash. A block is logged by rule and replaced by a fact-built line.</td><td class="num">≈1 ms</td></tr>
+    <tr><td class="num">11</td><td>Localizer</td><td>Canned money strings only (confirm, PIN prompt, receipt). Model text is already in the customer's language.</td><td class="num">0 on cache hit</td></tr>
+    <tr><td class="num">12</td><td>Sender</td><td>One message per turn by default; when a tool round ran, a one-line fact-built acknowledgement went out first so the customer saw something within a second. Result checked, one retry on a 5xx, the assistant turn recorded.</td><td class="num">300–600 ms per message</td></tr>
+    <tr><td class="num">13</td><td>Turn ledger</td><td>One row: path, hashes, tool timings, proposal, policy decision, guards fired, tokens, cost, outcome; the claim marked done.</td><td class="num">20–40 ms</td></tr>
+    <tr><td class="num">14</td><td>Runtime</td><td>Acknowledge to Meta. A watchdog at 20 seconds sends the fact-built fallback and marks the turn; the 60-second cap is never approached.</td><td class="num">guard turn under 1 s · reply-only p50 ≈2.3 s · one tool round p50 ≈3.5 s</td></tr>
+  </table></div>
+
+  <h2>"A main agent that talks to specialist agents"</h2>
+  <p>The picture the founder described, drawn honestly next to the recommendation. The difference is where the specialists run, not whether they exist.</p>
+  <figure>
+    <div class="diagram">
+<svg viewBox="0 0 1200 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Side by side: the founder's picture of a main agent calling three specialist model agents in series, versus one Pay model whose specialists are tools and data on the hot path and workers off it">
+  <defs>
+    <marker id="c-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+    <marker id="c-arr-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#359853"/></marker>
+    <marker id="c-arr-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B3541E"/></marker>
+  </defs>
+  <g font-family="'Public Sans', system-ui, sans-serif" font-size="11" fill="currentColor">
+    <text x="20" y="28" letter-spacing="1.2" opacity=".65">THE PICTURE IN THE BRIEF · a main agent talks to specialist agents</text>
+    <rect x="20" y="40" width="560" height="320" rx="8" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+
+    <rect x="40" y="60" width="90" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="85" y="87" text-anchor="middle" font-weight="600" font-size="12">WhatsApp</text>
+    <line x1="130" y1="83" x2="164" y2="83" stroke="currentColor" stroke-width="1.2" marker-end="url(#c-arr)"/>
+
+    <rect x="166" y="52" width="130" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <text x="231" y="76" text-anchor="middle" font-weight="600" font-size="12">Main "Pay" agent</text>
+    <text x="231" y="94" text-anchor="middle" opacity=".8">model call 1</text>
+
+    <text x="470" y="48" text-anchor="middle" font-size="10" fill="#B3541E">each 1–3 s, in series, its own prompt</text>
+    <g stroke="#B3541E" stroke-width="1.4" fill="none">
+      <rect x="380" y="56" width="180" height="46" rx="6"/>
+      <rect x="380" y="122" width="180" height="46" rx="6"/>
+      <rect x="380" y="188" width="180" height="46" rx="6"/>
+    </g>
+    <text x="470" y="76" text-anchor="middle" font-weight="600" font-size="12">Products agent</text>
+    <text x="470" y="92" text-anchor="middle" opacity=".8">model call 2</text>
+    <text x="470" y="142" text-anchor="middle" font-weight="600" font-size="12">Pay-outs agent</text>
+    <text x="470" y="158" text-anchor="middle" opacity=".8">model call 3</text>
+    <text x="470" y="208" text-anchor="middle" font-weight="600" font-size="12">Memory agent</text>
+    <text x="470" y="224" text-anchor="middle" opacity=".8">model call 4 · paraphrases the ledger</text>
+
+    <line x1="296" y1="75" x2="378" y2="79" stroke="#B3541E" stroke-width="1.4" marker-end="url(#c-arr-warn)"/>
+    <line x1="296" y1="90" x2="378" y2="145" stroke="#B3541E" stroke-width="1.4" marker-end="url(#c-arr-warn)"/>
+    <line x1="296" y1="104" x2="378" y2="211" stroke="#B3541E" stroke-width="1.4" marker-end="url(#c-arr-warn)"/>
+
+    <line x1="231" y1="114" x2="231" y2="150" stroke="currentColor" stroke-width="1.2" marker-end="url(#c-arr)"/>
+    <rect x="166" y="152" width="130" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="231" y="172" text-anchor="middle" font-weight="600" font-size="12">compose reply</text>
+    <text x="231" y="188" text-anchor="middle" opacity=".8">model call 5</text>
+
+    <text x="40" y="262" fill="#B3541E" font-weight="600">What it costs on WhatsApp, where nothing can stream:</text>
+    <text x="40" y="282" fill="#B3541E">· 3 to 5 serial model calls per turn: p50 6–10 s, a 30 s tail, five timeouts to fail</text>
+    <text x="40" y="300" fill="#B3541E">· the product truth written into every specialist's prompt (8 places for cash-out today)</text>
+    <text x="40" y="318" fill="#B3541E">· a memory agent can only paraphrase rows or invent; the ledger rule forbids it</text>
+    <text x="40" y="336" fill="#B3541E">· five prompts to evaluate and version in 11 languages, for a one-founder team</text>
+    <text x="40" y="354" opacity=".8">This is the shape running today: tier 1 routes, tier 2 "category agents" answer.</text>
+
+    <text x="620" y="28" letter-spacing="1.2" fill="#359853" font-weight="600">THE RECOMMENDATION · one brain, many hands</text>
+    <rect x="620" y="40" width="560" height="320" rx="8" fill="none" stroke="#359853" stroke-width="1.6"/>
+
+    <rect x="640" y="60" width="90" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="685" y="87" text-anchor="middle" font-weight="600" font-size="12">WhatsApp</text>
+    <line x1="730" y1="83" x2="764" y2="83" stroke="currentColor" stroke-width="1.2" marker-end="url(#c-arr)"/>
+
+    <rect x="766" y="52" width="130" height="62" rx="6" fill="none" stroke="#359853" stroke-width="2.2"/>
+    <text x="831" y="76" text-anchor="middle" font-weight="700" font-size="12" fill="#359853">Pay</text>
+    <text x="831" y="94" text-anchor="middle" opacity=".8">the one model call</text>
+
+    <text x="1070" y="48" text-anchor="middle" font-size="10" fill="#359853">code, not models · one parallel round</text>
+    <g stroke="#359853" stroke-width="1.4" fill="none">
+      <rect x="980" y="56" width="180" height="46" rx="6"/>
+      <rect x="980" y="122" width="180" height="46" rx="6"/>
+      <rect x="980" y="188" width="180" height="46" rx="6"/>
+    </g>
+    <text x="1070" y="76" text-anchor="middle" font-weight="600" font-size="12">Products hand</text>
+    <text x="1070" y="92" text-anchor="middle" opacity=".8">get_products · start_buy_*</text>
+    <text x="1070" y="142" text-anchor="middle" font-weight="600" font-size="12">Pay-outs hand</text>
+    <text x="1070" y="158" text-anchor="middle" opacity=".8">get_payout_status · start_withdraw</text>
+    <text x="1070" y="208" text-anchor="middle" font-weight="600" font-size="12">Memory hand</text>
+    <text x="1070" y="224" text-anchor="middle" opacity=".8">the prefetched pack · get_transactions</text>
+
+    <line x1="896" y1="75" x2="978" y2="79" stroke="#359853" stroke-width="1.4" marker-start="url(#c-arr-acc)" marker-end="url(#c-arr-acc)"/>
+    <line x1="896" y1="90" x2="978" y2="145" stroke="#359853" stroke-width="1.4" marker-start="url(#c-arr-acc)" marker-end="url(#c-arr-acc)"/>
+    <line x1="896" y1="104" x2="978" y2="211" stroke="#359853" stroke-width="1.4" marker-start="url(#c-arr-acc)" marker-end="url(#c-arr-acc)"/>
+
+    <line x1="831" y1="114" x2="831" y2="150" stroke="currentColor" stroke-width="1.2" marker-end="url(#c-arr)"/>
+    <rect x="766" y="152" width="130" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="831" y="172" text-anchor="middle" font-weight="600" font-size="12">guards → send</text>
+    <text x="831" y="188" text-anchor="middle" opacity=".8">same call composed it</text>
+
+    <rect x="640" y="214" width="320" height="52" rx="6" fill="none" stroke="#359853" stroke-width="1.4" stroke-dasharray="6 4"/>
+    <text x="800" y="234" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Specialists that need time run off-path</text>
+    <text x="800" y="252" text-anchor="middle" opacity=".85">reconcile sweep · summary · quotes → message back</text>
+
+    <text x="640" y="292" fill="#359853" font-weight="600">What changes:</text>
+    <text x="640" y="312" opacity=".9">· 1 model call typical, 2 at most: p50 2–3 s (target), one timeout, a fact-built fallback</text>
+    <text x="640" y="330" opacity=".9">· the product truth in one registry that also decides which hands this customer has</text>
+    <text x="640" y="348" opacity=".9">· memory is rows the model quotes, checked on the way out; per-product ownership stays</text>
+  </g>
+</svg>
+    </div>
+    <figcaption>Left: each specialist is a model call on the reply path, serial because WhatsApp cannot stream a partial answer, each with its own prompt that must state the same product truth. Right: the same specialists as tools and data on one model's hot path, and as workers off it that message the customer back when a slow job (a pay-out reconcile, a quote) completes.</figcaption>
+  </figure>
+  <div class="grid3">
+    <div class="card"><span class="kicker">Products specialist</span><p>A read tool over the catalogue and embeddings, plus one proposal tool per product. Its knowledge block is attached to the prompt only when the capability is live for this customer and in focus.</p></div>
+    <div class="card"><span class="kicker">Pay-outs specialist</span><p>The context pack carries the pending pay-out; a status tool asks the rail live; the reconcile sweep runs off-path every ten minutes and writes what it told the customer into the same history the agent reads.</p></div>
+    <div class="card"><span class="kicker">Memory specialist</span><p>A query, not a model. The pack, the transactions tool and a curated customer record. A second model reading the same rows can only paraphrase them or invent, and the numeric-provenance guard exists precisely so numbers come from rows.</p></div>
+  </div>
+  <h3>Sending money as easily as a text</h3>
+  <p>Today "send" mints a voucher. In the target, the send proposal resolves the recipient from the record (a saved name, a shared contact card, or a number) and the registry picks the rail by who the recipient is: a WaPay customer gets a balance transfer, anyone else gets a voucher today and a pay-out once cash-out is open. The model names the person and the amount; it never chooses the rail. "Send R50 to mom" works from a saved name, and the confirm, PIN and receipt stay exactly as they are.</p>
+
+  <h2>How "gets to know me over time" works</h2>
+  <p>Three memory tiers, each with a named writer and a named reader. The model reads all three and may propose exactly one kind of write: a customer-stated note. Money facts are never written by the model.</p>
+  <figure>
+    <div class="diagram">
+<svg viewBox="0 0 1200 350" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three memory tiers, working, episodic and semantic, each with its writer and reader, all rendered into one customer record block in the system prompt; the model reads them and never writes money facts">
+  <defs>
+    <marker id="m-arr-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#359853"/></marker>
+  </defs>
+  <g font-family="'Public Sans', system-ui, sans-serif" font-size="11" fill="currentColor">
+    <g stroke="#359853" stroke-width="1.6" fill="none">
+      <rect x="20" y="40" width="370" height="196" rx="8"/>
+      <rect x="415" y="40" width="370" height="196" rx="8"/>
+      <rect x="810" y="40" width="370" height="196" rx="8"/>
+    </g>
+    <text x="36" y="64" letter-spacing="1.2" fill="#359853" font-weight="600">WORKING · this turn and this flow</text>
+    <text x="36" y="88" opacity=".9">conversation_turns: both sides of every turn,</text>
+    <text x="36" y="104" opacity=".9">plus event rows for things that happened with</text>
+    <text x="36" y="120" opacity=".9">no message (pay-out failed, deposit landed)</text>
+    <text x="36" y="140" opacity=".9">flow state and slots (conversationData, kept)</text>
+    <text x="36" y="156" opacity=".9">this turn's pack and tool results, in process</text>
+    <text x="36" y="184" font-size="10" opacity=".7">written by: the memory writer at the end of every turn;</text>
+    <text x="36" y="198" font-size="10" opacity=".7">out-of-band senders through one helper</text>
+    <text x="36" y="216" font-size="10" opacity=".7">redacted before storage · dated · 30-day retention</text>
+
+    <text x="431" y="64" letter-spacing="1.2" fill="#359853" font-weight="600">EPISODIC · what happened, read from the source</text>
+    <text x="431" y="88" opacity=".9">one batch per turn over the tables that already exist:</text>
+    <text x="431" y="104" opacity=".9">journal lines by wallet (settled money) · active holds</text>
+    <text x="431" y="120" opacity=".9">(pending pay-outs) · provider requests (deposits, VAS,</text>
+    <text x="431" y="136" opacity=".9">fuel, pay-outs with rail status) · pay links · gifts</text>
+    <text x="431" y="160" opacity=".9">rendered as movements: kind, amount, state, reference, time</text>
+    <text x="431" y="184" font-size="10" opacity=".7">written by: the money flows, exactly as today; no second copy to drift</text>
+    <text x="431" y="198" font-size="10" opacity=".7">later: per-account columns on journal lines so the read is indexed</text>
+    <text x="431" y="216" font-size="10" opacity=".7">read by: the pack (newest 10), get_transactions, Mission Control</text>
+
+    <text x="826" y="64" letter-spacing="1.2" fill="#359853" font-weight="600">SEMANTIC · who the customer is</text>
+    <text x="826" y="88" opacity=".9">habits computed in SQL from events: usual airtime</text>
+    <text x="826" y="104" opacity=".9">number and amount, meter, deposit rail, cadence,</text>
+    <text x="826" y="120" opacity=".9">who gets sent money</text>
+    <text x="826" y="140" opacity=".9">notes the customer stated, each with provenance</text>
+    <text x="826" y="156" opacity=".9">language, KYC, pilot flags, opt-outs (kept as today)</text>
+    <text x="826" y="184" font-size="10" opacity=".7">written by: the nightly job and a validated "remember" tool;</text>
+    <text x="826" y="198" font-size="10" opacity=".7">no model-written memory in v1.4; a number-free summary is a later option</text>
+    <text x="826" y="216" font-size="10" opacity=".7">"what do you know about me" and "forget that" are ordinary tools</text>
+
+    <line x1="205" y1="236" x2="205" y2="272" stroke="#359853" stroke-width="1.4" marker-end="url(#m-arr-acc)"/>
+    <line x1="600" y1="236" x2="600" y2="272" stroke="#359853" stroke-width="1.4" marker-end="url(#m-arr-acc)"/>
+    <line x1="995" y1="236" x2="995" y2="272" stroke="#359853" stroke-width="1.4" marker-end="url(#m-arr-acc)"/>
+
+    <rect x="20" y="274" width="1160" height="60" rx="8" fill="none" stroke="#359853" stroke-width="2.2"/>
+    <text x="600" y="298" text-anchor="middle" font-weight="700" font-size="12" fill="#359853">CUSTOMER RECORD · one block in the system prompt, every turn</text>
+    <text x="600" y="318" text-anchor="middle" opacity=".9">the model may quote these numbers and nothing else; the provenance guard checks every figure it speaks against this block and this turn's tool results</text>
+  </g>
+</svg>
+    </div>
+    <figcaption>Working memory is the turn and the flow. Episodic memory is what happened, read straight from the ledger, the holds and the provider tables so there is no second copy to drift. Semantic memory is who the customer is: habits computed from those same tables, and notes the customer stated. All three render into one CUSTOMER RECORD block in the system prompt every turn.</figcaption>
+  </figure>
+  <ul>
+    <li><b>Status questions</b> ("did my payment go through") become a composition over the pack's recent movements: the newest candidate is named with its reference and state, and a second candidate is offered when two happened in the last day. Spelling and "to tbh" stop mattering because the candidate set comes from rows and the words only rank it.</li>
+    <li><b>Disambiguation and follow-up questions</b> fall out of the same block: the model sees the R50 PayShap and the R20 deposit side by side and asks which one. Clarify is a first-class outcome, not a slot ask: the question and the pending intent are stored in flow state, and the next turn's answer is routed back to the agent with that intent in the record ("R50 airtime: for you, or for the number ending 4421 you usually buy for?").</li>
+    <li><b>Things the customer tells it</b> ("I always buy for my mother", "call me Sipho") become notes through a propose_note tool: the runtime stores a note only when it contains no digits and is a direct statement about the customer, otherwise it asks once to confirm. The standing rule that the model writes no customer facts stays true; the feature ships in Phase 2.</li>
+    <li><b>Habits</b> (usual airtime number and amount, the meter, the deposit rail, who gets sent money) are computed in SQL from the same tables, not remembered by the model, so "the usual?" is exact.</li>
+    <li><b>Retention and erasure</b> become one delete on the turns table; the ledger and events stay as financial records. "What do you know about me" and "forget that" are ordinary tools.</li>
+  </ul>
+
+  <h2>The enterprise spine</h2>
+  <p>"Robust and enterprise" here means fewer moving parts with more instrumentation, not more agents. Six deterministic components carry it.</p>
+  <div class="grid3">
+    <div class="card"><span class="kicker">Policy engine</span><p>Sits between a proposal and a flow start: allow, deny, or require a KYC tier, a consent version, a PIN or a limit. Reads per-capability policy blocks and the existing Consent and Limit tables. This is where counsel-approved wording for credit, insurance and bank linking lives, and it keeps them dark until cleared.</p></div>
+    <div class="card"><span class="kicker">Output guards</span><p>Receipt shape, numeric provenance scoped to what matters (a balance, a status or a total stated as fact must come from the record or a tool result; limits, fee examples and echoed amounts pass), bearer digits, the partner and betting lexicon, message length. Totals over many rows come from the transactions tool's server-side sums, never from model arithmetic. A blocked reply degrades to a fact-built line, never to silence and never to "didn't catch that".</p></div>
+    <div class="card"><span class="kicker">Audit trail</span><p>One append-only turn table with a JSON payload per message: prompt hash, tools called, proposal, policy decision, guard blocks, latency and cost. Proposals that reach a preview also go to the existing AuditLog keyed by the WhatsApp message id, so message to proposal to preview to idemKey to ledger entry is one query. A nightly job re-derives every wallet balance from the journal and raises drift in Mission Control.</p></div>
+    <div class="card"><span class="kicker">Delivery and degraded mode</span><p>The webhook claims the message as in-flight and releases the claim on failure, with outbound sends idempotent per message id, so a killed turn is retried instead of silently lost. A typing indicator is sent before any work starts. A per-customer budget of model calls per hour stops a bored customer burning tokens. When the model is down, the guard list and the record still answer balance, status, help and the open flow deterministically; a second model provider is a later item, not a Phase 2 claim. Tool results and customer text are data in the prompt, never instructions.</p></div>
+    <div class="card"><span class="kicker">Async jobs</span><p>One jobs table drained on a schedule: the pay-out reconcile sweep, the customer summary, retention, and every future slow job (a credit check, insurance quotes). Workers message the customer back through one helper that picks in-window text, direct send or a template, and writes into the same history the agent reads.</p></div>
+    <div class="card"><span class="kicker">Evals</span><p>The golden corpus re-run through the agent with the pack and tools, scoring action, reply shape, language, latency and cost; the chat harness rewritten from exact copy to shape-and-fact assertions. English plus two languages first, the rest as promotion proceeds, and the translator kept as a fallback for the low-resource languages until their eval passes. Promotion per language is gated on both. Model ids stay env-tunable; "model-agnostic" is claimed only after a second provider has run the corpus.</p></div>
+  </div>
+
+  <h2>Adding a financial product</h2>
+  <p>Fuel cost 35 files and about 4,600 inserted lines across four commits because its truth and gates were copied into nine surfaces by hand. In the target, a product is one capability module and nothing in the agent, the prompt or the processor changes.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Part</th><th>What it holds</th><th>Bank-account linking example</th></tr>
+    <tr><td>Descriptor</td><td>id, label, one-liner, start command, <code>liveFor(waId)</code>, limits, fee line, policy block (KYC tier, consents, advice class)</td><td>live for an allowlist; requires a versioned open-banking consent; advice class "factual only"</td></tr>
+    <tr><td>Tools</td><td>read tools and one proposal tool with strict schemas</td><td><code>get_linked_accounts</code>, <code>start_link_bank</code></td></tr>
+    <tr><td>Flow</td><td>deterministic steps in the pure-step shape the withdraw flow already uses</td><td>consent text, a link button to the aggregator's hosted page, a webhook that records the link</td></tr>
+    <tr><td>Knowledge</td><td>brief and walkthrough, attached only when live and in focus</td><td>what is shared, what is not, how to unlink</td></tr>
+    <tr><td>Pack source</td><td>the table its flow writes, registered so the context pack and the transactions tool read it</td><td>a LinkedAccount table: provider, masked number, status, consent date</td></tr>
+  </table></div>
+  <p><b>Counsel first for three of them.</b> Recommending "the best insurance" is FAIS intermediary activity, a credit check needs NCA-grade consent and purpose, and bank linking runs through an aggregator with its own terms and a sponsor-bank question. The registry keeps each dark until cleared and the architecture makes each a module when it is. None of this design work is permission to advertise them. <b>Which first:</b> bank-account verification and linking, because it is the least regulated of the three, it is needed anyway to verify pay-out recipients, and it is the proof that a partner product is a folder. Credit follows once consent wording exists; insurance needs a licensed partner's journey, with the chat collecting needs and presenting quotes as facts, never "the best for you".</p>
+
+  <h2>The order to build it in</h2>
+  <p>Foundations first, because the agent cannot be built on a history that records one side, three public execute routes, and a message claim that is never released. The founder sees a change in the conversation at the end of every phase. Sizing is in working days for one Claude session at a time; on a calendar with one founder reviewing, that is six to eight weeks, with the founder's own number on the new brain in week two or three.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Phase</th><th>Sizing</th><th>What lands</th><th>What the founder sees in WhatsApp</th></tr>
+    <tr><td><b>Phase 0 · safety and spine · SHIPPED 3915d81</b></td><td class="num">done 16 Sep</td><td>Internal auth, ownership-before-PIN and crash-release on the three open execute routes; strict PIN shape in every PIN state; a reconciler for pay-outs stuck at INIT. One outbound wrapper so both sides of every turn are recorded, including the pay-out webhook and reconcile route. The context pack as a batch, fed into the existing model call. The per-customer withdrawal gate threaded into the prompt. Claim release on failure. Typing indicator. Template seeding off the customer's turn. The scheduler decision and a 10-minute reconcile cron. A real Transactions list behind the home card.</td><td>"Did my payment go through" and "what did I buy" answered from the real rows. No more two withdrawal truths. "Typing" appears within half a second. Transactions on the home card works. A pending pay-out is reconciled every ten minutes without anyone asking.</td></tr>
+    <tr><td><b>Phase 1 · registry, movements, policy · SHIPPED ea48cd4</b></td><td class="num">done 16 Sep</td><td>One capability registry with descriptors for the 11 existing capabilities; home, help, fallback, welcome, product list and how-it-works all render from it and the hand-written copies are deleted; a test asserts no surface names an unregistered capability. The pack's movement list built from the source tables in one batch (journal lines by wallet, active holds, provider requests, pay links, gifts), so a pending or failed pay-out appears with its rail status; a nightly integrity check of wallet balances against the journal. The policy engine over the existing Consent and Limit tables. Habits computed in SQL. "What do you know about me" and "forget that".</td><td>Every surface says the same thing about every product for his number. The bot greets with his usual airtime number and amount. Status questions name the right movement with its reference.</td></tr>
+    <tr><td><b>Phase 2 · the Pay agent behind the shadow list · WIRED a803950</b></td><td class="num">done 16 Sep (shadow)</td><td>The agent loop with strict tools through a model adapter; the guard list; the tool registry as plain JavaScript beside the helpers it wraps, with a test that no tool imports a model client; output guards; flow starters exported from the processor in place, not moved (exporting breaks no test lock, relocating breaks about 27); the shadow gate at the top of the post-onboarding path so shadow numbers skip the regex chain entirely; the turn ledger; a 20-second deadline with a fact-built fallback; the clarify outcome and the propose_note tool; a per-customer model-call budget and a degraded mode for a model outage; an eval runner that scores action, guards, latency and cost (English plus two languages first, the translator kept as a fallback for the low-resource languages); harness scenarios rewritten from exact copy to shape-and-fact checks.</td><td>A conversation. Two lines and a question for capability asks, headed lists for three or more items, his history quoted with references, follow-up questions in his words, no menu unless he asks. Confirm, PIN and receipts unchanged.</td></tr>
+    <tr><td><b>Phase 3 · promote and delete</b></td><td class="num">days 17–24</td><td>Promote per language from the eval table. Delete the pre-model regex groups in two batches with the eval as the gate: the question hooks first (fee ask, how-it-works, withdraw matcher), then the intent hooks (category context, the eight intent groups, the smart product query, the second help menu). Retire the two-tier classifier. Delete the dead code (second WhatsApp client, the bypassing ledger writer, the unused saved-accounts table). Rewrite the remaining source-text test locks as behaviour tests. Mission Control cards for conversations and pay-outs.</td><td>Every customer on the new brain. The processor roughly halves. Mission Control shows cost per day, guards fired, deadlines, and pending pay-outs with drift against the rail's float.</td></tr>
+    <tr><td><b>Phase 4 · the async tier and memory depth</b></td><td class="num">weeks 5–6</td><td>One jobs table drained by the cron: the pay-out sweep, the nightly backfill, retention and erasure, and every future slow job. A notify helper that picks in-window text, direct send or a template and records what it sent. Fuel reconcile off the per-turn path. Additive per-account columns on journal lines so the movement read is indexed (posting logic untouched). A second model provider run through the corpus. An optional number-free summary behind a flag, shipped only with the matching rule change. The first partner module (bank-account verification) as the extensibility proof. Voice notes and photos (a meter, a voucher slip) as a pre-agent channel step feeding the same text turn: deferred, and explicitly not in v1.4.</td><td>"I'll message you when the bank confirms" is kept without him asking. Habit-based openers improve week on week. A new partner product appears as a folder with no processor edit.</td></tr>
+  </table></div>
+
+  <h3>Mapped onto the v1.4 handover tasks</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Task</th><th>Disposition</th><th>Why</th></tr>
+    <tr><td>Task 1 · context pack and read path</td><td><span class="pill change">change</span></td><td>Keep the one-round-trip pack and feed it to the existing model call in Phase 0, which is the quickest real win. Keep the per-turn batch over the source tables as the movement list: it is what the admin CRM already does, it is consistent by construction, and a separate events table keyed by ledger idemKey cannot represent holds or pending pay-outs (they never reach the journal). Add per-account columns to the journal lines later so the read is indexed. Make status and "what did I buy" answers agent compositions over the pack; the deterministic ten-row list stays only for the home-card tap and as the fallback, because more regex intercepts recreate the menu feel.</td></tr>
+    <tr><td>Task 2 · capability registry</td><td><span class="pill keep">keep</span></td><td>As written, with three additions: the registry also scopes the model's tool list (a capability that is off for this customer cannot be proposed), each descriptor carries a policy block, and a capability's full knowledge is attached only when in focus.</td></tr>
+    <tr><td>Task 3 · composition policy</td><td><span class="pill change">change</span></td><td>Keep the day-one fixes (how-can-I versus how-do-I, list shape for the OTT answer) as a bridge the founder sees immediately, and keep harness checks on shape. Move the enforcement into the agent's prompt plus a post-model shape check, not regex tables kept in sync across eleven languages. Rewrite the exact-copy harness assertions so a better-worded agent passes. Delete the bridge in Phase 3.</td></tr>
+    <tr><td>Task 4 · the agent loop</td><td><span class="pill change">change</span></td><td>Keep one loop per turn, proposal-not-execute, the shadow list, per-language promotion and env-tunable models. Tools become plain JavaScript beside the helpers (no second build step); the get_context tool is dropped because the pack is always prefetched; two model rounds and three tool calls at most; the how-it-works block leaves the every-turn prompt for focus-loaded modules and a tool; the shadow gate sits at the top of the post-onboarding path; the timeout fallback is composed from the pack, not "didn't catch that". Added around it: the guard list, output guards, the turn ledger, an eval runner that records latency and cost.</td></tr>
+    <tr><td>Task 5 · pay-out operations</td><td><span class="pill keep">keep</span></td><td>All three parts. Pull the scheduler decision into Phase 0 as a blocker: the sweep has no scheduled caller and the project has one daily cron, and the whole async tier (sweep, backfill, retention, future quote workers) depends on Vercel Pro or UniFuel's runner. Add the reconciler for pay-outs stuck at INIT.</td></tr>
+    <tr><td>Task 6 · memory hygiene</td><td><span class="pill change">change</span></td><td>Keep the goals and the redaction list. Move turns to an append-only table (race-free by construction, one delete for retention and erasure, event rows possible) instead of atomic merges of a trimmed ring; the JSON column keeps flow state only. Add the outbound wrapper so recording both sides is structural, and redaction of bank account numbers and ID numbers typed in the withdraw flow.</td></tr>
+    <tr><td>Suggested order</td><td><span class="pill change">change</span></td><td>Safety first. The three open execute routes, the lenient PIN states and the never-released claim are live exposure the agent would widen; they land in Phase 0 with Task 6 and the pack, then Task 2 and events, then Task 4.</td></tr>
+    <tr><td>Not in the handover</td><td><span class="pill add">add</span></td><td>Numeric-provenance output guard, policy engine, turn ledger and audit trail, claim release, typing indicator, the events read model, the jobs table and notify helper, an erase script. These are the enterprise half of the ask and what makes bank linking, credit and insurance a descriptor change later.</td></tr>
+    <tr><td>Not in the handover</td><td><span class="pill drop">drop</span></td><td>A model-written customer summary on the hot path, specialist model agents, MCP servers in-process, token streaming, and multi-message "streaming" by default (Meta bills in-window replies from 1 October 2026, so one message per turn is the default and the split is a policy knob).</td></tr>
+  </table></div>
+
+  <h2>Fixed in 3915d81, whichever architecture</h2>
+  <p>Verified in the code before the build, all closed in the shipped commit (BUGLOG #56 to #64).</p>
+  <ul>
+    <li><b>Three execute routes are reachable without the internal key</b> (airtime, data, electricity) and they verify the PIN before checking that the preview exists and belongs to the caller. Anyone holding a customer's account id can burn their PIN attempts to lockout. Add the internal-auth check, move the ownership check before the PIN, and add the crash-release of the hold that the voucher and fuel routes already have.</li>
+    <li><b>The AI reads the global cash-out switch while the home card reads the per-customer pilot list.</b> With the allowlist set in production, a non-pilot customer sees "coming soon" on the home card and is told by the AI to type "withdraw R…", which bounces them back to the AI. One argument threaded into the knowledge builder and the prompt fixes it.</li>
+    <li><b>Only two of the PIN states accept PIN-shaped input strictly;</b> the others strip non-digits from any sentence, so a message carrying four to six digits reaches the PIN check and burns attempts.</li>
+    <li><b>A pay-out that crashes between the balance upgrade and the rail call is stuck at INIT</b> with the customer's money held and nothing sweeping it; the reconcile sweep only looks at PENDING. Add the INIT reconciler and a scheduled caller for the sweep.</li>
+    <li><b>Balance reads pick the first wallet with no type filter</b> in four places; once a customer has attempted a withdrawal they have two wallets, and "balance" can silently show the wrong one.</li>
+    <li><b>A turn that throws or is killed loses the message for good:</b> the claim is written before processing, never released, and every error is acknowledged to Meta as success. Release the claim when nothing was sent.</li>
+  </ul>
+
+  <h2>Where the recommendation disagrees with the brief</h2>
+  <ul>
+    <li><b>"A main Pay agent that talks to specialist agents."</b> No, not as separate model calls. The two-tier engine already is an orchestrator talking to category agents, and it is the source of the slow, fact-free answers. Specialists become tools, knowledge modules and off-path workers; one model composes per turn. Your mental model survives as the brain's tool list.</li>
+    <li><b>"A specialist for the customer's memory of transactions and pay-outs."</b> Memory is a query and a read model, not a model. A model reading the ledger can only paraphrase it or invent, and the standing rule that the AI never states balances or statuses from its own head is enforced mechanically by the provenance guard.</li>
+    <li><b>"Streaming the answers like ChatGPT."</b> WhatsApp delivers whole messages and cannot edit them. The ceiling is a typing indicator within half a second, one composed message in two to four seconds, and reply buttons for choices. From 1 October 2026 every extra in-window message is billable, so a stream of short bubbles is a cost, not a feature.</li>
+    <li><b>"Empowered by all sources of information."</b> Not raw access to everything. A curated, redacted record and read tools; every number spoken must trace to the record or a tool result this turn; confirm, PIN and receipt copy stay templates and the model never sees a PIN turn. A hallucinated "your payment went through" is a fraud vector, so some answers stay deterministic by design.</li>
+    <li><b>"Gets to know me over time"</b> does not mean the model remembers freely. Habits are computed from the ledger, notes come only from what the customer stated with provenance, and a number-free summary is a later option that lands together with a change to the standing rule in the code and the constitution.</li>
+    <li><b>"Super robust and enterprise"</b> means fewer moving parts with an audit trail, evals and gates: one loop, typed tools, a policy engine, a turn ledger, deterministic money flows and a jobs table. Not more agents, not a platform, not MCP on the hot path. The processor gets smaller.</li>
+    <li><b>Insurance, credit checks and bank linking are counsel-first.</b> Recommending insurance is FAIS intermediary activity, a credit enquiry needs NCA-grade consent and purpose, bank linking runs on an aggregator's terms with a sponsor bank. The registry and policy engine keep them dark and make them a module when cleared. Nothing here is permission to ship them or promise them in copy.</li>
+    <li><b>"Not running the orchestration agent right"</b> puts the fault in the wrong place. The architecture in the recon is right and unbuilt; the running implementation is its opposite. The first visible improvement (ledger facts in AI answers, one withdrawal truth, a typing indicator) comes from plumbing in Phase 0, before any new brain exists.</li>
+    <li><b>"Like ChatGPT or Claude"</b> should not mean open-ended chat inside a money product. Every off-topic turn costs a model call and a Meta message and adds risk. The persona stays warm and stays on the customer's money and the life around it; it declines the rest in one line.</li>
+    <li><b>The calendar.</b> The work is about twenty-four working days of Claude sessions, but with one founder reviewing, deploying and testing on his own phone, that is six to eight calendar weeks. The founder-visible milestone stays early: ledger-aware answers in the first week, his own number on the new brain in the second or third.</li>
+  </ul>
+
+  <h2>How this was checked</h2>
+  <p>Six read-only readers mapped routing, the brain, memory, the money boundary, the truth surfaces and the channel at the current build with file and line evidence. Four designers proposed independently from different angles (one brain, orchestrator plus specialists, memory first, financial platform). Three judges (founder, engineer, risk) scored all four on eight criteria; all three chose the one-brain design and grafted the same items from the others. One synthesis produced the recommendation; each of its twelve load-bearing claims was then attacked by two refuters, one against the code and one against Meta, Vercel and regulatory facts. Seven claims stood, four were corrected in wording, and one was refuted outright and changed the design (the events read model). A completeness critic then read the founder's message sentence by sentence against the result; its additions are on this page (the clarify outcome, the two-bubble rule, server-side totals, the note path, degraded mode, the moat, the send rail rule, the narrower provenance guard, fewer tables, and the calendar).</p>
+  <div class="tablewrap"><table>
+    <tr><th>Claim</th><th>Result</th><th>Note</th></tr>
+    <tr><td>The running system is already a two-model chain: tier 1 routes and never replies, tier 2 answers, the two share only a free-text note, and a tier-2 timeout discards tier 1. Neither prompt holds a customer fact.</td><td><span class="pill keep">stands</span></td><td>Both refuters confirmed every cited line.</td></tr>
+    <tr><td>The model has no read path to the ledger and the home card's Transactions line has no handler.</td><td><span class="pill change">narrowed</span></td><td>Overstated as written. The model can trigger two point lookups it never sees the result of (balance; latest deposit or pay-out status, pay-outs added on 16 September). There is no transaction list, statement or history read. The conclusion (build the pack first) holds.</td></tr>
+    <tr><td>History is lopsided and duplicated: 3 customer-side writes against 59 bot-side, the current message written before the 5-line read so it appears twice, and a non-atomic rewrite of the whole JSON column on every write.</td><td><span class="pill keep">stands</span></td><td>Counts verified by repo-wide grep; fast copy byte-identical to the iCloud repo.</td></tr>
+    <tr><td>The withdrawal truth is split per customer: home, the withdraw matcher and how-it-works use the per-customer pilot list, while the AI's knowledge and prompt read the global switch.</td><td><span class="pill keep">stands</span></td><td>Verified at every cited line; the pilot-gate test greps only for the global function, so it passes.</td></tr>
+    <tr><td>Three execute routes are public and mis-ordered (no internal auth, PIN verified before preview ownership, no crash release), and only 2 of the PIN states are strict.</td><td><span class="pill keep">stands</span></td><td>Verified; the middleware never touches /api, and the capabilities doc overstates what the code enforces.</td></tr>
+    <tr><td>Delivery is at-most-once with silent loss: the message is claimed before processing, never released, and every error is acknowledged as success.</td><td><span class="pill keep">stands</span></td><td>Verified; no release, no status column, no replay job exists.</td></tr>
+    <tr><td>About 28 test files read the processor as text; relocating or exporting flow starters fails a large share of the suite.</td><td><span class="pill change">corrected</span></td><td>27 files read it as text. Relocating breaks them; exporting in place breaks nothing (locks match by substring). So flow starters are exported where they are, not injected or moved.</td></tr>
+    <tr><td>The one-round-trip pack is not new ground: raw SQL is already used in 13 places and a seven-query customer pack already exists in the admin CRM.</td><td><span class="pill keep">stands</span></td><td>Verified; the only test guards are against the unsafe raw-SQL variant.</td></tr>
+    <tr><td>Removing tier 1 and the every-turn how-it-works block cuts prompt volume by at least a third, and a reply-only turn lands under 3 seconds at p50.</td><td><span class="pill change">corrected</span></td><td>Both refuters trimmed it. Measured from the delivered prompts: roughly a third less on today's two-call turns, and a net increase on the single-call fast-path turns (about a third of the corpus); the real saving is the uncached tier-1 call and the context sent twice. The latency figure was an unlogged impression, not a measurement; every latency on this page is a target for the eval runner.</td></tr>
+    <tr><td>WhatsApp cannot stream or edit a sent message; the repo sends no typing indicator; Meta's messages endpoint accepts a read status with a typing indicator that shows for up to 25 seconds.</td><td><span class="pill keep">stands</span></td><td>Verified against the repo and Meta's typing-indicators page, fetched 16 September 2026.</td></tr>
+    <tr><td>Every rand still moves only through the existing preview, confirm, PIN and execute contract, and every PIN state requires a preview id so no proposal can enter at the PIN step.</td><td><span class="pill change">corrected</span></td><td>The safety conclusion holds, two mechanisms were wrong: the pay-out and pay-request PIN states are gated by flow-owned state, not a preview id, and the dispatcher has no withdraw action today. Restated: the dispatcher may only start a flow at its first step, never sets a confirm or PIN state, never imports a ledger writer; a dead non-idempotent wallet writer in the domain package is to be deleted.</td></tr>
+    <tr><td>A customer-events read model keyed by ledger idemKey, backfilled nightly and sum-checked against the journal, converges to the ledger within a day.</td><td><span class="pill drop">refuted, design changed</span></td><td>An idemKey is per journal entry, not per customer (one send touches two wallets), and holds, pending and failed pay-outs never reach the journal at all, so that table could not show the founder's parked PayShap. The pack now reads the source tables directly in one batch, as the admin CRM does; per-account journal columns come later.</td></tr>
+  </table></div>
+
+  <p class="foot">Sources: the WaPay repo at commit 240526c (pages/api/webhooks/message-processor-v2.js, packages/ai/src/orchestrator.ts, lib/*), docs/AGENT_ARCHITECTURE_RECON.md, docs/HANDOVER_V1.4.md, WAPAY_STATUS.md v1.4.0, and Meta's WhatsApp Cloud API documentation for the typing indicator. Latency figures in the target are targets to be measured by the eval runner, not measurements.</p>
+</div>

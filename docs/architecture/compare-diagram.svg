@@ -1,0 +1,90 @@
+<svg viewBox="0 0 1200 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Side by side: the founder's picture of a main agent calling three specialist model agents in series, versus one Pay model whose specialists are tools and data on the hot path and workers off it">
+  <defs>
+    <marker id="c-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+    <marker id="c-arr-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#359853"/></marker>
+    <marker id="c-arr-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B3541E"/></marker>
+  </defs>
+  <g font-family="'Public Sans', system-ui, sans-serif" font-size="11" fill="currentColor">
+    <text x="20" y="28" letter-spacing="1.2" opacity=".65">THE PICTURE IN THE BRIEF · a main agent talks to specialist agents</text>
+    <rect x="20" y="40" width="560" height="320" rx="8" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+
+    <rect x="40" y="60" width="90" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="85" y="87" text-anchor="middle" font-weight="600" font-size="12">WhatsApp</text>
+    <line x1="130" y1="83" x2="164" y2="83" stroke="currentColor" stroke-width="1.2" marker-end="url(#c-arr)"/>
+
+    <rect x="166" y="52" width="130" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <text x="231" y="76" text-anchor="middle" font-weight="600" font-size="12">Main "Pay" agent</text>
+    <text x="231" y="94" text-anchor="middle" opacity=".8">model call 1</text>
+
+    <text x="470" y="48" text-anchor="middle" font-size="10" fill="#B3541E">each 1–3 s, in series, its own prompt</text>
+    <g stroke="#B3541E" stroke-width="1.4" fill="none">
+      <rect x="380" y="56" width="180" height="46" rx="6"/>
+      <rect x="380" y="122" width="180" height="46" rx="6"/>
+      <rect x="380" y="188" width="180" height="46" rx="6"/>
+    </g>
+    <text x="470" y="76" text-anchor="middle" font-weight="600" font-size="12">Products agent</text>
+    <text x="470" y="92" text-anchor="middle" opacity=".8">model call 2</text>
+    <text x="470" y="142" text-anchor="middle" font-weight="600" font-size="12">Pay-outs agent</text>
+    <text x="470" y="158" text-anchor="middle" opacity=".8">model call 3</text>
+    <text x="470" y="208" text-anchor="middle" font-weight="600" font-size="12">Memory agent</text>
+    <text x="470" y="224" text-anchor="middle" opacity=".8">model call 4 · paraphrases the ledger</text>
+
+    <line x1="296" y1="75" x2="378" y2="79" stroke="#B3541E" stroke-width="1.4" marker-end="url(#c-arr-warn)"/>
+    <line x1="296" y1="90" x2="378" y2="145" stroke="#B3541E" stroke-width="1.4" marker-end="url(#c-arr-warn)"/>
+    <line x1="296" y1="104" x2="378" y2="211" stroke="#B3541E" stroke-width="1.4" marker-end="url(#c-arr-warn)"/>
+
+    <line x1="231" y1="114" x2="231" y2="150" stroke="currentColor" stroke-width="1.2" marker-end="url(#c-arr)"/>
+    <rect x="166" y="152" width="130" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="231" y="172" text-anchor="middle" font-weight="600" font-size="12">compose reply</text>
+    <text x="231" y="188" text-anchor="middle" opacity=".8">model call 5</text>
+
+    <text x="40" y="262" fill="#B3541E" font-weight="600">What it costs on WhatsApp, where nothing can stream:</text>
+    <text x="40" y="282" fill="#B3541E">· 3 to 5 serial model calls per turn: p50 6–10 s, a 30 s tail, five timeouts to fail</text>
+    <text x="40" y="300" fill="#B3541E">· the product truth written into every specialist's prompt (8 places for cash-out today)</text>
+    <text x="40" y="318" fill="#B3541E">· a memory agent can only paraphrase rows or invent; the ledger rule forbids it</text>
+    <text x="40" y="336" fill="#B3541E">· five prompts to evaluate and version in 11 languages, for a one-founder team</text>
+    <text x="40" y="354" opacity=".8">This is the shape running today: tier 1 routes, tier 2 "category agents" answer.</text>
+
+    <text x="620" y="28" letter-spacing="1.2" fill="#359853" font-weight="600">THE RECOMMENDATION · one brain, many hands</text>
+    <rect x="620" y="40" width="560" height="320" rx="8" fill="none" stroke="#359853" stroke-width="1.6"/>
+
+    <rect x="640" y="60" width="90" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="685" y="87" text-anchor="middle" font-weight="600" font-size="12">WhatsApp</text>
+    <line x1="730" y1="83" x2="764" y2="83" stroke="currentColor" stroke-width="1.2" marker-end="url(#c-arr)"/>
+
+    <rect x="766" y="52" width="130" height="62" rx="6" fill="none" stroke="#359853" stroke-width="2.2"/>
+    <text x="831" y="76" text-anchor="middle" font-weight="700" font-size="12" fill="#359853">Pay</text>
+    <text x="831" y="94" text-anchor="middle" opacity=".8">the one model call</text>
+
+    <text x="1070" y="48" text-anchor="middle" font-size="10" fill="#359853">code, not models · one parallel round</text>
+    <g stroke="#359853" stroke-width="1.4" fill="none">
+      <rect x="980" y="56" width="180" height="46" rx="6"/>
+      <rect x="980" y="122" width="180" height="46" rx="6"/>
+      <rect x="980" y="188" width="180" height="46" rx="6"/>
+    </g>
+    <text x="1070" y="76" text-anchor="middle" font-weight="600" font-size="12">Products hand</text>
+    <text x="1070" y="92" text-anchor="middle" opacity=".8">get_products · start_buy_*</text>
+    <text x="1070" y="142" text-anchor="middle" font-weight="600" font-size="12">Pay-outs hand</text>
+    <text x="1070" y="158" text-anchor="middle" opacity=".8">get_payout_status · start_withdraw</text>
+    <text x="1070" y="208" text-anchor="middle" font-weight="600" font-size="12">Memory hand</text>
+    <text x="1070" y="224" text-anchor="middle" opacity=".8">the prefetched pack · get_transactions</text>
+
+    <line x1="896" y1="75" x2="978" y2="79" stroke="#359853" stroke-width="1.4" marker-start="url(#c-arr-acc)" marker-end="url(#c-arr-acc)"/>
+    <line x1="896" y1="90" x2="978" y2="145" stroke="#359853" stroke-width="1.4" marker-start="url(#c-arr-acc)" marker-end="url(#c-arr-acc)"/>
+    <line x1="896" y1="104" x2="978" y2="211" stroke="#359853" stroke-width="1.4" marker-start="url(#c-arr-acc)" marker-end="url(#c-arr-acc)"/>
+
+    <line x1="831" y1="114" x2="831" y2="150" stroke="currentColor" stroke-width="1.2" marker-end="url(#c-arr)"/>
+    <rect x="766" y="152" width="130" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="831" y="172" text-anchor="middle" font-weight="600" font-size="12">guards → send</text>
+    <text x="831" y="188" text-anchor="middle" opacity=".8">same call composed it</text>
+
+    <rect x="640" y="214" width="320" height="52" rx="6" fill="none" stroke="#359853" stroke-width="1.4" stroke-dasharray="6 4"/>
+    <text x="800" y="234" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Specialists that need time run off-path</text>
+    <text x="800" y="252" text-anchor="middle" opacity=".85">reconcile sweep · summary · quotes → message back</text>
+
+    <text x="640" y="292" fill="#359853" font-weight="600">What changes:</text>
+    <text x="640" y="312" opacity=".9">· 1 model call typical, 2 at most: p50 2–3 s (target), one timeout, a fact-built fallback</text>
+    <text x="640" y="330" opacity=".9">· the product truth in one registry that also decides which hands this customer has</text>
+    <text x="640" y="348" opacity=".9">· memory is rows the model quotes, checked on the way out; per-product ownership stays</text>
+  </g>
+</svg>

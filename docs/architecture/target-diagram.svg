@@ -1,0 +1,180 @@
+<svg viewBox="0 0 1320 760" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One WhatsApp turn in the target: a typing indicator at the webhook, a short guard list, one context pack and one registry feeding a single Pay model call with read and proposal tools, a policy engine in front of the unchanged money flows, output guards, one in-language send, and a memory writer; slow work runs off the request path">
+  <defs>
+    <marker id="g-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+    <marker id="g-arr-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#359853"/></marker>
+  </defs>
+  <g font-family="'Public Sans', system-ui, sans-serif" font-size="11" fill="currentColor">
+    <text x="20" y="28" letter-spacing="1.2" opacity=".65">HOT PATH · green = new · plain = unchanged · status after Phase 2 (16 Sep 2026): ✓ shipped, ◐ partly or behind the shadow list, ○ next</text>
+
+    <rect x="20" y="52" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="70" y="82" text-anchor="middle" font-weight="600" font-size="12">WhatsApp</text>
+    <text x="70" y="100" text-anchor="middle" opacity=".75">one message</text>
+    <line x1="120" y1="87" x2="148" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#g-arr)"/>
+
+    <rect x="150" y="40" width="190" height="94" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="245" y="62" text-anchor="middle" font-weight="600" font-size="12">Webhook</text>
+    <text x="336" y="52" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="245" y="80" text-anchor="middle" opacity=".8">HMAC · claim as in-flight</text>
+    <text x="245" y="96" text-anchor="middle" fill="#359853" font-weight="600">typing indicator ≈0.5 s</text>
+    <text x="245" y="112" text-anchor="middle" fill="#359853">claim released on failure</text>
+    <line x1="340" y1="87" x2="368" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#g-arr)"/>
+
+    <rect x="370" y="40" width="190" height="94" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="465" y="62" text-anchor="middle" font-weight="600" font-size="12">Guard list</text>
+    <text x="556" y="52" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="465" y="80" text-anchor="middle" opacity=".8">about ten deterministic checks</text>
+    <text x="465" y="96" text-anchor="middle" opacity=".8">OTP · PIN · YES steps · codes</text>
+    <text x="465" y="112" text-anchor="middle" opacity=".8">STOP · onboarding · open flow</text>
+    <line x1="560" y1="87" x2="588" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#g-arr)"/>
+    <text x="465" y="150" text-anchor="middle" font-size="10" opacity=".7">a guard answer ends the turn: 0 model calls</text>
+
+    <rect x="590" y="40" width="230" height="110" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="705" y="62" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Context pack · one round trip</text>
+    <text x="816" y="52" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="705" y="80" text-anchor="middle" opacity=".85">balances by type · last 10 movements</text>
+    <text x="705" y="96" text-anchor="middle" opacity=".85">pending pay-out · open pay links</text>
+    <text x="705" y="112" text-anchor="middle" opacity=".85">KYC · saved people · habits</text>
+    <text x="705" y="128" text-anchor="middle" opacity=".85">last 12 turns, both sides</text>
+
+    <rect x="590" y="176" width="230" height="82" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="705" y="198" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Capability registry</text>
+    <text x="816" y="188" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="705" y="216" text-anchor="middle" opacity=".85">what is live for THIS customer</text>
+    <text x="705" y="232" text-anchor="middle" opacity=".85">prompt lines · tool list · policy</text>
+    <text x="705" y="248" text-anchor="middle" opacity=".85">also renders home, help, welcome</text>
+
+    <line x1="820" y1="95" x2="848" y2="95" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <text x="834" y="86" text-anchor="middle" font-size="10" fill="#359853">facts</text>
+    <line x1="820" y1="217" x2="848" y2="190" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <text x="838" y="216" text-anchor="middle" font-size="10" fill="#359853">tools</text>
+
+    <rect x="850" y="40" width="210" height="220" rx="8" fill="none" stroke="#359853" stroke-width="2.4"/>
+    <text x="955" y="66" text-anchor="middle" font-weight="700" font-size="14" fill="#359853">Pay</text>
+    <text x="1056" y="52" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="955" y="86" text-anchor="middle" opacity=".9">one model call, rarely two</text>
+    <text x="955" y="104" text-anchor="middle" opacity=".9">system prompt: persona, rules,</text>
+    <text x="955" y="120" text-anchor="middle" opacity=".9">registry, fees, CUSTOMER RECORD</text>
+    <text x="955" y="144" text-anchor="middle" opacity=".9">composes in the customer's language</text>
+    <text x="955" y="160" text-anchor="middle" opacity=".9">asks the follow-up question itself</text>
+    <text x="955" y="184" text-anchor="middle" opacity=".9">three outcomes: reply · clarify · proposal</text>
+    <text x="955" y="200" text-anchor="middle" opacity=".9">calls a read tool when it needs depth</text>
+    <text x="955" y="216" text-anchor="middle" opacity=".9">proposes an action, never executes</text>
+    <text x="955" y="240" text-anchor="middle" opacity=".9">8 s per call · 2 rounds · no PIN turns</text>
+
+    <rect x="1090" y="40" width="210" height="100" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="1195" y="62" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Read tools</text>
+    <text x="1296" y="52" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="1195" y="80" text-anchor="middle" opacity=".85">get_transactions (with totals)</text>
+    <text x="1195" y="96" text-anchor="middle" opacity=".85">get_products · get_fee_quote</text>
+    <text x="1195" y="112" text-anchor="middle" opacity=".85">where_accepted · get_payout_status</text>
+    <text x="1195" y="128" text-anchor="middle" opacity=".85">get_pay_links · how_it_works(topic)</text>
+    <line x1="1060" y1="90" x2="1088" y2="90" stroke="#359853" stroke-width="1.4" marker-start="url(#g-arr-acc)" marker-end="url(#g-arr-acc)"/>
+
+    <rect x="1090" y="160" width="210" height="100" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="1195" y="182" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Proposal tools</text>
+    <text x="1296" y="172" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="1195" y="200" text-anchor="middle" opacity=".85">start_send · start_withdraw</text>
+    <text x="1195" y="216" text-anchor="middle" opacity=".85">start_buy_airtime · data · electricity</text>
+    <text x="1195" y="232" text-anchor="middle" opacity=".85">start_deposit · start_pay_link</text>
+    <text x="1195" y="248" text-anchor="middle" opacity=".85">start_fuel · start_voucher_load</text>
+    <line x1="1060" y1="210" x2="1088" y2="210" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+
+    <line x1="1195" y1="260" x2="1195" y2="292" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <text x="1205" y="281" font-size="10" fill="#359853">slots re-validated</text>
+    <rect x="1090" y="294" width="210" height="82" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="1195" y="316" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Policy engine</text>
+    <text x="1296" y="306" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="1195" y="334" text-anchor="middle" opacity=".85">allow · deny · require</text>
+    <text x="1195" y="350" text-anchor="middle" opacity=".85">KYC tier · consent version</text>
+    <text x="1195" y="366" text-anchor="middle" opacity=".85">PIN · limits · per-customer gate</text>
+    <line x1="1195" y1="376" x2="1195" y2="408" stroke="currentColor" stroke-width="1.2" marker-end="url(#g-arr)"/>
+    <text x="1205" y="397" font-size="10" opacity=".7">allow</text>
+    <rect x="1090" y="410" width="210" height="96" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="1195" y="432" text-anchor="middle" font-weight="600" font-size="12">Money flows, unchanged</text>
+    <text x="1296" y="422" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="1195" y="450" text-anchor="middle" opacity=".85">preview → confirm → PIN → execute</text>
+    <text x="1195" y="466" text-anchor="middle" opacity=".85">two-phase holds · idemKeys</text>
+    <text x="1195" y="482" text-anchor="middle" opacity=".85">quotes binding · PIN checked server-side</text>
+    <text x="1195" y="498" text-anchor="middle" opacity=".85">receipts and PIN prompts stay templates</text>
+
+    <line x1="955" y1="260" x2="955" y2="292" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <text x="965" y="281" font-size="10" fill="#359853">reply</text>
+    <rect x="850" y="294" width="210" height="82" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="955" y="316" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Output guards</text>
+    <text x="1056" y="306" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="955" y="334" text-anchor="middle" opacity=".85">receipt shape · number provenance</text>
+    <text x="955" y="350" text-anchor="middle" opacity=".85">bearer digits · banned words · length</text>
+    <text x="955" y="366" text-anchor="middle" opacity=".85">a block becomes a fact-built line</text>
+    <line x1="850" y1="335" x2="822" y2="335" stroke="currentColor" stroke-width="1.2" marker-end="url(#g-arr)"/>
+
+    <rect x="590" y="294" width="230" height="82" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="705" y="316" text-anchor="middle" font-weight="600" font-size="12">send</text>
+    <text x="816" y="306" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="705" y="334" text-anchor="middle" opacity=".85">one message per turn by default</text>
+    <text x="705" y="350" text-anchor="middle" opacity=".85">a fast fact line first only when a tool round runs</text>
+    <text x="705" y="366" text-anchor="middle" opacity=".85">in-language · length guard · result checked</text>
+
+    <line x1="705" y1="376" x2="705" y2="408" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <line x1="1090" y1="458" x2="1062" y2="458" stroke="#359853" stroke-width="1.4" marker-end="url(#g-arr-acc)"/>
+    <text x="1076" y="449" text-anchor="middle" font-size="10" fill="#359853">settle</text>
+    <rect x="590" y="410" width="470" height="96" rx="6" fill="none" stroke="#359853" stroke-width="1.6"/>
+    <text x="825" y="432" text-anchor="middle" font-weight="600" font-size="12" fill="#359853">Memory writer</text>
+    <text x="1056" y="422" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="825" y="450" text-anchor="middle" opacity=".85">both sides of every turn → conversation_turns (redacted, dated, 30-day retention)</text>
+    <text x="825" y="466" text-anchor="middle" opacity=".85">money facts stay where they are written: the ledger, holds, provider requests, links, gifts</text>
+    <text x="825" y="482" text-anchor="middle" opacity=".85">agent_turns audit: tools, proposal, policy decision, guards fired, ms, cost</text>
+    <text x="825" y="498" text-anchor="middle" opacity=".85">the next turn's pack reads all of it in one batch, nothing to drift</text>
+
+    <rect x="20" y="176" width="540" height="82" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+    <text x="36" y="198" letter-spacing="1.2" opacity=".65">BUDGET PER TURN · targets, to be measured by the eval runner</text>
+    <text x="36" y="218" opacity=".9">guard turn under 1 s · reply-only p50 ≈2.3 s · one tool round p50 ≈3.5 s</text>
+    <text x="36" y="234" opacity=".9">proposal p50 ≈3.2 s · hard stop at 20 s with a fact-built fallback from the pack</text>
+    <text x="36" y="250" opacity=".9">the 60 s function cap is never approached · ACK after the turn, as today</text>
+
+    <rect x="20" y="294" width="540" height="212" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+    <text x="36" y="316" letter-spacing="1.2" opacity=".65">WHAT THE MODEL IS GIVEN, EVERY TURN</text>
+    <text x="36" y="338" opacity=".9">· CUSTOMER RECORD: balances, the last movements with references and states,</text>
+    <text x="36" y="354" opacity=".9">  the pending pay-out, open links, saved people, habits, KYC, name, language</text>
+    <text x="36" y="374" opacity=".9">· the last 12 turns as real user and assistant messages, both sides</text>
+    <text x="36" y="394" opacity=".9">· the registry: one line per live capability, full knowledge only when in focus</text>
+    <text x="36" y="414" opacity=".9">· the fee table · composition rules (two lines and a question; lists for 3+)</text>
+    <text x="36" y="434" opacity=".9">· a tool list scoped to what is live for this customer: a capability that is</text>
+    <text x="36" y="450" opacity=".9">  off for this number cannot be proposed at all</text>
+    <text x="36" y="474" fill="#359853" font-weight="600">· every balance, status or total it states as fact must come from the record or a tool</text>
+    <text x="36" y="492" opacity=".9">  (limits, fee examples and echoed amounts are fine; a block is logged and replaced by a fact line)</text>
+
+    <rect x="20" y="540" width="1280" height="196" rx="8" fill="none" stroke="#359853" stroke-width="1.6" stroke-dasharray="7 5"/>
+    <text x="36" y="562" letter-spacing="1.2" fill="#359853" font-weight="600">OFF THE REQUEST PATH · one jobs table, drained every 10 minutes (Vercel Pro cron, or UniFuel's runner with the shared key)</text>
+    <g stroke="currentColor" stroke-width="1.2" fill="none">
+      <rect x="36" y="580" width="236" height="66" rx="6"/>
+      <rect x="288" y="580" width="236" height="66" rx="6"/>
+      <rect x="540" y="580" width="236" height="66" rx="6"/>
+      <rect x="792" y="580" width="236" height="66" rx="6"/>
+      <rect x="1044" y="580" width="236" height="66" rx="6"/>
+    </g>
+    <text x="154" y="602" text-anchor="middle" font-weight="600" font-size="12">Pay-out reconcile sweep</text>
+    <text x="268" y="592" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="154" y="619" text-anchor="middle" opacity=".85">asks the rail about every pending</text>
+    <text x="154" y="635" text-anchor="middle" opacity=".85">pay-out; settles or releases the hold</text>
+    <text x="406" y="602" text-anchor="middle" font-weight="600" font-size="12">Nightly integrity check</text>
+    <text x="520" y="592" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="406" y="619" text-anchor="middle" opacity=".85">wallet balances re-derived from the</text>
+    <text x="406" y="635" text-anchor="middle" opacity=".85">journal; drift raised in Mission Control</text>
+    <text x="658" y="602" text-anchor="middle" font-weight="600" font-size="12">Habits and retention</text>
+    <text x="772" y="592" text-anchor="end" font-size="10" font-weight="700" fill="#359853">✓</text>
+    <text x="658" y="619" text-anchor="middle" opacity=".85">regulars computed in SQL</text>
+    <text x="658" y="635" text-anchor="middle" opacity=".85">turns older than 30 days deleted</text>
+    <text x="910" y="602" text-anchor="middle" font-weight="600" font-size="12">Future slow specialists</text>
+    <text x="1024" y="592" text-anchor="end" font-size="10" font-weight="700" fill="currentColor">○</text>
+    <text x="910" y="619" text-anchor="middle" opacity=".85">credit enquiry · insurance quotes</text>
+    <text x="910" y="635" text-anchor="middle" opacity=".85">bank-link callbacks (counsel first)</text>
+    <text x="1162" y="602" text-anchor="middle" font-weight="600" font-size="12">notifyCustomer</text>
+    <text x="1276" y="592" text-anchor="end" font-size="10" font-weight="700" fill="#B3541E">◐</text>
+    <text x="1162" y="619" text-anchor="middle" opacity=".85">in-window text, direct send, template</text>
+    <text x="1162" y="635" text-anchor="middle" opacity=".85">writes into the turns the agent reads</text>
+    <text x="640" y="680" text-anchor="middle" opacity=".85">"I'll message you the moment the bank confirms" becomes a promise the system keeps without the customer asking, and the next turn's Pay already knows it was sent.</text>
+    <line x1="1162" y1="646" x2="1162" y2="704" stroke="#359853" stroke-width="1.4" stroke-dasharray="4 3"/>
+    <line x1="1162" y1="704" x2="840" y2="704" stroke="#359853" stroke-width="1.4" stroke-dasharray="4 3"/>
+    <text x="1000" y="720" text-anchor="middle" font-size="10" fill="#359853">→ memory writer, then WhatsApp</text>
+  </g>
+</svg>

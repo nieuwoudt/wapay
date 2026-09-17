@@ -1,0 +1,372 @@
+{
+ "sequence": [
+  [
+   "1",
+   "Webhook",
+   "Verify the signature, write the pulse row, claim the message as in-flight. A duplicate that already finished is acknowledged; a turn that throws before any send releases its claim so Meta's retry is processed.",
+   "≈20 ms"
+  ],
+  [
+   "2",
+   "Webhook",
+   "Send the read receipt and typing indicator in the background. The customer sees \"typing\" within about half a second.",
+   "0 on path"
+  ],
+  [
+   "3",
+   "Context pack",
+   "One round trip: account, profile, flow state, balances by type with holds, the last 10 movements, the pending pay-out, open links, waiting gifts, KYC, saved people, habits, the last 12 turns.",
+   "40–80 ms"
+  ],
+  [
+   "4",
+   "Memory writer",
+   "Record the customer's message once, redacted, after the history read so it never appears in the prompt twice.",
+   "≈15 ms"
+  ],
+  [
+   "5",
+   "Guard list",
+   "About ten pure checks: receipt code, language switch, onboarding, shared contact, STOP, codes, a 16-digit voucher PIN, a pay-request code, an open money state. A guard answer ends the turn with no model call.",
+   "under 1 ms; a state turn 50–900 ms"
+  ],
+  [
+   "6",
+   "Registry + prompt",
+   "Capabilities live for this customer; the stable prefix, the CUSTOMER RECORD, the 12 turns as real messages, the message once. A capability's full knowledge only when in focus.",
+   "≈2 ms"
+  ],
+  [
+   "7",
+   "Pay",
+   "Model call 1 with capability-scoped tools. Outcome: a reply, a clarify (a question plus a pending intent stored in flow state for the next turn), tool calls, or a proposal.",
+   "p50 ≈1.2 s · p95 ≈3 s"
+  ],
+  [
+   "8",
+   "Tools",
+   "If tools were called: run them in parallel with per-tool timeouts, then model call 2 composes. Two rounds at most; a third request is answered from what is already held.",
+   "30–800 ms + ≈1 s"
+  ],
+  [
+   "9",
+   "Policy + dispatcher",
+   "If a proposal: re-validate the slots, evaluate policy (allow, deny, require), call the flow starter at its first step. The flow's own preview mints the confirm state; the dispatcher never sets a confirm or PIN state and never touches the ledger. The confirm text is built from the preview, not by the model.",
+   "under 1 ms + 300–800 ms preview"
+  ],
+  [
+   "10",
+   "Output guards",
+   "Receipt shape, number provenance, bearer digits, partner and betting words, URL allowlist, length, em dash. A block is logged by rule and replaced by a fact-built line.",
+   "≈1 ms"
+  ],
+  [
+   "11",
+   "Localizer",
+   "Canned money strings only (confirm, PIN prompt, receipt). Model text is already in the customer's language.",
+   "0 on cache hit"
+  ],
+  [
+   "12",
+   "Sender",
+   "One message per turn by default; when a tool round ran, a one-line fact-built acknowledgement went out first so the customer saw something within a second. Result checked, one retry on a 5xx, the assistant turn recorded.",
+   "300–600 ms per message"
+  ],
+  [
+   "13",
+   "Turn ledger",
+   "One row: path, hashes, tool timings, proposal, policy decision, guards fired, tokens, cost, outcome; the claim marked done.",
+   "20–40 ms"
+  ],
+  [
+   "14",
+   "Runtime",
+   "Acknowledge to Meta. A watchdog at 20 seconds sends the fact-built fallback and marks the turn; the 60-second cap is never approached.",
+   "guard turn under 1 s · reply-only p50 ≈2.3 s · one tool round p50 ≈3.5 s"
+  ]
+ ],
+ "plan": [
+  [
+   "Phase 0 · safety and spine · SHIPPED 3915d81",
+   "done 16 Sep",
+   "Internal auth, ownership-before-PIN and crash-release on the three open execute routes; strict PIN shape in every PIN state; a reconciler for pay-outs stuck at INIT. One outbound wrapper so both sides of every turn are recorded, including the pay-out webhook and reconcile route. The context pack as a batch, fed into the existing model call. The per-customer withdrawal gate threaded into the prompt. Claim release on failure. Typing indicator. Template seeding off the customer's turn. The scheduler decision and a 10-minute reconcile cron. A real Transactions list behind the home card.",
+   "\"Did my payment go through\" and \"what did I buy\" answered from the real rows. No more two withdrawal truths. \"Typing\" appears within half a second. Transactions on the home card works. A pending pay-out is reconciled every ten minutes without anyone asking."
+  ],
+  [
+   "Phase 1 · registry, movements, policy · SHIPPED ea48cd4",
+   "done 16 Sep",
+   "One capability registry with descriptors for the 11 existing capabilities; home, help, fallback, welcome, product list and how-it-works all render from it and the hand-written copies are deleted; a test asserts no surface names an unregistered capability. The pack's movement list built from the source tables in one batch (journal lines by wallet, active holds, provider requests, pay links, gifts), so a pending or failed pay-out appears with its rail status; a nightly integrity check of wallet balances against the journal. The policy engine over the existing Consent and Limit tables. Habits computed in SQL. \"What do you know about me\" and \"forget that\".",
+   "Every surface says the same thing about every product for his number. The bot greets with his usual airtime number and amount. Status questions name the right movement with its reference."
+  ],
+  [
+   "Phase 2 · the Pay agent behind the shadow list · WIRED a803950",
+   "done 16 Sep (shadow)",
+   "The agent loop with strict tools through a model adapter; the guard list; the tool registry as plain JavaScript beside the helpers it wraps, with a test that no tool imports a model client; output guards; flow starters exported from the processor in place, not moved (exporting breaks no test lock, relocating breaks about 27); the shadow gate at the top of the post-onboarding path so shadow numbers skip the regex chain entirely; the turn ledger; a 20-second deadline with a fact-built fallback; the clarify outcome and the propose_note tool; a per-customer model-call budget and a degraded mode for a model outage; an eval runner that scores action, guards, latency and cost (English plus two languages first, the translator kept as a fallback for the low-resource languages); harness scenarios rewritten from exact copy to shape-and-fact checks.",
+   "A conversation. Two lines and a question for capability asks, headed lists for three or more items, his history quoted with references, follow-up questions in his words, no menu unless he asks. Confirm, PIN and receipts unchanged."
+  ],
+  [
+   "Phase 3 · promote and delete",
+   "days 17–24",
+   "Promote per language from the eval table. Delete the pre-model regex groups in two batches with the eval as the gate: the question hooks first (fee ask, how-it-works, withdraw matcher), then the intent hooks (category context, the eight intent groups, the smart product query, the second help menu). Retire the two-tier classifier. Delete the dead code (second WhatsApp client, the bypassing ledger writer, the unused saved-accounts table). Rewrite the remaining source-text test locks as behaviour tests. Mission Control cards for conversations and pay-outs.",
+   "Every customer on the new brain. The processor roughly halves. Mission Control shows cost per day, guards fired, deadlines, and pending pay-outs with drift against the rail's float."
+  ],
+  [
+   "Phase 4 · the async tier and memory depth",
+   "weeks 5–6",
+   "One jobs table drained by the cron: the pay-out sweep, the nightly backfill, retention and erasure, and every future slow job. A notify helper that picks in-window text, direct send or a template and records what it sent. Fuel reconcile off the per-turn path. Additive per-account columns on journal lines so the movement read is indexed (posting logic untouched). A second model provider run through the corpus. An optional number-free summary behind a flag, shipped only with the matching rule change. The first partner module (bank-account verification) as the extensibility proof. Voice notes and photos (a meter, a voucher slip) as a pre-agent channel step feeding the same text turn: deferred, and explicitly not in v1.4.",
+   "\"I'll message you when the bank confirms\" is kept without him asking. Habit-based openers improve week on week. A new partner product appears as a folder with no processor edit."
+  ]
+ ],
+ "handover": [
+  [
+   "Task 1 · context pack and read path",
+   "change",
+   "Keep the one-round-trip pack and feed it to the existing model call in Phase 0, which is the quickest real win. Keep the per-turn batch over the source tables as the movement list: it is what the admin CRM already does, it is consistent by construction, and a separate events table keyed by ledger idemKey cannot represent holds or pending pay-outs (they never reach the journal). Add per-account columns to the journal lines later so the read is indexed. Make status and \"what did I buy\" answers agent compositions over the pack; the deterministic ten-row list stays only for the home-card tap and as the fallback, because more regex intercepts recreate the menu feel."
+  ],
+  [
+   "Task 2 · capability registry",
+   "keep",
+   "As written, with three additions: the registry also scopes the model's tool list (a capability that is off for this customer cannot be proposed), each descriptor carries a policy block, and a capability's full knowledge is attached only when in focus."
+  ],
+  [
+   "Task 3 · composition policy",
+   "change",
+   "Keep the day-one fixes (how-can-I versus how-do-I, list shape for the OTT answer) as a bridge the founder sees immediately, and keep harness checks on shape. Move the enforcement into the agent's prompt plus a post-model shape check, not regex tables kept in sync across eleven languages. Rewrite the exact-copy harness assertions so a better-worded agent passes. Delete the bridge in Phase 3."
+  ],
+  [
+   "Task 4 · the agent loop",
+   "change",
+   "Keep one loop per turn, proposal-not-execute, the shadow list, per-language promotion and env-tunable models. Tools become plain JavaScript beside the helpers (no second build step); the get_context tool is dropped because the pack is always prefetched; two model rounds and three tool calls at most; the how-it-works block leaves the every-turn prompt for focus-loaded modules and a tool; the shadow gate sits at the top of the post-onboarding path; the timeout fallback is composed from the pack, not \"didn't catch that\". Added around it: the guard list, output guards, the turn ledger, an eval runner that records latency and cost."
+  ],
+  [
+   "Task 5 · pay-out operations",
+   "keep",
+   "All three parts. Pull the scheduler decision into Phase 0 as a blocker: the sweep has no scheduled caller and the project has one daily cron, and the whole async tier (sweep, backfill, retention, future quote workers) depends on Vercel Pro or UniFuel's runner. Add the reconciler for pay-outs stuck at INIT."
+  ],
+  [
+   "Task 6 · memory hygiene",
+   "change",
+   "Keep the goals and the redaction list. Move turns to an append-only table (race-free by construction, one delete for retention and erasure, event rows possible) instead of atomic merges of a trimmed ring; the JSON column keeps flow state only. Add the outbound wrapper so recording both sides is structural, and redaction of bank account numbers and ID numbers typed in the withdraw flow."
+  ],
+  [
+   "Suggested order",
+   "change",
+   "Safety first. The three open execute routes, the lenient PIN states and the never-released claim are live exposure the agent would widen; they land in Phase 0 with Task 6 and the pack, then Task 2 and events, then Task 4."
+  ],
+  [
+   "Not in the handover",
+   "add",
+   "Numeric-provenance output guard, policy engine, turn ledger and audit trail, claim release, typing indicator, the events read model, the jobs table and notify helper, an erase script. These are the enterprise half of the ask and what makes bank linking, credit and insurance a descriptor change later."
+  ],
+  [
+   "Not in the handover",
+   "drop",
+   "A model-written customer summary on the hot path, specialist model agents, MCP servers in-process, token streaming, and multi-message \"streaming\" by default (Meta bills in-window replies from 1 October 2026, so one message per turn is the default and the split is a policy knob)."
+  ]
+ ],
+ "fixNow": [
+  "<b>Three execute routes are reachable without the internal key</b> (airtime, data, electricity) and they verify the PIN before checking that the preview exists and belongs to the caller. Anyone holding a customer's account id can burn their PIN attempts to lockout. Add the internal-auth check, move the ownership check before the PIN, and add the crash-release of the hold that the voucher and fuel routes already have.",
+  "<b>The AI reads the global cash-out switch while the home card reads the per-customer pilot list.</b> With the allowlist set in production, a non-pilot customer sees \"coming soon\" on the home card and is told by the AI to type \"withdraw R…\", which bounces them back to the AI. One argument threaded into the knowledge builder and the prompt fixes it.",
+  "<b>Only two of the PIN states accept PIN-shaped input strictly;</b> the others strip non-digits from any sentence, so a message carrying four to six digits reaches the PIN check and burns attempts.",
+  "<b>A pay-out that crashes between the balance upgrade and the rail call is stuck at INIT</b> with the customer's money held and nothing sweeping it; the reconcile sweep only looks at PENDING. Add the INIT reconciler and a scheduled caller for the sweep.",
+  "<b>Balance reads pick the first wallet with no type filter</b> in four places; once a customer has attempted a withdrawal they have two wallets, and \"balance\" can silently show the wrong one.",
+  "<b>A turn that throws or is killed loses the message for good:</b> the claim is written before processing, never released, and every error is acknowledged to Meta as success. Release the claim when nothing was sent."
+ ],
+ "disagree": [
+  "<b>\"A main Pay agent that talks to specialist agents.\"</b> No, not as separate model calls. The two-tier engine already is an orchestrator talking to category agents, and it is the source of the slow, fact-free answers. Specialists become tools, knowledge modules and off-path workers; one model composes per turn. Your mental model survives as the brain's tool list.",
+  "<b>\"A specialist for the customer's memory of transactions and pay-outs.\"</b> Memory is a query and a read model, not a model. A model reading the ledger can only paraphrase it or invent, and the standing rule that the AI never states balances or statuses from its own head is enforced mechanically by the provenance guard.",
+  "<b>\"Streaming the answers like ChatGPT.\"</b> WhatsApp delivers whole messages and cannot edit them. The ceiling is a typing indicator within half a second, one composed message in two to four seconds, and reply buttons for choices. From 1 October 2026 every extra in-window message is billable, so a stream of short bubbles is a cost, not a feature.",
+  "<b>\"Empowered by all sources of information.\"</b> Not raw access to everything. A curated, redacted record and read tools; every number spoken must trace to the record or a tool result this turn; confirm, PIN and receipt copy stay templates and the model never sees a PIN turn. A hallucinated \"your payment went through\" is a fraud vector, so some answers stay deterministic by design.",
+  "<b>\"Gets to know me over time\"</b> does not mean the model remembers freely. Habits are computed from the ledger, notes come only from what the customer stated with provenance, and a number-free summary is a later option that lands together with a change to the standing rule in the code and the constitution.",
+  "<b>\"Super robust and enterprise\"</b> means fewer moving parts with an audit trail, evals and gates: one loop, typed tools, a policy engine, a turn ledger, deterministic money flows and a jobs table. Not more agents, not a platform, not MCP on the hot path. The processor gets smaller.",
+  "<b>Insurance, credit checks and bank linking are counsel-first.</b> Recommending insurance is FAIS intermediary activity, a credit enquiry needs NCA-grade consent and purpose, bank linking runs on an aggregator's terms with a sponsor bank. The registry and policy engine keep them dark and make them a module when cleared. Nothing here is permission to ship them or promise them in copy.",
+  "<b>\"Not running the orchestration agent right\"</b> puts the fault in the wrong place. The architecture in the recon is right and unbuilt; the running implementation is its opposite. The first visible improvement (ledger facts in AI answers, one withdrawal truth, a typing indicator) comes from plumbing in Phase 0, before any new brain exists.",
+  "<b>\"Like ChatGPT or Claude\"</b> should not mean open-ended chat inside a money product. Every off-topic turn costs a model call and a Meta message and adds risk. The persona stays warm and stays on the customer's money and the life around it; it declines the rest in one line.",
+  "<b>The calendar.</b> The work is about twenty-four working days of Claude sessions, but with one founder reviewing, deploying and testing on his own phone, that is six to eight calendar weeks. The founder-visible milestone stays early: ledger-aware answers in the first week, his own number on the new brain in the second or third."
+ ],
+ "phaseMapCaption": "Five phase columns in build order; every component carries the badge the verifiers gave it at HEAD 9bc355e with file and line evidence; the rust bar is the Phase 3 gate; the dashed line is where the build stands. The bottom strip names the test files that lock each phase. Regenerated on every ship.",
+ "whereWeAre": [
+  "Phase 2 is wired behind the shadow list. Phase 3 has not started. Latest code build 9bc355e.",
+  "Complete for every customer (Phases 0 and 1): the customer record and the last 12 turns, both sides, in every model turn; execute routes closed; strict PIN states; claim release, typing indicator; INIT pay-out reconcile; registry-rendered surfaces; habits, \"what do you know about me\" and \"forget me\"; nightly balance integrity; policy engine before proposals and withdrawals.",
+  "For the shadow list WAPAY_AGENT_V3_MSISDNS only (Phase 2): one model call over the record and typed tools; pre-model guards; per-customer budget; proposals through the same confirm and PIN steps; output gates, provenance guard; clarify state; an agent_turns row per turn. First live eval: 11 of 12, p50 1.9 s, p95 3.7 s. Everyone else: regex hooks and the two-tier engine.",
+  "Phase 3 gate (section 13, verbatim): the eval on the full set per language at or above the two-tier engine's pass rate, and a week of shadow turns with no gate firing on money copy.",
+  "Incident: the bot was mute from the Phase 0 deploy (2026-09-16) to hotfix 398475f (2026-09-17) because the webhook used runWithSendScope without importing it (BUGLOG #67). Rule: a webhook change ships only with the route runtime test green, and the first production message is watched in processed_messages before the deploy is called done."
+ ],
+ "founderTests": [
+  [
+   "0",
+   "C1 Webhook edge (claim, release, typing indicator, 500 on throw before send)",
+   "From any registered number send: hi. Expect blue ticks and the typing indicator within about a second, then the home card as one message. No flag needed. (A message that arrives while the bot is down should now be answered on Meta's retry instead of being lost; not testable by hand.)",
+   "shipped",
+   "nothing"
+  ],
+  [
+   "0",
+   "C2 Sender lib/say.js",
+   "Send: how do I buy airtime?  then: and electricity?  Expect the second reply to follow on from the first (the model now sees its own previous answer) instead of a generic menu; two short lines plus a question each. No flag needed. Note that WaPay replies were not being recorded in production until the 2026-09-17 hotfix, so history starts from then.",
+   "shipped",
+   "nothing"
+  ],
+  [
+   "0",
+   "C5 State machine and money flows: strict PIN states",
+   "Send \"buy R10 airtime\" for your own number (any amount you can afford), answer the confirm with \"yes\", and at the PIN prompt send \"12345678\". Expect exactly \"❌ Invalid PIN. Please enter your 4-6 digit WaPay PIN. Reply \\\"cancel\\\" to stop.\" and never \"❌ Incorrect PIN\" (that would mean a PIN attempt was spent). Sending \"my pin is 1234\" at the same prompt gets the same re-prompt and is never routed to the AI. Then send \"cancel\" and expect \"👍 Airtime purchase cancelled.\" followed by the home card.",
+   "shipped",
+   "nothing"
+  ],
+  [
+   "0",
+   "C6 Context pack (lib/context-pack.js)",
+   "Send \"what do you know about me\". Expect \"🧠 *What I know about you*\" with bullets: your name and masked number, language plus identity check, \"Balance to spend: R…\" (your real figure from the ledger), \"Your last N money movements…\", \"People you send to: …\", \"Habits: …\", \"Our last 30 days of chat\". Then send \"Transactions\": expect \"📄 *Your last N movements*\", one line per row shaped \"• <date> <kind> R… <status>\", then \"💰 Balance: R…\". Both are built straight from the pack; no flag needed.",
+   "shipped",
+   "nothing"
+  ],
+  [
+   "0",
+   "C21L Localizer (design table C21: gpt-4o-mini on canned money strings only)",
+   "Send 'Sawubona' (or any isiZulu greeting): the home card arrives in isiZulu with every rand amount unchanged; no flag needed.",
+   "shipped",
+   "nothing"
+  ],
+  [
+   "0",
+   "C14 Conversation store (conversation_turns, lib/turns.js, redaction, retention)",
+   "Send: I want to buy airtime for my brother  then: how much does that cost?  Expect the second answer to be about airtime fees, showing the previous line was remembered; then send: forget me  and expect '🧹 Done. I have erased our chat memory and the things you told me. Your transactions stay on record...'. No flag needed (if your number is on WAPAY_AGENT_V3_MSISDNS, 'forget me' goes to the agent instead, see C16).",
+   "partial",
+   "the shadow flag"
+  ],
+  [
+   "0",
+   "C13 Preview and execute routes (internal auth, ownership before PIN, crash release)",
+   "On the phone: complete any small purchase end to end (for example \"buy R10 airtime\" through PIN) and expect the normal receipt, which proves the processor sends the internal key. The decisive check needs a shell: `curl -s -o /dev/null -w '%{http_code}' -X POST https://pleasepayme.co.za/api/vas/airtime/execute -H 'content-type: application/json' -d '{}'` must print 401; a 400 (\"Missing required fields\") means WAPAY_INTERNAL_API_KEY is not set in Vercel and the route is fail-open.",
+   "partial",
+   "a shell"
+  ],
+  [
+   "0",
+   "C20 Jobs runner and the pay-out sweep",
+   "He is on WAPAY_PAYOUT_ALLOWLIST. Send 'withdraw R50', choose a method and finish with the PIN (OTT sandbox, test float; nothing reaches a bank). If OTT parks it, wait longer than two minutes and send 'hi': before the home card one line arrives in the pay-out wording, either '✅ Your withdrawal of R50 by <method> has been paid (reference WP…).' or '❌ Your withdrawal of R50 by <method> could not be completed by the bank rail (reference WP…). The full amount and the fee are back in your WaPay balance.' If OTT still answers pending, 'hi' shows only the home card.",
+   "partial",
+   "the pay-out allowlist"
+  ],
+  [
+   "1",
+   "C15 Movements read (the pack reads the source tables directly)",
+   "Send: Transactions  Expect up to ten rows newest first, each '• <date/time> <Kind> R<amount> <status>' (with a counterparty where there is one) and a held-amount line if anything is held; 'my withdrawals' and 'what did I buy' filter the same list. No flag needed. Numbers come from your own ledger rows.",
+   "shipped",
+   "nothing"
+  ],
+  [
+   "1",
+   "C7 Capability registry (lib/capabilities.js)",
+   "Send \"help\". Expect \"📋 *WaPay Help Menu*\" with one line per capability live for your number; because you are on WAPAY_PAYOUT_ALLOWLIST the line \"🏧 *Withdraw* - \\\"withdraw R200\\\" to your bank or as cash at an ATM\" must be present, a Fuel line only if fuel is live for your number, the Business line always. Then send \"hi\": the home card's product lines come from the same list (\"🏧 *Withdraw*: \\\"withdraw R200\\\"…\"); a phone not on the allowlist sees \"🏧 *Withdraw*: coming soon\" on both.",
+   "shipped",
+   "the pay-out allowlist"
+  ],
+  [
+   "1",
+   "C16 Customer model (habits, notes, 'what do you know about me', 'forget me', erase script)",
+   "Send: what do you know about me  Expect a '🧠 What I know about you' block: name and masked number, language, balance to spend, the count of recent movements, saved people, a 'Habits:' line only if you have completed purchases, and the closing line about 'forget me'. Then send: forget me  and expect the '🧹 Done...' confirmation. No flag needed; if your number is on WAPAY_AGENT_V3_MSISDNS, take it off first, these two commands do not reach the deterministic handlers there.",
+   "partial",
+   "the shadow flag"
+  ],
+  [
+   "1",
+   "C11 Policy engine and output gates (lib/policy.js, lib/agent/guards.js, looksLikeReceipt)",
+   "Without the flag nothing on the phone can trip the policy gate (it has nothing configured to require) and the receipt guard only shows when the model tries to write a receipt. Needs WAPAY_AGENT_V3_MSISDNS: send \"can I use my WaPay money for betting?\" and expect a reply that never contains a betting word; if the model echoes one, the gate swaps the reply for the fact line \"💰 Balance to spend: R… Tell me what you need, or type \\\"help\\\"…\" and the agent_turns row for that turn carries gatesFired ['BETTING'] (the partner gate cannot fire for your number because withdrawals are live for it).",
+   "partial",
+   "the shadow flag"
+  ],
+  [
+   "2",
+   "C12 Proposal dispatcher (dispatchOrchestratorAction incl. case WITHDRAW)",
+   "No flag needed for the engine's proposals: send a phrasing the regex router misses, for example: I'd like to top up my own phone with thirty rand. Expect the existing airtime flow's own first step (a preview or the number ask), then the normal confirm and PIN. The WITHDRAW case needs WAPAY_AGENT_V3_MSISDNS plus your number on the pay-out allowlist: send: withdraw some money; expect the withdraw flow's first step (method or amount ask), never a preview or a PIN ask.",
+   "partial",
+   "the shadow flag"
+  ],
+  [
+   "2",
+   "C4 Guard list (pre-model answers) as wired today",
+   "needs WAPAY_AGENT_V3_MSISDNS. Send: voucher pin 0000  Expect the resend flow to answer with no model call: either '🤔 I couldn't find a voucher of yours ending in \"0000\". Reply \"my vouchers\" to see the list.' or, if a voucher with that serial tail exists, a prompt for the WaPay PIN (processor :3549-3572). In the database an agent_turns row with path 'guard' and outcome 'VOUCHER_PIN_RESEND' appears.",
+   "shadow",
+   "the shadow flag"
+  ],
+  [
+   "2",
+   "C17 Turn ledger and audit (agent_turns; nightly ledger-integrity check)",
+   "needs WAPAY_AGENT_V3_MSISDNS. Nothing shows on the phone. After sending one message on a listed number, check the database: select path, outcome, ms, \"gatesFired\" from agent_turns order by \"createdAt\" desc limit 3; expect one row per message with path 'agent' or 'guard' and waId stored as the last four digits only. The nightly check is visible only as the Vercel log line cron_ledger_integrity after 02:00 UTC (04:00 SAST); mismatches should read 0.",
+   "shadow",
+   "the shadow flag"
+  ],
+  [
+   "2",
+   "C3 Turn runtime (handleAgentTurn)",
+   "needs WAPAY_AGENT_V3_MSISDNS. Send: what did I buy last week. Expect one short composed message listing your own recent purchases with a total, in your language, no menu; the Vercel log line agent_turn shows tools [get_transactions] and one agent_turns row appears with path agent.",
+   "shadow",
+   "the shadow flag"
+  ],
+  [
+   "2",
+   "C4 Guard list (agentGuard, lib/agent/guards.js)",
+   "needs WAPAY_AGENT_V3_MSISDNS. Send: voucher pin 1234. Expect the existing PIN-gated voucher resend prompt (it asks for your wallet PIN), never a composed reply; the log shows agent_guard kind VOUCHER_PIN_RESEND and an agent_turns row with path guard.",
+   "shadow",
+   "the shadow flag"
+  ],
+  [
+   "2",
+   "C8 Prompt assembler (packages/ai/src/prompt.ts)",
+   "needs WAPAY_AGENT_V3_MSISDNS. Send: How can I withdraw money? Expect two lines plus ONE question naming the options, no menu, and the fee wording identical to what the fee hook quotes for everyone else; if withdrawals are not open for your number the pay-out partner is never named.",
+   "shadow",
+   "the shadow flag"
+  ],
+  [
+   "2",
+   "C9 Pay agent loop (packages/ai/src/agent.ts runAgentTurn)",
+   "needs WAPAY_AGENT_V3_MSISDNS. Send: how much is 1GB on Vodacom. Expect one tool round then a short list of bundles with prices from the live catalogue, never a menu; the log line agent_turn shows tools [get_products] and the timings carry two model calls.",
+   "shadow",
+   "the shadow flag"
+  ],
+  [
+   "2",
+   "C10 Tool registry (lib/agent/tools)",
+   "needs WAPAY_AGENT_V3_MSISDNS. Send: how much does it cost to send R50. Expect the exact fee from the live fee table in one or two lines (log tools [get_fee_quote]). Then send: did my withdrawal go through. Expect the status of your newest withdrawal read from your own record, or the line that there is no withdrawal on this account yet (log tools [get_payout_status]).",
+   "shadow",
+   "the shadow flag"
+  ],
+  [
+   "2",
+   "GATE Shadow gate (agentV3For + WAPAY_AGENT_V3_MSISDNS)",
+   "needs WAPAY_AGENT_V3_MSISDNS (set it to your own number in Vercel and redeploy). Send: Where can I spend my OTT voucher? Expect one composed message with separate accepted and not-accepted blocks, no menu; then check the agent_turns table for a row with path agent and your last four digits.",
+   "shadow",
+   "the shadow flag"
+  ],
+  [
+   "2",
+   "CLARIFY AGENT_CLARIFY state (clarify outcome + pending intent)",
+   "needs WAPAY_AGENT_V3_MSISDNS. Send: I want to send some money. Expect ONE question (who or how much) and nothing else; reply with the answer, for example a saved name or an amount; expect the send flow's next step (recipient ask or preview), not a fresh 'what would you like to do'.",
+   "shadow",
+   "the shadow flag"
+  ],
+  [
+   "2",
+   "BUDGET Per-customer model-call budget (WAPAY_AGENT_TURNS_PER_HOUR)",
+   "needs WAPAY_AGENT_V3_MSISDNS and WAPAY_AGENT_TURNS_PER_HOUR=1 in Vercel. Send any two questions a minute apart: the second gets the single line starting '⏸️ Let us slow down a little' with no model call; 'voucher pin 1234' still answers normally because guard turns are free.",
+   "shadow",
+   "the shadow flag"
+  ],
+  [
+   "3",
+   "ENGINE Two-tier engine (orchestrate) for everyone not on the list",
+   "No flag needed. Send a free-form question no hook owns, for example: is my money safe with you? Expect a short warm answer with one or two emoji, not the Help menu; the Vercel log line orchestrator_result shows the tier (1 or 2) and the action.",
+   "shipped",
+   "nothing"
+  ],
+  [
+   "3",
+   "P3-promotion Phase 3: promote the agent per language beyond the shadow list",
+   "needs WAPAY_AGENT_V3_MSISDNS: put his number on the list in Vercel, redeploy, then send 'How can I withdraw money?' and expect two lines plus one question naming the options rather than the four-step walkthrough.",
+   "shadow",
+   "the shadow flag"
+  ]
+ ]
+}

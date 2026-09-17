@@ -1,0 +1,123 @@
+<svg viewBox="0 0 1200 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One WhatsApp turn today: 29 deterministic intercepts answer before the model, two serial classifier calls and a translation call, and no read path from the ledger to the model">
+  <defs>
+    <marker id="t-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+    <marker id="t-arr-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#B3541E"/></marker>
+  </defs>
+  <g font-family="'Public Sans', system-ui, sans-serif" font-size="11" fill="currentColor">
+    <text x="20" y="28" letter-spacing="1.2" opacity=".65">HOT PATH, LEFT TO RIGHT · every box runs before the ACK</text>
+
+    <rect x="20" y="52" width="100" height="70" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="70" y="82" text-anchor="middle" font-weight="600" font-size="12">WhatsApp</text>
+    <text x="70" y="100" text-anchor="middle" opacity=".75">one message</text>
+    <line x1="120" y1="87" x2="150" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+
+    <rect x="152" y="40" width="176" height="94" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="240" y="62" text-anchor="middle" font-weight="600" font-size="12">Webhook</text>
+    <text x="240" y="80" text-anchor="middle" opacity=".8">HMAC · pulse row</text>
+    <text x="240" y="96" text-anchor="middle" fill="#B3541E">claims wamid, never releases it</text>
+    <text x="240" y="112" text-anchor="middle" opacity=".8">ACK only after everything</text>
+    <line x1="328" y1="87" x2="358" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+
+    <rect x="360" y="40" width="160" height="94" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="440" y="62" text-anchor="middle" font-weight="600" font-size="12">processMessage</text>
+    <text x="440" y="80" text-anchor="middle" opacity=".8">~10 sequential reads</text>
+    <text x="440" y="96" text-anchor="middle" opacity=".8">on one Account row</text>
+    <text x="440" y="112" text-anchor="middle" opacity=".8">second dedupe ring</text>
+    <line x1="520" y1="87" x2="550" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+
+    <rect x="552" y="40" width="250" height="190" rx="6" fill="none" stroke="#B3541E" stroke-width="1.6"/>
+    <text x="677" y="62" text-anchor="middle" font-weight="600" font-size="12" fill="#B3541E">29 intercept points</text>
+    <text x="677" y="80" text-anchor="middle" fill="#B3541E">27 answer before the model</text>
+    <text x="566" y="104" opacity=".85">· fee ask, how-it-works, withdraw matcher</text>
+    <text x="566" y="121" opacity=".85">· slot-parser short-circuits (airtime, deposit)</text>
+    <text x="566" y="138" opacity=".85">· 38 regexes in detectExplicitIntent</text>
+    <text x="566" y="155" opacity=".85">· 5-minute category context</text>
+    <text x="566" y="172" opacity=".85">· 41-case conversation-state machine</text>
+    <text x="566" y="196" opacity=".85">reply = a template, then translated</text>
+    <text x="566" y="213" opacity=".85">history records the bot's side only</text>
+
+    <line x1="802" y1="87" x2="832" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+    <text x="817" y="76" text-anchor="middle" font-size="10" opacity=".7">AI_CHAT only</text>
+
+    <rect x="834" y="40" width="160" height="94" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="914" y="62" text-anchor="middle" font-weight="600" font-size="12">Tier 1 · gpt-5.5</text>
+    <text x="914" y="80" text-anchor="middle" opacity=".8">classifies the domain</text>
+    <text x="914" y="96" text-anchor="middle" opacity=".8">10 s timeout · 0 retries</text>
+    <text x="914" y="112" text-anchor="middle" opacity=".8">never replies</text>
+    <line x1="994" y1="87" x2="1024" y2="87" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+
+    <rect x="1026" y="40" width="160" height="94" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="1106" y="62" text-anchor="middle" font-weight="600" font-size="12">Tier 2 · gpt-5.4-mini</text>
+    <text x="1106" y="80" text-anchor="middle" opacity=".8">slots + a short reply</text>
+    <text x="1106" y="96" text-anchor="middle" opacity=".8">10 s · 4.4k-token prompt</text>
+    <text x="1106" y="112" text-anchor="middle" opacity=".8">a timeout discards tier 1</text>
+
+    <line x1="1106" y1="134" x2="1106" y2="166" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+    <rect x="1026" y="168" width="160" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="1106" y="190" text-anchor="middle" font-weight="600" font-size="12">dispatch → flows</text>
+    <text x="1106" y="207" text-anchor="middle" opacity=".8">re-validates the slots</text>
+    <text x="1106" y="222" text-anchor="middle" opacity=".8">preview · confirm · PIN</text>
+
+    <line x1="677" y1="230" x2="677" y2="262" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+    <line x1="1106" y1="230" x2="1106" y2="262" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+    <rect x="552" y="264" width="250" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="677" y="286" text-anchor="middle" font-weight="600" font-size="12">Localizer · gpt-4o-mini</text>
+    <text x="677" y="303" text-anchor="middle" opacity=".8">translates each canned string, 2.5 s each</text>
+    <text x="677" y="318" text-anchor="middle" opacity=".8">227 call sites · falls back to English</text>
+    <rect x="1026" y="264" width="160" height="62" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="1106" y="290" text-anchor="middle" font-weight="600" font-size="12">send</text>
+    <text x="1106" y="308" text-anchor="middle" opacity=".8">no typing indicator</text>
+    <line x1="802" y1="295" x2="1024" y2="295" stroke="currentColor" stroke-width="1.2" marker-end="url(#t-arr)"/>
+
+    <text x="20" y="176" letter-spacing="1.2" opacity=".65">WHAT REACHES THE MODEL EACH TURN</text>
+    <rect x="20" y="188" width="250" height="138" rx="6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <text x="34" y="212" opacity=".9">· 4 profile facts (language, deposit</text>
+    <text x="34" y="228" opacity=".9">  method, last meter, interests)</text>
+    <text x="34" y="246" opacity=".9">· 5 history lines, one of them the</text>
+    <text x="34" y="262" opacity=".9">  current message again</text>
+    <text x="34" y="280" opacity=".9">· ~10k chars of product truth, the</text>
+    <text x="34" y="296" opacity=".9">  same facts in four wordings</text>
+    <text x="34" y="314" opacity=".9">· 3 customer-side writes vs 59 bot-side</text>
+
+    <rect x="290" y="188" width="240" height="138" rx="6" fill="none" stroke="#B3541E" stroke-width="1.6"/>
+    <text x="304" y="212" font-weight="600" fill="#B3541E">NEVER REACHES THE MODEL</text>
+    <text x="304" y="232" opacity=".9">balance · transactions</text>
+    <text x="304" y="248" opacity=".9">pending pay-out · open pay links</text>
+    <text x="304" y="264" opacity=".9">vouchers · KYC status · saved people</text>
+    <text x="304" y="280" opacity=".9">the customer's name</text>
+    <text x="304" y="296" opacity=".9">what the customer said inside a flow</text>
+    <text x="304" y="312" opacity=".9">what the pay-out webhook told them</text>
+
+    <text x="20" y="370" letter-spacing="1.2" opacity=".65">WHERE THE FACTS ALREADY LIVE</text>
+    <g stroke="currentColor" stroke-width="1.2" fill="none">
+      <rect x="20" y="382" width="175" height="56" rx="6"/>
+      <rect x="215" y="382" width="175" height="56" rx="6"/>
+      <rect x="410" y="382" width="175" height="56" rx="6"/>
+      <rect x="605" y="382" width="175" height="56" rx="6"/>
+      <rect x="800" y="382" width="175" height="56" rx="6"/>
+      <rect x="995" y="382" width="185" height="56" rx="6"/>
+    </g>
+    <text x="107" y="404" text-anchor="middle" font-weight="600" font-size="12">Ledger</text>
+    <text x="107" y="421" text-anchor="middle" opacity=".8">JournalEntry / Line, Hold</text>
+    <text x="302" y="404" text-anchor="middle" font-weight="600" font-size="12">ProviderRequest</text>
+    <text x="302" y="421" text-anchor="middle" opacity=".8">deposits, VAS, fuel, pay-outs</text>
+    <text x="497" y="404" text-anchor="middle" font-weight="600" font-size="12">PaymentRequest</text>
+    <text x="497" y="421" text-anchor="middle" opacity=".8">pay links</text>
+    <text x="692" y="404" text-anchor="middle" font-weight="600" font-size="12">PendingGift</text>
+    <text x="692" y="421" text-anchor="middle" opacity=".8">sends and vouchers</text>
+    <text x="887" y="404" text-anchor="middle" font-weight="600" font-size="12">Beneficiary · profile</text>
+    <text x="887" y="421" text-anchor="middle" opacity=".8">people, KYC, language</text>
+    <text x="1087" y="404" text-anchor="middle" font-weight="600" font-size="12">conversationData</text>
+    <text x="1087" y="421" text-anchor="middle" opacity=".8">10-line ring, non-atomic</text>
+
+    <path d="M500,438 C500,500 700,500 834,140" fill="none" stroke="#B3541E" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#t-arr-warn)"/>
+    <text x="620" y="488" text-anchor="middle" fill="#B3541E" font-weight="600">no read path from any of these to the model</text>
+    <text x="620" y="505" text-anchor="middle" fill="#B3541E">the admin CRM already runs a 7-query customer pack; the chat never calls it</text>
+
+    <rect x="20" y="540" width="1160" height="76" rx="6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3"/>
+    <text x="36" y="562" letter-spacing="1.2" opacity=".65">PRODUCT TRUTH, WRITTEN BY HAND</text>
+    <text x="36" y="582" opacity=".9">9 static copies of "what WaPay can do" (prompt, home card, help menu, fallback, welcome, PIN reset, VAS list, category message, spend lines)</text>
+    <text x="36" y="598" opacity=".9">the withdrawal position alone is written in 8 places</text>
+    <text x="620" y="598" fill="#B3541E">the prompt reads the global cash-out switch, the home card reads the per-customer pilot list: two truths in one conversation</text>
+  </g>
+</svg>
