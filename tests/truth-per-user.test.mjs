@@ -89,7 +89,10 @@ test('a parked pay-out is reconciled on the next inbound message, with GetPaymen
   assert.ok(start > -1);
   const hook = processor.slice(start, start + 2600);
   assert.match(hook, /status: 'PENDING'/);
-  assert.match(hook, /reconcilePayout\(\{ reference: parkedRef, client: new OttPayoutClient\(\{ timeoutMs: 3000 \}\) \}\)/);
+  // PENDING after two minutes, INIT after five (2026-09-17): the INIT reconciler asks the rail first
+  assert.match(hook, /\{ status: 'INIT', requestTs: \{ lt: new Date\(Date\.now\(\) - 5 \* 60 \* 1000\) \} \}/);
+  assert.match(hook, /new OttPayoutClient\(\{ timeoutMs: 3000 \}\)/);
+  assert.match(hook, /parked\.status === 'INIT'\s*\? await reconcileInitPayout\(\{ pr: parked, client: railClient \}\)\s*: await reconcilePayout\(\{ reference: parkedRef, client: railClient \}\)/);
   assert.match(hook, /payoutOutcomeMessage\(outcome\)/);
   assert.doesNotMatch(hook, /requestPayout|performPayout/);
 });

@@ -60,7 +60,7 @@ test('VAS execute routes never put Date.now() in idempotency material', async ()
 });
 
 test('VAS execute routes are internal-only, verify ownership before the PIN, and release the hold on a crash before delivery', async () => {
-  for (const [name, relPath] of ROUTES.filter(([n]) => ['airtime', 'data', 'electricity'].includes(n))) {
+  for (const [name, relPath] of ROUTES.filter(([n]) => ['airtime', 'data', 'electricity', 'voucher'].includes(n))) {
     const text = await fileText(relPath);
 
     // Internal-only: without the guard any caller could burn PIN attempts
@@ -147,4 +147,17 @@ test('voucher gift execute never logs or returns the voucher PIN', async () => {
       `voucher: PIN material inside a log/metric/response call:\n${span.slice(0, 300)}`
     );
   }
+});
+
+test('the fuel execute route proves ownership before a PIN attempt is spent, and disarms its crash release once the voucher exists (2026-09-17)', async () => {
+  const text = await fileText('pages/api/vas/fuel/execute.js');
+  assert.ok(text.includes('requireInternalAuth('));
+  const previewIdx = text.indexOf('providerRequest.findUnique');
+  const pinIdx = text.indexOf('verifyPIN(');
+  const ownershipIdx = text.indexOf('preview.accountId || metadata.accountId');
+  assert.ok(previewIdx > -1 && pinIdx > -1 && ownershipIdx > -1);
+  assert.ok(previewIdx < pinIdx, 'fuel: preview loaded before verifyPIN');
+  assert.ok(ownershipIdx < pinIdx, 'fuel: ownership check precedes verifyPIN');
+  assert.ok(text.includes('holdIdemKey') && text.includes('execute_crashed'));
+  assert.match(text, /disarmed the moment the voucher is known to exist/i);
 });

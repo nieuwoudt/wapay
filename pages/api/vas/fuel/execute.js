@@ -75,20 +75,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'USER_INPUT', message: 'PIN is required for fuel purchases' });
     }
 
-    const pinResult = await verifyPIN({ accountId, pin });
-    if (!pinResult.ok) {
-      logStructured('vas_fuel_execute_result', {
-        previewId, accountId, success: false, error: 'PIN_FAILED', pinError: pinResult.error,
-      });
-      if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
-        return res.status(403).json({
-          error: 'AUTH',
-          message: 'Account is locked due to too many failed attempts',
-          lockedUntil: pinResult.lockedUntil?.toISOString(),
-        });
-      }
-      return res.status(401).json({ error: 'AUTH', message: 'Invalid PIN' });
-    }
 
     const preview = await prisma.providerRequest.findUnique({ where: { id: previewId } });
     const metadata = preview?.metadata || {};
@@ -110,6 +96,25 @@ export default async function handler(req, res) {
     if ((preview.accountId || metadata.accountId) !== accountId) {
       return res.status(403).json({ error: 'AUTH', message: 'Unauthorized' });
     }
+
+    // Ownership is proven BEFORE a PIN attempt is spent (BUGLOG #56 class,
+    // closed for fuel on 2026-09-17): a caller who does not own the preview
+    // cannot burn the owner's PIN attempts or lock the account.
+    const pinResult = await verifyPIN({ accountId, pin });
+    if (!pinResult.ok) {
+      logStructured('vas_fuel_execute_result', {
+        previewId, accountId, success: false, error: 'PIN_FAILED', pinError: pinResult.error,
+      });
+      if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
+        return res.status(403).json({
+          error: 'AUTH',
+          message: 'Account is locked due to too many failed attempts',
+          lockedUntil: pinResult.lockedUntil?.toISOString(),
+        });
+      }
+      return res.status(401).json({ error: 'AUTH', message: 'Invalid PIN' });
+    }
+
 
     // The concurrency gate: exactly one invocation may own this purchase.
     const flipped = await prisma.providerRequest.updateMany({

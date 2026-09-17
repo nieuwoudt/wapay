@@ -84,3 +84,11 @@ test('M2/M3/M4/L5/L6: a blocked clarify is never parked, the fallback is localiz
   const err = turn.slice(turn.indexOf("result.outcome === 'error'"), turn.indexOf("result.outcome === 'proposal'"));
   assert.ok(err.indexOf('await deliver(') < err.indexOf('await ledger('), 'error path: send before the row');
 });
+
+test('C11 gap: the output gate protects every customer\'s model reply in the dispatcher, not only the shadow list; a blocked reply is the fact line, never a menu', () => {
+  const d = between('async function dispatchOrchestratorAction(', "switch (result.action) {");
+  assert.match(d, /const rawReply = sanitizeUserText\(result\.reply \|\| ''\);/);
+  assert.match(d, /outputGate\(rawReply, \{ withdrawLive: payoutAllowedFor\(from\) \}\)/);
+  assert.match(d, /const reply = replyGate\.ok \? replyGate\.text : agentFallbackLine\(pack\);/);
+  assert.doesNotMatch(d, /welcomeLines\(\)/, 'a blocked reply never becomes the welcome menu');
+});

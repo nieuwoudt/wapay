@@ -89,6 +89,10 @@ export default async function handler(req, res) {
   // because a crash between reserveHold and settle/release skipped the
   // taxonomy paths' releaseHold calls.
   let holdIdemKey = null;
+  // Set the moment OTT confirms the voucher exists: from then on a crash must
+  // NOT give the money back (the recipient holds a live PIN); the row is
+  // marked RECONCILE for the operator instead (float leak found 2026-09-17).
+  let providerDelivered = false;
 
   logStructured('vas_voucher_execute_call', {
     previewId,
@@ -127,31 +131,6 @@ export default async function handler(req, res) {
       });
     }
 
-    const pinResult = await verifyPIN({ accountId, pin });
-
-    if (!pinResult.ok) {
-      logStructured('vas_voucher_execute_result', {
-        previewId,
-        accountId,
-        success: false,
-        error: 'PIN_FAILED',
-        pinError: pinResult.error,
-      });
-      logMetric('vas.voucher_gift.pin_failure', 1, { error: pinResult.error });
-
-      if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
-        return res.status(403).json({
-          error: 'AUTH',
-          message: 'Account is locked due to too many failed attempts',
-          lockedUntil: pinResult.lockedUntil?.toISOString(),
-        });
-      }
-
-      return res.status(401).json({
-        error: 'AUTH',
-        message: 'Invalid PIN',
-      });
-    }
 
     // =========================================================================
     // Get and Validate Preview
@@ -203,6 +182,36 @@ export default async function handler(req, res) {
         message: 'Unauthorized',
       });
     }
+
+    // Ownership is proven BEFORE a PIN attempt is spent (BUGLOG #56 class,
+    // closed for voucher gifts on 2026-09-17): a caller who does not own the
+    // preview cannot burn the owner's PIN attempts or lock the account.
+    const pinResult = await verifyPIN({ accountId, pin });
+
+    if (!pinResult.ok) {
+      logStructured('vas_voucher_execute_result', {
+        previewId,
+        accountId,
+        success: false,
+        error: 'PIN_FAILED',
+        pinError: pinResult.error,
+      });
+      logMetric('vas.voucher_gift.pin_failure', 1, { error: pinResult.error });
+
+      if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
+        return res.status(403).json({
+          error: 'AUTH',
+          message: 'Account is locked due to too many failed attempts',
+          lockedUntil: pinResult.lockedUntil?.toISOString(),
+        });
+      }
+
+      return res.status(401).json({
+        error: 'AUTH',
+        message: 'Invalid PIN',
+      });
+    }
+
 
     // =========================================================================
     // Get Account (the SPEND wallet is ensured below, not required to pre-exist)
@@ -279,6 +288,7 @@ export default async function handler(req, res) {
       });
 
       const ottLatency = Date.now() - ottStartTime;
+      providerDelivered = true;
       logMetric('vas.voucher_gift.ott_latency_ms', ottLatency, { success: true });
     } catch (error) {
       if (error.message === 'TIMEOUT_CHECK_REQUIRED') {
@@ -289,6 +299,7 @@ export default async function handler(req, res) {
         });
         try {
           voucher = await ottClient.checkVoucher(uniqueReference);
+          providerDelivered = true;
           logStructured('vas_voucher_timeout_recovered', {
             previewId, accountId, uniqueReference, voucherId: voucher.voucherId,
           });
@@ -449,7 +460,12 @@ export default async function handler(req, res) {
     // crash skipped the taxonomy paths, give the money back now. releaseHold
     // is status-guarded (no-op on SETTLED/RELEASED), so this is safe even
     // when the crash happened after a successful settle.
-    if (holdIdemKey) {
+    if (holdIdemKey && providerDelivered) {
+      // The voucher exists: keep the money reserved and hand the row to the
+      // reconciler; releasing here would pay for the voucher twice.
+      logStructured('vas_voucher_settle_failed_after_delivery', { previewId, idemKey: holdIdemKey, error: error?.message });
+      await prisma.providerRequest.update({ where: { id: previewId }, data: { status: 'RECONCILE' } }).catch(() => {});
+    } else if (holdIdemKey) {
       try {
         await releaseHold({
           idemKey: holdIdemKey,

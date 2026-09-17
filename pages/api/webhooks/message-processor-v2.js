@@ -84,7 +84,7 @@ import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '.
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
-import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders, getLatestPayout, reconcilePayout, payoutOutcomeMessage, PAYOUT_METHODS } from '../../../lib/payouts.js';
+import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders, getLatestPayout, reconcilePayout, reconcileInitPayout, payoutOutcomeMessage, PAYOUT_METHODS } from '../../../lib/payouts.js';
 import { OttPayoutClient } from '../../../lib/ott-payout.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
 import { searchProducts } from '../../../lib/vas-search.js';
@@ -1186,9 +1186,19 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   // confirms" is kept even before a scheduled sweep exists (BUGLOG #53).
   // GetPaymentStatus only, never a second PerformPayout.
   try {
+    // PENDING after two minutes, or INIT after five (a pay-out that crashed
+    // between the balance upgrade and the rail call; the INIT reconciler
+    // asks the rail before it releases anything).
     const parked = await prisma.providerRequest.findFirst({
-      where: { accountId: account.id, route: 'ott-payout', status: 'PENDING', requestTs: { lt: new Date(Date.now() - 2 * 60 * 1000) } },
-      select: { idemKey: true, metadata: true },
+      where: {
+        accountId: account.id,
+        route: 'ott-payout',
+        OR: [
+          { status: 'PENDING', requestTs: { lt: new Date(Date.now() - 2 * 60 * 1000) } },
+          { status: 'INIT', requestTs: { lt: new Date(Date.now() - 5 * 60 * 1000) } },
+        ],
+      },
+      orderBy: { requestTs: 'desc' },
     });
     const parkedRef = parked?.metadata?.reference;
     // Ask the rail at most every ten minutes from this hook (a pay-out can
@@ -1198,7 +1208,10 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     const lastCheckedMs = parked?.metadata?.lastCheckedAt ? Date.parse(parked.metadata.lastCheckedAt) : 0;
     const recentlyChecked = lastCheckedMs > 0 && Date.now() - lastCheckedMs < 10 * 60 * 1000;
     if (parkedRef && !recentlyChecked) {
-      const outcome = await reconcilePayout({ reference: parkedRef, client: new OttPayoutClient({ timeoutMs: 3000 }) });
+      const railClient = new OttPayoutClient({ timeoutMs: 3000 });
+      const outcome = parked.status === 'INIT'
+        ? await reconcileInitPayout({ pr: parked, client: railClient })
+        : await reconcilePayout({ reference: parkedRef, client: railClient });
       if (outcome?.checked === false) {
         await prisma.providerRequest
           .update({ where: { idemKey: parked.idemKey }, data: { metadata: { ...(parked.metadata || {}), lastCheckedAt: new Date().toISOString() } } })
@@ -6122,7 +6135,14 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
     result.slots.amountCents <= 500000
       ? result.slots.amountCents
       : null;
-  const reply = sanitizeUserText(result.reply || '');
+  // The output gate (betting words, the partner name while cash-out is off
+  // for this customer, off-domain links, dashes, length) protects EVERY
+  // customer's model reply, not only the shadow list (review 2026-09-17).
+  // A blocked reply becomes the fact line from the record, never a menu.
+  const rawReply = sanitizeUserText(result.reply || '');
+  const replyGate = rawReply ? outputGate(rawReply, { withdrawLive: payoutAllowedFor(from) }) : { ok: true, text: rawReply, rule: null };
+  if (!replyGate.ok) logStructured('reply_blocked', { from, accountId: account.id, action: result.action, rule: replyGate.rule });
+  const reply = replyGate.ok ? replyGate.text : agentFallbackLine(pack);
 
   switch (result.action) {
     case 'CHECK_BALANCE': {

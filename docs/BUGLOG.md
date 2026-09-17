@@ -4,6 +4,13 @@
 
 ---
 
+## 69. Fuel and voucher-gift execute routes still spent a PIN attempt before proving ownership; a voucher crash after issue refunded the sender
+
+- **Symptom:** found by the architecture verification pass (2026-09-17). BUGLOG #56 closed the PIN-before-ownership order for airtime, data and electricity only. Fuel and voucher gifts still called `verifyPIN` before loading the preview and checking that the caller owns it, so an internal caller with someone else's preview id could burn that customer's PIN attempts and lock the account. The voucher route's crash guard also released the hold on any crash, including one after OTT had issued the voucher: the recipient would hold a live PIN and the sender would have the money back (a float leak).
+- **Root cause:** the Phase 0 fix and its test lock covered three of the five execute routes.
+- **Fix:** both routes prove ownership before the PIN; the voucher route carries a `providerDelivered` flag set the moment OTT confirms the voucher (issue or the timeout recovery) and, once set, a crash marks the row RECONCILE instead of releasing the hold.
+- **Guard:** `tests/vas-execute-ledger-pattern.test.mjs` now covers the voucher route with the full pattern and the fuel route's ownership order.
+
 ## 68. The withdraw flow offered a method the balance could not cover, then bounced between two limits
 
 - **Symptom:** founder test 2026-09-17 07:25 UTC, R66 in the wallet: "Where can I withdraw money?" → YES → *2* (cash at an Absa ATM, R50 minimum, R18 fee) → "How much? Between R50 and R3000" → "50" → "That is more than you have once the R18 fee is added. You can withdraw up to R48" → "48" → "R48 is below the R50 minimum". A dead end with no way out but "back".

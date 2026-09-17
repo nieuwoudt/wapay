@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-09-17 (40) — Three gaps from the architecture verification closed: execute-route ownership order for fuel and voucher gifts (BUGLOG #69), the output gate for every customer, the on-inbound reconcile covers INIT
+
+Four read-only verifiers established the status of every component of
+`docs/AGENT_ARCHITECTURE_V2.md` at HEAD with file and line evidence (the
+table feeds the phase map). Three of their gaps are closed in this entry:
+the fuel and voucher-gift execute routes prove ownership before a PIN
+attempt is spent and the voucher route no longer refunds a crash after OTT
+has issued the voucher (BUGLOG #69); the betting, partner-name, URL and
+length gate now runs on every customer's model reply in the dispatcher, not
+only behind the shadow list (a blocked reply becomes the fact line from the
+record, never a menu); and the on-inbound pay-out reconcile also picks up a
+pay-out stuck at INIT for more than five minutes, through the INIT
+reconciler, as section 13 already claimed. The rest of the verifiers' gaps
+are recorded in the design record's section 13 as the Phase 3 and 4
+backlog.
+
 ## 2026-09-17 (39) — Withdraw: a method the balance cannot cover is named and refused with the reason (BUGLOG #68)
 
 From the founder's first live test after the hotfix. With R66, cash at an
