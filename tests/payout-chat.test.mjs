@@ -50,8 +50,8 @@ test('happy path PayShap: menu → 1 → amount → account → bank → confirm
   assert.equal(amt.state, 'PAYOUT_AMOUNT'); assert.equal(amt.data.method, 'PAYSHAP');
   const tooMuch = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: '999' });
   assert.equal(tooMuch.state, 'PAYOUT_AMOUNT'); assert.match(tooMuch.text, /more than you have/);
-  const tooSmall = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: '5' });
-  assert.match(tooSmall.text, /R5 is below the R20 minimum for PayShap/);
+  const tooSmall = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: '15' });   // a bare 1 to 5 is a menu choice now (BUGLOG 68); R15 still tests the minimum
+  assert.match(tooSmall.text, /R15 is below the R20 minimum for PayShap/);
   const acc = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: 'R200' });
   assert.equal(acc.state, 'PAYOUT_ACCOUNT', 'PayShap is addressed by account number + branch code on OTT (2026-09-14), never a cellphone number'); assert.equal(acc.data.amountCents, 20000);
   const br = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ACCOUNT', data: acc.data, text: '62012345678' });
@@ -133,7 +133,7 @@ test('live providers drive the menu, the limits and the ID step (OTT test mercha
   const cash = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
   assert.equal(cash.data.method, 'CASHSEND', 'menu numbers follow the offered options');
   const ps = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '1' });
-  assert.equal(ps.state, 'PAYOUT_AMOUNT'); assert.match(ps.text, /Between R50 and R3000/, 'the provider minimum narrows the product limits');
+  assert.equal(ps.state, 'PAYOUT_AMOUNT'); assert.match(ps.text, /Between R50 and R9\d\d\. You have R1000 available/, 'the provider minimum narrows the product limits; the ceiling is what R1000 covers after the fee');
   const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ps.data, text: '30' });
   assert.equal(low.state, 'PAYOUT_AMOUNT'); assert.match(low.text, /R30 is below the R50 minimum for PayShap/);
   const acc = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ps.data, text: '50' });
@@ -181,7 +181,7 @@ test('FNB eWallet and Nedbank cardless are methods (founder ask 2026-09-15): men
   assert.equal(parseMethodChoice('fnb ewallet', menu.data.options), 'EWALLET'); assert.equal(parseMethodChoice('nedbank', menu.data.options), 'NEDCASH'); assert.equal(parseMethodChoice('4', menu.data.options), 'EWALLET');
   assert.equal(parseMethodChoice('cash at the atm', ['PAYSHAP', 'EWALLET']), 'EWALLET', '"cash" picks the first cash method on offer');
   const ew = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '4' });
-  assert.equal(ew.state, 'PAYOUT_AMOUNT'); assert.match(ew.text, /Between R20 and R3000/, 'eWallet has no provider minimum');
+  assert.equal(ew.state, 'PAYOUT_AMOUNT'); assert.match(ew.text, /Between R20 and R9\d\d\. You have R1000 available/, 'eWallet has no provider minimum; the ceiling is what R1000 covers after the fee');
   const amt = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ew.data, text: '20' });
   assert.equal(amt.state, 'PAYOUT_MOBILE'); assert.match(amt.text, /FNB eWallet/);
   const mob = await handleWithdrawReply({ account: verified, state: 'PAYOUT_MOBILE', data: amt.data, text: 'mine' });
@@ -189,7 +189,7 @@ test('FNB eWallet and Nedbank cardless are methods (founder ask 2026-09-15): men
   const conf = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ID', data: mob.data, text: '9001015009087' });
   assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.match(conf.text, /Withdraw \*R20\* to an FNB eWallet on 0731234567/); assert.equal(conf.data.feeCents, 1800);
   const ned = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '3' });
-  assert.equal(ned.data.method, 'NEDCASH'); assert.match(ned.text, /Between R20 and R3000/);
+  assert.equal(ned.data.method, 'NEDCASH'); assert.match(ned.text, /Between R20 and R9\d\d\./);
 });
 
 test('below the minimum: the message names the methods that DO allow the amount, and "menu" changes method (founder 2026-09-15)', async () => {
@@ -200,7 +200,7 @@ test('below the minimum: the message names the methods that DO allow the amount,
     { method: 'NEDCASH', providerCode: '4', providerName: 'Nedbank Cardless Withdrawal', minCents: 1000, maxCents: 500000, requiredFields: ['firstname', 'surname', 'id_number', 'mobile'] },
     { method: 'EWALLET', providerCode: '1', providerName: 'FNB e-wallet', minCents: null, maxCents: 2500000, requiredFields: ['firstname', 'surname', 'id_number', 'mobile'] },
   ];
-  const d = { ...deps(6600), resolveProviders: async () => live };
+  const d = { ...deps(10000), resolveProviders: async () => live };   // R100: CashSend is affordable, so the R30 ask reaches the below-minimum branch
   const menu = await startWithdraw({ account: verified, ask: { amountCents: 3000 }, deps: d });   // "Withdraw 30"
   assert.equal(menu.state, 'PAYOUT_METHOD');
   const absa = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });

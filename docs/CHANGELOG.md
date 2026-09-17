@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-09-17 (39) — Withdraw: a method the balance cannot cover is named and refused with the reason (BUGLOG #68)
+
+From the founder's first live test after the hotfix. With R66, cash at an
+Absa ATM (R50 minimum plus R18 fee) was pickable, then "50" was refused as
+too much and "48" as too little. The flow now knows what each method needs
+with the fee: the menu marks the ones the balance cannot cover, the pick (or
+the agent's proposal) is refused with the reason and the methods that work,
+the amount question states the real ceiling, and the entry gate counts the
+fee. A bare option number typed at the amount step ("3" after "choose *3*")
+now switches the method instead of being read as R3. Locks in
+`tests/payout-affordability.test.mjs`; three older locks that
+expected the unreachable "R3000" ceiling now expect the affordable one.
+
 ## 2026-09-17 (38) — Hotfix: the mute bot (BUGLOG #67); the webhook route is now loaded and run by a test
 
 One line: `runWithSendScope` added to the webhook's import from `@wapay/whatsapp`.

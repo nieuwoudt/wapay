@@ -4,6 +4,14 @@
 
 ---
 
+## 68. The withdraw flow offered a method the balance could not cover, then bounced between two limits
+
+- **Symptom:** founder test 2026-09-17 07:25 UTC, R66 in the wallet: "Where can I withdraw money?" → YES → *2* (cash at an Absa ATM, R50 minimum, R18 fee) → "How much? Between R50 and R3000" → "50" → "That is more than you have once the R18 fee is added. You can withdraw up to R48" → "48" → "R48 is below the R50 minimum". A dead end with no way out but "back".
+- **Root cause:** the menu and the amount question used the method's limits and the balance separately; nothing asked whether the minimum plus its fee fits the balance. The "up to R48" ceiling was balance minus fee, which can sit below the minimum.
+- **Fix:** `affordableMaxCents` in `lib/payout-chat.js` (the largest whole rand inside the limits whose amount plus fee fits; null when even the minimum does not). The menu line says "(needs R68 with the fee)" for such a method; picking it, or the agent proposing it, is refused with the reason and the methods the balance does cover; the amount question states the real ceiling; "more than you have" names a ceiling inside the limits or the same refusal; the entry gate counts the fee ("Withdrawals start at R20 plus the fee, so the smallest one needs R…").
+- **Guard:** `tests/payout-affordability.test.mjs` replays the founder's exact numbers and checks that every ceiling the flow states is accepted when typed.
+- **Also in the same test:** told to "reply *back* and choose *3*", the founder typed "3" at the amount step and got "R3 is below the R50 minimum". A bare 1 to 5 at the amount step now picks that menu option (no method allows an amount under R6, so the reading is never ambiguous).
+
 ## 67. The bot was mute for 14 hours: the webhook used `runWithSendScope` without importing it
 
 - **Symptom:** founder report 2026-09-17 morning: "they just stopped responding today". Every text message since the Phase 0 deploy (`3915d81`, 2026-09-16 evening) showed "typing" and then nothing. `processed_messages` had only `webhook-ok` pulses and no claimed `wamid` rows since 06:36 UTC on the 16th, no delivery-status pulses, and `conversation_turns` had never received a production row. Meta's retries (three pulses a minute apart, then four minutes) were the same message dying the same way.
