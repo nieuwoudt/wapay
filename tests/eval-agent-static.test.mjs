@@ -253,8 +253,13 @@ test('the fake executor answers read tools from the synthetic pack and turns sta
 
   const reply = await exec('reply', { kind: 'clarify', text: 'Which one?', pendingIntent: { action: 'WITHDRAW', slots: {} } });
   assert.equal(reply.reply.kind, 'clarify');
-  assert.equal((await exec('propose_note', { note: 'I usually buy airtime for my mom' })).accepted, true);
-  assert.equal((await exec('propose_note', { note: 'my meter is 01234567890' })).accepted, false);
+  // propose_note proposes; nothing is accepted until the customer says yes.
+  const noteOk = await exec('propose_note', { note: 'I usually buy airtime for my mom' });
+  assert.equal(noteOk.accepted, false);
+  assert.deepEqual(noteOk.pendingNote, { text: 'I usually buy airtime for my mom' });
+  const noteBad = await exec('propose_note', { note: 'my meter is 01234567890' });
+  assert.equal(noteBad.accepted, false);
+  assert.equal(noteBad.pendingNote, undefined, 'a rejected note is not pending either');
   assert.equal((await exec('no_such_tool', {})).ok, false);
   assert.equal(exec.calls.length, 14);
   assert.equal(noteAcceptable('x'.repeat(121)), false);

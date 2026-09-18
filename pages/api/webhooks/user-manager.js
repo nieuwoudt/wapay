@@ -279,72 +279,18 @@ export async function unmarkMessageProcessed(waId, messageId) {
   }
 }
 
-/**
- * Add message to conversation history
- * Stores last 10 messages for context
+/*
+ * The ten-message JSON ring that used to live at conversationData.history is
+ * gone (2026-09-18). It was written at 63 call sites in the processor and
+ * read at none: conversation memory is the append-only conversation_turns
+ * table (lib/turns.js), recorded by construction on every send through
+ * lib/say.js. Each ring write was also a read-modify-write of the whole
+ * conversationData column, so it could clobber the flow state and the
+ * inbound dedupe list sitting in the same blob. Erasure now strips the key
+ * (migration 20260918_drop_conversation_ring plus handleForgetMe), so a
+ * customer who asks to be forgotten is not left with ten old messages in a
+ * column nobody reads.
  */
-export async function addToConversationHistory(waId, role, text) {
-  try {
-    const account = await prisma.account.findFirst({
-      where: { waId },
-      select: {
-        conversationData: true,
-      },
-    });
-    
-    const existingData = account?.conversationData || {};
-    const history = existingData.history || [];
-    
-    // Add new message
-    history.push({
-      role, // 'user' or 'assistant'
-      text,
-      timestamp: new Date().toISOString(),
-    });
-    
-    // Keep only last 10 messages
-    const trimmedHistory = history.slice(-10);
-    
-    await prisma.account.update({
-      where: { waId },
-      data: {
-        conversationData: {
-          ...existingData,
-          history: trimmedHistory,
-        },
-      },
-    });
-    
-    return { ok: true };
-  } catch (error) {
-    console.error('❌ Error adding to conversation history:', error);
-    return { ok: false, error: error.message };
-  }
-}
-
-/**
- * Get recent conversation history
- * Returns last N messages for AI context
- */
-export async function getConversationHistory(waId, limit = 5) {
-  try {
-    const account = await prisma.account.findFirst({
-      where: { waId },
-      select: {
-        conversationData: true,
-      },
-    });
-    
-    const existingData = account?.conversationData || {};
-    const history = existingData.history || [];
-    
-    // Return last N messages
-    return history.slice(-limit);
-  } catch (error) {
-    console.error('❌ Error getting conversation history:', error);
-    return [];
-  }
-}
 
 /**
  * Set active category context

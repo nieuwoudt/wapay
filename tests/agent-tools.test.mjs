@@ -4,7 +4,7 @@
  * offered only for capabilities live for THIS customer; every read tool
  * answers from fixtures and never throws; totals are summed server-side;
  * start_withdraw proposes WITHDRAW; no proposal ever carries a PIN;
- * propose_note refuses digits and long notes and keeps at most ten;
+ * propose_note refuses digits and long notes and only ever proposes;
  * get_payout_status asks the rail with GetPaymentStatus only; and no tool
  * file imports a model client or the localizer.
  */
@@ -548,31 +548,25 @@ test('propose_note refuses digits, long notes and notes not about the customer',
   assert.ok(!prisma._calls.some((c) => c[0] === '$executeRaw'), 'nothing written');
 });
 
-test('propose_note stores at most ten notes on the profile and touches no other key', async () => {
-  const prisma = stubPrisma({ profile: { language: 'zu', lastMeterNumber: '01234567890', notes: Array.from({ length: 9 }, (_, i) => ({ text: `You like note ${'x'.repeat(i)}`, at: NOW.toISOString() })) } });
-  const first = await executeTool({ name: 'propose_note', args: { note: 'You usually buy airtime for your mum.' }, ctx: { prisma, account: ACCOUNT, now: NOW } });
-  assert.equal(first.ok, true);
-  assert.equal(first.accepted, true);
-  assert.deepEqual(first.note, { text: 'You usually buy airtime for your mum.', at: NOW.toISOString() });
-  assert.equal(first.count, 10);
-  const second = await executeTool({ name: 'propose_note', args: { note: 'You prefer isiZulu replies.' }, ctx: { prisma, account: ACCOUNT, now: NOW } });
-  assert.equal(second.count, 10, 'capped at ten: the oldest drops');
-  const profile = prisma._accounts.get('acc-1').profile;
-  assert.equal(profile.notes.length, 10);
-  assert.equal(profile.notes[profile.notes.length - 1].text, 'You prefer isiZulu replies.');
-  assert.equal(profile.notes[profile.notes.length - 2].text, 'You usually buy airtime for your mum.');
-  assert.equal(profile.language, 'zu', 'other keys untouched');
-  assert.equal(profile.lastMeterNumber, '01234567890');
-  const writes = prisma._calls.filter((c) => c[0] === '$executeRaw');
-  assert.equal(writes.length, 2);
-  assert.deepEqual(Object.keys(writes[1][1]).sort(), ['notes', 'updatedAt'], 'the patch carries only notes');
+test('propose_note proposes and writes nothing: the customer confirms before anything is kept', async () => {
+  // The rule this protects: the model never authors a customer fact. Until
+  // 2026-09-18 this tool wrote the note the moment the model called it.
+  const prisma = stubPrisma({ profile: { language: 'zu', lastMeterNumber: '01234567890' } });
+  const proposed = await executeTool({ name: 'propose_note', args: { note: 'You usually buy airtime for your mum.' }, ctx: { prisma, account: ACCOUNT, now: NOW } });
+  assert.equal(proposed.ok, true);
+  assert.equal(proposed.accepted, false, 'nothing is accepted without the customer');
+  assert.equal(proposed.note, null, 'no stored note comes back');
+  assert.deepEqual(proposed.pendingNote, { text: 'You usually buy airtime for your mum.' });
+  assert.equal(proposed.reason, 'NEEDS_CONFIRM');
+  assert.ok(!prisma._calls.some((c) => c[0] === '$executeRaw'), 'nothing written');
+  assert.equal(prisma._calls.length, 0, 'the tool does not even read the database');
+  assert.deepEqual(prisma._accounts.get('acc-1').profile.notes, undefined, 'the profile is untouched');
 
-  const noAccount = await executeTool({ name: 'propose_note', args: { note: 'You like data.' }, ctx: {} });
-  assert.equal(noAccount.ok, false);
-  assert.equal(noAccount.accepted, false);
-  const failing = await executeTool({ name: 'propose_note', args: { note: 'You like data.' }, ctx: { prisma: { account: { async findUnique() { return null; } }, async $executeRaw() { throw new Error('db down'); } }, account: ACCOUNT } });
-  assert.equal(failing.ok, false);
-  assert.equal(failing.accepted, false);
+  // No context at all is still fine: the tool is pure.
+  const noCtx = await executeTool({ name: 'propose_note', args: { note: 'You like data.' }, ctx: {} });
+  assert.equal(noCtx.ok, true);
+  assert.equal(noCtx.accepted, false);
+  assert.deepEqual(noCtx.pendingNote, { text: 'You like data.' });
 });
 
 // ---------------------------------------------------------------------------

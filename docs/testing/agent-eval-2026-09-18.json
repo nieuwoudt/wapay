@@ -6,8 +6,8 @@
   "args": {
     "limit": null,
     "langs": null,
-    "concurrency": 6,
-    "baseline": null
+    "concurrency": 4,
+    "baseline": "docs/testing/agent-eval-baseline.json"
   },
   "regression": {
     "accuracyPoints": 2,
@@ -22,10 +22,10 @@
       "actionPct": 100,
       "outcomePct": 100,
       "shapePct": 99.4,
-      "p50Ms": 1671,
-      "p95Ms": 4792,
-      "inputTokens": 746678,
-      "outputTokens": 9452,
+      "p50Ms": 1892,
+      "p95Ms": 5336,
+      "inputTokens": 768892,
+      "outputTokens": 9413,
       "costUsd": 0
     },
     "byLanguage": {
@@ -37,10 +37,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 2133,
-        "p95Ms": 4342,
-        "inputTokens": 103487,
-        "outputTokens": 1418,
+        "p50Ms": 2141,
+        "p95Ms": 4304,
+        "inputTokens": 105094,
+        "outputTokens": 1374,
         "costUsd": 0
       },
       "en": {
@@ -51,10 +51,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 95.2,
-        "p50Ms": 1816,
-        "p95Ms": 3138,
-        "inputTokens": 107708,
-        "outputTokens": 1308,
+        "p50Ms": 1892,
+        "p95Ms": 2906,
+        "inputTokens": 109658,
+        "outputTokens": 1148,
         "costUsd": 0
       },
       "nr": {
@@ -65,10 +65,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 1305,
-        "p95Ms": 7209,
-        "inputTokens": 55679,
-        "outputTokens": 700,
+        "p50Ms": 1449,
+        "p95Ms": 5558,
+        "inputTokens": 52241,
+        "outputTokens": 701,
         "costUsd": 0
       },
       "nso": {
@@ -79,10 +79,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 1383,
-        "p95Ms": 3884,
-        "inputTokens": 55658,
-        "outputTokens": 695,
+        "p50Ms": 1640,
+        "p95Ms": 5793,
+        "inputTokens": 61127,
+        "outputTokens": 753,
         "costUsd": 0
       },
       "ss": {
@@ -93,10 +93,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 1360,
-        "p95Ms": 6749,
-        "inputTokens": 51300,
-        "outputTokens": 729,
+        "p50Ms": 1371,
+        "p95Ms": 6541,
+        "inputTokens": 56687,
+        "outputTokens": 676,
         "costUsd": 0
       },
       "st": {
@@ -107,10 +107,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 1455,
-        "p95Ms": 5788,
-        "inputTokens": 55625,
-        "outputTokens": 752,
+        "p50Ms": 1444,
+        "p95Ms": 5119,
+        "inputTokens": 61093,
+        "outputTokens": 677,
         "costUsd": 0
       },
       "tn": {
@@ -121,10 +121,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 1340,
-        "p95Ms": 4792,
-        "inputTokens": 60035,
-        "outputTokens": 674,
+        "p50Ms": 1420,
+        "p95Ms": 7296,
+        "inputTokens": 61127,
+        "outputTokens": 726,
         "costUsd": 0
       },
       "ts": {
@@ -135,10 +135,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 1569,
-        "p95Ms": 6359,
-        "inputTokens": 59998,
-        "outputTokens": 696,
+        "p50Ms": 1315,
+        "p95Ms": 6864,
+        "inputTokens": 61089,
+        "outputTokens": 706,
         "costUsd": 0
       },
       "ve": {
@@ -149,10 +149,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 1545,
-        "p95Ms": 4840,
-        "inputTokens": 55626,
-        "outputTokens": 677,
+        "p50Ms": 1489,
+        "p95Ms": 4485,
+        "inputTokens": 56640,
+        "outputTokens": 678,
         "costUsd": 0
       },
       "xh": {
@@ -163,10 +163,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 1398,
-        "p95Ms": 4184,
-        "inputTokens": 51320,
-        "outputTokens": 645,
+        "p50Ms": 2400,
+        "p95Ms": 5076,
+        "inputTokens": 52256,
+        "outputTokens": 636,
         "costUsd": 0
       },
       "zu": {
@@ -177,10 +177,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 2267,
-        "p95Ms": 5756,
-        "inputTokens": 90242,
-        "outputTokens": 1158,
+        "p50Ms": 2187,
+        "p95Ms": 6189,
+        "inputTokens": 91880,
+        "outputTokens": 1338,
         "costUsd": 0
       }
     },
@@ -193,10 +193,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 95.8,
-        "p50Ms": 2777,
-        "p95Ms": 4342,
-        "inputTokens": 143214,
-        "outputTokens": 1962,
+        "p50Ms": 2773,
+        "p95Ms": 4304,
+        "inputTokens": 145522,
+        "outputTokens": 1874,
         "costUsd": 0
       },
       "golden": {
@@ -207,10 +207,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 1499,
-        "p95Ms": 4792,
-        "inputTokens": 603464,
-        "outputTokens": 7490,
+        "p50Ms": 1551,
+        "p95Ms": 5558,
+        "inputTokens": 623370,
+        "outputTokens": 7539,
         "costUsd": 0
       }
     },
@@ -223,10 +223,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 1682,
-        "p95Ms": 2492,
-        "inputTokens": 17065,
-        "outputTokens": 167,
+        "p50Ms": 1911,
+        "p95Ms": 2773,
+        "inputTokens": 17377,
+        "outputTokens": 188,
         "costUsd": 0
       },
       "aside": {
@@ -237,10 +237,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 2644,
-        "p95Ms": 2917,
-        "inputTokens": 17632,
-        "outputTokens": 231,
+        "p50Ms": 2802,
+        "p95Ms": 2985,
+        "inputTokens": 17944,
+        "outputTokens": 224,
         "costUsd": 0
       },
       "complaint": {
@@ -251,10 +251,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 2981,
-        "p95Ms": 3593,
-        "inputTokens": 12814,
-        "outputTokens": 320,
+        "p50Ms": 3867,
+        "p95Ms": 4304,
+        "inputTokens": 17481,
+        "outputTokens": 311,
         "costUsd": 0
       },
       "disambiguation": {
@@ -265,10 +265,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 2948,
-        "p95Ms": 3085,
-        "inputTokens": 17228,
-        "outputTokens": 184,
+        "p50Ms": 2906,
+        "p95Ms": 3126,
+        "inputTokens": 17540,
+        "outputTokens": 160,
         "costUsd": 0
       },
       "discovery": {
@@ -279,10 +279,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 66.7,
-        "p50Ms": 2777,
-        "p95Ms": 2792,
-        "inputTokens": 12811,
-        "outputTokens": 276,
+        "p50Ms": 2469,
+        "p95Ms": 2856,
+        "inputTokens": 13045,
+        "outputTokens": 281,
         "costUsd": 0
       },
       "fees": {
@@ -293,10 +293,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 4342,
-        "p95Ms": 5756,
-        "inputTokens": 26705,
-        "outputTokens": 394,
+        "p50Ms": 3834,
+        "p95Ms": 5336,
+        "inputTokens": 27173,
+        "outputTokens": 345,
         "costUsd": 0
       },
       "status": {
@@ -307,10 +307,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 3292,
-        "p95Ms": 4102,
-        "inputTokens": 21516,
-        "outputTokens": 241,
+        "p50Ms": 2811,
+        "p95Ms": 3867,
+        "inputTokens": 21906,
+        "outputTokens": 224,
         "costUsd": 0
       },
       "withdraw": {
@@ -321,10 +321,10 @@
         "actionPct": 100,
         "outcomePct": 100,
         "shapePct": 100,
-        "p50Ms": 1403,
-        "p95Ms": 3511,
-        "inputTokens": 17443,
-        "outputTokens": 149,
+        "p50Ms": 1638,
+        "p95Ms": 3052,
+        "inputTokens": 13056,
+        "outputTokens": 141,
         "costUsd": 0
       }
     },
@@ -333,7 +333,25 @@
       "outputUsdPerM": 0
     }
   },
-  "baseline": null,
+  "baseline": {
+    "compared": true,
+    "regressions": [],
+    "lines": [
+      "action accuracy: 100% -> 100% (+0 points)",
+      "p95 latency: 4792 ms -> 5336 ms (+11.4%)",
+      "  af: action 100% -> 100%, p95 4342 -> 4304 ms",
+      "  en: action 100% -> 100%, p95 3138 -> 2906 ms",
+      "  nr: action 100% -> 100%, p95 7209 -> 5558 ms",
+      "  nso: action 100% -> 100%, p95 3884 -> 5793 ms",
+      "  ss: action 100% -> 100%, p95 6749 -> 6541 ms",
+      "  st: action 100% -> 100%, p95 5788 -> 5119 ms",
+      "  tn: action 100% -> 100%, p95 4792 -> 7296 ms",
+      "  ts: action 100% -> 100%, p95 6359 -> 6864 ms",
+      "  ve: action 100% -> 100%, p95 4840 -> 4485 ms",
+      "  xh: action 100% -> 100%, p95 4184 -> 5076 ms",
+      "  zu: action 100% -> 100%, p95 5756 -> 6189 ms"
+    ]
+  },
   "cases": [
     {
       "key": "golden/en/balance-plain",
@@ -355,7 +373,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, you have R150 available to spend. 💰\nYou also have R80 cash balance for withdrawals only, and R55 held for your pending PayShap withdrawal ref WPC15800A7BD6637.",
+        "text": "You have R150 available to spend, Thabo. 💰\n\nYour cash balance for withdrawals is R80, and R55 is held for your pending PayShap payout of R50, ref WPC15800A7BD6637.",
         "toolCalls": [
           "reply"
         ],
@@ -374,12 +392,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1893,
+      "ms": 2077,
       "modelMs": [
-        1893
+        2077
       ],
-      "inputTokens": 4270,
-      "outputTokens": 71
+      "inputTokens": 4348,
+      "outputTokens": 75
     },
     {
       "key": "golden/en/balance-typo",
@@ -401,7 +419,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, your balance to spend is R150. 💰\nYou also have R80 cash balance for withdrawals only, and R55 held for your pending PayShap payout.",
+        "text": "Your balance to spend is R150, Thabo. 💰\n\nYou also have R80 cash balance for withdrawals only, and R55 held for your pending PayShap payout.",
         "toolCalls": [
           "reply"
         ],
@@ -420,12 +438,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1753,
+      "ms": 1728,
       "modelMs": [
-        1753
+        1727
       ],
-      "inputTokens": 4268,
-      "outputTokens": 61
+      "inputTokens": 4346,
+      "outputTokens": 62
     },
     {
       "key": "golden/en/deposit-100",
@@ -467,11 +485,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1671,
+      "ms": 1751,
       "modelMs": [
-        1671
+        1750
       ],
-      "inputTokens": 4273,
+      "inputTokens": 4351,
       "outputTokens": 21
     },
     {
@@ -494,7 +512,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Yes, Thabo. Your PayFast deposit of R20 succeeded on 16 Sep at 04:30, ref 2179045. 💰\n\nYour balance to spend is R150. You also have R55 held for your pending PayShap withdrawal.",
+        "text": "Yes, Thabo. Your R20 deposit came through successfully earlier today by PayFast, ref 2179045. 💰\n\nYour balance to spend is R150.",
         "toolCalls": [
           "reply"
         ],
@@ -513,12 +531,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1842,
+      "ms": 2364,
       "modelMs": [
-        1842
+        2364
       ],
-      "inputTokens": 4272,
-      "outputTokens": 79
+      "inputTokens": 4350,
+      "outputTokens": 60
     },
     {
       "key": "golden/en/airtime-self",
@@ -560,11 +578,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1499,
+      "ms": 1468,
       "modelMs": [
-        1498
+        1468
       ],
-      "inputTokens": 4268,
+      "inputTokens": 4346,
       "outputTokens": 32
     },
     {
@@ -607,11 +625,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1739,
+      "ms": 1497,
       "modelMs": [
-        1739
+        1497
       ],
-      "inputTokens": 4277,
+      "inputTokens": 4355,
       "outputTokens": 35
     },
     {
@@ -654,11 +672,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1564,
+      "ms": 1453,
       "modelMs": [
-        1564
+        1453
       ],
-      "inputTokens": 4273,
+      "inputTokens": 4351,
       "outputTokens": 35
     },
     {
@@ -701,11 +719,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1384,
+      "ms": 1526,
       "modelMs": [
-        1384
+        1526
       ],
-      "inputTokens": 4280,
+      "inputTokens": 4358,
       "outputTokens": 31
     },
     {
@@ -748,11 +766,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1968,
+      "ms": 2365,
       "modelMs": [
-        1968
+        2365
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 38
     },
     {
@@ -795,11 +813,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1118,
+      "ms": 1197,
       "modelMs": [
-        1118
+        1197
       ],
-      "inputTokens": 4275,
+      "inputTokens": 4353,
       "outputTokens": 15
     },
     {
@@ -823,7 +841,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Howzit Thabo 😊\n\nWaPay can help you spend, send, add and withdraw money from your balance.\n\nYou can:\nSee your balance and recent transactions\nBuy airtime, data or prepaid electricity\nSend money to Philly, Mom or any SA number\nCreate a please-pay-me link\nDeposit by card, Instant EFT, Apple Pay or Google Pay\nLoad a Blu or OTT voucher\nWithdraw to your bank or as cash\nBuy an OTT voucher for yourself\n\n",
+        "text": "Howzit Thabo 😊\n\nWaPay lets you add money, check your balance, buy airtime, data and electricity, send money, make a please-pay-me link, load vouchers and withdraw to bank or cash.\n\nWant the full menu with exact start words? 💡",
         "toolCalls": [
           "reply"
         ],
@@ -842,12 +860,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3138,
+      "ms": 2149,
       "modelMs": [
-        3137
+        2149
       ],
-      "inputTokens": 4271,
-      "outputTokens": 158
+      "inputTokens": 4349,
+      "outputTokens": 83
     },
     {
       "key": "golden/en/greeting",
@@ -869,7 +887,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Heita Thabo 😊\nYou’ve got R150 to spend. How can I help you today?",
+        "text": "Heita Thabo 😊\nYou have R150 to spend. What would you like to do today? 💰",
         "toolCalls": [
           "reply"
         ],
@@ -888,12 +906,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1816,
+      "ms": 1760,
       "modelMs": [
-        1816
+        1760
       ],
-      "inputTokens": 4263,
-      "outputTokens": 46
+      "inputTokens": 4341,
+      "outputTokens": 48
     },
     {
       "key": "golden/af/balance-plain",
@@ -915,7 +933,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, jy het R150 beskikbaar om te spandeer. 💰\nJy het ook R80 kontantbalans net vir onttrekkings, en R55 word gehou vir jou hangende PayShap-uitbetaling van R50.",
+        "text": "Thabo, jy het R150 beskikbaar om te spandeer. 💰\n\nJy het ook R80 kontantbalans vir onttrekkings, en R55 word gehou vir jou hangende PayShap-uitbetaling van R50.",
         "toolCalls": [
           "reply"
         ],
@@ -934,11 +952,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2424,
+      "ms": 2148,
       "modelMs": [
-        2424
+        2147
       ],
-      "inputTokens": 4269,
+      "inputTokens": 4347,
       "outputTokens": 77
     },
     {
@@ -961,7 +979,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, jou balans om te spandeer is R150. 💰\n\nJy het ook R80 kontantbalans vir onttrekkings alleen.\nR55 word gehou vir jou hangende PayShap uitbetaling van R50, ref WPC15800A7BD6637.",
+        "text": "Thabo, jou balans om te spandeer is R150. 💰\n\nJy het ook R80 kontant-balans vir onttrekkings, en R55 word gehou vir jou hangende PayShap-uitbetaling van R50, ref WPC15800A7BD6637.",
         "toolCalls": [
           "reply"
         ],
@@ -980,12 +998,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2369,
+      "ms": 2434,
       "modelMs": [
-        2369
+        2434
       ],
-      "inputTokens": 4269,
-      "outputTokens": 88
+      "inputTokens": 4347,
+      "outputTokens": 87
     },
     {
       "key": "golden/af/deposit-100",
@@ -1027,11 +1045,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1251,
+      "ms": 1149,
       "modelMs": [
-        1251
+        1149
       ],
-      "inputTokens": 4273,
+      "inputTokens": 4351,
       "outputTokens": 21
     },
     {
@@ -1054,10 +1072,8 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ja, Thabo. Jou vroeër inbetaling van R20 via PayFast is suksesvol. Ref 2179045. 💰\n\nDit wys op 16 Sep 04:30.",
-        "toolCalls": [
-          "reply"
-        ],
+        "text": "Ja, Thabo. Jou deposito van R20 het suksesvol ingekom op 16 Sep 04:30 via PayFast. Ref 2179045 💰\n\nJou balans om te spandeer is nou R150.",
+        "toolCalls": [],
         "model": "gpt-5.5"
       },
       "checks": {
@@ -1073,12 +1089,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2184,
+      "ms": 1998,
       "modelMs": [
-        2184
+        1998
       ],
-      "inputTokens": 4276,
-      "outputTokens": 67
+      "inputTokens": 4354,
+      "outputTokens": 51
     },
     {
       "key": "golden/af/airtime-self",
@@ -1120,11 +1136,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1392,
+      "ms": 1276,
       "modelMs": [
-        1392
+        1276
       ],
-      "inputTokens": 4270,
+      "inputTokens": 4348,
       "outputTokens": 32
     },
     {
@@ -1167,11 +1183,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1486,
+      "ms": 1324,
       "modelMs": [
-        1486
+        1324
       ],
-      "inputTokens": 4275,
+      "inputTokens": 4353,
       "outputTokens": 35
     },
     {
@@ -1214,11 +1230,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1478,
+      "ms": 1331,
       "modelMs": [
-        1478
+        1331
       ],
-      "inputTokens": 4272,
+      "inputTokens": 4350,
       "outputTokens": 35
     },
     {
@@ -1261,11 +1277,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1418,
+      "ms": 1217,
       "modelMs": [
-        1418
+        1217
       ],
-      "inputTokens": 4275,
+      "inputTokens": 4353,
       "outputTokens": 31
     },
     {
@@ -1308,11 +1324,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1347,
+      "ms": 1354,
       "modelMs": [
-        1347
+        1353
       ],
-      "inputTokens": 4274,
+      "inputTokens": 4352,
       "outputTokens": 38
     },
     {
@@ -1355,11 +1371,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1111,
+      "ms": 1261,
       "modelMs": [
-        1111
+        1261
       ],
-      "inputTokens": 4278,
+      "inputTokens": 4356,
       "outputTokens": 15
     },
     {
@@ -1383,7 +1399,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Hi Thabo 😊 Jy kan WaPay hier in WhatsApp gebruik om geld te bestuur.\n\nWat jy kan doen:\n💰 Sê “saldo” om jou balans, vouchers en onlangse transaksies te sien.\n📱 Koop lugtyd of data vir enige SA nommer uit jou balans.\n💡 Koop prepaid elektrisiteit en kry die token hier.\n💸 Stuur geld na enige SA nommer.\n🙏 Maak ’n please-pay-me link sodat iemand jou kan betaal.\n➕ Laai geld by met kaart, Instant EF",
+        "text": "Hi Thabo 😊 Jy kan hier geld bestuur op WhatsApp.\n\nWat jy kan doen:\nSien jou balans en transaksies.\nKoop lugtyd, data en prepaid krag.\nStuur geld na enige SA nommer.\nMaak ’n betaal-skakel sodat iemand jou kan betaal.\nLaai geld met kaart, EFT, Apple Pay of Google Pay.\nLaai ’n Blu of OTT voucher.\nTrek geld uit na jou bank of as kontant.\nKoop ’n WaPay OTT voucher vir jouself.\nGebruik WaPay for Busine",
         "toolCalls": [
           "how_it_works",
           "reply"
@@ -1403,13 +1419,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 5764,
+      "ms": 5797,
       "modelMs": [
-        1266,
-        4498
+        1309,
+        4487
       ],
-      "inputTokens": 8646,
-      "outputTokens": 250
+      "inputTokens": 8803,
+      "outputTokens": 245
     },
     {
       "key": "golden/af/greeting",
@@ -1431,7 +1447,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Hallo Thabo, dit gaan goed dankie 😊\nEk hoop dit gaan ook goed met jou. Hoe kan ek help vandag? 💡",
+        "text": "Hallo Thabo, dit gaan goed dankie 😊\nEk hoop dit gaan ook goed met jou. Hoe kan ek vandag help? 💡",
         "toolCalls": [
           "reply"
         ],
@@ -1450,11 +1466,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2133,
+      "ms": 2037,
       "modelMs": [
-        2133
+        2037
       ],
-      "inputTokens": 4266,
+      "inputTokens": 4344,
       "outputTokens": 54
     },
     {
@@ -1477,7 +1493,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Sawubona Thabo 😊\n\nUne-R150 ongayisebenzisa manje.\nUbuye ube ne-R80 cash balance yokukhipha kuphela.\nKukhona ne-R55 ebambekile ngenxa yePayShap payout esalindile, ref WPC15800A7BD6637. 💰",
+        "text": "Sawubona Thabo 😊\n\nUnayo R150 ongayisebenzisa ku-wallet yakho.\n\nFuthi kukhona R80 cash balance yokukhipha kuphela.\n\nKukhona R55 ebambekile ngenxa ye-PayShap payout ka-R50 esalindile, ref WPC15800A7BD6637. 💰",
         "toolCalls": [
           "reply"
         ],
@@ -1496,12 +1512,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3019,
+      "ms": 2931,
       "modelMs": [
-        3019
+        2931
       ],
-      "inputTokens": 4280,
-      "outputTokens": 93
+      "inputTokens": 4358,
+      "outputTokens": 99
     },
     {
       "key": "golden/zu/balance-typo",
@@ -1523,7 +1539,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Yebo Thabo 😊\n\nIbhalansi ongayisebenzisa manje ngu R150.\nImali ye-cash yokukhipha kuphela ngu R80.\nKukhona u R55 obanjwe ngoba iPayShap payout yakho ka R50 kuThabo M isalinde impendulo yebhange, ref WPC15800A7BD6637. 💰",
+        "text": "Yebo Thabo 😊\n\nIbhalansi ongayisebenzisa manje: R150.\nOkukheshi okungakhishwa kuphela: R80.\nKukhona no R55 obanjiwe ngenxa yePayShap payout engu R50 esalindile, ref WPC15800A7BD6637 💰",
         "toolCalls": [
           "reply"
         ],
@@ -1542,12 +1558,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3477,
+      "ms": 2985,
       "modelMs": [
-        3477
+        2985
       ],
-      "inputTokens": 4279,
-      "outputTokens": 107
+      "inputTokens": 4357,
+      "outputTokens": 95
     },
     {
       "key": "golden/zu/deposit-100",
@@ -1589,11 +1605,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1372,
+      "ms": 1301,
       "modelMs": [
-        1371
+        1301
       ],
-      "inputTokens": 4274,
+      "inputTokens": 4352,
       "outputTokens": 21
     },
     {
@@ -1616,7 +1632,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Yebo Thabo, imali oyifakile ekuseni isingenile 😊\n\nI-DEPOSIT R20 nge-PayFast iphumelele ngo-16 Sep 04:30. Ref 2179045.\nIbhalansi ongayisebenzisa manje ngu-R150 💰",
+        "text": "Yebo Thabo, imali oyifake ekuseni ingenile. 💰\nI-DEPOSIT R20 nge-PayFast iphumelele ngo-16 Sep 04:30. Ref 2179045.",
         "toolCalls": [
           "reply"
         ],
@@ -1635,12 +1651,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2662,
+      "ms": 2187,
       "modelMs": [
-        2662
+        2187
       ],
-      "inputTokens": 4274,
-      "outputTokens": 85
+      "inputTokens": 4352,
+      "outputTokens": 69
     },
     {
       "key": "golden/zu/airtime-self",
@@ -1682,11 +1698,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1228,
+      "ms": 1256,
       "modelMs": [
-        1228
+        1256
       ],
-      "inputTokens": 4275,
+      "inputTokens": 4353,
       "outputTokens": 32
     },
     {
@@ -1729,11 +1745,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1447,
+      "ms": 1251,
       "modelMs": [
-        1447
+        1251
       ],
-      "inputTokens": 4277,
+      "inputTokens": 4355,
       "outputTokens": 35
     },
     {
@@ -1776,11 +1792,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1272,
+      "ms": 1346,
       "modelMs": [
-        1272
+        1346
       ],
-      "inputTokens": 4277,
+      "inputTokens": 4355,
       "outputTokens": 35
     },
     {
@@ -1823,11 +1839,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1332,
+      "ms": 1446,
       "modelMs": [
-        1332
+        1446
       ],
-      "inputTokens": 4280,
+      "inputTokens": 4358,
       "outputTokens": 31
     },
     {
@@ -1870,11 +1886,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1166,
+      "ms": 1602,
       "modelMs": [
-        1166
+        1602
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 38
     },
     {
@@ -1917,11 +1933,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1041,
+      "ms": 1111,
       "modelMs": [
-        1041
+        1111
       ],
-      "inputTokens": 4281,
+      "inputTokens": 4359,
       "outputTokens": 15
     },
     {
@@ -1941,13 +1957,13 @@
         "msisdn": null
       },
       "got": {
-        "outcome": "proposal",
-        "action": "HELP",
+        "outcome": "reply",
+        "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "",
+        "text": "I-WaPay ikusiza ukuphatha imali ku-WhatsApp, Thabo 😊\nUngabona ibhalansi, ufake imali, uthenge i-airtime, data nogesi, uthumele imali, wenze isicelo sokukhokhelwa, noma ukhiphe imali.\n\nIsebenza kanje:\nThumela into oyifunayo, njenge “balance”, “deposit”, “buy airtime”, “send money” noma “withdraw”.\nNgizokubuza okushodayo kuphela.\nNgikubonise imininingwane nemali ekhokhwayo uma ikhona.\nUqinisekisa n",
         "toolCalls": [
-          "show_help"
+          "reply"
         ],
         "model": "gpt-5.5"
       },
@@ -1964,12 +1980,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1143,
+      "ms": 6189,
       "modelMs": [
-        1143
+        6188
       ],
-      "inputTokens": 4274,
-      "outputTokens": 13
+      "inputTokens": 4352,
+      "outputTokens": 201
     },
     {
       "key": "golden/zu/greeting",
@@ -1991,7 +2007,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ngikhona kahle, bafo Thabo 😊\nWena unjani? Ngikusize ngani namhlanje? 💰",
+        "text": "Ngiyaphila, bafo 😊 Wena unjani namhlanje?\n\nNgikhona ukukusiza ngeWaPay yakho noma yini oyidingayo 💰",
         "toolCalls": [
           "reply"
         ],
@@ -2010,12 +2026,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2267,
+      "ms": 2519,
       "modelMs": [
-        2267
+        2519
       ],
-      "inputTokens": 4267,
-      "outputTokens": 52
+      "inputTokens": 4345,
+      "outputTokens": 59
     },
     {
       "key": "golden/xh/balance-plain",
@@ -2037,7 +2053,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Molo Thabo 😊\n\nEseleyo kwi wallet yakho onokuyisebenzisa ngoku yi R150.\n\nUkwanayo ne R80 cash balance yokurhoxa kuphela. Kwaye i R55 ibanjiwe ngenxa ye PayShap payout esalindileyo, ref WPC15800A7BD6637. 💰",
+        "text": "Molo Thabo 😊\n\nUnayo R150 onokuyisebenzisa kwi-wallet yakho. Kukwakho R80 cash balance yokukhupha kuphela.\n\nKukho R55 ebanjiweyo ngenxa yePayShap payout yeR50 esalindileyo, ref WPC15800A7BD6637 💰",
         "toolCalls": [
           "reply"
         ],
@@ -2056,12 +2072,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2822,
+      "ms": 3553,
       "modelMs": [
-        2822
+        3551
       ],
-      "inputTokens": 4275,
-      "outputTokens": 97
+      "inputTokens": 4353,
+      "outputTokens": 93
     },
     {
       "key": "golden/xh/balance-typo",
@@ -2083,7 +2099,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, ibhalansi yakho onokuyisebenzisa yi R150. 💰\n\nImali onokuyikhupha kuphela yi R80.\nKukho R55 ebanjiweyo ngenxa yePayShap payout esalindileyo, ref WPC15800A7BD6637. 📱",
+        "text": "Thabo, ibhalansi yakho onokuyisebenzisa yi R150. 💰\n\nIbhalansi yemali ekhutshelwayo kuphela yi R80.\nKukho R55 ebanjiweyo ngenxa ye pay-out esalindileyo: R50 PayShap ku Thabo M, ref WPC15800A7BD6637. 😊",
         "toolCalls": [
           "reply"
         ],
@@ -2102,12 +2118,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3024,
+      "ms": 2813,
       "modelMs": [
-        3024
+        2813
       ],
-      "inputTokens": 4274,
-      "outputTokens": 90
+      "inputTokens": 4352,
+      "outputTokens": 99
     },
     {
       "key": "golden/xh/deposit-100",
@@ -2149,11 +2165,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1247,
+      "ms": 1106,
       "modelMs": [
-        1247
+        1106
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 21
     },
     {
@@ -2176,7 +2192,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ewe Thabo, imali oyifakileyo ekuseni ifikile ✅\n\nIdiphozithi ye-R20 nge-PayFast iphumelele ngo-16 Sep 04:30. Ref 2179045 💰",
+        "text": "Ewe Thabo, imali oyifakileyo ekuseni ifikile ✅\n\nIdiphozithi yakho ye-R20 ngePayFast iphumelele ngo-16 Sep 04:30. Ref: 2179045 💰",
         "toolCalls": [
           "reply"
         ],
@@ -2195,12 +2211,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2367,
+      "ms": 2734,
       "modelMs": [
-        2367
+        2734
       ],
-      "inputTokens": 4278,
-      "outputTokens": 74
+      "inputTokens": 4356,
+      "outputTokens": 75
     },
     {
       "key": "golden/xh/airtime-self",
@@ -2242,11 +2258,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1220,
+      "ms": 1786,
       "modelMs": [
-        1220
+        1786
       ],
-      "inputTokens": 4273,
+      "inputTokens": 4351,
       "outputTokens": 32
     },
     {
@@ -2289,11 +2305,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1408,
+      "ms": 1547,
       "modelMs": [
-        1408
+        1547
       ],
-      "inputTokens": 4280,
+      "inputTokens": 4358,
       "outputTokens": 35
     },
     {
@@ -2336,11 +2352,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1319,
+      "ms": 1503,
       "modelMs": [
-        1319
+        1503
       ],
-      "inputTokens": 4278,
+      "inputTokens": 4356,
       "outputTokens": 35
     },
     {
@@ -2383,11 +2399,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1398,
+      "ms": 1326,
       "modelMs": [
-        1398
+        1326
       ],
-      "inputTokens": 4281,
+      "inputTokens": 4359,
       "outputTokens": 31
     },
     {
@@ -2430,11 +2446,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1314,
+      "ms": 2770,
       "modelMs": [
-        1314
+        2770
       ],
-      "inputTokens": 4278,
+      "inputTokens": 4356,
       "outputTokens": 38
     },
     {
@@ -2477,11 +2493,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1247,
+      "ms": 2400,
       "modelMs": [
-        1247
+        2400
       ],
-      "inputTokens": 4281,
+      "inputTokens": 4359,
       "outputTokens": 15
     },
     {
@@ -2505,7 +2521,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "WaPay ikunceda usebenzise imali yakho kuWhatsApp: ubone ibhalansi, uthenge i-airtime, idatha nombane, uthumele imali, ufake imali, urhoxe, okanye wenze ilink yokucelwa imali. 📱\n\nYintoni kanye ofuna ukuyenza ngoku, ukubona ibhalansi, ukufaka imali, ukuthenga, ukuthumela, okanye ukurhoxa? 💡",
+        "text": "I-WaPay ikunceda ugcine imali, uthenge izinto ezifana ne-airtime, idatha nombane, uthumele imali, ufake imali, urhoxe, okanye wenze ikhonkco lokucela intlawulo. 💡\n\nEyona ilula kukuqala nge-home ukuze ubone ibhalansi yakho uze ukhethe into ofuna ukuyenza. Ndikubonise i-home ngoku? 😊",
         "toolCalls": [
           "reply"
         ],
@@ -2524,12 +2540,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 4184,
+      "ms": 5076,
       "modelMs": [
-        4184
+        5076
       ],
-      "inputTokens": 4277,
-      "outputTokens": 116
+      "inputTokens": 4355,
+      "outputTokens": 114
     },
     {
       "key": "golden/xh/greeting",
@@ -2551,7 +2567,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Molo Thabo, ndiphilile enkosi 😊\n\nNdiyathemba nawe uphilile. Ndingakunceda ngantoni namhlanje? 💡",
+        "text": "Molo Thabo, ndiphilile enkosi mfethu 😊\nWena unjani namhlanje?",
         "toolCalls": [
           "reply"
         ],
@@ -2570,12 +2586,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2400,
+      "ms": 2508,
       "modelMs": [
-        2400
+        2508
       ],
-      "inputTokens": 4269,
-      "outputTokens": 61
+      "inputTokens": 4347,
+      "outputTokens": 48
     },
     {
       "key": "golden/nso/balance-plain",
@@ -2597,7 +2613,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Dumela Thabo 😊\n\nO na le R150 ye o ka e dirišago.\nR80 ke cash balance ya go ntšha fela.\nR55 e swere bakeng sa PayShap ya R50 go Thabo M, ref WPC15800A7BD6637. 💰",
+        "text": "Dumela Thabo 😊\nO na le R150 ye o ka e šomišago mo walleteng.\n\nGape o na le R80 cash balance ya go ntšha fela, gomme R55 e swerwe bakeng sa payout ya PayShap ya R50, ref WPC15800A7BD6637. 💰",
         "toolCalls": [
           "reply"
         ],
@@ -2616,12 +2632,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2807,
+      "ms": 3236,
       "modelMs": [
-        2807
+        3235
       ],
-      "inputTokens": 4274,
-      "outputTokens": 90
+      "inputTokens": 4352,
+      "outputTokens": 97
     },
     {
       "key": "golden/nso/balance-typo",
@@ -2643,7 +2659,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ee Thabo 😊\nBalance ya gago ya go šomiša ke R150. Cash balance ya go ntšha fela ke R80.\n\nGo na le R55 ye e swerwego bakeng sa PayShap payout ya R50 go Thabo M, ref WPC15800A7BD6637. 💰",
+        "text": "Thabo, balance ya gago ya go šomiša ke R150. 💰\nCash balance ya go ntšha fela ke R80.\n\nGo na le R55 ye e swerwego bakeng sa withdrawal ya PayShap ya R50, ref WPC15800A7BD6637.",
         "toolCalls": [
           "reply"
         ],
@@ -2662,12 +2678,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2815,
+      "ms": 2913,
       "modelMs": [
-        2815
+        2913
       ],
-      "inputTokens": 4273,
-      "outputTokens": 93
+      "inputTokens": 4351,
+      "outputTokens": 88
     },
     {
       "key": "golden/nso/deposit-100",
@@ -2709,11 +2725,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1228,
+      "ms": 1121,
       "modelMs": [
-        1228
+        1121
       ],
-      "inputTokens": 4275,
+      "inputTokens": 4353,
       "outputTokens": 21
     },
     {
@@ -2736,7 +2752,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, tšhelete ya gago ya go ntšha ya R50 ka PayShap e sa le PENDING. Ref ke WPC15800A7BD6637.\n\nR55 e sa swarilwe go fihlela tsela ya panka e araba. 💰",
+        "text": "Thabo, tefo ya gago ya PayShap ya R50 e sa le PENDING.\nRef: WPC15800A7BD6637. R55 e sa swere, e akaretša tšhelete le fee. 💰",
         "toolCalls": [
           "get_payout_status",
           "reply"
@@ -2756,13 +2772,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3884,
+      "ms": 3580,
       "modelMs": [
-        1145,
-        2738
+        1164,
+        2416
       ],
-      "inputTokens": 8631,
-      "outputTokens": 103
+      "inputTokens": 8787,
+      "outputTokens": 95
     },
     {
       "key": "golden/nso/airtime-self",
@@ -2804,11 +2820,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1214,
+      "ms": 1179,
       "modelMs": [
-        1214
+        1179
       ],
-      "inputTokens": 4270,
+      "inputTokens": 4348,
       "outputTokens": 32
     },
     {
@@ -2851,11 +2867,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1268,
+      "ms": 1551,
       "modelMs": [
-        1268
+        1551
       ],
-      "inputTokens": 4278,
+      "inputTokens": 4356,
       "outputTokens": 35
     },
     {
@@ -2898,11 +2914,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1573,
+      "ms": 1308,
       "modelMs": [
-        1573
+        1308
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 35
     },
     {
@@ -2945,11 +2961,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1376,
+      "ms": 2493,
       "modelMs": [
-        1376
+        2493
       ],
-      "inputTokens": 4279,
+      "inputTokens": 4357,
       "outputTokens": 31
     },
     {
@@ -2992,11 +3008,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1383,
+      "ms": 1154,
       "modelMs": [
-        1382
+        1154
       ],
-      "inputTokens": 4279,
+      "inputTokens": 4357,
       "outputTokens": 38
     },
     {
@@ -3039,11 +3055,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1097,
+      "ms": 1640,
       "modelMs": [
-        1097
+        1640
       ],
-      "inputTokens": 4279,
+      "inputTokens": 4357,
       "outputTokens": 15
     },
     {
@@ -3067,8 +3083,9 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ee Thabo, WaPay e a šoma 😊\n\nNka go thuša ka go lebelela balance ya gago, go reka airtime, data goba mohlagase, go romela tšhelete, go dira please-pay-me link, go deposit, go load voucher, goba go withdraw.\n\nO nyaka ke go bontšhe balance ya gago bjale? 💰",
+        "text": "Ee Thabo, WaPay e go thuša go šomiša tšhelete ya gago ka WhatsApp. O ka bona balance, wa reka airtime, data le mohlagase, wa romela tšhelete, wa tsenya tšhelete, wa ntšha tšhelete, goba wa dira please-pay-me link. 💰\n\nGe o bolela ka service ya kgwebo, o ka re “business account” gomme re go bulela portal ya WaPay for Business. O nyaka account ya gago ya motho ka noši goba ya kgwebo? 📱",
         "toolCalls": [
+          "how_it_works",
           "reply"
         ],
         "model": "gpt-5.5"
@@ -3086,12 +3103,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3307,
+      "ms": 5793,
       "modelMs": [
-        3306
+        1674,
+        4117
       ],
-      "inputTokens": 4276,
-      "outputTokens": 108
+      "inputTokens": 8809,
+      "outputTokens": 168
     },
     {
       "key": "golden/nso/greeting",
@@ -3113,7 +3131,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thobela Thabo 😊\nBalansi ya gago ya go diriša ke R150. O na le R80 ya go ntšha fela, gomme R55 e swerwe ka lebaka la PayShap ya R50 yeo e sa emetšego, ref WPC15800A7BD6637. 💰",
+        "text": "Thobela Thabo 😊\nO na le R150 ye o ka e dirišago. R80 ke cash balance ya go ntšha feela.\n\nGo na le R55 ye e swarilwego ka lebaka la PayShap payout ya R50 go Thabo M, ref WPC15800A7BD6637. 💰",
         "toolCalls": [
           "reply"
         ],
@@ -3132,12 +3150,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2947,
+      "ms": 3325,
       "modelMs": [
-        2947
+        3325
       ],
-      "inputTokens": 4268,
-      "outputTokens": 94
+      "inputTokens": 4346,
+      "outputTokens": 98
     },
     {
       "key": "golden/st/balance-plain",
@@ -3159,7 +3177,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, o na le R150 eo o ka e sebedisang walleteng ya hao. 💰\n\nHape o na le R80 ya cash balance bakeng sa withdrawals feela. R55 e tshwerwe bakeng sa payout e pending ya R50 ho Thabo M, ref WPC15800A7BD6637. ✨",
+        "text": "Thabo, o na le R150 eo o ka e sebelisang walleteng ya hao. 💰\nHape o na le R80 cash balance bakeng sa withdrawals feela. R55 e tshwerwe bakeng sa payout e ntseng e emetse.",
         "toolCalls": [
           "reply"
         ],
@@ -3178,12 +3196,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2639,
+      "ms": 2728,
       "modelMs": [
-        2639
+        2728
       ],
-      "inputTokens": 4272,
-      "outputTokens": 96
+      "inputTokens": 4350,
+      "outputTokens": 76
     },
     {
       "key": "golden/st/balance-typo",
@@ -3205,7 +3223,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, balance ya hao eo o ka e sebelisang ke R150. 💰\nCash balance ya withdrawals feela ke R80.\nHo na le R55 e tshwerweng bakeng sa payout ya PayShap ya R50, ref WPC15800A7BD6637, e sa ntse e pending.",
+        "text": "Thabo, balance ya hao eo o ka e sebedisang ke R150. 💰\n\nCash balance ya withdrawals feela ke R80.\nR55 e tshwerwe bakeng sa PayShap payout ya R50 ho Thabo M, ref WPC15800A7BD6637, e sa ntse e pending.",
         "toolCalls": [
           "reply"
         ],
@@ -3224,12 +3242,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2721,
+      "ms": 2486,
       "modelMs": [
-        2721
+        2486
       ],
-      "inputTokens": 4270,
-      "outputTokens": 90
+      "inputTokens": 4348,
+      "outputTokens": 92
     },
     {
       "key": "golden/st/deposit-100",
@@ -3271,11 +3289,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1112,
+      "ms": 1099,
       "modelMs": [
-        1112
+        1098
       ],
-      "inputTokens": 4271,
+      "inputTokens": 4349,
       "outputTokens": 21
     },
     {
@@ -3298,7 +3316,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "E, Thabo, payout ya hao ya PayShap ya R50 e sa ntse e le PENDING.\nRef: WPC15800A7BD6637. R55 e ntse e tshwerwe ho fihlela bank rail e araba. 💰",
+        "text": "Thabo, tefo ya hao ya PayShap ya R50 ha e so fihle. E ntse e le PENDING.\n\nRef: WPC15800A7BD6637. R55 e ntse e tshwerwe ho fihlela karabo ya banka e kgutla. 💰",
         "toolCalls": [
           "get_payout_status",
           "reply"
@@ -3318,13 +3336,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3718,
+      "ms": 3884,
       "modelMs": [
-        1182,
-        2536
+        1130,
+        2754
       ],
-      "inputTokens": 8627,
-      "outputTokens": 97
+      "inputTokens": 8783,
+      "outputTokens": 106
     },
     {
       "key": "golden/st/airtime-self",
@@ -3366,11 +3384,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1582,
+      "ms": 1450,
       "modelMs": [
-        1582
+        1450
       ],
-      "inputTokens": 4268,
+      "inputTokens": 4346,
       "outputTokens": 32
     },
     {
@@ -3413,11 +3431,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1455,
+      "ms": 1370,
       "modelMs": [
-        1455
+        1370
       ],
-      "inputTokens": 4274,
+      "inputTokens": 4352,
       "outputTokens": 35
     },
     {
@@ -3460,11 +3478,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1213,
+      "ms": 1444,
       "modelMs": [
-        1213
+        1444
       ],
-      "inputTokens": 4267,
+      "inputTokens": 4345,
       "outputTokens": 35
     },
     {
@@ -3507,11 +3525,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1228,
+      "ms": 1239,
       "modelMs": [
-        1228
+        1239
       ],
-      "inputTokens": 4279,
+      "inputTokens": 4357,
       "outputTokens": 31
     },
     {
@@ -3554,11 +3572,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1431,
+      "ms": 1210,
       "modelMs": [
-        1431
+        1210
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 38
     },
     {
@@ -3601,11 +3619,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1073,
+      "ms": 1389,
       "modelMs": [
-        1072
+        1389
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 15
     },
     {
@@ -3629,8 +3647,9 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "E, Thabo 😊\n\nWaPay e o thusa ho boloka le ho sebedisa tjhelete moqoqong ona. O ka sheba balance, wa kenya tjhelete, wa reka airtime, data le motlakase, wa romela tjhelete, wa ntsha tjhelete, kapa wa etsa link ya hore motho a o lefe.\n\nSeo o ka se etsang:\nSheba balance ya hao\nKenya tjhelete ka card, EFT, Apple Pay kapa Google Pay\nKenya voucher ya cash kapa OTT\nReka airtime, data kapa motlakase\nRomel",
+        "text": "E, Thabo. WaPay ke wallet ya WhatsApp. O ka bona balance, wa kenya tjhelete, wa romela tjhelete, wa reka airtime, data le motlakase, wa kopa hore batho ba o lefe, kapa wa ntsha tjhelete. 💰\n\nHo bona seo o nang le sona, ngola feela “balance”. Ke tla o bontsha balance, vouchers le diketso tsa morao tjena. 😊",
         "toolCalls": [
+          "how_it_works",
           "reply"
         ],
         "model": "gpt-5.5"
@@ -3648,12 +3667,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 5788,
+      "ms": 5119,
       "modelMs": [
-        5788
+        1476,
+        3643
       ],
-      "inputTokens": 4276,
-      "outputTokens": 217
+      "inputTokens": 8808,
+      "outputTokens": 141
     },
     {
       "key": "golden/st/greeting",
@@ -3675,7 +3695,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Dumela Thabo 😊 Ke teng, ke lokile. Wena o kae kajeno? ✨",
+        "text": "Dumela Thabo, ke teng hantle 😊\nKe thabela ho o bona. O batla ke o thuse ka eng kajeno? 💡",
         "toolCalls": [
           "reply"
         ],
@@ -3694,12 +3714,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2098,
+      "ms": 2191,
       "modelMs": [
-        2098
+        2191
       ],
-      "inputTokens": 4269,
-      "outputTokens": 45
+      "inputTokens": 4347,
+      "outputTokens": 55
     },
     {
       "key": "golden/tn/balance-plain",
@@ -3721,7 +3741,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Dumela Thabo 😊\n\nO na le R150 e o ka e dirisang.\nR80 ke cash balance ya go ntsha fela.\nR55 e tshwerwe ka ntlha ya payout ya R50 e e sa ntse e emetse banka, ref WPC15800A7BD6637. 💰",
+        "text": "Dumela Thabo 😊\nO na le R150 e o ka e dirisang mo wallet.\n\nGape o na le R80 cash balance ya withdrawals fela. R55 e tshwerwe ka ntlha ya payout ya PayShap ya R50 e sa ntse e emetse banka, ref WPC15800A7BD6637 💰",
         "toolCalls": [
           "reply"
         ],
@@ -3740,12 +3760,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2839,
+      "ms": 3547,
       "modelMs": [
-        2839
+        3546
       ],
-      "inputTokens": 4274,
-      "outputTokens": 92
+      "inputTokens": 4352,
+      "outputTokens": 97
     },
     {
       "key": "golden/tn/balance-typo",
@@ -3767,7 +3787,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ee Thabo 😊\nBalanse ya gago ya go dirisa ke R150.\n\nCash balance ya go ntsha fela ke R80.\n\nGo na le R55 e tshwerweng ka ntlha ya payout ya R50 ka PayShap, ref WPC15800A7BD6637. 💰",
+        "text": "Ee Thabo, balanse ya gago ya go dirisa ke R150. 💰\n\nO na le R80 ya cash balance ya go ntsha fela, mme R55 e tshwerwe ka ntlha ya payout e e sa emetseng karabo ya banka.",
         "toolCalls": [
           "reply"
         ],
@@ -3786,12 +3806,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2679,
+      "ms": 2831,
       "modelMs": [
-        2679
+        2831
       ],
-      "inputTokens": 4272,
-      "outputTokens": 92
+      "inputTokens": 4350,
+      "outputTokens": 79
     },
     {
       "key": "golden/tn/deposit-100",
@@ -3833,11 +3853,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1353,
+      "ms": 1259,
       "modelMs": [
-        1353
+        1259
       ],
-      "inputTokens": 4274,
+      "inputTokens": 4352,
       "outputTokens": 21
     },
     {
@@ -3860,7 +3880,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, go ntšha madi ga gago ga PayShap ga R50 go santse go le PENDING. Ref WPC15800A7BD6637.\n\nR55 e sa tshwerwe go fitlha seporo sa banka se araba. 💰",
+        "text": "Thabo, madi a gago a go ntsha R50 ka PayShap a santse a le PENDING.\nRef: WPC15800A7BD6637. R55 e santse e tshwerwe go fitlha bank rail e araba. 💰",
         "toolCalls": [
           "get_payout_status",
           "reply"
@@ -3880,13 +3900,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3910,
+      "ms": 3770,
       "modelMs": [
-        1303,
-        2606
+        1258,
+        2512
       ],
-      "inputTokens": 8633,
-      "outputTokens": 100
+      "inputTokens": 8789,
+      "outputTokens": 99
     },
     {
       "key": "golden/tn/airtime-self",
@@ -3928,11 +3948,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1285,
+      "ms": 1155,
       "modelMs": [
-        1285
+        1155
       ],
-      "inputTokens": 4271,
+      "inputTokens": 4349,
       "outputTokens": 32
     },
     {
@@ -3975,11 +3995,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1233,
+      "ms": 1275,
       "modelMs": [
-        1233
+        1275
       ],
-      "inputTokens": 4280,
+      "inputTokens": 4358,
       "outputTokens": 35
     },
     {
@@ -4022,11 +4042,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1171,
+      "ms": 1420,
       "modelMs": [
-        1171
+        1420
       ],
-      "inputTokens": 4271,
+      "inputTokens": 4349,
       "outputTokens": 35
     },
     {
@@ -4069,11 +4089,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1340,
+      "ms": 1486,
       "modelMs": [
-        1340
+        1485
       ],
-      "inputTokens": 4281,
+      "inputTokens": 4359,
       "outputTokens": 31
     },
     {
@@ -4116,11 +4136,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1210,
+      "ms": 1366,
       "modelMs": [
-        1210
+        1366
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 38
     },
     {
@@ -4163,11 +4183,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1090,
+      "ms": 1086,
       "modelMs": [
-        1090
+        1086
       ],
-      "inputTokens": 4278,
+      "inputTokens": 4356,
       "outputTokens": 15
     },
     {
@@ -4191,10 +4211,9 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ee Thabo 😊 WaPay e go thusa go dirisa madi mo WhatsApp.\n\nO ka bona balance, wa reka airtime, data le motlakase, wa romela madi, wa dira please-pay-me link, wa deposit-a, wa load-a voucher, le go ntsha madi.\n\nFa o batla go bona se o nang le sona, kwala fela \"balance\" 💰",
+        "text": "Hei Thabo 😊 WaPay e go thusa go dirisa madi mo WhatsApp.\n\nSe o ka se dirang:\n- Bona balance ya gago\n- Reka airtime, data le motlakase\n- Romela madi go motho\n- Tsenya madi ka card, EFT, Apple Pay kgotsa Google Pay\n- Ntsha madi go bank kgotsa cash\n- Dira please-pay-me link gore batho ba go duele\n- Load voucher ya Blu kgotsa OTT 💰\n\nE bereka jaana:\nO nthomela se o batlang go se dira, jaaka “balance”",
         "toolCalls": [
-          "how_it_works",
-          "reply"
+          "how_it_works"
         ],
         "model": "gpt-5.5"
       },
@@ -4211,13 +4230,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 4792,
+      "ms": 7296,
       "modelMs": [
-        1069,
-        3723
+        1586,
+        5709
       ],
-      "inputTokens": 8654,
-      "outputTokens": 127
+      "inputTokens": 8810,
+      "outputTokens": 188
     },
     {
       "key": "golden/tn/greeting",
@@ -4258,11 +4277,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2023,
+      "ms": 2272,
       "modelMs": [
-        2023
+        2272
       ],
-      "inputTokens": 4271,
+      "inputTokens": 4349,
       "outputTokens": 56
     },
     {
@@ -4285,7 +4304,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Sawubona Thabo 😊\nUne-R150 ongayisebentisa ku-wallet yakho.\n\nKukhona ne-R80 ye-cash balance, yekukhipha imali kuphela.\nR55 ibanjwe ngekukhishwa kwemali lokusamilela: R50 PayShap, ref WPC15800A7BD6637. 💰",
+        "text": "Sawubona Thabo 😊\n\nKu-wallet yakho ungasebenzisa R150.\nCash balance yakho, yekukhipha kuphela, ngu-R80.\nKukhona R55 lebanjiwe ngoba i-PayShap payout yakho ya-R50 isalindile, ref WPC15800A7BD6637. 💰",
         "toolCalls": [
           "reply"
         ],
@@ -4304,12 +4323,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3251,
+      "ms": 3980,
       "modelMs": [
-        3251
+        3980
       ],
-      "inputTokens": 4274,
-      "outputTokens": 102
+      "inputTokens": 4352,
+      "outputTokens": 96
     },
     {
       "key": "golden/ss/balance-typo",
@@ -4331,7 +4350,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Yebo Thabo 😊\nIbhalansi yakho ongayisebenzisa ngu R150.\n\nImali yokukhipha kuphela ngu R80.\nKukhona R55 ebanjiwe nge PayShap payout esalindile, ref WPC15800A7BD6637. 💰",
+        "text": "Yebo Thabo 😊\nIbhalansi yakho ongayisebenzisa ngu R150. Imali ye-cash yokukhipha kuphela ngu R80. Kukhona R55 ebanjiwe ngenxa ye-PayShap payout esalindile.",
         "toolCalls": [
           "reply"
         ],
@@ -4350,12 +4369,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2771,
+      "ms": 3222,
       "modelMs": [
-        2771
+        3222
       ],
-      "inputTokens": 4276,
-      "outputTokens": 89
+      "inputTokens": 4354,
+      "outputTokens": 77
     },
     {
       "key": "golden/ss/deposit-100",
@@ -4397,11 +4416,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1290,
+      "ms": 1272,
       "modelMs": [
-        1290
+        1272
       ],
-      "inputTokens": 4274,
+      "inputTokens": 4352,
       "outputTokens": 21
     },
     {
@@ -4424,7 +4443,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Yebo Thabo, imali loyifake ekuseni ingenile. 💰\nDeposit yakho ya R20 nge PayFast iphumelele ngo 16 Sep 04:30, ref 2179045.",
+        "text": "Yebo Thabo, imali loyifake ekuseni ingenile. 😊\n\nDEPOSIT R20 SUCCESS nge PayFast, ref 2179045, nga 16 Sep 04:30.\nIbhalansi longayisebentisa manje ngu R150. 💰",
         "toolCalls": [
           "reply"
         ],
@@ -4443,12 +4462,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2061,
+      "ms": 2534,
       "modelMs": [
-        2061
+        2534
       ],
-      "inputTokens": 4274,
-      "outputTokens": 68
+      "inputTokens": 4352,
+      "outputTokens": 84
     },
     {
       "key": "golden/ss/airtime-self",
@@ -4490,11 +4509,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1250,
+      "ms": 1231,
       "modelMs": [
-        1250
+        1230
       ],
-      "inputTokens": 4274,
+      "inputTokens": 4352,
       "outputTokens": 32
     },
     {
@@ -4537,11 +4556,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1286,
+      "ms": 1368,
       "modelMs": [
-        1286
+        1368
       ],
-      "inputTokens": 4277,
+      "inputTokens": 4355,
       "outputTokens": 35
     },
     {
@@ -4584,11 +4603,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1366,
+      "ms": 1628,
       "modelMs": [
-        1366
+        1628
       ],
-      "inputTokens": 4277,
+      "inputTokens": 4355,
       "outputTokens": 35
     },
     {
@@ -4631,11 +4650,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1360,
+      "ms": 1371,
       "modelMs": [
-        1360
+        1371
       ],
-      "inputTokens": 4280,
+      "inputTokens": 4358,
       "outputTokens": 31
     },
     {
@@ -4678,11 +4697,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1358,
+      "ms": 1253,
       "modelMs": [
-        1358
+        1253
       ],
-      "inputTokens": 4277,
+      "inputTokens": 4355,
       "outputTokens": 38
     },
     {
@@ -4725,11 +4744,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1237,
+      "ms": 1210,
       "modelMs": [
-        1237
+        1210
       ],
-      "inputTokens": 4278,
+      "inputTokens": 4356,
       "outputTokens": 15
     },
     {
@@ -4753,8 +4772,9 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "WaPay ikusita kutsi ubhatale, utfumele imali, utsenge i-airtime, idatha negesi, ufake imali, uphindze uyikhiphe. Konkhe kwenteka lapha kuWhatsApp 📱\n\nIsebenta kanjena:\nUfaka imali nge-card, Instant EFT, Apple Pay, Google Pay, noma ngevoucher.\nUngayisebentisa kutsenga i-airtime, idatha, gezi, noma utfumele lomunye umuntfu.\nUma ufuna imali, ungayikhipha e-bank account yakho noma uyitsatse njenge-cas",
+        "text": "I-service yeBusiness ikusita kutsi wamukele tinkhokhelo kumakhasimende akho. 🏪\n\nUsebenta kanje:\nVula ngekutsi utsi “business account”\nUnike trading name yakho\nUtfola i-WaPay for Business portal\nUngagcina amakhasimende\nUtfumele please-pay-me links letinemininingwane\nWabelane ngema-QR codes\nUbuke kutsi ngubani lokhokhile\n\nNawufuna kungena, utsi “business login”. ✨",
         "toolCalls": [
+          "how_it_works",
           "reply"
         ],
         "model": "gpt-5.5"
@@ -4772,12 +4792,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 6749,
+      "ms": 6541,
       "modelMs": [
-        6749
+        1152,
+        5389
       ],
-      "inputTokens": 4272,
-      "outputTokens": 212
+      "inputTokens": 8801,
+      "outputTokens": 161
     },
     {
       "key": "golden/ss/greeting",
@@ -4799,7 +4820,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Sawubona Thabo 😊 Ngikhona kahle, ngiyabonga.\nWena unjani namuhla? ✨",
+        "text": "Sawubona Thabo 😊 Ngikhona, ngiyabonga.\n\nWena unjani namhlanje? ✨",
         "toolCalls": [
           "reply"
         ],
@@ -4818,11 +4839,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2114,
+      "ms": 2466,
       "modelMs": [
-        2114
+        2466
       ],
-      "inputTokens": 4267,
+      "inputTokens": 4345,
       "outputTokens": 51
     },
     {
@@ -4845,7 +4866,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, kha wallet yau u na R150 ine wa nga shumisa. 💰\n\nCash balance ya u bvisa fhedzi ndi R80. Hu na R55 yo farwaho kha payout ya PayShap ya R50, ref WPC15800A7BD6637.",
+        "text": "Thabo, kha wallet yau u na R150 ine wa nga shumisa. 💰\n\nCash balance yau ya u withdraw fhedzi ndi R80.\nR55 yo farelwa payout ine ya kha ḓi lindela.",
         "toolCalls": [
           "reply"
         ],
@@ -4864,12 +4885,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2713,
+      "ms": 2789,
       "modelMs": [
-        2713
+        2789
       ],
-      "inputTokens": 4272,
-      "outputTokens": 86
+      "inputTokens": 4350,
+      "outputTokens": 73
     },
     {
       "key": "golden/ve/balance-typo",
@@ -4891,7 +4912,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, balance yau ya u shumisa ndi R150. 💰\nCash balance ya u bvisa fhedzi ndi R80.\nHu na R55 yo fariwaho kha payout ya PayShap ya R50, ref WPC15800A7BD6637.",
+        "text": "Thabo, balance ine wa nga shumisa ndi R150. 💰\n\nCash balance ya withdrawals fhedzi ndi R80.\nR55 yo fariwa kha payout ya R50 nga PayShap, ref WPC15800A7BD6637, i kha pending.",
         "toolCalls": [
           "reply"
         ],
@@ -4910,11 +4931,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2695,
+      "ms": 2518,
       "modelMs": [
-        2695
+        2517
       ],
-      "inputTokens": 4268,
+      "inputTokens": 4346,
       "outputTokens": 83
     },
     {
@@ -4957,11 +4978,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1545,
+      "ms": 1459,
       "modelMs": [
-        1545
+        1459
       ],
-      "inputTokens": 4272,
+      "inputTokens": 4350,
       "outputTokens": 21
     },
     {
@@ -4984,7 +5005,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, masheleni a u a badelaho nga PayShap a R50 a kha ḓi vha PENDING.\nRef: WPC15800A7BD6637. R55 yo farwa zwino u swika rail ya banka i fhindula. 💰",
+        "text": "Hai Thabo, tshelede ya u bvisa ya R50 a i athu swika. I kha ḓi vha PENDING.\n\nRef: WPC15800A7BD6637. R55 yo farwa u swika bank rail i tshi fhindula. 💰",
         "toolCalls": [
           "get_payout_status",
           "reply"
@@ -5004,13 +5025,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3792,
+      "ms": 4148,
       "modelMs": [
-        1061,
-        2731
+        1139,
+        3009
       ],
-      "inputTokens": 8633,
-      "outputTokens": 104
+      "inputTokens": 8789,
+      "outputTokens": 105
     },
     {
       "key": "golden/ve/airtime-self",
@@ -5052,11 +5073,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1242,
+      "ms": 1830,
       "modelMs": [
-        1242
+        1830
       ],
-      "inputTokens": 4271,
+      "inputTokens": 4349,
       "outputTokens": 32
     },
     {
@@ -5099,11 +5120,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1370,
+      "ms": 1489,
       "modelMs": [
-        1369
+        1489
       ],
-      "inputTokens": 4274,
+      "inputTokens": 4352,
       "outputTokens": 35
     },
     {
@@ -5146,11 +5167,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1418,
+      "ms": 1486,
       "modelMs": [
-        1418
+        1486
       ],
-      "inputTokens": 4267,
+      "inputTokens": 4345,
       "outputTokens": 35
     },
     {
@@ -5193,11 +5214,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2018,
+      "ms": 1181,
       "modelMs": [
-        2018
+        1181
       ],
-      "inputTokens": 4274,
+      "inputTokens": 4352,
       "outputTokens": 31
     },
     {
@@ -5240,11 +5261,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1330,
+      "ms": 1343,
       "modelMs": [
-        1330
+        1343
       ],
-      "inputTokens": 4273,
+      "inputTokens": 4351,
       "outputTokens": 38
     },
     {
@@ -5287,11 +5308,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1083,
+      "ms": 1206,
       "modelMs": [
-        1083
+        1206
       ],
-      "inputTokens": 4275,
+      "inputTokens": 4353,
       "outputTokens": 15
     },
     {
@@ -5315,7 +5336,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Hei Thabo 😊 WaPay i ni thusa uri ni shumise masheleni kha WhatsApp.\n\nZwine na nga ita:\nU sedza balance yaṋu\nU renga airtime, data na muḓagasi\nU rumela masheleni\nU ita link ya u badelwa\nU deposit-a nga card kana EFT\nU load-a voucher\nU withdraw-a masheleni\n\nBalance yaṋu ine na nga shumisa zwino ndi R150 💰\nNi ṱoḓa ndi ni thuse nga tshifhio zwino?",
+        "text": "Ndaa Thabo 😊\n\nWaPay i ni thusa u shumisa tshelede kha WhatsApp. Ni nga sedza balance, u rengisa airtime, data, mudagasi, u rumela tshelede, u ita link ya u badelwa, u deposit, u load voucher, kana u withdraw.\n\nZwino balance ine na nga shumisa ndi R150. Cash balance ya withdrawals fhedzi ndi R80. Hu na R55 yo farwaho nga payout i kha di pending 💰\n\nNi khou ṱoḓa ndi ni thuse nga mini zwino?",
         "toolCalls": [
           "reply"
         ],
@@ -5334,12 +5355,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 4840,
+      "ms": 4485,
       "modelMs": [
-        4840
+        4485
       ],
-      "inputTokens": 4277,
-      "outputTokens": 146
+      "inputTokens": 4355,
+      "outputTokens": 152
     },
     {
       "key": "golden/ve/greeting",
@@ -5361,7 +5382,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ndaa Thabo, ndo vuwa zwavhuḓi 😊\nNi khou ita hani namusi? 💡",
+        "text": "Ndaa Thabo, ndo vuwa zwavhuḓi, ndi livhuwa 😊\nInwi vho vuwa hani namusi? ✨",
         "toolCalls": [
           "reply"
         ],
@@ -5380,12 +5401,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2166,
+      "ms": 2201,
       "modelMs": [
-        2166
+        2201
       ],
-      "inputTokens": 4270,
-      "outputTokens": 51
+      "inputTokens": 4348,
+      "outputTokens": 58
     },
     {
       "key": "golden/ts/balance-plain",
@@ -5407,7 +5428,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Hi Thabo 😊\nMali leyi u nga yi tirhisa sweswi i R150.\nYa cash leyi u nga yi withdrawa ntsena i R80.\nKu na R55 leyi ha khomiweke eka PayShap payout ya R50, ref WPC15800A7BD6637. 💰",
+        "text": "Hi Thabo 😊\nU na R150 leyi u nga yi tirhisaka. Cash balance ya ku withdraw ntsena i R80.\n\nKu ni R55 leyi khomiweke eka payout ya R50 hi PayShap, ref WPC15800A7BD6637. 💰",
         "toolCalls": [
           "reply"
         ],
@@ -5426,12 +5447,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2970,
+      "ms": 2574,
       "modelMs": [
-        2970
+        2573
       ],
-      "inputTokens": 4270,
-      "outputTokens": 89
+      "inputTokens": 4348,
+      "outputTokens": 85
     },
     {
       "key": "golden/ts/balance-typo",
@@ -5453,7 +5474,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, balance ya wena leyi u nga yi tirhisaka i R150. 💰\nCash balance yo withdraw ntsena i R80.\nR55 yi khomiwile eka PayShap payout ya R50 leyi ya ha rindzeleke, ref WPC15800A7BD6637.",
+        "text": "Thabo, balance ya wena yo tirhisa i R150. 💰\nCash balance ya ku withdraw ntsena i R80.\nKu na R55 leyi khomiweke eka pay-out leyi nga pending.",
         "toolCalls": [
           "reply"
         ],
@@ -5472,12 +5493,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2874,
+      "ms": 2445,
       "modelMs": [
-        2874
+        2444
       ],
-      "inputTokens": 4271,
-      "outputTokens": 86
+      "inputTokens": 4349,
+      "outputTokens": 65
     },
     {
       "key": "golden/ts/deposit-100",
@@ -5519,11 +5540,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1105,
+      "ms": 1092,
       "modelMs": [
-        1105
+        1092
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 21
     },
     {
@@ -5546,7 +5567,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "E-e Thabo, mali ya wena ya PayShap ya R50 a yi si fika. Yi ha ri PENDING.\nRef: WPC15800A7BD6637. R55 yi ha khomiwile ku fikela bank rail yi hlamula. 💰",
+        "text": "Thabo, ku humesa mali ka wena ka PayShap ka R50 ka ref WPC15800A7BD6637 ka ha ri PENDING. R55 yi khomiwile ku fikela rail ya bank yi hlamula. 💰\n\nA ndzi nga tiyisekisi leswaku yi fikile sweswi.",
         "toolCalls": [
           "get_payout_status",
           "reply"
@@ -5566,13 +5587,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 4234,
+      "ms": 4260,
       "modelMs": [
-        1423,
-        2811
+        1214,
+        3046
       ],
-      "inputTokens": 8627,
-      "outputTokens": 100
+      "inputTokens": 8783,
+      "outputTokens": 109
     },
     {
       "key": "golden/ts/airtime-self",
@@ -5614,11 +5635,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1514,
+      "ms": 1163,
       "modelMs": [
-        1514
+        1163
       ],
-      "inputTokens": 4270,
+      "inputTokens": 4348,
       "outputTokens": 32
     },
     {
@@ -5661,11 +5682,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1446,
+      "ms": 1222,
       "modelMs": [
-        1446
+        1222
       ],
-      "inputTokens": 4274,
+      "inputTokens": 4352,
       "outputTokens": 35
     },
     {
@@ -5708,11 +5729,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1612,
+      "ms": 1315,
       "modelMs": [
-        1612
+        1315
       ],
-      "inputTokens": 4269,
+      "inputTokens": 4347,
       "outputTokens": 35
     },
     {
@@ -5755,11 +5776,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1515,
+      "ms": 1438,
       "modelMs": [
-        1515
+        1438
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 31
     },
     {
@@ -5802,11 +5823,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1569,
+      "ms": 1272,
       "modelMs": [
-        1569
+        1272
       ],
-      "inputTokens": 4273,
+      "inputTokens": 4351,
       "outputTokens": 38
     },
     {
@@ -5849,11 +5870,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1045,
+      "ms": 1300,
       "modelMs": [
-        1045
+        1300
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 15
     },
     {
@@ -5877,7 +5898,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "WaPay yi ku pfuna ku hakela, ku rhumela mali, ku xava airtime, data, gezi, na ku amukela mali hi link. U ni R150 leyi u nga yi tirhisaka sweswi, naswona R80 yi kumeka ntsena eka withdrawals. 💰\n\nKu tirha ka yona: u ndzi tsalela leswi u lavaka ku swi endla, ndzi ku komba preview, kutani u tiyisisa hi PIN loko ku ri transaction. Eka business, u nga vula \"business account\" ku kuma portal ya ku rhumel",
+        "text": "WaPay yi ku pfuna ku tirhisa mali hi WhatsApp, Thabo 💡\n\nU nga vona balance ya wena, u xava airtime, data na gezi, u rhumela mali, u endla link ya ku kombela ku hakeriwa, u chela mali, u redeem voucher, kumbe u withdraw-a.\n\nYi tirha hi ndlela leyi:\nLoko u tsala leswi u lavaka swona, ndzi sungula flow.\nFlow yi ku komba vuxokoxoko bya mali na fee loko yi ri kona.\nU tiyisisa hi PIN ya wena loko ku ri",
         "toolCalls": [
           "how_it_works",
           "reply"
@@ -5897,13 +5918,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 6359,
+      "ms": 6864,
       "modelMs": [
-        1412,
-        4946
+        1219,
+        5644
       ],
-      "inputTokens": 8647,
-      "outputTokens": 168
+      "inputTokens": 8802,
+      "outputTokens": 192
     },
     {
       "key": "golden/ts/greeting",
@@ -5925,7 +5946,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Avuxeni Thabo mfowethu 😊\nNdza hanya kahle, wena u pfuke kahle?",
+        "text": "Avuxeni Thabo 😊\nNi kona, ndza khensa. Wena u pfukile kahle?",
         "toolCalls": [
           "reply"
         ],
@@ -5944,12 +5965,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2127,
+      "ms": 2315,
       "modelMs": [
-        2127
+        2315
       ],
-      "inputTokens": 4269,
-      "outputTokens": 46
+      "inputTokens": 4347,
+      "outputTokens": 48
     },
     {
       "key": "golden/nr/balance-plain",
@@ -5971,7 +5992,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Lotjhani Thabo 😊\nUne-R150 ongayisebenzisa eWaPay.\n\nUne-R80 we-cash balance, yokukhipha kwaphela.\nKukhona no-R55 obanjiweko nge-pay-out esalindileko ka-R50 kuThabo M, ref WPC15800A7BD6637. 💰",
+        "text": "Lotjhani Thabo 😊\n\nUnayo R150 ongayisebenzisa. Kukhona no-R80 we-cash balance, ongayikhipha kwaphela.\n\nKukhona R55 ebanjiweko nge-PayShap payout yakho ye-R50, ref WPC15800A7BD6637, isalinde ipendulo yebhanga. 💰",
         "toolCalls": [
           "reply"
         ],
@@ -5990,12 +6011,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3196,
+      "ms": 3472,
       "modelMs": [
-        3196
+        3472
       ],
-      "inputTokens": 4279,
-      "outputTokens": 102
+      "inputTokens": 4357,
+      "outputTokens": 108
     },
     {
       "key": "golden/nr/balance-typo",
@@ -6017,7 +6038,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Yebo Thabo 😊\nIbhalansi ongayisebenzisa manje ngu R150.\n\nOkukhona ekheshi lokukhipha imali kuphela ngu R80.\nKukhona no R55 obanjiwe ngenxa ye PayShap payout engu R50, ref WPC15800A7BD6637.",
+        "text": "Sawubona Thabo 😊\nIbhalansi ongayisebenzisa ngu R150.\n\nImali yokukhipha kuphela ngu R80.\nKukhona R55 ebanjiwe ngenxa ye PayShap payout esalindile, ref WPC15800A7BD6637 💰",
         "toolCalls": [
           "reply"
         ],
@@ -6036,12 +6057,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3397,
+      "ms": 2855,
       "modelMs": [
-        3397
+        2855
       ],
-      "inputTokens": 4273,
-      "outputTokens": 92
+      "inputTokens": 4351,
+      "outputTokens": 89
     },
     {
       "key": "golden/nr/deposit-100",
@@ -6083,11 +6104,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1081,
+      "ms": 1205,
       "modelMs": [
-        1081
+        1205
       ],
-      "inputTokens": 4277,
+      "inputTokens": 4355,
       "outputTokens": 21
     },
     {
@@ -6110,7 +6131,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Iye Thabo, imali oyifakileko ekuseni ifikile. 😊\n\n16 Sep 04:30 DEPOSIT R20 SUCCESS PayFast, ref 2179045.\n\nIbhalansi ongayisebenzisa nje ngu R150. 💰",
+        "text": "Iye Thabo, imali oyifakileko ekuseni ifikile. 😊\n\nDEPOSIT R20 SUCCESS nge PayFast, ref 2179045, ngo 16 Sep 04:30.\nIbhalansi ongayisebenzisa manje ngu R150. 💰",
         "toolCalls": [
           "reply"
         ],
@@ -6129,12 +6150,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2250,
+      "ms": 2215,
       "modelMs": [
-        2250
+        2215
       ],
-      "inputTokens": 4276,
-      "outputTokens": 82
+      "inputTokens": 4354,
+      "outputTokens": 85
     },
     {
       "key": "golden/nr/airtime-self",
@@ -6176,11 +6197,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1388,
+      "ms": 1449,
       "modelMs": [
-        1388
+        1449
       ],
-      "inputTokens": 4271,
+      "inputTokens": 4349,
       "outputTokens": 32
     },
     {
@@ -6223,11 +6244,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1291,
+      "ms": 1366,
       "modelMs": [
-        1291
+        1366
       ],
-      "inputTokens": 4275,
+      "inputTokens": 4353,
       "outputTokens": 35
     },
     {
@@ -6270,11 +6291,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1305,
+      "ms": 1266,
       "modelMs": [
-        1305
+        1266
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 35
     },
     {
@@ -6317,11 +6338,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1266,
+      "ms": 2060,
       "modelMs": [
-        1266
+        2060
       ],
-      "inputTokens": 4279,
+      "inputTokens": 4357,
       "outputTokens": 31
     },
     {
@@ -6364,11 +6385,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1221,
+      "ms": 1284,
       "modelMs": [
-        1221
+        1284
       ],
-      "inputTokens": 4276,
+      "inputTokens": 4354,
       "outputTokens": 38
     },
     {
@@ -6411,11 +6432,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1163,
+      "ms": 1082,
       "modelMs": [
-        1163
+        1081
       ],
-      "inputTokens": 4281,
+      "inputTokens": 4359,
       "outputTokens": 15
     },
     {
@@ -6439,9 +6460,8 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Isevisi le ikusiza ukuphatha imali kuWhatsApp, Thabo. Ungabona ibhalansi, uthenge i-airtime, idatha nogesi, uthumele imali, ufake imali, ukhiphe imali, namkha wenze ama-link wokuthi abantu bakubhadele 💡\n\nNangabe ubuza nge-business service: utjho “business account”, unginikele igama lebhizinisi lakho, bese uthola i-portal yokubona amakhasimende, ama-link wokubhadelwa, ama-QR codes, nokuthi ngubani",
+        "text": "Isevisi le ikuvumela usebenzise imali yakho kuWaPay ngeWhatsApp. Ungabona ibhalansi, ufake imali, uthumele imali, uthenge i-airtime, idatha, ugesi, ama-voucher, wenze i-link yokukhokhelwa, noma ukhiphe imali. 💡\n\nIsebenza kanje: uvele ungitshele into ofuna ukuyenza, ngikukhombisa imininingwane nemali ekhokhwayo uma ikhona, bese uqinisekisa nge-PIN yakho ngaphambi kokuthi imali iphume. Ibhalansi ya",
         "toolCalls": [
-          "how_it_works",
           "reply"
         ],
         "model": "gpt-5.5"
@@ -6459,13 +6479,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 7209,
+      "ms": 5558,
       "modelMs": [
-        1383,
-        5826
+        5558
       ],
-      "inputTokens": 8647,
-      "outputTokens": 172
+      "inputTokens": 4351,
+      "outputTokens": 159
     },
     {
       "key": "golden/nr/greeting",
@@ -6487,7 +6506,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ngiyaphila, Thabo mngani 😊\nWena unjani namhlanje?",
+        "text": "Ngiyaphila, Thabo, ngiyathokoza mngani 😊\nWena unjani namhlanjesi?",
         "toolCalls": [
           "reply"
         ],
@@ -6506,12 +6525,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2312,
+      "ms": 2073,
       "modelMs": [
-        2312
+        2073
       ],
-      "inputTokens": 4269,
-      "outputTokens": 45
+      "inputTokens": 4347,
+      "outputTokens": 53
     },
     {
       "key": "agent/en/withdraw-amount-bank",
@@ -6552,11 +6571,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1324,
+      "ms": 1638,
       "modelMs": [
-        1324
+        1638
       ],
-      "inputTokens": 4273,
+      "inputTokens": 4351,
       "outputTokens": 25
     },
     {
@@ -6580,9 +6599,8 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ja, Thabo. Jy kan na jou eie bankrekening onttrek. PayShap is die goedkoopste vinnige opsie teen R8. 💰\nWil jy jou beskikbare kontantbalans van R80 na jou bank onttrek?",
+        "text": "Ja, Thabo. Die goedkoopste vinnige opsie is PayShap na jou bank vir R8, en jy het R80 kontantbalans beskikbaar vir onttrekkings. 💰\nWil jy met PayShap onttrek, of verkies jy gewone bankoorplasing of kontant?",
         "toolCalls": [
-          "how_it_works",
           "reply"
         ],
         "model": "gpt-5.5"
@@ -6600,13 +6618,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3511,
+      "ms": 3052,
       "modelMs": [
-        1139,
-        2371
+        3052
       ],
-      "inputTokens": 8893,
-      "outputTokens": 99
+      "inputTokens": 4350,
+      "outputTokens": 91
     },
     {
       "key": "agent/zu/withdraw-amount",
@@ -6648,11 +6665,11 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1403,
+      "ms": 1525,
       "modelMs": [
-        1403
+        1525
       ],
-      "inputTokens": 4277,
+      "inputTokens": 4355,
       "outputTokens": 25
     },
     {
@@ -6675,10 +6692,9 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "💸 Sending to another WaPay user from your balance is free.\nSending a WaPay voucher to any SA number costs R3 flat.\n\nWould you like me to start a send for you, Thabo? 😊",
+        "text": "💸 Sending to another WaPay user is free.\n\nSending a WaPay voucher to any SA number costs R3 flat. 😊",
         "toolCalls": [
-          "get_fee_quote",
-          "reply"
+          "get_fee_quote"
         ],
         "model": "gpt-5.5"
       },
@@ -6695,13 +6711,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2970,
+      "ms": 2664,
       "modelMs": [
-        1299,
-        1671
+        1231,
+        1432
       ],
-      "inputTokens": 8868,
-      "outputTokens": 94
+      "inputTokens": 9024,
+      "outputTokens": 53
     },
     {
       "key": "agent/af/fee-deposit-card",
@@ -6723,7 +6739,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Met jou kaart kos dit 4.2% + R2.30 bo-op die bedrag, afgerond na die volgende rand. 💳\n\nVoorbeelde:\nR20 kos R24\nR100 kos R107\nR500 kos R524\n\nDie volle bedrag wat jy kies, land in jou WaPay-balans. Wil jy hê ek moet ’n veilige kaart-betaalskakel vir jou begin? 😊",
+        "text": "Met jou kaart kos dit 4.2% + R2.30, afgerond op na die volgende rand, bo-op die bedrag. Die volle bedrag wat jy inbetaal land in jou balans. 💳\n\nVoorbeelde:\nR20 kos R24\nR100 kos R107\nR500 kos R524",
         "toolCalls": [
           "get_fee_quote",
           "reply"
@@ -6743,13 +6759,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 4342,
+      "ms": 3834,
       "modelMs": [
-        1560,
-        2781
+        1458,
+        2375
       ],
-      "inputTokens": 8949,
-      "outputTokens": 137
+      "inputTokens": 9105,
+      "outputTokens": 117
     },
     {
       "key": "agent/zu/fee-withdraw",
@@ -6771,7 +6787,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Kubiza kanje ukukhipha imali, Thabo 🏧\n\nPayShap ebhange lakho: R8\nBank transfer: R10\nCash e-Absa noma Nedbank ATM, Pick n Pay / Boxer till, noma FNB eWallet: R18 kuze kufike ku-R700\nCash: R23 kuze kufike ku-R1500\nCash: R30 ngaphezulu kwalokho\n\nOkushesha nokushibhile kakhulu kuvamise ukuba yi-PayShap ngoba R8 futhi iza ngemizuzu. 😊",
+        "text": "Kubiza kanje ukukhipha imali, Thabo 🏧\n\nPayShap ebhange lakho: R8\nBank transfer: R10\nCash e-Absa noma Nedbank ATM, Pick n Pay / Boxer till, noma FNB eWallet: R18 kuze kufike ku-R700\nCash: R23 kuze kufike ku-R1500\nCash: R30 ngaphezu kwalokho\n\nIndlela eshibhile futhi esheshayo ivamise ukuba yi-PayShap ngo-R8. Ufuna ngiqale ukukhipha imali nge-PayShap? 😊",
         "toolCalls": [
           "get_fee_quote",
           "reply"
@@ -6791,13 +6807,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 5756,
+      "ms": 5336,
       "modelMs": [
-        1526,
-        4230
+        1353,
+        3982
       ],
-      "inputTokens": 8888,
-      "outputTokens": 163
+      "inputTokens": 9044,
+      "outputTokens": 175
     },
     {
       "key": "agent/en/status-payshap",
@@ -6819,7 +6835,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Not yet, Thabo. Your PayShap withdrawal of R50 is still pending, ref WPC15800A7BD6637. R55 is held for it until the bank rail answers. 💰",
+        "text": "Not yet, Thabo. Your PayShap withdrawal of R50 is still pending, ref WPC15800A7BD6637.\n\nR55 is held until the bank rail answers. 💰",
         "toolCalls": [
           "get_payout_status",
           "reply"
@@ -6839,12 +6855,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3292,
+      "ms": 2811,
       "modelMs": [
-        1339,
-        1952
+        1081,
+        1730
       ],
-      "inputTokens": 8617,
+      "inputTokens": 8773,
       "outputTokens": 86
     },
     {
@@ -6867,10 +6883,8 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ja, Thabo. Jou R20 inbetaling deur PayFast is suksesvol. 💰\nVerwysing: 2179045, op 16 Sep 04:30.",
-        "toolCalls": [
-          "reply"
-        ],
+        "text": "Ja, Thabo. Jou R20 inbetaling deur PayFast is suksesvol. 💰\n\nVerwysing: 2179045\nDatum: 16 Sep 04:30",
+        "toolCalls": [],
         "model": "gpt-5.5"
       },
       "checks": {
@@ -6886,12 +6900,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2441,
+      "ms": 2206,
       "modelMs": [
-        2441
+        2206
       ],
-      "inputTokens": 4272,
-      "outputTokens": 62
+      "inputTokens": 4350,
+      "outputTokens": 41
     },
     {
       "key": "agent/zu/status-payshap",
@@ -6913,7 +6927,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Cha Thabo, i-PayShap yakho ka-R50 isengu-PENDING. Ref: WPC15800A7BD6637.\n\nU-R55 usabanjiwe kuze kuphendule ibhange. 💡",
+        "text": "Cha Thabo, ayikafiki okwamanje. I-PayShap yakho engu-R50 isengu-PENDING, ref WPC15800A7BD6637. R55 isabanjiwe kuze kuphendule ibhange. 💰",
         "toolCalls": [
           "get_payout_status",
           "reply"
@@ -6933,13 +6947,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 4102,
+      "ms": 3867,
       "modelMs": [
-        1405,
-        2697
+        1165,
+        2702
       ],
-      "inputTokens": 8627,
-      "outputTokens": 93
+      "inputTokens": 8783,
+      "outputTokens": 97
     },
     {
       "key": "agent/en/discovery-what-can-i-do",
@@ -6962,7 +6976,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, with WaPay you can spend, send, add money and get paid from this chat 📱✨\n\nYou can:\nBuy airtime, data and prepaid electricity.\nSend money to any SA number.\nMake a please-pay-me link.\nAdd money by card, Instant EFT, Apple Pay, Google Pay, or voucher.\nWithdraw to your bank or as cash.\nBuy or redeem OTT vouchers.\nCheck your balance and recent activity.\n\nYou have R150 available to spend right n",
+        "text": "You can use WaPay for everyday money jobs, Thabo 😊\n\nWhat you can do:\nCheck your balance and recent activity\nBuy airtime, data and prepaid electricity\nSend money to SA numbers\nMake a please-pay-me link\nAdd money by card, EFT, Apple Pay, Google Pay or voucher\nWithdraw to your bank or as cash\nBuy or load an OTT voucher\n\nYou have R150 available to spend right now 💰",
         "toolCalls": [
           "reply"
         ],
@@ -6981,12 +6995,12 @@
       },
       "pass": false,
       "error": null,
-      "ms": 2792,
+      "ms": 2469,
       "modelMs": [
-        2792
+        2469
       ],
-      "inputTokens": 4270,
-      "outputTokens": 132
+      "inputTokens": 4348,
+      "outputTokens": 117
     },
     {
       "key": "agent/af/discovery-electricity",
@@ -7009,7 +7023,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ja, Thabo, jy kan prepaid elektrisiteit hier koop en die token sommer in hierdie chat kry 💡\nWil jy dit nou koop, en moet ek begin met jou meter nommer en bedrag?",
+        "text": "Ja, Thabo. Jy kan voorafbetaalde elektrisiteit hier koop uit jou WaPay-balans, en die token kom sommer hier in die chat. ⚡\n\nWil jy koop met ’n meter nommer en bedrag, of moet ek jou deur die stappe vat?",
         "toolCalls": [
           "reply"
         ],
@@ -7028,12 +7042,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2016,
+      "ms": 2141,
       "modelMs": [
-        2016
+        2141
       ],
-      "inputTokens": 4269,
-      "outputTokens": 67
+      "inputTokens": 4347,
+      "outputTokens": 83
     },
     {
       "key": "agent/zu/discovery-data",
@@ -7056,7 +7070,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Yebo, Thabo. Ungathenga i-data yanoma iyiphi inombolo yase-SA usebenzisa ibhalansi yakho, akukho mali ye-WaPay. 📱\nUfuna siqale i-data yakho noma eyenye inombolo?",
+        "text": "Yebo Thabo, ungathenga i-data lapha usebenzisa ibhalansi yakho. Akukho fee ye-WaPay, ukhokha intengo ye-bundle kuphela 📱\nUfuna ngiqale ngeyakho inombolo noma enye inombolo?",
         "toolCalls": [
           "reply"
         ],
@@ -7075,12 +7089,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2777,
+      "ms": 2856,
       "modelMs": [
-        2777
+        2856
       ],
-      "inputTokens": 4272,
-      "outputTokens": 77
+      "inputTokens": 4350,
+      "outputTokens": 81
     },
     {
       "key": "agent/en/disambiguation-payment",
@@ -7103,10 +7117,9 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Your newest payment is still pending, Thabo.\n\nPayShap payout: R50 to Thabo M\nRef: WPC15800A7BD6637\nR55 is still held while the bank rail answers. 💰",
+        "text": "Your newest payout is still pending, Thabo. 💰\n\nR50 by PayShap to Thabo M, ref WPC15800A7BD6637. R55 is still held until the bank rail answers.",
         "toolCalls": [
-          "get_payout_status",
-          "reply"
+          "get_payout_status"
         ],
         "model": "gpt-5.5"
       },
@@ -7123,13 +7136,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3085,
+      "ms": 2906,
       "modelMs": [
-        1137,
-        1948
+        1272,
+        1634
       ],
-      "inputTokens": 8613,
-      "outputTokens": 92
+      "inputTokens": 8769,
+      "outputTokens": 68
     },
     {
       "key": "agent/af/disambiguation-payment",
@@ -7152,7 +7165,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, jou PayShap-uitbetaling van R50 na Thabo M is nog PENDING.\nRef: WPC15800A7BD6637.\nR55 word nog gehou totdat die bankrail antwoord. 💰",
+        "text": "Nog nie, Thabo. Jou PayShap-uitbetaling van R50 is nog PENDING.\n\nVerwysing: WPC15800A7BD6637. R55 bly gehou totdat die bankrail antwoord. 💰",
         "toolCalls": [
           "get_payout_status",
           "reply"
@@ -7172,12 +7185,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2948,
+      "ms": 3126,
       "modelMs": [
-        1134,
-        1814
+        1207,
+        1919
       ],
-      "inputTokens": 8615,
+      "inputTokens": 8771,
       "outputTokens": 92
     },
     {
@@ -7201,7 +7214,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, I see your newest airtime was R20 Vodacom for 083…1234 on 15 Sep, ref BLU-77. It shows SUCCESS on my side 📱\n\nPlease check that number first. If it is the right number and still not loaded, I can help you query ref BLU-77 with support 😊",
+        "text": "Thabo, I see your newest airtime was R20 Vodacom to 083…1234, ref BLU-77, marked SUCCESS on 15 Sep 07:30. 📱\n\nWas it that airtime you did not receive?",
         "toolCalls": [
           "reply"
         ],
@@ -7220,12 +7233,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2415,
+      "ms": 1892,
       "modelMs": [
-        2415
+        1892
       ],
-      "inputTokens": 4267,
-      "outputTokens": 96
+      "inputTokens": 4345,
+      "outputTokens": 77
     },
     {
       "key": "agent/af/complaint-send",
@@ -7248,8 +7261,9 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Thabo, ek sien nie ’n onlangse stuur na Philly in jou ledger nie.\n\nDie nuutste beweging is jou PayShap onttrekking van R50 aan Thabo M, ref WPC15800A7BD6637. Dit is nog PENDING en R55 word gehou.\n\nBedoel jy dalk hierdie onttrekking, of ’n ouer stuur na Philly? 💡",
+        "text": "Thabo, ek sien jou nuutste uitbetaling is R50 per PayShap na Thabo M, ref WPC15800A7BD6637. Dit is nog PENDING, en R55 word gehou tot die bankrail antwoord. 💡\n\nBedoel jy hierdie uitbetaling, of ’n stuur na Philly wat nie in die lys hier wys nie?",
         "toolCalls": [
+          "get_payout_status",
           "reply"
         ],
         "model": "gpt-5.5"
@@ -7267,12 +7281,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2981,
+      "ms": 4304,
       "modelMs": [
-        2981
+        1246,
+        3058
       ],
-      "inputTokens": 4276,
-      "outputTokens": 112
+      "inputTokens": 8787,
+      "outputTokens": 123
     },
     {
       "key": "agent/zu/complaint-airtime",
@@ -7295,7 +7310,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ngiyabona, Thabo. I-airtime yakamuva engiyibonayo ngu R20 Vodacom ku 083…1234, iphumelele ngo 15 Sep 07:30, ref BLU-77. 📱\n\nUma ubungayitholi kuleyo nombolo, ngingakusiza sihlole ukuthi inombolo ibiyiyo yini noma uthenge enye namuhla?",
+        "text": "Ngiyabona, Thabo. Eyamuva engiyibonayo i-airtime R20 yeVodacom ku-083…1234, iphumelele ngo-15 Sep 07:30. Ref BLU-77 📱\n\nUma ingakangeni, sicela uhlole leyo nombolo kuqala. Ufuna ngikusize ubheke ukuthenga kwakho kwakamuva kwe-airtime? 😊",
         "toolCalls": [
           "reply"
         ],
@@ -7314,12 +7329,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 3593,
+      "ms": 3867,
       "modelMs": [
-        3593
+        3867
       ],
-      "inputTokens": 4271,
-      "outputTokens": 112
+      "inputTokens": 4349,
+      "outputTokens": 111
     },
     {
       "key": "agent/en/aside-fee-mid-deposit",
@@ -7341,7 +7356,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "For a R100 deposit, the fee is R7.\n\nYou pay R107 total, and the full R100 lands in your WaPay balance 💳😊",
+        "text": "For a R100 deposit, the fee is R7.\n\nYou pay R107 total, and the full R100 lands in your WaPay balance. 💳😊",
         "toolCalls": [
           "get_fee_quote",
           "reply"
@@ -7361,13 +7376,13 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2917,
+      "ms": 2985,
       "modelMs": [
-        1289,
-        1628
+        1398,
+        1587
       ],
-      "inputTokens": 9008,
-      "outputTokens": 83
+      "inputTokens": 9164,
+      "outputTokens": 84
     },
     {
       "key": "agent/af/aside-why-pin",
@@ -7389,7 +7404,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Ek vra jou PIN om seker te maak dit is regtig jy, Thabo 😊\nDit beskerm jou R150 balans voordat R50 na Philly gestuur word.",
+        "text": "Ek vra jou PIN om seker te maak dit is regtig jy wat R50 vir Philly stuur. 💡\n\nJou PIN beskerm jou geld. Ek kan nie geld stuur sonder jou bevestiging nie.",
         "toolCalls": [
           "reply"
         ],
@@ -7408,12 +7423,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2298,
+      "ms": 2370,
       "modelMs": [
-        2298
+        2370
       ],
-      "inputTokens": 4302,
-      "outputTokens": 58
+      "inputTokens": 4380,
+      "outputTokens": 67
     },
     {
       "key": "agent/zu/aside-fee-mid-airtime",
@@ -7435,7 +7450,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Cha, Thabo. I-airtime ayinayo i-WaPay fee 💡\nUkhokha nje intengo ye-airtime, ngakho u-R20 uthenga i-airtime engu-R20. Uyaqhubeka nokuthenga i-airtime engu-R20 enombolweni yakho? 📱",
+        "text": "Yebo Thabo, ukuthenga i-airtime akunayo imali ekhokhiswa yi-WaPay. 😊\n\nUkukhetha kanjani, ngiqhubeke ne-R20 yenombolo yakho noma ngiyiyeke manje?",
         "toolCalls": [
           "reply"
         ],
@@ -7454,12 +7469,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2644,
+      "ms": 2802,
       "modelMs": [
-        2644
+        2802
       ],
-      "inputTokens": 4322,
-      "outputTokens": 90
+      "inputTokens": 4400,
+      "outputTokens": 73
     },
     {
       "key": "agent/en/ack-okay",
@@ -7481,7 +7496,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Okay, Thabo 😊\nI’m here when you need me.",
+        "text": "Okay, Thabo 😊\nYour balance to spend is R150. Your R50 PayShap withdrawal is still pending, with ref WPC15800A7BD6637. 💰",
         "toolCalls": [
           "reply"
         ],
@@ -7500,12 +7515,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1682,
+      "ms": 1911,
       "modelMs": [
-        1682
+        1911
       ],
-      "inputTokens": 4262,
-      "outputTokens": 38
+      "inputTokens": 4340,
+      "outputTokens": 64
     },
     {
       "key": "agent/en/ack-later",
@@ -7527,7 +7542,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "No problem, Thabo. I’ll be here when you’re ready 😊✨",
+        "text": "No problem, Thabo. I’ll be here when you’re ready 😊",
         "toolCalls": [
           "reply"
         ],
@@ -7546,12 +7561,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1453,
+      "ms": 1588,
       "modelMs": [
-        1453
+        1588
       ],
-      "inputTokens": 4264,
-      "outputTokens": 40
+      "inputTokens": 4342,
+      "outputTokens": 39
     },
     {
       "key": "agent/af/ack-later",
@@ -7573,7 +7588,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Dis reg, Thabo 😊\nEk is hier wanneer jy weer wil probeer. Jou geld en aksies bly veilig.",
+        "text": "Dis reg, Thabo. Ek is hier wanneer jy reg is 😊✨",
         "toolCalls": [
           "reply"
         ],
@@ -7592,12 +7607,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 1771,
+      "ms": 2773,
       "modelMs": [
-        1771
+        2773
       ],
-      "inputTokens": 4268,
-      "outputTokens": 48
+      "inputTokens": 4346,
+      "outputTokens": 39
     },
     {
       "key": "agent/zu/ack-later",
@@ -7619,7 +7634,7 @@
         "action": "NONE",
         "amountCents": null,
         "msisdn": null,
-        "text": "Kulungile Thabo. Ngikhona uma usulungele kamuva 😊✨",
+        "text": "Kulungile Thabo, akukho nkinga. Ngikhona uma usufuna ukuqhubeka 😊✨",
         "toolCalls": [
           "reply"
         ],
@@ -7638,12 +7653,12 @@
       },
       "pass": true,
       "error": null,
-      "ms": 2492,
+      "ms": 2152,
       "modelMs": [
-        2492
+        2152
       ],
-      "inputTokens": 4271,
-      "outputTokens": 41
+      "inputTokens": 4349,
+      "outputTokens": 46
     }
   ]
 }

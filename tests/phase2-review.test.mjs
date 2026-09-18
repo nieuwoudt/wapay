@@ -59,7 +59,10 @@ test('H2/M5: raw inbound text never reaches the logs; the gift claim is remember
 
 test('L8: a shared contact answers the agent\'s "who?" instead of "you are busy with another step"', () => {
   const sc = between('async function handleSharedContact', '// Fresh share: treat it as "send money to this person"');
-  assert.match(sc, /if \(state === 'AGENT_CLARIFY'\) \{[\s\S]*?await updateConversationState\(from, null\);[\s\S]*?\} else if \(state\) \{/);
+  // Both agent-owned states clear rather than answering "finish the other
+  // step first": neither a pending clarify nor a pending note is a flow the
+  // customer has to escape (2026-09-18).
+  assert.match(sc, /if \(state === 'AGENT_CLARIFY' \|\| state === 'AGENT_NOTE_CONFIRM'\) \{[\s\S]*?await updateConversationState\(from, null\);[\s\S]*?\} else if \(state\) \{/);
 });
 
 test('L1/L2/L4: pending intent only from the cleaned tool result; the withdraw method enum is the pay-out module\'s; data is never instructions', () => {

@@ -4,6 +4,14 @@
 
 ---
 
+## 74. "Forget me" left the customer's last ten messages in a column nobody reads
+
+- **Symptom:** found while retiring the legacy conversation ring (2026-09-18). `handleForgetMe` erased `conversation_turns` and cleared the customer's notes and interests, and told them "I have erased our chat memory and the things you told me". It never touched `Account.conversationData.history`, the ten-message JSON ring that every reply had been appended to since before the turns table existed. A customer who asked to be forgotten kept ten of their own messages, including anything they had typed into a flow, in the database indefinitely.
+- **Root cause:** the ring was made obsolete by `conversation_turns` but never deleted, and erasure was written against the new store only. Because nothing read the ring any more, no behaviour anywhere revealed that it was still being filled.
+- **Fix:** the ring is gone. All 63 write sites in the processor are deleted, along with `addToConversationHistory` and the never-called `getConversationHistory`; migration `20260918_drop_conversation_ring` drops the key from every existing row (applied to production before the code shipped); and `handleForgetMe` drops it for that one account, so an older row that somehow reacquires it is still erased. The `-` operator takes only that key, so the live flow state and the inbound dedupe list sharing the column survive.
+- **Guard:** `tests/conversation-ring-retired.test.mjs`: no file in the repo mentions either helper, the helpers are gone from `user-manager.js`, both sides of a turn still reach memory (`recordInbound` and `lib/say.js`), the erasure drops the key and only that key, and the migration is key-scoped and idempotent.
+- **Worth knowing:** each ring write was a read-modify-write of the whole `conversationData` column, which also carries flow state and the dedupe list, so 63 of those races are gone with it. The handover said "about twenty call sites"; it was 63.
+
 ## 73. The pilot list matched one spelling of a number, and a list that matches nobody looks exactly like a quiet week
 
 - **Symptom:** 2026-09-18, the first check of the shadow week. `GET /api/admin/conversations?days=7` reported 19 customer messages, 20 replies, the pilot list live with one number on it, and **zero agent turns**. `agent_turns` had never received a single row since the table was created. Everything else was healthy: the messages were landing (`wamid` rows and `status-sent` pulses in `processed_messages`), the founder's account was answering, and all 19 inbound turns in the window were his. Nothing on the card could say whether the number on the list was wrong or whether he simply had not messaged since it was set, and the difference is a week of calendar.

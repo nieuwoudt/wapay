@@ -172,7 +172,7 @@ test('directed requests: delivery is INFORMATIONAL — no state, no history, no 
   const fn = processorSource.indexOf('async function deliverDirectedRequest(');
   const body = processorSource.slice(fn, processorSource.indexOf('\n}', fn));
   assert.ok(!body.includes('updateConversationState'), 'never sets another user\'s conversation state');
-  assert.ok(!body.includes('addToConversationHistory'), 'never writes the payer\'s AI-context history (unsolicited)');
+  assert.ok(!body.includes('recordTurn') && !body.includes('recordInbound'), 'never writes into the payer\'s own conversation memory (unsolicited)');
   assert.match(body, /pay request \$\{request\.id\}/, 'the payer opts in by typing the code — their own explicit action');
   assert.match(body, /safeRequesterLabel\(requesterLabel\)/, 'the requester label is sanitised (spoofable profile name)');
   assert.ok(!body.includes('buildSend'), 'delivery moves NO money');

@@ -206,8 +206,12 @@ test('bearer-digit redaction: voucher PINs never reach history or logs, phone nu
     'send R50 to 0837654321',
     'phone numbers stay intact for slot-filling'
   );
-  // Wiring: history writes and the structured log both go through redaction.
-  assert.match(processorSource, /addToConversationHistory\(from, 'user', redactBearerDigits\(text\)\)/);
+  // Wiring: what is persisted and what is logged both go through redaction.
+  // The customer's line reaches memory through recordInbound, which redacts
+  // with redactForMemory (lib/turns.js); the JSON ring that used to hold a
+  // second, separately-redacted copy is gone (2026-09-18).
+  assert.match(readFileSync(fileURLToPath(new URL('../lib/turns.js', import.meta.url)), 'utf8'), /export function redactForMemory/);
+  assert.match(processorSource, /recordInbound\(/);
   assert.match(processorSource, /text: redactBearerDigits\(text\)/);
   assert.match(processorSource, /msisdn: result\.slots\?\.msisdn \? maskMsisdn\(/);
 });

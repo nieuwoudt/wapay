@@ -43,12 +43,12 @@ Please enter your meter number:
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll receive the full *R20* however they pay. No fees on this one. 🎉
-[button:View my payment page -> https://pleasepayme.co.za/PRRJGMHH]
+[button:View my payment page -> https://pleasepayme.co.za/PRBCVMEX]
 ···
 🙏 *Pay WaPay QA Harness now* · R20 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRRJGMHH
+https://pleasepayme.co.za/PRBCVMEX
 ```
 
 </details>
@@ -151,12 +151,12 @@ Reply *1* or *2*, or "cancel".
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll get the full *R250* if they pay from their WaPay (free), or R237.20 if they pay by card.
-[button:View my payment page -> https://pleasepayme.co.za/PRTXQJEH]
+[button:View my payment page -> https://pleasepayme.co.za/PRXRADXZ]
 ···
 🙏 *Pay WaPay QA Harness now* · R250 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRTXQJEH
+https://pleasepayme.co.za/PRXRADXZ
 ```
 
 </details>
@@ -205,13 +205,13 @@ Just tell me what you need, in any language.
 **User:** My name is Thabo and I run a spaza shop in Soweto.
 
 ```
-Nice to meet you, Thabo 😊 Spaza shops are a great fit for WaPay. If you want, I can help you get started with a business account.
+Nice to meet you, Thabo 😊 That’s useful to know. If you want, I can help you get paid, take deposits, or set up a business account.
 ```
 
 **User:** What did I tell you my name was?
 
 ```
-You told me your name was Thabo 😊
+You told me your name is Thabo 😊
 ```
 
 </details>
@@ -225,7 +225,7 @@ You told me your name was Thabo 😊
 **User:** Please remember that my favourite colour is green.
 
 ```
-Got it, Thabo 😊 I’ll remember that your favourite colour is green ✨
+Got it, Thabo 💚 I’ll remember that your favourite colour is green.
 ```
 
 **User:** buy electricity
@@ -248,7 +248,7 @@ Reply with an amount (e.g., R50, R100, R500)
 **User:** What is my favourite colour?
 
 ```
-Your favourite colour is green 😊
+Your favourite colour is green 💚
 ```
 
 </details>
@@ -264,13 +264,8 @@ Your favourite colour is green 😊
 **User:** Where can I spend my WaPay money!
 
 ```
-You can spend your WaPay money on:
-• Airtime and data for any SA number
-• Prepaid electricity for any meter
-• Sending money to friends and family on WhatsApp
-• WaPay vouchers, which work online and in apps
-
-If you want, I can also tell you where OTT vouchers are accepted ✨
+You can spend your WaPay money on airtime and data, prepaid electricity, sending money to friends and family, getting paid with a shareable link, and WaPay vouchers for online use 💡
+Want me to tell you where OTT vouchers are accepted?
 ```
 
 </details>
@@ -543,7 +538,21 @@ No monthly fees, ever. 😊
 **User:** cancel
 
 ```
-No problem 😊 If you want, you can start again anytime with the electricity amount or tell me what you need next.
+👋 *Hi WaPay QA Harness!*
+💰 Balance: *R0.00*
+━━━━━━━━━━━━━━━
+
+🛒 *Buy*: airtime, data, electricity
+💸 *Send*: "send R10 airtime to 083..."
+🙏 *Get Paid*: "please pay me R50" → share your link
+💳 *Deposit*: "deposit R100" or a Blu voucher
+⛽ *Fuel vouchers*: coming soon
+🏧 *Withdraw*: coming soon
+📄 *Transactions* · ⚙️ *Settings*
+
+⚡ Quick: Buy airtime · Buy data · Check balance
+
+Just tell me what you need, in any language.
 ```
 
 </details>
@@ -714,7 +723,7 @@ Reply *YES* to continue to your PIN, or *NO* to cancel.
 **User:** 1934
 
 ```
-✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WP36AA5F7D1C3818. Fee R18.
+✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WPED0959AA8CB215. Fee R18.
 ```
 
 **User:** balance
@@ -756,7 +765,7 @@ Sawubona WaPay QA Harness!
 
 💵 Ibhalansi Yamanje: R 52.00
 
- Ufunani okunye? Ngicela ungibuze!
+Ufunani okunye? Ngicela ungibuze!
 ```
 
 **User:** wat is my balans
@@ -767,7 +776,8 @@ Sawubona WaPay QA Harness!
 Sawubona WaPay QA Harness!  
 Ibhalansi yakho yamanje ingu-R 52.00
 
-. Uthanda ukwenza ini kulandela?
+  
+Uthanda ukwenza ini kulandela?
 ```
 
 **User:** speak english
@@ -821,7 +831,7 @@ Manage customers, payment links and revenue at https://wapay.co.za/business. To 
 **User:** business login
 
 ```
-🔐 *WaPay for Business code: 012447*
+🔐 *WaPay for Business code: 334215*
 
 Type it into the business portal within 10 minutes. One attempt only.
 
@@ -849,9 +859,9 @@ Not you? Ignore this and tell us right away.
 • Habits: 1 completed movement in the last 30 days
 
 📄 *Your last 3 movements*
-• 18 Sep 19:08  Withdrawal (FNB eWallet)  R30  ✅ done  WaPay QA Harness
-• 18 Sep 19:05  Payment link  R250  🔗 open
-• 18 Sep 19:04  Payment link  R20  🔗 open
+• 18 Sep 19:23  Withdrawal (FNB eWallet)  R30  ✅ done  WaPay QA Harness
+• 18 Sep 19:20  Payment link  R250  🔗 open
+• 18 Sep 19:20  Payment link  R20  🔗 open
 
 I keep 30 days of our chat so I can follow the conversation, and I never store your PIN, voucher PINs or card details. Reply *forget me* and the chat memory and what I have learned about how you use WaPay both go; your transactions stay on record, as the law requires.
 Want the detail on any one of them? Say the date or the amount.
@@ -910,9 +920,9 @@ Takealot
 Netflix
 Showmax
 Spotify
-Mobile networks' own sites
+Mobile networks’ own sites
 
-At checkout, choose OTT Voucher and enter the 12-digit PIN. ✨
+At checkout, choose OTT Voucher and enter the voucher PIN. The full live list is on ottvoucher.com. 📱
 ```
 
 </details>
@@ -928,12 +938,15 @@ At checkout, choose OTT Voucher and enter the 12-digit PIN. ✨
 **User:** what did I buy last week
 
 ```
-Last week, you did not buy airtime, data, electricity or vouchers. 💡
+Here’s last week’s activity. I only found one completed movement, and it was not a purchase. 💡
 
-Your activity was:
-• R30 pay-out, successful, ref WP36AA5F7D1C3818
-• R250 pay link, open, ref PRTXQJEH
-• R20 pay link, open, ref PRRJGMHH
+Last week:
+• Withdrawal  R30  success  ref WPED0959AA8CB215
+• Payment link  R250  open  ref PRXRADXZ
+• Payment link  R20  open  ref PRBCVMEX
+
+Completed total: R30
+Open payment links: 2
 ```
 
 </details>
@@ -948,7 +961,7 @@ Your activity was:
 **User:** did my payment go through
 
 ```
-Do you mean the newest R30 pay-out that succeeded, or one of your open payment links? 💡
+Do you mean the newest R30 withdrawal that succeeded, or one of your open payment links for R250 or R20? 💡
 ```
 
 </details>
@@ -963,9 +976,9 @@ Do you mean the newest R30 pay-out that succeeded, or one of your open payment l
 **User:** Okay
 
 ```
-I am here 😊
+No problem 😊
 
-If you want me to check the R30 pay-out, say *check payout*. If you mean a payment link, say *pay link*.
+If you mean the newest one, your R30 withdrawal was successful. Ref WPED0959AA8CB215. 💰
 ```
 
 </details>
@@ -991,7 +1004,7 @@ I'll send them a WaPay voucher they can spend online at any store that accepts O
 ## ✅ Agent: an airtime proposal lands in the same airtime step
 
 - ✅ no menu
-- ✅ the airtime flow answers (number/confirm/PIN or the funding position)
+- ✅ the airtime flow answers (number/confirm/PIN, the funding position, or the preview route this harness cannot serve)
 - ✅ nothing is executed without a PIN
 
 <details><summary>Transcript</summary>

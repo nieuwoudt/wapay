@@ -4,6 +4,53 @@
 
 ---
 
+## 2026-09-18 (48) — The model stops writing customer facts, and the JSON conversation ring is deleted (BUGLOG #74)
+
+Two amber rows of C14 and C16, and between them the last two places where the
+chat wrote memory outside the one store that owns it.
+
+**propose_note proposes.** It used to write the note into the customer's
+profile the moment the model called it, which made the model the author of a
+customer fact and broke the rule at the top of `lib/user-profile.js` that every
+key there is written deterministically at a success point and never by the
+model. The tool is now pure: no database, no clock, no context, and `accepted`
+is false on every path it can return. It hands back a pending note, the agent
+loop ends the turn on it (below the proposal check, so money always wins, and
+above the reply check, so the model cannot narrate a memory it has not got),
+and the runtime asks the question in its own words: `🧠 Want me to remember
+this? "…" Reply yes to keep it, or no.` The note text is model-authored, so it
+goes through the same output gate as any other model text, and the question is
+parked only once the customer has actually seen it. A yes calls the new
+deterministic writer `addNote`; a no keeps nothing; anything else keeps nothing
+and is answered as a fresh message, so a question asked at the wrong moment
+never swallows the next thing said. The idle expiry and the home trigger both
+sit above the hook, so a yes typed the next morning writes nothing. The
+composition rules now tell the model the tool remembers nothing by itself.
+
+**The legacy conversation ring is gone.** `Account.conversationData.history`
+held the last ten messages of each chat and was written at **63** call sites in
+the processor, not the twenty the handover recorded, and read at none. Memory is
+`conversation_turns`, recorded by construction on every send through
+`lib/say.js`. Every one of those 63 writes was also a read-modify-write of the
+whole `conversationData` column, which carries live flow state and the inbound
+dedupe list, so each was a chance to clobber them. All 63 are deleted, with
+`addToConversationHistory` and the never-called `getConversationHistory`.
+
+**And the erasure gap it hid (BUGLOG #74).** "Forget me" erased the turns table
+and the customer's notes, and never touched the ring, so a customer who asked
+to be forgotten kept ten of their own messages. Migration
+`20260918_drop_conversation_ring` drops the key from every existing row, applied
+to production before this code, and the erasure drops it per account from now
+on. Only that key: the flow state and the dedupe list in the same column
+survive.
+
+Three tests that asserted the ring writes exist now assert the thing they were
+really about: that both sides of a turn reach memory, and that what is
+persisted is redacted.
+
+Unit 889/889, build green, chat QA harness 29/29, agent eval 100% action in all
+eleven languages against the frozen baseline, no regression.
+
 ## 2026-09-18 (47) — The pilot week could not have started: the list matched one spelling of a number, and an empty week could not be told from a broken one (BUGLOG #73)
 
 The first read of the shadow week returned zero agent turns over seven days,

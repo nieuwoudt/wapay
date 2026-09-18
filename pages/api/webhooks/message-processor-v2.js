@@ -5,7 +5,7 @@
  * Includes structured logging for debugging VAS flows.
  */
 
-import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, addToConversationHistory, getConversationHistory, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed, wasErrorSent, markErrorSent } from './user-manager.js';
+import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed, wasErrorSent, markErrorSent } from './user-manager.js';
 import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, outboundSendCount } from '@wapay/whatsapp';
 // Every outbound text goes through lib/say.js, which records the assistant
 // side of the turn by construction (docs/AGENT_ARCHITECTURE_V2.md C2).
@@ -44,6 +44,7 @@ import {
   noteDepositMethod,
   noteMeterNumber,
   noteInterest,
+  addNote,
   formatProfileContext,
 } from '../../../lib/user-profile.js';
 import crypto from 'crypto';
@@ -160,9 +161,6 @@ async function sendWhatsAppErrorOnce({ to, errorKey, text }) {
     markSent: markErrorSent,
     send: sendWhatsAppText,
   });
-  if (!res?.dedup && !res?.deduped) {
-    await addToConversationHistory(to, 'assistant', text);
-  }
   return res;
 }
 
@@ -405,7 +403,6 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
       `Please check the number carefully. They'll get a WaPay voucher they can spend online at any store that accepts OTT vouchers.\n\n` +
       `Reply *YES* to confirm or *NO* to cancel.`, await userLang(account));
 
-  await addToConversationHistory(from, 'assistant', confirmMsg);
   return await sendWhatsAppText({ to: from, text: confirmMsg });
 }
 
@@ -433,7 +430,6 @@ function fuelLiveFor(waId) {
 async function startFuelPurchase({ from, account, amountCents = null, rawText = '' }) {
   if (!fuelLiveFor(from)) {
     const soonMsg = await localizeOutbound(fuelComingSoonReply(), await userLang(account));
-    await addToConversationHistory(from, 'assistant', soonMsg);
     return await sendWhatsAppText({ to: from, text: soonMsg });
   }
 
@@ -448,7 +444,6 @@ async function startFuelPurchase({ from, account, amountCents = null, rawText = 
       `⛽ Fuel vouchers are between R${minCents / 100} and R${maxCents / 100} right now.\n\nHow much would you like? (e.g., R100)\n\nReply "cancel" to stop.`,
       await userLang(account)
     );
-    await addToConversationHistory(from, 'assistant', boundsMsg);
     return await sendWhatsAppText({ to: from, text: boundsMsg });
   }
 
@@ -458,7 +453,6 @@ async function startFuelPurchase({ from, account, amountCents = null, rawText = 
       `⛽ *Buy a Fuel Voucher*\n\nHow much fuel would you like? Reply with an amount (e.g., R100, R200).\n(Min R${minCents / 100}, Max R${maxCents / 100})\n\nReply "cancel" to stop.`,
       await userLang(account)
     );
-    await addToConversationHistory(from, 'assistant', askMsg);
     return await sendWhatsAppText({ to: from, text: askMsg });
   }
 
@@ -516,7 +510,6 @@ async function startFuelPurchase({ from, account, amountCents = null, rawText = 
     `Reply *YES* to confirm or *NO* to cancel.`,
     await userLang(account)
   );
-  await addToConversationHistory(from, 'assistant', confirmMsg);
   return await sendWhatsAppText({ to: from, text: confirmMsg });
 }
 
@@ -576,7 +569,6 @@ async function sendReceipt({ to, productLabel, targetLabel, targetValue, network
     `📅 ${formatDateTimeZa(dateTime)}\n\n` +
     `💳 New balance: R${(newBalanceCents / 100).toFixed(2)}`;
 
-  await addToConversationHistory(to, 'assistant', receipt);
   return await sendWhatsAppText({ to, text: receipt });
 }
 
@@ -667,7 +659,6 @@ async function sendPostTransactionCta(to) {
   // the receipt is the moment; a bullet list under it reads as clutter.
   // One warm line, nothing else.
   const cta = `💚 If you have any questions or get stuck anywhere, just tell me. I am right here.`;
-  await addToConversationHistory(to, 'assistant', cta);
   return await sendWhatsAppText({ to, text: cta });
 }
 
@@ -754,7 +745,6 @@ async function renderHome({ from, account }) {
   logStructured('home_render', { from, accountId: account.id });
 
   const localizedHome = await localizeOutbound(home, await userLang(account));
-  await addToConversationHistory(from, 'assistant', localizedHome);
   await sendWhatsAppText({ to: from, text: localizedHome });
 
   return { ok: true };
@@ -1014,9 +1004,12 @@ async function handleSharedContact({ from, account, sharedContact }) {
   // Any OTHER active flow (electricity, deposit amount, a pending confirm…)
   // must not be silently hijacked into send-money (QA 2026-08-21). The
   // contact is saved; the user decides what happens next.
-  if (state === 'AGENT_CLARIFY') {
+  if (state === 'AGENT_CLARIFY' || state === 'AGENT_NOTE_CONFIRM') {
     // The agent asked a question; a shared contact answers "who": the
-    // fresh-share path below asks the amount.
+    // fresh-share path below asks the amount. A pending note is dropped
+    // rather than treated as a flow the customer must finish first: sharing
+    // a contact is not an answer to "shall I remember this", and nothing is
+    // written without a yes.
     await updateConversationState(from, null);
   } else if (state) {
     const name2 = name ? ` (${name})` : '';
@@ -1035,7 +1028,6 @@ async function handleSharedContact({ from, account, sharedContact }) {
     `They'll get a WaPay voucher they can spend online at any store that accepts OTT vouchers. Reply "cancel" to stop.`,
     await userLang(account)
   );
-  await addToConversationHistory(from, 'assistant', msg);
   return await sendWhatsAppText({ to: from, text: msg });
 }
 
@@ -1232,7 +1224,6 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       }
       if (outcome?.status === 'SETTLED' || outcome?.status === 'FAILED') {
         const note = await localizeOutbound(payoutOutcomeMessage(outcome), await userLang(account));
-        await addToConversationHistory(from, 'assistant', note);
         await sendWhatsAppText({ to: from, text: note });
       }
     }
@@ -1333,6 +1324,38 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     const pendingIntent = data?.pendingIntent || null;
     await updateConversationState(from, null);
     if (agentV3For(from)) return await handleAgentTurn({ from, text, account, messageId, pendingIntent });
+    state = null; data = null;
+  }
+
+  // The one customer fact the model may ask to keep, kept here and nowhere
+  // else (2026-09-18). The model proposes a note; the previous turn asked the
+  // customer; this writes it only on an explicit yes. Anything that is not a
+  // yes or a no keeps nothing and is answered as a fresh message, so a
+  // question asked at the wrong moment never swallows the next thing said.
+  if (state === 'AGENT_NOTE_CONFIRM') {
+    const pendingNote = data?.pendingNote || null;
+    await updateConversationState(from, null);
+    const answer = String(text || '').trim();
+    if (pendingNote?.text && /^\W*(yes|yep|yeah|y|sure|ok|okay|alright|confirm|please|yebo|ewe|ja|ee|eya)\W*$/i.test(answer)) {
+      const wrote = await addNote({ accountId: account.id, text: pendingNote.text });
+      logStructured('agent_note_written', { from, accountId: account.id, ok: !!wrote });
+      return await sendWhatsAppText({
+        to: from,
+        text: await localizeOutbound(
+          wrote ? '👍 Noted. What would you like to do next?' : '👍 Thanks. I could not keep that just now. What would you like to do next?',
+          await userLang(account),
+        ),
+        kind: 'flow',
+      });
+    }
+    if (/^\W*(no|nope|n|nee|cha|hayi|cancel|stop)\W*$/i.test(answer)) {
+      logStructured('agent_note_declined', { from, accountId: account.id });
+      return await sendWhatsAppText({
+        to: from,
+        text: await localizeOutbound('👍 I will not keep that. What would you like to do next?', await userLang(account)),
+        kind: 'flow',
+      });
+    }
     state = null; data = null;
   }
 
@@ -1563,7 +1586,6 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       const msg =
         `📱 Airtime is sold in *rand*, not minutes. Call minutes depend on your network's rates.\n\n` +
         `How many rand of airtime would you like? For example *R50 airtime*.`;
-      await addToConversationHistory(from, 'assistant', msg);
       return await sendWhatsAppText({ to: from, text: await localizeOutbound(msg, await userLang(account)) });
     }
   }
@@ -1683,7 +1705,6 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     }
     await updateConversationState(from, 'VOUCHER_GIFT_AMOUNT', { recipientMsisdn: account.msisdn });
     const askMsg = `🎟️ *OTT Voucher*\n\nHow much would you like your voucher for? (R10–R1000)\n\nFor example "R50", or reply "cancel" to stop.`;
-    await addToConversationHistory(from, 'assistant', askMsg);
     return await sendWhatsAppText({ to: from, text: askMsg });
   }
 
@@ -1901,7 +1922,6 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
         // can already carry the recipient forward.
         recipientMsisdn: gift.kind === 'NEEDS_AMOUNT' && slots.msisdn ? slots.msisdn : null,
       });
-      await addToConversationHistory(from, 'assistant', gift.message);
       return await sendWhatsAppText({ to: from, text: gift.message });
     }
   }
@@ -2500,7 +2520,6 @@ async function deliverBusinessStep({ from, account, step }) {
   if (!step) return null;
   await updateConversationState(from, step.state || null, step.data || null);
   const msg = step.raw ? step.text : await localizeOutbound(step.text, await userLang(account));
-  await addToConversationHistory(from, 'assistant', msg);
   return await sendWhatsAppText({ to: from, text: msg });
 }
 async function askAccountType({ from, account }) {
@@ -2534,12 +2553,10 @@ async function deliverPayoutStep({ from, account, step }) {
     const msg = k.ok
       ? `🪪 Here is your secure identity-check link. It takes about two minutes:\n${k.url}\n\nOnce it clears, say "withdraw" again.`
       : await localizeOutbound(`🪪 I could not start the identity check right now. Please try again a little later.`, await userLang(account));
-    await addToConversationHistory(from, 'assistant', msg);
     return await sendWhatsAppText({ to: from, text: msg });
   }
   await updateConversationState(from, step.state || null, step.data || null);
   const msg = step.raw ? step.text : await localizeOutbound(step.text, await userLang(account));
-  await addToConversationHistory(from, 'assistant', msg);
   return await sendWhatsAppText({ to: from, text: msg });
 }
 function howItWorksContext(from) {
@@ -2560,15 +2577,11 @@ async function handleHowItWorks({ from, account, topic, text }) {
   const body = steps ? howItWorksAnswer(topic, ctx) : howItWorksBrief(topic, ctx);
   const msg = await localizeOutbound(body, await userLang(account));
   await updateConversationState(from, steps ? null : 'HOWTO_OFFER', steps ? null : { topic, method: detectMethod(text) });
-  await addToConversationHistory(from, 'user', text);
-  await addToConversationHistory(from, 'assistant', msg);
   return await sendWhatsAppText({ to: from, text: msg });
 }
 async function handleFeeAsk({ from, account, topic, text }) {
   logStructured('fee_ask', { accountId: account.id, topic });
   const msg = await localizeOutbound(feeAnswer(topic, feeAskAmountCents(text), { withdrawLive: payoutAllowedFor(from) }), await userLang(account));
-  await addToConversationHistory(from, 'user', text);
-  await addToConversationHistory(from, 'assistant', msg);
   return await sendWhatsAppText({ to: from, text: msg });
 }
 async function handleWithdrawStart({ from, account, ask, text }) {
@@ -2666,7 +2679,6 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
       `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5–R3000)\n\nFor example "R150", or reply "cancel" to stop.`,
       await userLang(account)
     );
-    await addToConversationHistory(from, 'assistant', askMsg);
     return await sendWhatsAppText({ to: from, text: askMsg });
   }
 
@@ -2700,7 +2712,6 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
         `Reply *1* or *2*, or "cancel".`,
       await userLang(account)
     );
-    await addToConversationHistory(from, 'assistant', chooseMsg);
     return await sendWhatsAppText({ to: from, text: chooseMsg });
   }
 
@@ -2727,7 +2738,6 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
       }
       const capMsg = await localizeOutbound(capBody, await userLang(account));
       await updateConversationState(from, null);
-      await addToConversationHistory(from, 'assistant', capMsg);
       return await sendWhatsAppText({ to: from, text: capMsg });
     }
     logStructured('payrequest_create_error', { from, accountId: account.id, amountCents, error: error?.message });
@@ -2761,7 +2771,6 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
       `You'll get the full *${randsShort(amountCents)}* if they pay from their WaPay (free), ` +
       `or ${randsShort(amountCents - cardFeeCents)} if they pay by card.`;
   }
-  await addToConversationHistory(from, 'assistant', introBody);
 
   // The requester's own copy shows a BUTTON, not a raw URL (founder ask
   // 2026-08-24). Interactive falls back to plain text — a request must
@@ -2794,7 +2803,6 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
       ? `📨 I've let ${target.label} know on WaPay. They can pay you from their balance. ` +
         `I'll tell you the moment it's paid.\n\nHere's the link too, to share however you like:\n${url}`
       : `🙏 *Payment request created!*\n\n${introBody}`, await userLang(account));
-    await addToConversationHistory(from, 'assistant', note);
     await sendWhatsAppText({ to: from, text: note });
     return { ok: true };
   }
@@ -2808,7 +2816,6 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
     `Tap the link to pay. Free from a WaPay balance, or pay by card:\n${url}`,
     await userLang(account)
   );
-  await addToConversationHistory(from, 'assistant', forwardable);
   return await sendWhatsAppText({ to: from, text: forwardable });
 }
 
@@ -2957,7 +2964,6 @@ async function handlePayRequestStart({ from, account, code, rawText = '' }) {
     `Reply *YES* to confirm or *NO* to cancel.`,
     await userLang(account)
   );
-  await addToConversationHistory(from, 'assistant', confirmMsg);
   return await sendWhatsAppText({ to: from, text: confirmMsg });
 }
 
@@ -3239,7 +3245,6 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
     `or Instant EFT. When you've paid, tap *"Back to WaPay"* and you'll be ` +
     `brought straight back to this chat. I'll confirm here the moment your ` +
     `${randsShort(amountCents)} lands. 💰`;
-  await addToConversationHistory(from, 'assistant', bodyText);
 
   const interactive = await sendWhatsAppCtaUrl({
     to: from,
@@ -3359,7 +3364,6 @@ async function handleDepositStatus({ from, account, rawText = '' }) {
   }
 
   const localizedStatus = await localizeOutbound(text + altLine, await userLang(account));
-  await addToConversationHistory(from, 'assistant', localizedStatus);
   return await sendWhatsAppText({ to: from, text: localizedStatus });
 }
 
@@ -3494,6 +3498,13 @@ async function handleAboutMe({ from, account }) {
 async function handleForgetMe({ from, account }) {
   const erased = await eraseTurns({ prisma, accountId: account.id });
   await updateProfile({ accountId: account.id, patch: { notes: [], interests: [] } }).catch(() => {});
+  // The ten-message JSON ring is no longer written, but an account that was
+  // active before 2026-09-18 can still carry one, and an erasure that leaves
+  // the customer's own messages behind is not an erasure. Drops only that key,
+  // so live flow state and the inbound dedupe list in the same column survive.
+  await prisma
+    .$executeRaw`UPDATE "Account" SET "conversationData" = "conversationData" - 'history' WHERE id = ${account.id} AND "conversationData" ? 'history'`
+    .catch(() => {});
   logStructured('forget_me', { from, accountId: account.id, turnsErased: erased?.count ?? null });
   return await sendWhatsAppText({
     to: from,
@@ -3568,7 +3579,6 @@ async function handlePayoutStatus({ from, account, payout, altLine = '' }) {
   }
 
   const localized = await localizeOutbound(text + altLine, await userLang(account));
-  await addToConversationHistory(from, 'assistant', localized);
   return await sendWhatsAppText({ to: from, text: localized });
 }
 
@@ -3629,7 +3639,6 @@ async function handleVoucherHistory({ from, account }) {
   parts.push(`\nWant another? Reply "buy a voucher R50".`);
 
   const msg = await localizeOutbound(parts.join('\n'), await userLang(account));
-  await addToConversationHistory(from, 'assistant', msg);
   return await sendWhatsAppText({ to: from, text: msg });
 }
 
@@ -3701,7 +3710,6 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
       if (/^\W*(more|steps|how|explain|details?|tell me more)\W*$/i.test(t) && HOWTO_TOPICS[topic]) {
         const msg = await localizeOutbound(howItWorksAnswer(topic, await howItWorksContextLive(from, text)), await userLang(account));
-        await addToConversationHistory(from, 'assistant', msg);
         return await sendWhatsAppText({ to: from, text: msg });
       }
       return await handlePostOnboarding({ account, from, text });
@@ -3796,7 +3804,6 @@ async function handleConversationState({ from, text, state, data, account }) {
       if (/^(yes|yep|yeah|y|sure|ok|okay|confirm|yebo|ewe|ja|ee|eya)$/i.test(normalized)) {
         await updateConversationState(from, 'PAYREQ_PIN', data);
         const pinMsg = await localizeOutbound(`🔐 *Enter Your PIN*\n\nTo pay ${randsShort(data.amountCents)} to ${data.requesterLabel}, please enter your WaPay PIN.`, await userLang(account));
-        await addToConversationHistory(from, 'assistant', pinMsg);
         return await sendWhatsAppText({ to: from, text: pinMsg });
       }
       if (/^(no|nope|n|cancel|stop)$/i.test(normalized)) {
@@ -3931,7 +3938,6 @@ async function handleConversationState({ from, text, state, data, account }) {
         `💳 New balance: R${balance}`,
         await userLang(account)
       );
-      await addToConversationHistory(from, 'assistant', receipt);
       await sendWhatsAppText({ to: from, text: receipt });
 
       // Tell the requester their money arrived (best effort, never blocks).
@@ -4848,7 +4854,6 @@ async function handleConversationState({ from, text, state, data, account }) {
           await userLang(account)
         );
 
-        await addToConversationHistory(from, 'assistant', msg);
         return await sendWhatsAppText({ to: from, text: msg });
       } catch (e) {
         await updateConversationState(from, null);
@@ -4909,7 +4914,6 @@ async function handleConversationState({ from, text, state, data, account }) {
         await userLang(account)
       );
 
-      await addToConversationHistory(from, 'assistant', pinMsg);
       return await sendWhatsAppText({
         to: from,
         text: pinMsg,
@@ -5471,7 +5475,6 @@ async function handleConversationState({ from, text, state, data, account }) {
               // Money is safely reserved; the voucher is being confirmed
               // with the network. Reassure — never guess an outcome.
               const pendingMsg = await localizeOutbound(`⏳ ${executeData.message || 'We are confirming your fuel voucher with the network. Your money is safely reserved.'}`, await userLang(account));
-              await addToConversationHistory(from, 'assistant', pendingMsg);
               return await sendWhatsAppText({ to: from, text: pendingMsg });
             }
             return await sendWhatsAppErrorOnce({
@@ -5500,7 +5503,6 @@ async function handleConversationState({ from, text, state, data, account }) {
             `Your UniFuel voucher code is coming right up… ⛽`,
             await userLang(account)
           );
-          await addToConversationHistory(from, 'assistant', receipt);
           await sendWhatsAppText({ to: from, text: receipt });
 
           // Deliver the wiCode through the atomic claim flow (rail YOYO →
@@ -5774,7 +5776,6 @@ async function handleConversationState({ from, text, state, data, account }) {
               `They'll get their voucher the moment they message WaPay.`,
             await userLang(account)
           );
-          await addToConversationHistory(from, 'assistant', receipt);
           await sendWhatsAppText({ to: from, text: receipt });
 
           if (isSelfPurchase) {
@@ -6064,6 +6065,18 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
 
   // A reply or a clarifying question: the output gates, then one message.
   let out = sanitizeUserText(result.text || '') || '';
+  // The model asked to remember something the customer said about themself.
+  // The question is OURS, not the model's: its own words for that round could
+  // promise a memory that does not exist yet, and nothing is written until
+  // the customer answers yes. The note text is model-authored, so it goes
+  // through the same output gate as any other model text, below.
+  const pendingNote = result.outcome === 'clarify' && result.pendingNote?.text ? result.pendingNote : null;
+  if (pendingNote) {
+    out = await localizeOutbound(
+      `🧠 Want me to remember this? "${sanitizeUserText(pendingNote.text)}" Reply *yes* to keep it, or *no*.`,
+      await userLang(account),
+    );
+  }
   let blocked = false;
   const gate = outputGate(out, { withdrawLive });
   if (gate.rule) gatesFired.push(gate.rule);
@@ -6084,21 +6097,19 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   // A clarifying question is remembered only when the customer saw it.
   const parked = !blocked && result.outcome === 'clarify' && !!result.pendingIntent;
   if (parked) await updateConversationState(from, 'AGENT_CLARIFY', { pendingIntent: result.pendingIntent });
+  // Same rule for the note: parked only if the question was actually sent, so
+  // a gated or failed turn leaves nothing waiting for a yes.
+  else if (!blocked && pendingNote) await updateConversationState(from, 'AGENT_NOTE_CONFIRM', { pendingNote });
   await ledger({ ...base, outcome: blocked ? 'fallback' : result.outcome, gatesFired, proposal: parked ? result.pendingIntent : null });
   return sent;
 }
 async function handleAIChat({ from, text, account, messageId = null }) {
   console.log('🤖 Routing to AI chat:', redactBearerDigits(text));
 
-  // Store user message in conversation history (bearer digits redacted —
-  // history is persisted AND fed back to the model as context).
-  await addToConversationHistory(from, 'user', redactBearerDigits(text));
-
   // Check if OpenAI is configured
   if (!process.env.OPENAI_API_KEY) {
     console.log('⚠️ OpenAI not configured, using fallback');
     const fallbackMsg = `👋 Hi there!\n\nI didn't quite understand that. Here's what I can help you with:\n\n${welcomeLines().join('\n')}\n\nType "help" to see more options!`;
-    await addToConversationHistory(from, 'assistant', fallbackMsg);
     return await sendWhatsAppText({
       to: from,
       text: fallbackMsg,
@@ -6177,7 +6188,6 @@ async function handleAIChat({ from, text, account, messageId = null }) {
     }
 
     const localizedFallback = await localizeOutbound(fallbackMessage, await userLang(account));
-    await addToConversationHistory(from, 'assistant', localizedFallback);
     return await sendWhatsAppText({
       to: from,
       text: localizedFallback,
@@ -6243,7 +6253,6 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
         ? `\n🎟️ Vouchers you've bought: *${randsShort(vouchers.totalCents)}* (${vouchers.count}). Reply "my vouchers" to see them.\n`
         : '';
       const balanceMsg = await localizeOutbound(`💰 *Your WaPay Balance*\n\nHi ${displayName}!\nYour current balance is R ${balance}\n${voucherLine}\nWhat would you like to do next?`, await userLang(account));
-      await addToConversationHistory(from, 'assistant', balanceMsg);
       return await sendWhatsAppText({ to: from, text: balanceMsg });
     }
 
@@ -6256,14 +6265,12 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
       }
       await updateConversationState(from, 'DEPOSIT_CARD_AMOUNT');
       const depositAskMsg = await localizeOutbound(`💳 *Card / Instant EFT*\n\nHow much would you like to deposit? Just reply with the amount.\n\nExample: R100`, await userLang(account));
-      await addToConversationHistory(from, 'assistant', depositAskMsg);
       return await sendWhatsAppText({ to: from, text: depositAskMsg });
     }
 
     case 'REDEEM_VOUCHER': {
       await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
       const voucherMsg = await localizeOutbound(buildDepositPrompt(), await userLang(account));
-      await addToConversationHistory(from, 'assistant', voucherMsg);
       return await sendWhatsAppText({ to: from, text: voucherMsg });
     }
 
@@ -6281,12 +6288,10 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
       if (amountCents) {
         await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents });
         const msg = await localizeOutbound(`📱 *Buy R${amountCents / 100} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`, await userLang(account));
-        await addToConversationHistory(from, 'assistant', msg);
         return await sendWhatsAppText({ to: from, text: msg });
       }
       await updateConversationState(from, 'AIRTIME_AMOUNT', msisdn ? { msisdn } : {});
       const airtimeMsg = await localizeOutbound(`📱 *Buy Airtime*\n\nHow much airtime would you like to buy?\n\nReply with an amount (e.g., R10, R50, R100)`, await userLang(account));
-      await addToConversationHistory(from, 'assistant', airtimeMsg);
       return await sendWhatsAppText({ to: from, text: airtimeMsg });
     }
 
@@ -6310,12 +6315,10 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
       if (amountCents) {
         await updateConversationState(from, 'ELECTRICITY_METER', { amountCents });
         const meterMsg = await localizeOutbound(`💡 *Buy R${amountCents / 100} Electricity*\n\nPlease enter your meter number:`, await userLang(account));
-        await addToConversationHistory(from, 'assistant', meterMsg);
         return await sendWhatsAppText({ to: from, text: meterMsg });
       }
       await updateConversationState(from, 'ELECTRICITY_AMOUNT', {});
       const amountMsg = await localizeOutbound(`💡 *Buy Electricity*\n\nHow much electricity would you like to buy?\n\nReply with an amount (e.g., R50, R100, R500)\n(Min R10, Max R5000)`, await userLang(account));
-      await addToConversationHistory(from, 'assistant', amountMsg);
       return await sendWhatsAppText({ to: from, text: amountMsg });
     }
 
@@ -6347,7 +6350,6 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
           if (amountCents) {
             await updateConversationState(from, 'VOUCHER_GIFT_RECIPIENT', { amountCents });
           }
-          await addToConversationHistory(from, 'assistant', listMsg);
           return await sendWhatsAppText({ to: from, text: listMsg });
         }
         // No match: fall through — resolveGift asks for the number.
@@ -6376,7 +6378,6 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
           amountCents: gift.amountCents || null,
           recipientMsisdn: gift.kind === 'NEEDS_AMOUNT' && recipientMsisdn ? recipientMsisdn : null,
         });
-        await addToConversationHistory(from, 'assistant', gift.message);
         return await sendWhatsAppText({ to: from, text: gift.message });
       }
       // Any other kind: fall through to the agent's reply.
@@ -6417,19 +6418,16 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
       const explicitMenuAsk = /^\W*(help|help me|menu|options|\?+)\W*$/i.test(String(text || '').trim());
       if (!explicitMenuAsk) {
         if (reply && !looksLikeReceipt(reply, knownAmounts)) {
-          await addToConversationHistory(from, 'assistant', reply);
           return await sendWhatsAppText({ to: from, text: reply });
         }
         const spendMsg = buildSpendDestinationsReply({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from) });
         const localizedSpend = await localizeOutbound(spendMsg, await userLang(account));
-        await addToConversationHistory(from, 'assistant', localizedSpend);
         return await sendWhatsAppText({ to: from, text: localizedSpend });
       }
       // Every line comes from the capability registry (one gate per
       // capability), never hand-written here.
       const helpMsg = `📋 *WaPay Help Menu*\n\nHere's what I can help you with:\n\n${helpLines({ waId: from, account }).join('\n')}\n\nJust ask me in your own words. Any South African language works!`;
       const localizedHelp = await localizeOutbound(helpMsg, await userLang(account));
-      await addToConversationHistory(from, 'assistant', localizedHelp);
       return await sendWhatsAppText({ to: from, text: localizedHelp });
     }
 
@@ -6478,7 +6476,6 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
       await userLang(account)
     );
   }
-  await addToConversationHistory(from, 'assistant', finalText);
   return await sendWhatsAppText({ to: from, text: finalText });
 }
 
@@ -6571,7 +6568,6 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
         amountCents: slots.amountCents,
       });
       const meterMsg = await localizeOutbound(`💡 *Buy R${(slots.amountCents / 100).toFixed(0)} Electricity*\n\nPlease enter your meter number to continue.`, await userLang(account));
-      await addToConversationHistory(from, 'assistant', meterMsg);
       return await sendWhatsAppText({ to: from, text: meterMsg });
     }
 
@@ -6600,7 +6596,6 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
             amountCents: amount * 100,
           });
           const meterMsg = await localizeOutbound(`💡 *Buy R${amount} Electricity*\n\nPlease enter your meter number to continue.`, await userLang(account));
-          await addToConversationHistory(from, 'assistant', meterMsg);
           return await sendWhatsAppText({
             to: from,
             text: meterMsg,
@@ -6611,7 +6606,6 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
             amountCents: amount * 100,
           });
           const meterMsg = await localizeOutbound(`💡 *Buy R${amount} Electricity*\n\nPlease enter your meter number:`, await userLang(account));
-          await addToConversationHistory(from, 'assistant', meterMsg);
           return await sendWhatsAppText({
             to: from,
             text: meterMsg,
@@ -6622,7 +6616,6 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
             meterNumber,
           });
           const amountMsg = await localizeOutbound(`💡 *Buy Electricity*\n\nHow much electricity would you like to buy?\n\nReply with an amount (e.g., R50, R100, R500)\n(Min R10, Max R5000)`, await userLang(account));
-          await addToConversationHistory(from, 'assistant', amountMsg);
           return await sendWhatsAppText({
             to: from,
             text: amountMsg,
@@ -6656,13 +6649,11 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
           });
           await updateConversationState(from, 'AIRTIME_MSISDN', { amountCents: amount * 100 });
           const msg = await localizeOutbound(`📱 *Buy R${amount} Airtime*\n\nWhich phone number should I send the airtime to?\n\nReply with the number (e.g., 0781234567) or "me" for your own number.`, await userLang(account));
-          await addToConversationHistory(from, 'assistant', msg);
           return await sendWhatsAppText({ to: from, text: msg });
         }
         
         await updateConversationState(from, 'AIRTIME_AMOUNT', {});
         const msg = await localizeOutbound(`📱 *Buy Airtime*\n\nHow much airtime would you like to buy?\n\nReply with an amount (e.g., R10, R50, R100)`, await userLang(account));
-        await addToConversationHistory(from, 'assistant', msg);
         return await sendWhatsAppText({ to: from, text: msg });
       }
       
@@ -7877,7 +7868,6 @@ async function attemptOttRedemption({ from, pin, account }) {
     `What would you like to do with it? 😊`,
     await userLang(account)
   );
-  await addToConversationHistory(from, 'assistant', msg);
   await sendWhatsAppText({ to: from, text: msg });
   return true;
 }

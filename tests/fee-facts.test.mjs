@@ -70,7 +70,12 @@ test('processor wiring: fee hook before the keyword router, deposit trap ignores
   assert.ok(hook > -1 && hook < p.indexOf('const detection = detectExplicitIntent(text);'), 'fee questions never reach the keyword router');
   assert.match(p, /const wantsDeposit =\s*\n\s*!\/\\b\(fee\|fees\|cost\|costs\|charge\|charges\)\\b\/\.test\(squashed\) && \(/);
   assert.match(p, /async function handleFeeAsk\(\{ from, account, topic, text \}\)/);
-  assert.match(p, /addToConversationHistory\(from, 'user', text\);\s*\n\s*await addToConversationHistory\(from, 'assistant', msg\);/, 'both turns land in the AI context');
+  // Both sides of the turn still land in the agent's memory, but by
+  // construction now: recordInbound writes the customer's line and every send
+  // goes through lib/say.js, which records the reply (2026-09-18, the JSON
+  // ring deleted).
+  assert.match(p, /async function handleFeeAsk\(\{ from, account, topic, text \}\)[\s\S]{0,900}?sendWhatsAppText\(/, 'the fee answer is sent through say.js, which records it');
+  assert.match(p, /import \{ sendWhatsAppText, recordInbound \} from '\.\.\/\.\.\/\.\.\/lib\/say\.js';/);
   assert.match(p, /Here is everything your WaPay money can do right now\*\\n\\n\$\{spendDestinationLines\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\) \}\)\}/, '"what can I buy" opens with the catalogue-built list, gated per customer');
   assert.ok(!/🛒 \*WaPay VAS Products\*/.test(p), 'the three-item dump is gone');
   // Tightened 2026-09-15: the menu follows the PER-USER gate, so it never

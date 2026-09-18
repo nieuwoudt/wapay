@@ -361,9 +361,11 @@ export function makeFakeExecuteTool({ pack, now = NOW, withdrawLive = true, deps
           return { ok: true, result: { text } };
         }
         case 'propose_note': {
+          // A proposal, never a write: the runtime asks the customer and
+          // writes on the yes (lib/agent/tools/proposals.js, 2026-09-18).
           const note = String(a.note || '').trim();
-          const accepted = noteAcceptable(note);
-          return { ok: true, accepted, note: accepted ? { text: note, at: now.toISOString() } : null };
+          if (!noteAcceptable(note)) return { ok: true, accepted: false, note: null, reason: 'REJECTED' };
+          return { ok: true, accepted: false, note: null, pendingNote: { text: note }, reason: 'NEEDS_CONFIRM' };
         }
         case 'reply': {
           const kind = a.kind === 'clarify' ? 'clarify' : 'reply';
