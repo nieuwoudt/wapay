@@ -202,27 +202,6 @@ model VasProduct {
 }
 
 // User's saved accounts for quick reuse (meters, smartcards, betting accounts)
-model UserSavedAccount {
-  id              String   @id @default(cuid())
-  accountId       String   // WaPay account ID
-  // Categories: ELECTRICITY | PAYTV | BETTING
-  category        String
-  // Provider: dstv, hollywoodbets, etc.
-  providerId      String?
-  // Identifier: meter number, smartcard, betting account
-  identifier      String
-  // User-friendly name: "Home", "Mom's place"
-  nickname        String?
-  // Name from validation lookup
-  customerName    String?
-  metadata        Json?
-  lastUsed        DateTime @default(now())
-  createdAt       DateTime @default(now())
-
-  @@unique([accountId, category, identifier])
-  @@index([accountId, category])
-  @@map("user_saved_accounts")
-}
 
 model YoyoInstrument {
   id            String  @id @default(cuid())
@@ -415,7 +394,6 @@ model PendingGift {
   @@index([recipientMsisdn, status])
   @@map("pending_gifts")
 }
-
 
 /// Both sides of every chat turn, append-only (2026-09-16). Replaces the
 /// 10-message JSON ring in Account.conversationData.history. Text is

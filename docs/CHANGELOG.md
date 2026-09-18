@@ -4,6 +4,43 @@
 
 ---
 
+## 2026-09-18 (49) — Phase 3 prep: the three dead things deleted, each of them a second way to do something the product already does once
+
+Item 4 of the Phase 3 order, the one the handover marks safe to do at any time
+because it only reduces risk.
+
+**A second WhatsApp client.** `WhatsAppClient` with its own `sendTemplate` and
+`sendText`, a parallel `Templates` builder, `formatCurrencyCents`, and an
+orphaned `templates.ts` beside them. A second way to send is a way to send
+that `lib/say.js` does not record, so a customer could be told something the
+agent's memory never sees. One sender now: `send.ts`, and in the app
+`lib/say.js` over it.
+
+**The bypassing ledger writer.** `postBluDeposit` set no idemKey, so nothing
+stopped it double-posting; it incremented wallet balances directly with an
+`updateMany` that would have credited BOTH of an account's wallets; and it
+posted to account codes (`Clearing:Blu`) that no reader in this product
+knows, so the nightly integrity check could not have seen its money. It
+violated four of the ten money rules in `CLAUDE.md` at once. The file held
+nothing else, so it is gone and the barrel no longer re-exports it.
+
+**A model for a table that never existed.** `UserSavedAccount` was in the
+Prisma schema, mapped to `user_saved_accounts`, which no migration in the
+repo ever creates and no code ever reads.
+
+All three had exactly one importer, `apps/api`, which is outside
+`build:packages` (it filters `./packages/**`) and cannot compile anyway: it
+imports two symbols from a file that is checked in as `yoyo.ts.disabled`.
+
+**What was NOT done, and why it is a founder call.** The verification pass
+found that `apps/` as a whole is dead weight, but removing it touches
+`pnpm-workspace.yaml` and two root scripts, and four tests reach into package
+`dist/` folders by relative path while CI never runs `build:packages`. That is
+a bigger change than this row, with a real chance of a red build for reasons
+unrelated to the agent. It is written up in the handover instead.
+
+Unit 892/892, build green, chat QA harness 29/29.
+
 ## 2026-09-18 (48) — The model stops writing customer facts, and the JSON conversation ring is deleted (BUGLOG #74)
 
 Two amber rows of C14 and C16, and between them the last two places where the
