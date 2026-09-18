@@ -1,0 +1,7649 @@
+{
+  "date": "2026-09-18",
+  "model": "gpt-5.5",
+  "smoke": false,
+  "withdrawLive": true,
+  "args": {
+    "limit": null,
+    "langs": null,
+    "concurrency": 6,
+    "baseline": null
+  },
+  "regression": {
+    "accuracyPoints": 2,
+    "p95Ratio": 0.25
+  },
+  "summary": {
+    "overall": {
+      "total": 156,
+      "pass": 155,
+      "errors": 0,
+      "passPct": 99.4,
+      "actionPct": 100,
+      "outcomePct": 100,
+      "shapePct": 99.4,
+      "p50Ms": 1671,
+      "p95Ms": 4792,
+      "inputTokens": 746678,
+      "outputTokens": 9452,
+      "costUsd": 0
+    },
+    "byLanguage": {
+      "af": {
+        "total": 20,
+        "pass": 20,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 2133,
+        "p95Ms": 4342,
+        "inputTokens": 103487,
+        "outputTokens": 1418,
+        "costUsd": 0
+      },
+      "en": {
+        "total": 21,
+        "pass": 20,
+        "errors": 0,
+        "passPct": 95.2,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 95.2,
+        "p50Ms": 1816,
+        "p95Ms": 3138,
+        "inputTokens": 107708,
+        "outputTokens": 1308,
+        "costUsd": 0
+      },
+      "nr": {
+        "total": 12,
+        "pass": 12,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 1305,
+        "p95Ms": 7209,
+        "inputTokens": 55679,
+        "outputTokens": 700,
+        "costUsd": 0
+      },
+      "nso": {
+        "total": 12,
+        "pass": 12,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 1383,
+        "p95Ms": 3884,
+        "inputTokens": 55658,
+        "outputTokens": 695,
+        "costUsd": 0
+      },
+      "ss": {
+        "total": 12,
+        "pass": 12,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 1360,
+        "p95Ms": 6749,
+        "inputTokens": 51300,
+        "outputTokens": 729,
+        "costUsd": 0
+      },
+      "st": {
+        "total": 12,
+        "pass": 12,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 1455,
+        "p95Ms": 5788,
+        "inputTokens": 55625,
+        "outputTokens": 752,
+        "costUsd": 0
+      },
+      "tn": {
+        "total": 12,
+        "pass": 12,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 1340,
+        "p95Ms": 4792,
+        "inputTokens": 60035,
+        "outputTokens": 674,
+        "costUsd": 0
+      },
+      "ts": {
+        "total": 12,
+        "pass": 12,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 1569,
+        "p95Ms": 6359,
+        "inputTokens": 59998,
+        "outputTokens": 696,
+        "costUsd": 0
+      },
+      "ve": {
+        "total": 12,
+        "pass": 12,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 1545,
+        "p95Ms": 4840,
+        "inputTokens": 55626,
+        "outputTokens": 677,
+        "costUsd": 0
+      },
+      "xh": {
+        "total": 12,
+        "pass": 12,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 1398,
+        "p95Ms": 4184,
+        "inputTokens": 51320,
+        "outputTokens": 645,
+        "costUsd": 0
+      },
+      "zu": {
+        "total": 19,
+        "pass": 19,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 2267,
+        "p95Ms": 5756,
+        "inputTokens": 90242,
+        "outputTokens": 1158,
+        "costUsd": 0
+      }
+    },
+    "bySource": {
+      "agent": {
+        "total": 24,
+        "pass": 23,
+        "errors": 0,
+        "passPct": 95.8,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 95.8,
+        "p50Ms": 2777,
+        "p95Ms": 4342,
+        "inputTokens": 143214,
+        "outputTokens": 1962,
+        "costUsd": 0
+      },
+      "golden": {
+        "total": 132,
+        "pass": 132,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 1499,
+        "p95Ms": 4792,
+        "inputTokens": 603464,
+        "outputTokens": 7490,
+        "costUsd": 0
+      }
+    },
+    "byGroup": {
+      "ack": {
+        "total": 4,
+        "pass": 4,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 1682,
+        "p95Ms": 2492,
+        "inputTokens": 17065,
+        "outputTokens": 167,
+        "costUsd": 0
+      },
+      "aside": {
+        "total": 3,
+        "pass": 3,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 2644,
+        "p95Ms": 2917,
+        "inputTokens": 17632,
+        "outputTokens": 231,
+        "costUsd": 0
+      },
+      "complaint": {
+        "total": 3,
+        "pass": 3,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 2981,
+        "p95Ms": 3593,
+        "inputTokens": 12814,
+        "outputTokens": 320,
+        "costUsd": 0
+      },
+      "disambiguation": {
+        "total": 2,
+        "pass": 2,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 2948,
+        "p95Ms": 3085,
+        "inputTokens": 17228,
+        "outputTokens": 184,
+        "costUsd": 0
+      },
+      "discovery": {
+        "total": 3,
+        "pass": 2,
+        "errors": 0,
+        "passPct": 66.7,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 66.7,
+        "p50Ms": 2777,
+        "p95Ms": 2792,
+        "inputTokens": 12811,
+        "outputTokens": 276,
+        "costUsd": 0
+      },
+      "fees": {
+        "total": 3,
+        "pass": 3,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 4342,
+        "p95Ms": 5756,
+        "inputTokens": 26705,
+        "outputTokens": 394,
+        "costUsd": 0
+      },
+      "status": {
+        "total": 3,
+        "pass": 3,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 3292,
+        "p95Ms": 4102,
+        "inputTokens": 21516,
+        "outputTokens": 241,
+        "costUsd": 0
+      },
+      "withdraw": {
+        "total": 3,
+        "pass": 3,
+        "errors": 0,
+        "passPct": 100,
+        "actionPct": 100,
+        "outcomePct": 100,
+        "shapePct": 100,
+        "p50Ms": 1403,
+        "p95Ms": 3511,
+        "inputTokens": 17443,
+        "outputTokens": 149,
+        "costUsd": 0
+      }
+    },
+    "prices": {
+      "inputUsdPerM": 0,
+      "outputUsdPerM": 0
+    }
+  },
+  "baseline": null,
+  "cases": [
+    {
+      "key": "golden/en/balance-plain",
+      "source": "golden",
+      "language": "en",
+      "id": "balance-plain",
+      "group": null,
+      "text": "hey how much do i have in my wallet",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, you have R150 available to spend. 💰\nYou also have R80 cash balance for withdrawals only, and R55 held for your pending PayShap withdrawal ref WPC15800A7BD6637.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1893,
+      "modelMs": [
+        1893
+      ],
+      "inputTokens": 4270,
+      "outputTokens": 71
+    },
+    {
+      "key": "golden/en/balance-typo",
+      "source": "golden",
+      "language": "en",
+      "id": "balance-typo",
+      "group": null,
+      "text": "wats my balnce quick",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, your balance to spend is R150. 💰\nYou also have R80 cash balance for withdrawals only, and R55 held for your pending PayShap payout.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1753,
+      "modelMs": [
+        1753
+      ],
+      "inputTokens": 4268,
+      "outputTokens": 61
+    },
+    {
+      "key": "golden/en/deposit-100",
+      "source": "golden",
+      "language": "en",
+      "id": "deposit-100",
+      "group": null,
+      "text": "i want to load R100 into my wallet with my card",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1671,
+      "modelMs": [
+        1671
+      ],
+      "inputTokens": 4273,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/en/deposit-status",
+      "source": "golden",
+      "language": "en",
+      "id": "deposit-status",
+      "group": null,
+      "text": "has my money come thru yet? paid it in earlier",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Yes, Thabo. Your PayFast deposit of R20 succeeded on 16 Sep at 04:30, ref 2179045. 💰\n\nYour balance to spend is R150. You also have R55 held for your pending PayShap withdrawal.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1842,
+      "modelMs": [
+        1842
+      ],
+      "inputTokens": 4272,
+      "outputTokens": 79
+    },
+    {
+      "key": "golden/en/airtime-self",
+      "source": "golden",
+      "language": "en",
+      "id": "airtime-self",
+      "group": null,
+      "text": "buy me R20 airtime please",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1499,
+      "modelMs": [
+        1498
+      ],
+      "inputTokens": 4268,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/en/airtime-gift",
+      "source": "golden",
+      "language": "en",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "can you send R20 airtime to 0837654321 for my sister",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1739,
+      "modelMs": [
+        1739
+      ],
+      "inputTokens": 4277,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/en/data-want",
+      "source": "golden",
+      "language": "en",
+      "id": "data-want",
+      "group": null,
+      "text": "eish my data is finished, i need a data bundle",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1564,
+      "modelMs": [
+        1564
+      ],
+      "inputTokens": 4273,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/en/electricity-200",
+      "source": "golden",
+      "language": "en",
+      "id": "electricity-200",
+      "group": null,
+      "text": "need R200 electrisity for meter 01234567890 pls lights are gonna go off",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1384,
+      "modelMs": [
+        1384
+      ],
+      "inputTokens": 4280,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/en/send-money",
+      "source": "golden",
+      "language": "en",
+      "id": "send-money",
+      "group": null,
+      "text": "send R50 to 0841234567 please, its for my brother",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1968,
+      "modelMs": [
+        1968
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/en/redeem-voucher",
+      "source": "golden",
+      "language": "en",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "i bought a blu voucher at the shop, how do i load it",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_voucher_load"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1118,
+      "modelMs": [
+        1118
+      ],
+      "inputTokens": 4275,
+      "outputTokens": 15
+    },
+    {
+      "key": "golden/en/help",
+      "source": "golden",
+      "language": "en",
+      "id": "help",
+      "group": null,
+      "text": "howzit, what can this thing actually do?",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Howzit Thabo 😊\n\nWaPay can help you spend, send, add and withdraw money from your balance.\n\nYou can:\nSee your balance and recent transactions\nBuy airtime, data or prepaid electricity\nSend money to Philly, Mom or any SA number\nCreate a please-pay-me link\nDeposit by card, Instant EFT, Apple Pay or Google Pay\nLoad a Blu or OTT voucher\nWithdraw to your bank or as cash\nBuy an OTT voucher for yourself\n\n",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3138,
+      "modelMs": [
+        3137
+      ],
+      "inputTokens": 4271,
+      "outputTokens": 158
+    },
+    {
+      "key": "golden/en/greeting",
+      "source": "golden",
+      "language": "en",
+      "id": "greeting",
+      "group": null,
+      "text": "heita",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Heita Thabo 😊\nYou’ve got R150 to spend. How can I help you today?",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1816,
+      "modelMs": [
+        1816
+      ],
+      "inputTokens": 4263,
+      "outputTokens": 46
+    },
+    {
+      "key": "golden/af/balance-plain",
+      "source": "golden",
+      "language": "af",
+      "id": "balance-plain",
+      "group": null,
+      "text": "hoeveel geld het ek in my wallet",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, jy het R150 beskikbaar om te spandeer. 💰\nJy het ook R80 kontantbalans net vir onttrekkings, en R55 word gehou vir jou hangende PayShap-uitbetaling van R50.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2424,
+      "modelMs": [
+        2424
+      ],
+      "inputTokens": 4269,
+      "outputTokens": 77
+    },
+    {
+      "key": "golden/af/balance-typo",
+      "source": "golden",
+      "language": "af",
+      "id": "balance-typo",
+      "group": null,
+      "text": "wat is my balnce asb",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, jou balans om te spandeer is R150. 💰\n\nJy het ook R80 kontantbalans vir onttrekkings alleen.\nR55 word gehou vir jou hangende PayShap uitbetaling van R50, ref WPC15800A7BD6637.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2369,
+      "modelMs": [
+        2369
+      ],
+      "inputTokens": 4269,
+      "outputTokens": 88
+    },
+    {
+      "key": "golden/af/deposit-100",
+      "source": "golden",
+      "language": "af",
+      "id": "deposit-100",
+      "group": null,
+      "text": "ek wil R100 in my wallet laai met my kaart",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1251,
+      "modelMs": [
+        1251
+      ],
+      "inputTokens": 4273,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/af/deposit-status",
+      "source": "golden",
+      "language": "af",
+      "id": "deposit-status",
+      "group": null,
+      "text": "het my geld al ingekom wat ek vroeer inbetaal het?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ja, Thabo. Jou vroeër inbetaling van R20 via PayFast is suksesvol. Ref 2179045. 💰\n\nDit wys op 16 Sep 04:30.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2184,
+      "modelMs": [
+        2184
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 67
+    },
+    {
+      "key": "golden/af/airtime-self",
+      "source": "golden",
+      "language": "af",
+      "id": "airtime-self",
+      "group": null,
+      "text": "koop vir my R20 airtime asb",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1392,
+      "modelMs": [
+        1392
+      ],
+      "inputTokens": 4270,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/af/airtime-gift",
+      "source": "golden",
+      "language": "af",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "stuur R20 airtime na 0837654321 asb",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1486,
+      "modelMs": [
+        1486
+      ],
+      "inputTokens": 4275,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/af/data-want",
+      "source": "golden",
+      "language": "af",
+      "id": "data-want",
+      "group": null,
+      "text": "ek soek n data bundle my data is amper op",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1478,
+      "modelMs": [
+        1478
+      ],
+      "inputTokens": 4272,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/af/electricity-200",
+      "source": "golden",
+      "language": "af",
+      "id": "electricity-200",
+      "group": null,
+      "text": "koop R200 prepaid elektrisiteit vir meter 01234567890",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1418,
+      "modelMs": [
+        1418
+      ],
+      "inputTokens": 4275,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/af/send-money",
+      "source": "golden",
+      "language": "af",
+      "id": "send-money",
+      "group": null,
+      "text": "stuur asb R50 geld vir 0841234567",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1347,
+      "modelMs": [
+        1347
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/af/redeem-voucher",
+      "source": "golden",
+      "language": "af",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "ek het n Blu voucher by die winkel gekoop, hoe laai ek dit?",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_voucher_load"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1111,
+      "modelMs": [
+        1111
+      ],
+      "inputTokens": 4278,
+      "outputTokens": 15
+    },
+    {
+      "key": "golden/af/help",
+      "source": "golden",
+      "language": "af",
+      "id": "help",
+      "group": null,
+      "text": "hi wat kan ek alles hier doen? hoe werk di ding",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Hi Thabo 😊 Jy kan WaPay hier in WhatsApp gebruik om geld te bestuur.\n\nWat jy kan doen:\n💰 Sê “saldo” om jou balans, vouchers en onlangse transaksies te sien.\n📱 Koop lugtyd of data vir enige SA nommer uit jou balans.\n💡 Koop prepaid elektrisiteit en kry die token hier.\n💸 Stuur geld na enige SA nommer.\n🙏 Maak ’n please-pay-me link sodat iemand jou kan betaal.\n➕ Laai geld by met kaart, Instant EF",
+        "toolCalls": [
+          "how_it_works",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 5764,
+      "modelMs": [
+        1266,
+        4498
+      ],
+      "inputTokens": 8646,
+      "outputTokens": 250
+    },
+    {
+      "key": "golden/af/greeting",
+      "source": "golden",
+      "language": "af",
+      "id": "greeting",
+      "group": null,
+      "text": "hallo hoe gaan dit",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Hallo Thabo, dit gaan goed dankie 😊\nEk hoop dit gaan ook goed met jou. Hoe kan ek help vandag? 💡",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2133,
+      "modelMs": [
+        2133
+      ],
+      "inputTokens": 4266,
+      "outputTokens": 54
+    },
+    {
+      "key": "golden/zu/balance-plain",
+      "source": "golden",
+      "language": "zu",
+      "id": "balance-plain",
+      "group": null,
+      "text": "sawubona, ngicela ukubona ukuthi nginamalini ku wallet yami",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Sawubona Thabo 😊\n\nUne-R150 ongayisebenzisa manje.\nUbuye ube ne-R80 cash balance yokukhipha kuphela.\nKukhona ne-R55 ebambekile ngenxa yePayShap payout esalindile, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3019,
+      "modelMs": [
+        3019
+      ],
+      "inputTokens": 4280,
+      "outputTokens": 93
+    },
+    {
+      "key": "golden/zu/balance-typo",
+      "source": "golden",
+      "language": "zu",
+      "id": "balance-typo",
+      "group": null,
+      "text": "yho bafo ngisele namalini la, chek balnce yami plz",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Yebo Thabo 😊\n\nIbhalansi ongayisebenzisa manje ngu R150.\nImali ye-cash yokukhipha kuphela ngu R80.\nKukhona u R55 obanjwe ngoba iPayShap payout yakho ka R50 kuThabo M isalinde impendulo yebhange, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3477,
+      "modelMs": [
+        3477
+      ],
+      "inputTokens": 4279,
+      "outputTokens": 107
+    },
+    {
+      "key": "golden/zu/deposit-100",
+      "source": "golden",
+      "language": "zu",
+      "id": "deposit-100",
+      "group": null,
+      "text": "ngifuna ukufaka R100 ku wallet nge card yami",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1372,
+      "modelMs": [
+        1371
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/zu/deposit-status",
+      "source": "golden",
+      "language": "zu",
+      "id": "deposit-status",
+      "group": null,
+      "text": "imali engiyifake ekuseni isingenile yini?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Yebo Thabo, imali oyifakile ekuseni isingenile 😊\n\nI-DEPOSIT R20 nge-PayFast iphumelele ngo-16 Sep 04:30. Ref 2179045.\nIbhalansi ongayisebenzisa manje ngu-R150 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2662,
+      "modelMs": [
+        2662
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 85
+    },
+    {
+      "key": "golden/zu/airtime-self",
+      "source": "golden",
+      "language": "zu",
+      "id": "airtime-self",
+      "group": null,
+      "text": "ngicela ukuthenga airtime ka R20 kunumber yami",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1228,
+      "modelMs": [
+        1228
+      ],
+      "inputTokens": 4275,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/zu/airtime-gift",
+      "source": "golden",
+      "language": "zu",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "ngicela ukuthumela airtime ka R20 ku 0837654321",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1447,
+      "modelMs": [
+        1447
+      ],
+      "inputTokens": 4277,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/zu/data-want",
+      "source": "golden",
+      "language": "zu",
+      "id": "data-want",
+      "group": null,
+      "text": "bafo ngifuna idata bundle, ngiphelelwe yi data",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1272,
+      "modelMs": [
+        1272
+      ],
+      "inputTokens": 4277,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/zu/electricity-200",
+      "source": "golden",
+      "language": "zu",
+      "id": "electricity-200",
+      "group": null,
+      "text": "ngicela ugesi ka R200, imeter number ithi 01234567890",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1332,
+      "modelMs": [
+        1332
+      ],
+      "inputTokens": 4280,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/zu/send-money",
+      "source": "golden",
+      "language": "zu",
+      "id": "send-money",
+      "group": null,
+      "text": "ngicela ukuthumela imali ka R50 ku 0841234567",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1166,
+      "modelMs": [
+        1166
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/zu/redeem-voucher",
+      "source": "golden",
+      "language": "zu",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "ngithenge i Blu voucher esitolo, manje ngifuna ukuyifaka ku wallet yami",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_voucher_load"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1041,
+      "modelMs": [
+        1041
+      ],
+      "inputTokens": 4281,
+      "outputTokens": 15
+    },
+    {
+      "key": "golden/zu/help",
+      "source": "golden",
+      "language": "zu",
+      "id": "help",
+      "group": null,
+      "text": "le service yenzani kanti, isebenza kanjani?",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "show_help"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1143,
+      "modelMs": [
+        1143
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 13
+    },
+    {
+      "key": "golden/zu/greeting",
+      "source": "golden",
+      "language": "zu",
+      "id": "greeting",
+      "group": null,
+      "text": "heyta bafo unjani",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ngikhona kahle, bafo Thabo 😊\nWena unjani? Ngikusize ngani namhlanje? 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2267,
+      "modelMs": [
+        2267
+      ],
+      "inputTokens": 4267,
+      "outputTokens": 52
+    },
+    {
+      "key": "golden/xh/balance-plain",
+      "source": "golden",
+      "language": "xh",
+      "id": "balance-plain",
+      "group": null,
+      "text": "molo, yimalini eseleyo kwi wallet yam?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Molo Thabo 😊\n\nEseleyo kwi wallet yakho onokuyisebenzisa ngoku yi R150.\n\nUkwanayo ne R80 cash balance yokurhoxa kuphela. Kwaye i R55 ibanjiwe ngenxa ye PayShap payout esalindileyo, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2822,
+      "modelMs": [
+        2822
+      ],
+      "inputTokens": 4275,
+      "outputTokens": 97
+    },
+    {
+      "key": "golden/xh/balance-typo",
+      "source": "golden",
+      "language": "xh",
+      "id": "balance-typo",
+      "group": null,
+      "text": "ndicela ubona ibalanse yam plz",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, ibhalansi yakho onokuyisebenzisa yi R150. 💰\n\nImali onokuyikhupha kuphela yi R80.\nKukho R55 ebanjiweyo ngenxa yePayShap payout esalindileyo, ref WPC15800A7BD6637. 📱",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3024,
+      "modelMs": [
+        3024
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 90
+    },
+    {
+      "key": "golden/xh/deposit-100",
+      "source": "golden",
+      "language": "xh",
+      "id": "deposit-100",
+      "group": null,
+      "text": "ndifuna ukufaka i R100 kwi wallet nge card yam",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1247,
+      "modelMs": [
+        1247
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/xh/deposit-status",
+      "source": "golden",
+      "language": "xh",
+      "id": "deposit-status",
+      "group": null,
+      "text": "ingaba imali endiyifakileyo ekuseni ifikile?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ewe Thabo, imali oyifakileyo ekuseni ifikile ✅\n\nIdiphozithi ye-R20 nge-PayFast iphumelele ngo-16 Sep 04:30. Ref 2179045 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2367,
+      "modelMs": [
+        2367
+      ],
+      "inputTokens": 4278,
+      "outputTokens": 74
+    },
+    {
+      "key": "golden/xh/airtime-self",
+      "source": "golden",
+      "language": "xh",
+      "id": "airtime-self",
+      "group": null,
+      "text": "ndicela i airtime ye R20 kum",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1220,
+      "modelMs": [
+        1220
+      ],
+      "inputTokens": 4273,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/xh/airtime-gift",
+      "source": "golden",
+      "language": "xh",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "ndicela uthumela i airtime ye R20 ku 0837654321",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1408,
+      "modelMs": [
+        1408
+      ],
+      "inputTokens": 4280,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/xh/data-want",
+      "source": "golden",
+      "language": "xh",
+      "id": "data-want",
+      "group": null,
+      "text": "ndifuna i data bundle bhuti, iphelile idata yam",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1319,
+      "modelMs": [
+        1319
+      ],
+      "inputTokens": 4278,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/xh/electricity-200",
+      "source": "golden",
+      "language": "xh",
+      "id": "electricity-200",
+      "group": null,
+      "text": "ndicela umbane we R200, imitha yam ngu 01234567890",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1398,
+      "modelMs": [
+        1398
+      ],
+      "inputTokens": 4281,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/xh/send-money",
+      "source": "golden",
+      "language": "xh",
+      "id": "send-money",
+      "group": null,
+      "text": "ndifuna ukuthumela imali engu R50 ku 0841234567",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1314,
+      "modelMs": [
+        1314
+      ],
+      "inputTokens": 4278,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/xh/redeem-voucher",
+      "source": "golden",
+      "language": "xh",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "ndithenge i Blu voucher evenkileni, ndiyifaka njani apha?",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_voucher_load"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1247,
+      "modelMs": [
+        1247
+      ],
+      "inputTokens": 4281,
+      "outputTokens": 15
+    },
+    {
+      "key": "golden/xh/help",
+      "source": "golden",
+      "language": "xh",
+      "id": "help",
+      "group": null,
+      "text": "le service yenza ntoni kanye kanye? isebenza njani?",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "WaPay ikunceda usebenzise imali yakho kuWhatsApp: ubone ibhalansi, uthenge i-airtime, idatha nombane, uthumele imali, ufake imali, urhoxe, okanye wenze ilink yokucelwa imali. 📱\n\nYintoni kanye ofuna ukuyenza ngoku, ukubona ibhalansi, ukufaka imali, ukuthenga, ukuthumela, okanye ukurhoxa? 💡",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 4184,
+      "modelMs": [
+        4184
+      ],
+      "inputTokens": 4277,
+      "outputTokens": 116
+    },
+    {
+      "key": "golden/xh/greeting",
+      "source": "golden",
+      "language": "xh",
+      "id": "greeting",
+      "group": null,
+      "text": "molo mfethu unjani",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Molo Thabo, ndiphilile enkosi 😊\n\nNdiyathemba nawe uphilile. Ndingakunceda ngantoni namhlanje? 💡",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2400,
+      "modelMs": [
+        2400
+      ],
+      "inputTokens": 4269,
+      "outputTokens": 61
+    },
+    {
+      "key": "golden/nso/balance-plain",
+      "source": "golden",
+      "language": "nso",
+      "id": "balance-plain",
+      "group": null,
+      "text": "dumela, ke na le bokae mo wallet ya ka?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Dumela Thabo 😊\n\nO na le R150 ye o ka e dirišago.\nR80 ke cash balance ya go ntšha fela.\nR55 e swere bakeng sa PayShap ya R50 go Thabo M, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2807,
+      "modelMs": [
+        2807
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 90
+    },
+    {
+      "key": "golden/nso/balance-typo",
+      "source": "golden",
+      "language": "nso",
+      "id": "balance-typo",
+      "group": null,
+      "text": "ke kgopela go bona blance ya ka hle",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ee Thabo 😊\nBalance ya gago ya go šomiša ke R150. Cash balance ya go ntšha fela ke R80.\n\nGo na le R55 ye e swerwego bakeng sa PayShap payout ya R50 go Thabo M, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2815,
+      "modelMs": [
+        2815
+      ],
+      "inputTokens": 4273,
+      "outputTokens": 93
+    },
+    {
+      "key": "golden/nso/deposit-100",
+      "source": "golden",
+      "language": "nso",
+      "id": "deposit-100",
+      "group": null,
+      "text": "ke nyaka go tsenya R100 ka wallet ka card ya ka",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1228,
+      "modelMs": [
+        1228
+      ],
+      "inputTokens": 4275,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/nso/deposit-status",
+      "source": "golden",
+      "language": "nso",
+      "id": "deposit-status",
+      "group": null,
+      "text": "naa tshelete ye ke e lefilego e fihlile?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, tšhelete ya gago ya go ntšha ya R50 ka PayShap e sa le PENDING. Ref ke WPC15800A7BD6637.\n\nR55 e sa swarilwe go fihlela tsela ya panka e araba. 💰",
+        "toolCalls": [
+          "get_payout_status",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3884,
+      "modelMs": [
+        1145,
+        2738
+      ],
+      "inputTokens": 8631,
+      "outputTokens": 103
+    },
+    {
+      "key": "golden/nso/airtime-self",
+      "source": "golden",
+      "language": "nso",
+      "id": "airtime-self",
+      "group": null,
+      "text": "ke reka airtime ya R20 ya ka",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1214,
+      "modelMs": [
+        1214
+      ],
+      "inputTokens": 4270,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/nso/airtime-gift",
+      "source": "golden",
+      "language": "nso",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "nthomele airtime ya R20 go nomoro ye 0837654321",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1268,
+      "modelMs": [
+        1268
+      ],
+      "inputTokens": 4278,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/nso/data-want",
+      "source": "golden",
+      "language": "nso",
+      "id": "data-want",
+      "group": null,
+      "text": "ke nyaka go reka data bundle hle, ya ka e fedile",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1573,
+      "modelMs": [
+        1573
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/nso/electricity-200",
+      "source": "golden",
+      "language": "nso",
+      "id": "electricity-200",
+      "group": null,
+      "text": "ke reka mohlagase wa R200 wa prepaid, meter ke 01234567890",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1376,
+      "modelMs": [
+        1376
+      ],
+      "inputTokens": 4279,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/nso/send-money",
+      "source": "golden",
+      "language": "nso",
+      "id": "send-money",
+      "group": null,
+      "text": "ke nyaka go romela tshelete ya R50 go 0841234567",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1383,
+      "modelMs": [
+        1382
+      ],
+      "inputTokens": 4279,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/nso/redeem-voucher",
+      "source": "golden",
+      "language": "nso",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "ke rekile voucher ya Blu ka lebenkeleng, ke e loada bjang?",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_voucher_load"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1097,
+      "modelMs": [
+        1097
+      ],
+      "inputTokens": 4279,
+      "outputTokens": 15
+    },
+    {
+      "key": "golden/nso/help",
+      "source": "golden",
+      "language": "nso",
+      "id": "help",
+      "group": null,
+      "text": "naa service ye e soma bjang? le ka nthusa ka eng?",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ee Thabo, WaPay e a šoma 😊\n\nNka go thuša ka go lebelela balance ya gago, go reka airtime, data goba mohlagase, go romela tšhelete, go dira please-pay-me link, go deposit, go load voucher, goba go withdraw.\n\nO nyaka ke go bontšhe balance ya gago bjale? 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3307,
+      "modelMs": [
+        3306
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 108
+    },
+    {
+      "key": "golden/nso/greeting",
+      "source": "golden",
+      "language": "nso",
+      "id": "greeting",
+      "group": null,
+      "text": "thobela, le kae?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thobela Thabo 😊\nBalansi ya gago ya go diriša ke R150. O na le R80 ya go ntšha fela, gomme R55 e swerwe ka lebaka la PayShap ya R50 yeo e sa emetšego, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2947,
+      "modelMs": [
+        2947
+      ],
+      "inputTokens": 4268,
+      "outputTokens": 94
+    },
+    {
+      "key": "golden/st/balance-plain",
+      "source": "golden",
+      "language": "st",
+      "id": "balance-plain",
+      "group": null,
+      "text": "ke na le bokae ka walleteng ya ka?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, o na le R150 eo o ka e sebedisang walleteng ya hao. 💰\n\nHape o na le R80 ya cash balance bakeng sa withdrawals feela. R55 e tshwerwe bakeng sa payout e pending ya R50 ho Thabo M, ref WPC15800A7BD6637. ✨",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2639,
+      "modelMs": [
+        2639
+      ],
+      "inputTokens": 4272,
+      "outputTokens": 96
+    },
+    {
+      "key": "golden/st/balance-typo",
+      "source": "golden",
+      "language": "st",
+      "id": "balance-typo",
+      "group": null,
+      "text": "balence ya ka ke bokae hle",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, balance ya hao eo o ka e sebelisang ke R150. 💰\nCash balance ya withdrawals feela ke R80.\nHo na le R55 e tshwerweng bakeng sa payout ya PayShap ya R50, ref WPC15800A7BD6637, e sa ntse e pending.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2721,
+      "modelMs": [
+        2721
+      ],
+      "inputTokens": 4270,
+      "outputTokens": 90
+    },
+    {
+      "key": "golden/st/deposit-100",
+      "source": "golden",
+      "language": "st",
+      "id": "deposit-100",
+      "group": null,
+      "text": "ke batla ho kenya R100 ka wallet ka card",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1112,
+      "modelMs": [
+        1112
+      ],
+      "inputTokens": 4271,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/st/deposit-status",
+      "source": "golden",
+      "language": "st",
+      "id": "deposit-status",
+      "group": null,
+      "text": "na chelete eo ke e patetseng e fihlile?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "E, Thabo, payout ya hao ya PayShap ya R50 e sa ntse e le PENDING.\nRef: WPC15800A7BD6637. R55 e ntse e tshwerwe ho fihlela bank rail e araba. 💰",
+        "toolCalls": [
+          "get_payout_status",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3718,
+      "modelMs": [
+        1182,
+        2536
+      ],
+      "inputTokens": 8627,
+      "outputTokens": 97
+    },
+    {
+      "key": "golden/st/airtime-self",
+      "source": "golden",
+      "language": "st",
+      "id": "airtime-self",
+      "group": null,
+      "text": "nkgele airtime ya R20",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1582,
+      "modelMs": [
+        1582
+      ],
+      "inputTokens": 4268,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/st/airtime-gift",
+      "source": "golden",
+      "language": "st",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "romela airtime ya R20 ho 0837654321",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1455,
+      "modelMs": [
+        1455
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/st/data-want",
+      "source": "golden",
+      "language": "st",
+      "id": "data-want",
+      "group": null,
+      "text": "ke batla data bundle hle",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1213,
+      "modelMs": [
+        1213
+      ],
+      "inputTokens": 4267,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/st/electricity-200",
+      "source": "golden",
+      "language": "st",
+      "id": "electricity-200",
+      "group": null,
+      "text": "ke batla ho reka motlakase wa R200 prepaid, meter 01234567890",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1228,
+      "modelMs": [
+        1228
+      ],
+      "inputTokens": 4279,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/st/send-money",
+      "source": "golden",
+      "language": "st",
+      "id": "send-money",
+      "group": null,
+      "text": "romela chelete ya R50 ho nomoro 0841234567",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1431,
+      "modelMs": [
+        1431
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/st/redeem-voucher",
+      "source": "golden",
+      "language": "st",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "ke rekile voucher ya Blu shopong, ke batla ho e loada",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_voucher_load"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1073,
+      "modelMs": [
+        1072
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 15
+    },
+    {
+      "key": "golden/st/help",
+      "source": "golden",
+      "language": "st",
+      "id": "help",
+      "group": null,
+      "text": "ntho ena e sebetsa jwang? le ka nthusa ka eng?",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "E, Thabo 😊\n\nWaPay e o thusa ho boloka le ho sebedisa tjhelete moqoqong ona. O ka sheba balance, wa kenya tjhelete, wa reka airtime, data le motlakase, wa romela tjhelete, wa ntsha tjhelete, kapa wa etsa link ya hore motho a o lefe.\n\nSeo o ka se etsang:\nSheba balance ya hao\nKenya tjhelete ka card, EFT, Apple Pay kapa Google Pay\nKenya voucher ya cash kapa OTT\nReka airtime, data kapa motlakase\nRomel",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 5788,
+      "modelMs": [
+        5788
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 217
+    },
+    {
+      "key": "golden/st/greeting",
+      "source": "golden",
+      "language": "st",
+      "id": "greeting",
+      "group": null,
+      "text": "dumela hle, o kae?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Dumela Thabo 😊 Ke teng, ke lokile. Wena o kae kajeno? ✨",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2098,
+      "modelMs": [
+        2098
+      ],
+      "inputTokens": 4269,
+      "outputTokens": 45
+    },
+    {
+      "key": "golden/tn/balance-plain",
+      "source": "golden",
+      "language": "tn",
+      "id": "balance-plain",
+      "group": null,
+      "text": "dumela, ke na le bokae mo wallet ya me?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Dumela Thabo 😊\n\nO na le R150 e o ka e dirisang.\nR80 ke cash balance ya go ntsha fela.\nR55 e tshwerwe ka ntlha ya payout ya R50 e e sa ntse e emetse banka, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2839,
+      "modelMs": [
+        2839
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 92
+    },
+    {
+      "key": "golden/tn/balance-typo",
+      "source": "golden",
+      "language": "tn",
+      "id": "balance-typo",
+      "group": null,
+      "text": "ke btla go bona balanse ya me tlhe",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ee Thabo 😊\nBalanse ya gago ya go dirisa ke R150.\n\nCash balance ya go ntsha fela ke R80.\n\nGo na le R55 e tshwerweng ka ntlha ya payout ya R50 ka PayShap, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2679,
+      "modelMs": [
+        2679
+      ],
+      "inputTokens": 4272,
+      "outputTokens": 92
+    },
+    {
+      "key": "golden/tn/deposit-100",
+      "source": "golden",
+      "language": "tn",
+      "id": "deposit-100",
+      "group": null,
+      "text": "ke batla go tsenya R100 mo wallet ka card ya me",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1353,
+      "modelMs": [
+        1353
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/tn/deposit-status",
+      "source": "golden",
+      "language": "tn",
+      "id": "deposit-status",
+      "group": null,
+      "text": "a madi a ke a duetseng maloba a setse a tsene?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, go ntšha madi ga gago ga PayShap ga R50 go santse go le PENDING. Ref WPC15800A7BD6637.\n\nR55 e sa tshwerwe go fitlha seporo sa banka se araba. 💰",
+        "toolCalls": [
+          "get_payout_status",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3910,
+      "modelMs": [
+        1303,
+        2606
+      ],
+      "inputTokens": 8633,
+      "outputTokens": 100
+    },
+    {
+      "key": "golden/tn/airtime-self",
+      "source": "golden",
+      "language": "tn",
+      "id": "airtime-self",
+      "group": null,
+      "text": "nthekele airtime ya R20 tlhe",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1285,
+      "modelMs": [
+        1285
+      ],
+      "inputTokens": 4271,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/tn/airtime-gift",
+      "source": "golden",
+      "language": "tn",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "tswee tswee romela airtime ya R20 kwa nomorong 0837654321",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1233,
+      "modelMs": [
+        1233
+      ],
+      "inputTokens": 4280,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/tn/data-want",
+      "source": "golden",
+      "language": "tn",
+      "id": "data-want",
+      "group": null,
+      "text": "ke batla data bundle, ya me e fedile",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1171,
+      "modelMs": [
+        1171
+      ],
+      "inputTokens": 4271,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/tn/electricity-200",
+      "source": "golden",
+      "language": "tn",
+      "id": "electricity-200",
+      "group": null,
+      "text": "ke batla go reka motlakase wa R200 wa prepaid, meter ke 01234567890",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1340,
+      "modelMs": [
+        1340
+      ],
+      "inputTokens": 4281,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/tn/send-money",
+      "source": "golden",
+      "language": "tn",
+      "id": "send-money",
+      "group": null,
+      "text": "romela madi a R50 kwa go 0841234567 tlhe",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1210,
+      "modelMs": [
+        1210
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/tn/redeem-voucher",
+      "source": "golden",
+      "language": "tn",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "ke rekile blu voucher kwa shopong, ke batla go e loada mo wallet",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_voucher_load"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1090,
+      "modelMs": [
+        1090
+      ],
+      "inputTokens": 4278,
+      "outputTokens": 15
+    },
+    {
+      "key": "golden/tn/help",
+      "source": "golden",
+      "language": "tn",
+      "id": "help",
+      "group": null,
+      "text": "hei, service e e dira eng? mpolelele gore e bereka jang",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ee Thabo 😊 WaPay e go thusa go dirisa madi mo WhatsApp.\n\nO ka bona balance, wa reka airtime, data le motlakase, wa romela madi, wa dira please-pay-me link, wa deposit-a, wa load-a voucher, le go ntsha madi.\n\nFa o batla go bona se o nang le sona, kwala fela \"balance\" 💰",
+        "toolCalls": [
+          "how_it_works",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 4792,
+      "modelMs": [
+        1069,
+        3723
+      ],
+      "inputTokens": 8654,
+      "outputTokens": 127
+    },
+    {
+      "key": "golden/tn/greeting",
+      "source": "golden",
+      "language": "tn",
+      "id": "greeting",
+      "group": null,
+      "text": "dumela mma, o tsogile jang?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Dumela Thabo 😊 Ke tsogile sentle, ke a leboga.\n\nWena o tsogile jang gompieno? ✨",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2023,
+      "modelMs": [
+        2023
+      ],
+      "inputTokens": 4271,
+      "outputTokens": 56
+    },
+    {
+      "key": "golden/ss/balance-plain",
+      "source": "golden",
+      "language": "ss",
+      "id": "balance-plain",
+      "group": null,
+      "text": "sawubona, nginemalini ku wallet yami?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Sawubona Thabo 😊\nUne-R150 ongayisebentisa ku-wallet yakho.\n\nKukhona ne-R80 ye-cash balance, yekukhipha imali kuphela.\nR55 ibanjwe ngekukhishwa kwemali lokusamilela: R50 PayShap, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3251,
+      "modelMs": [
+        3251
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 102
+    },
+    {
+      "key": "golden/ss/balance-typo",
+      "source": "golden",
+      "language": "ss",
+      "id": "balance-typo",
+      "group": null,
+      "text": "yebo bhuti ngicela ku cheka i blance yami",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Yebo Thabo 😊\nIbhalansi yakho ongayisebenzisa ngu R150.\n\nImali yokukhipha kuphela ngu R80.\nKukhona R55 ebanjiwe nge PayShap payout esalindile, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2771,
+      "modelMs": [
+        2771
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 89
+    },
+    {
+      "key": "golden/ss/deposit-100",
+      "source": "golden",
+      "language": "ss",
+      "id": "deposit-100",
+      "group": null,
+      "text": "ngifuna kufaka R100 ku wallet nge card yami",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1290,
+      "modelMs": [
+        1290
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/ss/deposit-status",
+      "source": "golden",
+      "language": "ss",
+      "id": "deposit-status",
+      "group": null,
+      "text": "imali lengiyifake ekuseni seyingenile yini?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Yebo Thabo, imali loyifake ekuseni ingenile. 💰\nDeposit yakho ya R20 nge PayFast iphumelele ngo 16 Sep 04:30, ref 2179045.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2061,
+      "modelMs": [
+        2061
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 68
+    },
+    {
+      "key": "golden/ss/airtime-self",
+      "source": "golden",
+      "language": "ss",
+      "id": "airtime-self",
+      "group": null,
+      "text": "ngicela kutsenga i airtime ye R20 yami",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1250,
+      "modelMs": [
+        1250
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/ss/airtime-gift",
+      "source": "golden",
+      "language": "ss",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "tfumela airtime ye R20 ku 0837654321 ngiyacela",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1286,
+      "modelMs": [
+        1286
+      ],
+      "inputTokens": 4277,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/ss/data-want",
+      "source": "golden",
+      "language": "ss",
+      "id": "data-want",
+      "group": null,
+      "text": "bhuti ngifuna i data bundle, ngiphelelwe yi data",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1366,
+      "modelMs": [
+        1366
+      ],
+      "inputTokens": 4277,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/ss/electricity-200",
+      "source": "golden",
+      "language": "ss",
+      "id": "electricity-200",
+      "group": null,
+      "text": "ngicela kutsenga gesi we R200 prepaid, meter number 01234567890",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1360,
+      "modelMs": [
+        1360
+      ],
+      "inputTokens": 4280,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/ss/send-money",
+      "source": "golden",
+      "language": "ss",
+      "id": "send-money",
+      "group": null,
+      "text": "ngifuna kutfumela imali ye R50 ku 0841234567",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1358,
+      "modelMs": [
+        1358
+      ],
+      "inputTokens": 4277,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/ss/redeem-voucher",
+      "source": "golden",
+      "language": "ss",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "ngitsenge i Blu voucher esitolo, ngifuna kuyi loada la",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_voucher_load"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1237,
+      "modelMs": [
+        1237
+      ],
+      "inputTokens": 4278,
+      "outputTokens": 15
+    },
+    {
+      "key": "golden/ss/help",
+      "source": "golden",
+      "language": "ss",
+      "id": "help",
+      "group": null,
+      "text": "le service yenta ini? isebenta njani?",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "WaPay ikusita kutsi ubhatale, utfumele imali, utsenge i-airtime, idatha negesi, ufake imali, uphindze uyikhiphe. Konkhe kwenteka lapha kuWhatsApp 📱\n\nIsebenta kanjena:\nUfaka imali nge-card, Instant EFT, Apple Pay, Google Pay, noma ngevoucher.\nUngayisebentisa kutsenga i-airtime, idatha, gezi, noma utfumele lomunye umuntfu.\nUma ufuna imali, ungayikhipha e-bank account yakho noma uyitsatse njenge-cas",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 6749,
+      "modelMs": [
+        6749
+      ],
+      "inputTokens": 4272,
+      "outputTokens": 212
+    },
+    {
+      "key": "golden/ss/greeting",
+      "source": "golden",
+      "language": "ss",
+      "id": "greeting",
+      "group": null,
+      "text": "sawubona unjani",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Sawubona Thabo 😊 Ngikhona kahle, ngiyabonga.\nWena unjani namuhla? ✨",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2114,
+      "modelMs": [
+        2114
+      ],
+      "inputTokens": 4267,
+      "outputTokens": 51
+    },
+    {
+      "key": "golden/ve/balance-plain",
+      "source": "golden",
+      "language": "ve",
+      "id": "balance-plain",
+      "group": null,
+      "text": "ndi na masheleni mangana kha wallet yanga",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, kha wallet yau u na R150 ine wa nga shumisa. 💰\n\nCash balance ya u bvisa fhedzi ndi R80. Hu na R55 yo farwaho kha payout ya PayShap ya R50, ref WPC15800A7BD6637.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2713,
+      "modelMs": [
+        2713
+      ],
+      "inputTokens": 4272,
+      "outputTokens": 86
+    },
+    {
+      "key": "golden/ve/balance-typo",
+      "source": "golden",
+      "language": "ve",
+      "id": "balance-typo",
+      "group": null,
+      "text": "balence yanga ndi mangana",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, balance yau ya u shumisa ndi R150. 💰\nCash balance ya u bvisa fhedzi ndi R80.\nHu na R55 yo fariwaho kha payout ya PayShap ya R50, ref WPC15800A7BD6637.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2695,
+      "modelMs": [
+        2695
+      ],
+      "inputTokens": 4268,
+      "outputTokens": 83
+    },
+    {
+      "key": "golden/ve/deposit-100",
+      "source": "golden",
+      "language": "ve",
+      "id": "deposit-100",
+      "group": null,
+      "text": "ndi toda u longela R100 kha wallet nga card",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1545,
+      "modelMs": [
+        1545
+      ],
+      "inputTokens": 4272,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/ve/deposit-status",
+      "source": "golden",
+      "language": "ve",
+      "id": "deposit-status",
+      "group": null,
+      "text": "masheleni e nda badela nga murahu o no swika naa?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, masheleni a u a badelaho nga PayShap a R50 a kha ḓi vha PENDING.\nRef: WPC15800A7BD6637. R55 yo farwa zwino u swika rail ya banka i fhindula. 💰",
+        "toolCalls": [
+          "get_payout_status",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3792,
+      "modelMs": [
+        1061,
+        2731
+      ],
+      "inputTokens": 8633,
+      "outputTokens": 104
+    },
+    {
+      "key": "golden/ve/airtime-self",
+      "source": "golden",
+      "language": "ve",
+      "id": "airtime-self",
+      "group": null,
+      "text": "ndi toda u renga airtime ya R20",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1242,
+      "modelMs": [
+        1242
+      ],
+      "inputTokens": 4271,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/ve/airtime-gift",
+      "source": "golden",
+      "language": "ve",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "rumela airtime ya R20 kha 0837654321",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1370,
+      "modelMs": [
+        1369
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/ve/data-want",
+      "source": "golden",
+      "language": "ve",
+      "id": "data-want",
+      "group": null,
+      "text": "ndi khou toda data bundle",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1418,
+      "modelMs": [
+        1418
+      ],
+      "inputTokens": 4267,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/ve/electricity-200",
+      "source": "golden",
+      "language": "ve",
+      "id": "electricity-200",
+      "group": null,
+      "text": "ndi renge electricity ya R200 meter 01234567890",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2018,
+      "modelMs": [
+        2018
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/ve/send-money",
+      "source": "golden",
+      "language": "ve",
+      "id": "send-money",
+      "group": null,
+      "text": "rumela R50 kha nomboro 0841234567",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1330,
+      "modelMs": [
+        1330
+      ],
+      "inputTokens": 4273,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/ve/redeem-voucher",
+      "source": "golden",
+      "language": "ve",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "ndo renga voucher ya Blu shoponi ndi toda u i loadela",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_voucher_load"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1083,
+      "modelMs": [
+        1083
+      ],
+      "inputTokens": 4275,
+      "outputTokens": 15
+    },
+    {
+      "key": "golden/ve/help",
+      "source": "golden",
+      "language": "ve",
+      "id": "help",
+      "group": null,
+      "text": "heyi service i shuma hani, ni nga nthusa nga mini?",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Hei Thabo 😊 WaPay i ni thusa uri ni shumise masheleni kha WhatsApp.\n\nZwine na nga ita:\nU sedza balance yaṋu\nU renga airtime, data na muḓagasi\nU rumela masheleni\nU ita link ya u badelwa\nU deposit-a nga card kana EFT\nU load-a voucher\nU withdraw-a masheleni\n\nBalance yaṋu ine na nga shumisa zwino ndi R150 💰\nNi ṱoḓa ndi ni thuse nga tshifhio zwino?",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 4840,
+      "modelMs": [
+        4840
+      ],
+      "inputTokens": 4277,
+      "outputTokens": 146
+    },
+    {
+      "key": "golden/ve/greeting",
+      "source": "golden",
+      "language": "ve",
+      "id": "greeting",
+      "group": null,
+      "text": "ndaa, vho vuwa hani",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ndaa Thabo, ndo vuwa zwavhuḓi 😊\nNi khou ita hani namusi? 💡",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2166,
+      "modelMs": [
+        2166
+      ],
+      "inputTokens": 4270,
+      "outputTokens": 51
+    },
+    {
+      "key": "golden/ts/balance-plain",
+      "source": "golden",
+      "language": "ts",
+      "id": "balance-plain",
+      "group": null,
+      "text": "hi mali muni leyi nga ka wallet ya mina",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Hi Thabo 😊\nMali leyi u nga yi tirhisa sweswi i R150.\nYa cash leyi u nga yi withdrawa ntsena i R80.\nKu na R55 leyi ha khomiweke eka PayShap payout ya R50, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2970,
+      "modelMs": [
+        2970
+      ],
+      "inputTokens": 4270,
+      "outputTokens": 89
+    },
+    {
+      "key": "golden/ts/balance-typo",
+      "source": "golden",
+      "language": "ts",
+      "id": "balance-typo",
+      "group": null,
+      "text": "ndzi kombela ku vona balence ya mina",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, balance ya wena leyi u nga yi tirhisaka i R150. 💰\nCash balance yo withdraw ntsena i R80.\nR55 yi khomiwile eka PayShap payout ya R50 leyi ya ha rindzeleke, ref WPC15800A7BD6637.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2874,
+      "modelMs": [
+        2874
+      ],
+      "inputTokens": 4271,
+      "outputTokens": 86
+    },
+    {
+      "key": "golden/ts/deposit-100",
+      "source": "golden",
+      "language": "ts",
+      "id": "deposit-100",
+      "group": null,
+      "text": "ndzi lava ku nghenisa R100 eka wallet hi card ya mina",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1105,
+      "modelMs": [
+        1105
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/ts/deposit-status",
+      "source": "golden",
+      "language": "ts",
+      "id": "deposit-status",
+      "group": null,
+      "text": "xana mali leyi ndzi yi hakeleke yi fikile ke",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "E-e Thabo, mali ya wena ya PayShap ya R50 a yi si fika. Yi ha ri PENDING.\nRef: WPC15800A7BD6637. R55 yi ha khomiwile ku fikela bank rail yi hlamula. 💰",
+        "toolCalls": [
+          "get_payout_status",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 4234,
+      "modelMs": [
+        1423,
+        2811
+      ],
+      "inputTokens": 8627,
+      "outputTokens": 100
+    },
+    {
+      "key": "golden/ts/airtime-self",
+      "source": "golden",
+      "language": "ts",
+      "id": "airtime-self",
+      "group": null,
+      "text": "ndzi xavela airtime ya R20",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1514,
+      "modelMs": [
+        1514
+      ],
+      "inputTokens": 4270,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/ts/airtime-gift",
+      "source": "golden",
+      "language": "ts",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "rhumela airtime ya R20 eka 0837654321",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1446,
+      "modelMs": [
+        1446
+      ],
+      "inputTokens": 4274,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/ts/data-want",
+      "source": "golden",
+      "language": "ts",
+      "id": "data-want",
+      "group": null,
+      "text": "ndzi lava data bundle mfowethu",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1612,
+      "modelMs": [
+        1612
+      ],
+      "inputTokens": 4269,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/ts/electricity-200",
+      "source": "golden",
+      "language": "ts",
+      "id": "electricity-200",
+      "group": null,
+      "text": "ndzi xavela gezi ya R200 meter 01234567890",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1515,
+      "modelMs": [
+        1515
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/ts/send-money",
+      "source": "golden",
+      "language": "ts",
+      "id": "send-money",
+      "group": null,
+      "text": "rhumela mali ya R50 eka 0841234567",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1569,
+      "modelMs": [
+        1569
+      ],
+      "inputTokens": 4273,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/ts/redeem-voucher",
+      "source": "golden",
+      "language": "ts",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "ndzi xavile voucher ya Blu exitolo ndzi lava ku yi loada",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_voucher_load"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1045,
+      "modelMs": [
+        1045
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 15
+    },
+    {
+      "key": "golden/ts/help",
+      "source": "golden",
+      "language": "ts",
+      "id": "help",
+      "group": null,
+      "text": "xana service leyi yi endla yini, yi tirha njhani",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "WaPay yi ku pfuna ku hakela, ku rhumela mali, ku xava airtime, data, gezi, na ku amukela mali hi link. U ni R150 leyi u nga yi tirhisaka sweswi, naswona R80 yi kumeka ntsena eka withdrawals. 💰\n\nKu tirha ka yona: u ndzi tsalela leswi u lavaka ku swi endla, ndzi ku komba preview, kutani u tiyisisa hi PIN loko ku ri transaction. Eka business, u nga vula \"business account\" ku kuma portal ya ku rhumel",
+        "toolCalls": [
+          "how_it_works",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 6359,
+      "modelMs": [
+        1412,
+        4946
+      ],
+      "inputTokens": 8647,
+      "outputTokens": 168
+    },
+    {
+      "key": "golden/ts/greeting",
+      "source": "golden",
+      "language": "ts",
+      "id": "greeting",
+      "group": null,
+      "text": "avuxeni mfowethu u njhani",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Avuxeni Thabo mfowethu 😊\nNdza hanya kahle, wena u pfuke kahle?",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2127,
+      "modelMs": [
+        2127
+      ],
+      "inputTokens": 4269,
+      "outputTokens": 46
+    },
+    {
+      "key": "golden/nr/balance-plain",
+      "source": "golden",
+      "language": "nr",
+      "id": "balance-plain",
+      "group": null,
+      "text": "lotjhani, ngingazi bona ngine malini na ewalletini yami",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Lotjhani Thabo 😊\nUne-R150 ongayisebenzisa eWaPay.\n\nUne-R80 we-cash balance, yokukhipha kwaphela.\nKukhona no-R55 obanjiweko nge-pay-out esalindileko ka-R50 kuThabo M, ref WPC15800A7BD6637. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3196,
+      "modelMs": [
+        3196
+      ],
+      "inputTokens": 4279,
+      "outputTokens": 102
+    },
+    {
+      "key": "golden/nr/balance-typo",
+      "source": "golden",
+      "language": "nr",
+      "id": "balance-typo",
+      "group": null,
+      "text": "heyi ngicela ibhalance yami plz",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Yebo Thabo 😊\nIbhalansi ongayisebenzisa manje ngu R150.\n\nOkukhona ekheshi lokukhipha imali kuphela ngu R80.\nKukhona no R55 obanjiwe ngenxa ye PayShap payout engu R50, ref WPC15800A7BD6637.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3397,
+      "modelMs": [
+        3397
+      ],
+      "inputTokens": 4273,
+      "outputTokens": 92
+    },
+    {
+      "key": "golden/nr/deposit-100",
+      "source": "golden",
+      "language": "nr",
+      "id": "deposit-100",
+      "group": null,
+      "text": "ngifuna ukufaka i R100 ewalletini ngekarada yami",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "DEPOSIT_START",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_deposit"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1081,
+      "modelMs": [
+        1081
+      ],
+      "inputTokens": 4277,
+      "outputTokens": 21
+    },
+    {
+      "key": "golden/nr/deposit-status",
+      "source": "golden",
+      "language": "nr",
+      "id": "deposit-status",
+      "group": null,
+      "text": "imali engiyifakileko ekuseni ifikile na?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Iye Thabo, imali oyifakileko ekuseni ifikile. 😊\n\n16 Sep 04:30 DEPOSIT R20 SUCCESS PayFast, ref 2179045.\n\nIbhalansi ongayisebenzisa nje ngu R150. 💰",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2250,
+      "modelMs": [
+        2250
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 82
+    },
+    {
+      "key": "golden/nr/airtime-self",
+      "source": "golden",
+      "language": "nr",
+      "id": "airtime-self",
+      "group": null,
+      "text": "ngicela i airtime ye R20 kimi",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1388,
+      "modelMs": [
+        1388
+      ],
+      "inputTokens": 4271,
+      "outputTokens": 32
+    },
+    {
+      "key": "golden/nr/airtime-gift",
+      "source": "golden",
+      "language": "nr",
+      "id": "airtime-gift",
+      "group": null,
+      "text": "thumela i airtime ye R20 ku 0837654321",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "0837654321"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_AIRTIME",
+        "amountCents": 2000,
+        "msisdn": "083…4321",
+        "text": "",
+        "toolCalls": [
+          "start_buy_airtime"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1291,
+      "modelMs": [
+        1291
+      ],
+      "inputTokens": 4275,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/nr/data-want",
+      "source": "golden",
+      "language": "nr",
+      "id": "data-want",
+      "group": null,
+      "text": "ngifuna idata bundle boss, ngiphelelwe yi data",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_DATA",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_data"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1305,
+      "modelMs": [
+        1305
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 35
+    },
+    {
+      "key": "golden/nr/electricity-200",
+      "source": "golden",
+      "language": "nr",
+      "id": "electricity-200",
+      "group": null,
+      "text": "ngicela ugezi we R200 prepaid, imitha ngu 01234567890",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "BUY_ELECTRICITY",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_buy_electricity"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1266,
+      "modelMs": [
+        1266
+      ],
+      "inputTokens": 4279,
+      "outputTokens": 31
+    },
+    {
+      "key": "golden/nr/send-money",
+      "source": "golden",
+      "language": "nr",
+      "id": "send-money",
+      "group": null,
+      "text": "ngicela uthumele imali engu R50 ku 0841234567",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "0841234567"
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "SEND_VOUCHER",
+        "amountCents": 5000,
+        "msisdn": "084…4567",
+        "text": "",
+        "toolCalls": [
+          "start_send"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1221,
+      "modelMs": [
+        1221
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 38
+    },
+    {
+      "key": "golden/nr/redeem-voucher",
+      "source": "golden",
+      "language": "nr",
+      "id": "redeem-voucher",
+      "group": null,
+      "text": "ngithenge i Blu voucher evinkilini, ngifuna ukuyifaka ewalletini",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "REDEEM_VOUCHER",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_voucher_load"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1163,
+      "modelMs": [
+        1163
+      ],
+      "inputTokens": 4281,
+      "outputTokens": 15
+    },
+    {
+      "key": "golden/nr/help",
+      "source": "golden",
+      "language": "nr",
+      "id": "help",
+      "group": null,
+      "text": "le service yenzani kanti? isebenza njani",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "HELP",
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Isevisi le ikusiza ukuphatha imali kuWhatsApp, Thabo. Ungabona ibhalansi, uthenge i-airtime, idatha nogesi, uthumele imali, ufake imali, ukhiphe imali, namkha wenze ama-link wokuthi abantu bakubhadele 💡\n\nNangabe ubuza nge-business service: utjho “business account”, unginikele igama lebhizinisi lakho, bese uthola i-portal yokubona amakhasimende, ama-link wokubhadelwa, ama-QR codes, nokuthi ngubani",
+        "toolCalls": [
+          "how_it_works",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 7209,
+      "modelMs": [
+        1383,
+        5826
+      ],
+      "inputTokens": 8647,
+      "outputTokens": 172
+    },
+    {
+      "key": "golden/nr/greeting",
+      "source": "golden",
+      "language": "nr",
+      "id": "greeting",
+      "group": null,
+      "text": "lotjha mngani unjani",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ngiyaphila, Thabo mngani 😊\nWena unjani namhlanje?",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2312,
+      "modelMs": [
+        2312
+      ],
+      "inputTokens": 4269,
+      "outputTokens": 45
+    },
+    {
+      "key": "agent/en/withdraw-amount-bank",
+      "source": "agent",
+      "language": "en",
+      "id": "withdraw-amount-bank",
+      "group": "withdraw",
+      "text": "I want to withdraw R200 to my Capitec account",
+      "want": {
+        "outcome": [
+          "proposal"
+        ],
+        "action": "WITHDRAW",
+        "amountCents": 20000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "WITHDRAW",
+        "amountCents": 20000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_withdraw"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1324,
+      "modelMs": [
+        1324
+      ],
+      "inputTokens": 4273,
+      "outputTokens": 25
+    },
+    {
+      "key": "agent/af/withdraw-can-i",
+      "source": "agent",
+      "language": "af",
+      "id": "withdraw-can-i",
+      "group": "withdraw",
+      "text": "Kan ek geld onttrek na my bank toe?",
+      "want": {
+        "outcome": [
+          "reply",
+          "clarify"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ja, Thabo. Jy kan na jou eie bankrekening onttrek. PayShap is die goedkoopste vinnige opsie teen R8. 💰\nWil jy jou beskikbare kontantbalans van R80 na jou bank onttrek?",
+        "toolCalls": [
+          "how_it_works",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3511,
+      "modelMs": [
+        1139,
+        2371
+      ],
+      "inputTokens": 8893,
+      "outputTokens": 99
+    },
+    {
+      "key": "agent/zu/withdraw-amount",
+      "source": "agent",
+      "language": "zu",
+      "id": "withdraw-amount",
+      "group": "withdraw",
+      "text": "Ngifuna ukukhipha imali engu-R100 iye ebhange lami",
+      "want": {
+        "outcome": [
+          "proposal",
+          "clarify"
+        ],
+        "action": "WITHDRAW",
+        "amountCents": 10000,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "proposal",
+        "action": "WITHDRAW",
+        "amountCents": 10000,
+        "msisdn": null,
+        "text": "",
+        "toolCalls": [
+          "start_withdraw"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1403,
+      "modelMs": [
+        1403
+      ],
+      "inputTokens": 4277,
+      "outputTokens": 25
+    },
+    {
+      "key": "agent/en/fee-send",
+      "source": "agent",
+      "language": "en",
+      "id": "fee-send",
+      "group": "fees",
+      "text": "what does it cost to send money to someone?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "💸 Sending to another WaPay user from your balance is free.\nSending a WaPay voucher to any SA number costs R3 flat.\n\nWould you like me to start a send for you, Thabo? 😊",
+        "toolCalls": [
+          "get_fee_quote",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2970,
+      "modelMs": [
+        1299,
+        1671
+      ],
+      "inputTokens": 8868,
+      "outputTokens": 94
+    },
+    {
+      "key": "agent/af/fee-deposit-card",
+      "source": "agent",
+      "language": "af",
+      "id": "fee-deposit-card",
+      "group": "fees",
+      "text": "Hoeveel kos dit om geld in te betaal met my kaart?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Met jou kaart kos dit 4.2% + R2.30 bo-op die bedrag, afgerond na die volgende rand. 💳\n\nVoorbeelde:\nR20 kos R24\nR100 kos R107\nR500 kos R524\n\nDie volle bedrag wat jy kies, land in jou WaPay-balans. Wil jy hê ek moet ’n veilige kaart-betaalskakel vir jou begin? 😊",
+        "toolCalls": [
+          "get_fee_quote",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 4342,
+      "modelMs": [
+        1560,
+        2781
+      ],
+      "inputTokens": 8949,
+      "outputTokens": 137
+    },
+    {
+      "key": "agent/zu/fee-withdraw",
+      "source": "agent",
+      "language": "zu",
+      "id": "fee-withdraw",
+      "group": "fees",
+      "text": "Kubiza malini ukukhipha imali?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Kubiza kanje ukukhipha imali, Thabo 🏧\n\nPayShap ebhange lakho: R8\nBank transfer: R10\nCash e-Absa noma Nedbank ATM, Pick n Pay / Boxer till, noma FNB eWallet: R18 kuze kufike ku-R700\nCash: R23 kuze kufike ku-R1500\nCash: R30 ngaphezulu kwalokho\n\nOkushesha nokushibhile kakhulu kuvamise ukuba yi-PayShap ngoba R8 futhi iza ngemizuzu. 😊",
+        "toolCalls": [
+          "get_fee_quote",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 5756,
+      "modelMs": [
+        1526,
+        4230
+      ],
+      "inputTokens": 8888,
+      "outputTokens": 163
+    },
+    {
+      "key": "agent/en/status-payshap",
+      "source": "agent",
+      "language": "en",
+      "id": "status-payshap",
+      "group": "status",
+      "text": "is my payshap withdrawal done yet?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Not yet, Thabo. Your PayShap withdrawal of R50 is still pending, ref WPC15800A7BD6637. R55 is held for it until the bank rail answers. 💰",
+        "toolCalls": [
+          "get_payout_status",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3292,
+      "modelMs": [
+        1339,
+        1952
+      ],
+      "inputTokens": 8617,
+      "outputTokens": 86
+    },
+    {
+      "key": "agent/af/status-deposit",
+      "source": "agent",
+      "language": "af",
+      "id": "status-deposit",
+      "group": "status",
+      "text": "Het my inbetaling van R20 deurgekom?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ja, Thabo. Jou R20 inbetaling deur PayFast is suksesvol. 💰\nVerwysing: 2179045, op 16 Sep 04:30.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2441,
+      "modelMs": [
+        2441
+      ],
+      "inputTokens": 4272,
+      "outputTokens": 62
+    },
+    {
+      "key": "agent/zu/status-payshap",
+      "source": "agent",
+      "language": "zu",
+      "id": "status-payshap",
+      "group": "status",
+      "text": "Imali yami ye-PayShap isifikile?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Cha Thabo, i-PayShap yakho ka-R50 isengu-PENDING. Ref: WPC15800A7BD6637.\n\nU-R55 usabanjiwe kuze kuphendule ibhange. 💡",
+        "toolCalls": [
+          "get_payout_status",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 4102,
+      "modelMs": [
+        1405,
+        2697
+      ],
+      "inputTokens": 8627,
+      "outputTokens": 93
+    },
+    {
+      "key": "agent/en/discovery-what-can-i-do",
+      "source": "agent",
+      "language": "en",
+      "id": "discovery-what-can-i-do",
+      "group": "discovery",
+      "text": "what can i actually do with wapay?",
+      "want": {
+        "outcome": [
+          "reply",
+          "proposal"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, with WaPay you can spend, send, add money and get paid from this chat 📱✨\n\nYou can:\nBuy airtime, data and prepaid electricity.\nSend money to any SA number.\nMake a please-pay-me link.\nAdd money by card, Instant EFT, Apple Pay, Google Pay, or voucher.\nWithdraw to your bank or as cash.\nBuy or redeem OTT vouchers.\nCheck your balance and recent activity.\n\nYou have R150 available to spend right n",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": false,
+        "expectText": true,
+        "rejectText": true,
+        "shape": false
+      },
+      "pass": false,
+      "error": null,
+      "ms": 2792,
+      "modelMs": [
+        2792
+      ],
+      "inputTokens": 4270,
+      "outputTokens": 132
+    },
+    {
+      "key": "agent/af/discovery-electricity",
+      "source": "agent",
+      "language": "af",
+      "id": "discovery-electricity",
+      "group": "discovery",
+      "text": "Kan ek elektrisiteit hier koop?",
+      "want": {
+        "outcome": [
+          "reply",
+          "clarify"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ja, Thabo, jy kan prepaid elektrisiteit hier koop en die token sommer in hierdie chat kry 💡\nWil jy dit nou koop, en moet ek begin met jou meter nommer en bedrag?",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2016,
+      "modelMs": [
+        2016
+      ],
+      "inputTokens": 4269,
+      "outputTokens": 67
+    },
+    {
+      "key": "agent/zu/discovery-data",
+      "source": "agent",
+      "language": "zu",
+      "id": "discovery-data",
+      "group": "discovery",
+      "text": "Ngingakwazi yini ukuthenga i-data lapha?",
+      "want": {
+        "outcome": [
+          "reply",
+          "clarify"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Yebo, Thabo. Ungathenga i-data yanoma iyiphi inombolo yase-SA usebenzisa ibhalansi yakho, akukho mali ye-WaPay. 📱\nUfuna siqale i-data yakho noma eyenye inombolo?",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2777,
+      "modelMs": [
+        2777
+      ],
+      "inputTokens": 4272,
+      "outputTokens": 77
+    },
+    {
+      "key": "agent/en/disambiguation-payment",
+      "source": "agent",
+      "language": "en",
+      "id": "disambiguation-payment",
+      "group": "disambiguation",
+      "text": "did my payment go through?",
+      "want": {
+        "outcome": [
+          "reply",
+          "clarify"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Your newest payment is still pending, Thabo.\n\nPayShap payout: R50 to Thabo M\nRef: WPC15800A7BD6637\nR55 is still held while the bank rail answers. 💰",
+        "toolCalls": [
+          "get_payout_status",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3085,
+      "modelMs": [
+        1137,
+        1948
+      ],
+      "inputTokens": 8613,
+      "outputTokens": 92
+    },
+    {
+      "key": "agent/af/disambiguation-payment",
+      "source": "agent",
+      "language": "af",
+      "id": "disambiguation-payment",
+      "group": "disambiguation",
+      "text": "het my betaling deurgegaan?",
+      "want": {
+        "outcome": [
+          "reply",
+          "clarify"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, jou PayShap-uitbetaling van R50 na Thabo M is nog PENDING.\nRef: WPC15800A7BD6637.\nR55 word nog gehou totdat die bankrail antwoord. 💰",
+        "toolCalls": [
+          "get_payout_status",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2948,
+      "modelMs": [
+        1134,
+        1814
+      ],
+      "inputTokens": 8615,
+      "outputTokens": 92
+    },
+    {
+      "key": "agent/en/complaint-airtime",
+      "source": "agent",
+      "language": "en",
+      "id": "complaint-airtime",
+      "group": "complaint",
+      "text": "I didn't get my airtime",
+      "want": {
+        "outcome": [
+          "reply",
+          "clarify"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, I see your newest airtime was R20 Vodacom for 083…1234 on 15 Sep, ref BLU-77. It shows SUCCESS on my side 📱\n\nPlease check that number first. If it is the right number and still not loaded, I can help you query ref BLU-77 with support 😊",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2415,
+      "modelMs": [
+        2415
+      ],
+      "inputTokens": 4267,
+      "outputTokens": 96
+    },
+    {
+      "key": "agent/af/complaint-send",
+      "source": "agent",
+      "language": "af",
+      "id": "complaint-send",
+      "group": "complaint",
+      "text": "Die geld wat ek vir Philly gestuur het, het nooit aangekom nie",
+      "want": {
+        "outcome": [
+          "reply",
+          "clarify"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Thabo, ek sien nie ’n onlangse stuur na Philly in jou ledger nie.\n\nDie nuutste beweging is jou PayShap onttrekking van R50 aan Thabo M, ref WPC15800A7BD6637. Dit is nog PENDING en R55 word gehou.\n\nBedoel jy dalk hierdie onttrekking, of ’n ouer stuur na Philly? 💡",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2981,
+      "modelMs": [
+        2981
+      ],
+      "inputTokens": 4276,
+      "outputTokens": 112
+    },
+    {
+      "key": "agent/zu/complaint-airtime",
+      "source": "agent",
+      "language": "zu",
+      "id": "complaint-airtime",
+      "group": "complaint",
+      "text": "Angikayitholi i-airtime yami",
+      "want": {
+        "outcome": [
+          "reply",
+          "clarify"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ngiyabona, Thabo. I-airtime yakamuva engiyibonayo ngu R20 Vodacom ku 083…1234, iphumelele ngo 15 Sep 07:30, ref BLU-77. 📱\n\nUma ubungayitholi kuleyo nombolo, ngingakusiza sihlole ukuthi inombolo ibiyiyo yini noma uthenge enye namuhla?",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 3593,
+      "modelMs": [
+        3593
+      ],
+      "inputTokens": 4271,
+      "outputTokens": 112
+    },
+    {
+      "key": "agent/en/aside-fee-mid-deposit",
+      "source": "agent",
+      "language": "en",
+      "id": "aside-fee-mid-deposit",
+      "group": "aside",
+      "text": "wait, how much is the fee for that again?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "For a R100 deposit, the fee is R7.\n\nYou pay R107 total, and the full R100 lands in your WaPay balance 💳😊",
+        "toolCalls": [
+          "get_fee_quote",
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2917,
+      "modelMs": [
+        1289,
+        1628
+      ],
+      "inputTokens": 9008,
+      "outputTokens": 83
+    },
+    {
+      "key": "agent/af/aside-why-pin",
+      "source": "agent",
+      "language": "af",
+      "id": "aside-why-pin",
+      "group": "aside",
+      "text": "hoekom vra jy my PIN?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Ek vra jou PIN om seker te maak dit is regtig jy, Thabo 😊\nDit beskerm jou R150 balans voordat R50 na Philly gestuur word.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2298,
+      "modelMs": [
+        2298
+      ],
+      "inputTokens": 4302,
+      "outputTokens": 58
+    },
+    {
+      "key": "agent/zu/aside-fee-mid-airtime",
+      "source": "agent",
+      "language": "zu",
+      "id": "aside-fee-mid-airtime",
+      "group": "aside",
+      "text": "kulungile, ake ngibuze kuqala, ikhona yini imali engikhokhiswa yona?",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Cha, Thabo. I-airtime ayinayo i-WaPay fee 💡\nUkhokha nje intengo ye-airtime, ngakho u-R20 uthenga i-airtime engu-R20. Uyaqhubeka nokuthenga i-airtime engu-R20 enombolweni yakho? 📱",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2644,
+      "modelMs": [
+        2644
+      ],
+      "inputTokens": 4322,
+      "outputTokens": 90
+    },
+    {
+      "key": "agent/en/ack-okay",
+      "source": "agent",
+      "language": "en",
+      "id": "ack-okay",
+      "group": "ack",
+      "text": "Okay",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Okay, Thabo 😊\nI’m here when you need me.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1682,
+      "modelMs": [
+        1682
+      ],
+      "inputTokens": 4262,
+      "outputTokens": 38
+    },
+    {
+      "key": "agent/en/ack-later",
+      "source": "agent",
+      "language": "en",
+      "id": "ack-later",
+      "group": "ack",
+      "text": "I'll try later",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "No problem, Thabo. I’ll be here when you’re ready 😊✨",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1453,
+      "modelMs": [
+        1453
+      ],
+      "inputTokens": 4264,
+      "outputTokens": 40
+    },
+    {
+      "key": "agent/af/ack-later",
+      "source": "agent",
+      "language": "af",
+      "id": "ack-later",
+      "group": "ack",
+      "text": "Dankie, ek sal later probeer",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Dis reg, Thabo 😊\nEk is hier wanneer jy weer wil probeer. Jou geld en aksies bly veilig.",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 1771,
+      "modelMs": [
+        1771
+      ],
+      "inputTokens": 4268,
+      "outputTokens": 48
+    },
+    {
+      "key": "agent/zu/ack-later",
+      "source": "agent",
+      "language": "zu",
+      "id": "ack-later",
+      "group": "ack",
+      "text": "Kulungile, ngizozama kamuva",
+      "want": {
+        "outcome": [
+          "reply"
+        ],
+        "action": null,
+        "amountCents": null,
+        "msisdn": null
+      },
+      "got": {
+        "outcome": "reply",
+        "action": "NONE",
+        "amountCents": null,
+        "msisdn": null,
+        "text": "Kulungile Thabo. Ngikhona uma usulungele kamuva 😊✨",
+        "toolCalls": [
+          "reply"
+        ],
+        "model": "gpt-5.5"
+      },
+      "checks": {
+        "action": true,
+        "outcome": true,
+        "amount": true,
+        "msisdn": true,
+        "maxLines": true,
+        "list": true,
+        "expectText": true,
+        "rejectText": true,
+        "shape": true
+      },
+      "pass": true,
+      "error": null,
+      "ms": 2492,
+      "modelMs": [
+        2492
+      ],
+      "inputTokens": 4271,
+      "outputTokens": 41
+    }
+  ]
+}

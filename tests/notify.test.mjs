@@ -115,3 +115,29 @@ test('the pay-out sweep goes through notifyCustomer, and the template parameters
   assert.equal(p.amount, 'R50');
   assert.equal(p.method, 'Cash at a Nedbank ATM');
 });
+
+test('C19: the pay-out half of the card reports what is held and how long the oldest has waited', () => {
+  const route = read('../pages/api/admin/conversations.js');
+  assert.match(route, /const heldCents = parkedRows\.reduce\(\(sum, p\) => sum \+ \(p\.amountCents \|\| 0\) \+ \(p\.feeCents \|\| 0\), 0\);/);
+  assert.match(route, /const oldestMinutes = parkedRows\.length \? Math\.max\(\.\.\.parkedRows\.map\(\(p\) => p\.ageMinutes \|\| 0\)\) : null;/);
+  assert.match(route, /payouts: \{ parked: parkedRows\.length, heldCents, oldestMinutes, rows:/);
+  const page = read('../pages/admin/index.js');
+  assert.match(page, /holding.*R\(c\.payouts\.heldCents\)/);
+  assert.match(page, /oldest ' \+ c\.payouts\.oldestMinutes/);
+  // the console still carries none of the gate words as copy
+  assert.doesNotMatch(page, /\bbet(s|ting|tor)?\b|gambl|casino|wager|bookmak/i);
+  assert.doesNotMatch(page, /cash\s?-?\s?out|withdraw/i);
+});
+
+test('the eval runner has a frozen baseline and a script that uses it, so a regression exits non-zero', () => {
+  const pkg = JSON.parse(read('../package.json'));
+  assert.equal(pkg.scripts['eval:agent'], 'node --env-file=.env scripts/eval-agent.mjs --baseline docs/testing/agent-eval-baseline.json');
+  assert.ok(pkg.scripts['eval:orchestrator']);
+  const baseline = JSON.parse(read('../docs/testing/agent-eval-baseline.json'));
+  assert.ok(baseline.summary?.overall, 'compareBaseline reads summary.overall');
+  assert.equal(baseline.summary.overall.total, 156);
+  assert.equal(baseline.summary.overall.actionPct, 100);
+  assert.ok(Object.keys(baseline.summary.byLanguage || {}).length >= 11, 'all eleven languages are in the baseline');
+  const runner = read('../scripts/eval-agent.mjs');
+  assert.match(runner, /Exit 1: regression against baseline\./);
+});

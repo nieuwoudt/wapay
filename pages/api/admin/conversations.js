@@ -108,6 +108,13 @@ export default async function handler(req, res) {
       };
     });
 
+    // What the parked pay-outs are holding of the customers' money, and what
+    // the oldest one has been waiting. Both are what a human chases; the
+    // supplier float they are drawn against is its own card, because reading
+    // it is an HTTP call to OTT with a different failure profile.
+    const heldCents = parkedRows.reduce((sum, p) => sum + (p.amountCents || 0) + (p.feeCents || 0), 0);
+    const oldestMinutes = parkedRows.length ? Math.max(...parkedRows.map((p) => p.ageMinutes || 0)) : null;
+
     const shadowCount = shadowListRaw.split(',').map((s) => s.trim()).filter(Boolean).length;
 
     return res.status(200).json({
@@ -142,7 +149,7 @@ export default async function handler(req, res) {
       // console, because the console must carry none of these words as copy.
       gateWatch: ['RECEIPT', 'PARTNER', 'BETTING'],
       shadow: { count: shadowCount, live: shadowCount > 0 },
-      payouts: { parked: parkedRows.length, rows: parkedRows.slice(0, 12) },
+      payouts: { parked: parkedRows.length, heldCents, oldestMinutes, rows: parkedRows.slice(0, 12) },
     });
   } catch (error) {
     console.error(JSON.stringify({ type: 'admin_conversations_error', error: error?.message }));

@@ -351,7 +351,20 @@ function Conversations() {
         The next phase opens when the eval passes in every language AND a full week of agent turns fires none of the three gates drawn in red. The rest are informational.
       </p>
       <div style={{ marginTop: 6 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>Still with the rail: {c.payouts.parked}</div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>
+          Still with the rail: {c.payouts.parked}
+          {c.payouts.parked > 0 ? (
+            <span style={{ fontWeight: 400, color: 'var(--ink3)' }}>
+              {' · holding '}{R(c.payouts.heldCents)}{' of customer money'}
+              {c.payouts.oldestMinutes != null ? ' · oldest ' + c.payouts.oldestMinutes + 'm' : ''}
+            </span>
+          ) : null}
+        </div>
+        {c.payouts.parked > 0 ? (
+          <p className="note" style={{ marginTop: 0, marginBottom: 6 }}>
+            Compare this against the supplier float on the card below: money held here has left the customer's balance but has not reached them.
+          </p>
+        ) : null}
         {c.payouts.rows.length === 0 ? (
           <div className="empty" style={{ padding: '6px 0' }}>Nothing parked.</div>
         ) : c.payouts.rows.map((p) => (

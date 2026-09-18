@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-09-18 (44) — The two gaps the map verification named: the eval has a frozen baseline that fails on regression, and the pay-out half of the Mission Control card reports what is held
+
+A five-agent pass verified every row of the phase map against the code before
+redrawing it, and refused to mark two rows shipped. Both gaps are closed here.
+
+**C18.** The runner already exits non-zero on a regression, but nothing froze a
+baseline to compare against, so the flag was one a human had to remember.
+The 18 September run is now docs/testing/agent-eval-baseline.json and
+pnpm eval:agent passes it automatically. pnpm eval:orchestrator runs the
+two-tier baseline beside it.
+
+**C19.** The card listed parked pay-outs without the one number a human acts
+on: what they are holding. It now reports the total of amount plus fee across
+every parked row and how long the oldest has waited, and says plainly that
+this money has left the customer balance without reaching them, to be read
+against the supplier float on the card below.
+
+Unit 864/864, build green. The phase map is republished as Version 5: the
+eval condition of the promotion gate reads MET, the pilot list carries its
+first number, C18 moves to shipped and C19 to partial.
+
 ## 2026-09-18 (43) — notifyCustomer: the one message WaPay starts on its own now uses a rail that crosses the 24 hour window (BUGLOG #72)
 
 C21 of the design record. The pay-out sweep runs at 02:00 and from a cron, so
