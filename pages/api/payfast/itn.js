@@ -41,6 +41,7 @@ import {
 } from '../../../lib/deposits.js';
 import { markRequestPaid } from '../../../lib/payment-requests.js';
 import { deliverRequestPaidNotifications } from '../../../lib/request-notify.js';
+import { recordMoneyEvent } from '../../../lib/notify.js';
 import { noteDepositMethod } from '../../../lib/user-profile.js';
 import { postEntry, ensureWallet } from '../../../lib/ledger-post.js';
 import { buildLoad, RAIL, BALANCE } from '../../../lib/ledger-core.js';
@@ -263,11 +264,28 @@ export default async function handler(req, res) {
         console.error(
           JSON.stringify({ type: 'payfast_itn_confirm_send_error', paymentId, error: confirmSent?.error })
         );
+        // The money landed and the customer was not told. Write the ledger
+        // fact into the history the agent reads, or its next turn sees a
+        // balance that grew for no reason it can explain (C14, 2026-09-18).
+        await recordMoneyEvent({
+          prisma,
+          accountId,
+          text: lines.join('\n'),
+          kind: 'deposit',
+          refs: { paymentId },
+        });
       }
     } catch (error) {
       console.error(
         JSON.stringify({ type: 'payfast_itn_confirm_send_error', paymentId, error: error?.message })
       );
+      await recordMoneyEvent({
+        prisma,
+        accountId,
+        text: `✅ Deposit received: R${centsToRandString(amountCents)}`,
+        kind: 'deposit',
+        refs: { paymentId },
+      }).catch(() => {});
     }
   }
 

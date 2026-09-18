@@ -4,6 +4,13 @@
 
 ---
 
+## 75. A voucher gift marked delivered whose PIN nobody ever saw
+
+- **Symptom:** found while closing C14 (2026-09-18). `claimPendingGifts` marks every claimable gift DELIVERED before anything is sent, which is correct: the guarded update is what stops two concurrent turns delivering the same voucher twice. The send-failure branch has always put the gift back for exactly that reason, with the comment "bearer PIN must never strand". A THROW anywhere else in the claim loop did not: the outer catch logged `voucher_gift_claim_failed` and moved on, leaving the gift DELIVERED, the recipient with no PIN, and no path back to it. The sender's money was gone and nothing would ever retry.
+- **Root cause:** the revert was attached to one failure shape (a send that answers not-ok) rather than to the invariant (claimed and not sent).
+- **Fix:** the ids of everything claimed are tracked from the moment of the claim and removed on a successful send or on the explicit revert; the catch puts back whatever is still on the list, so the next message retries.
+- **Guard:** `tests/money-events.test.mjs` asserts the claim is tracked at the claim, cleared on both success and the explicit revert, and reverted in the catch, and that this path writes NO event turn (saying a voucher was delivered when the PIN never arrived would be a false fact in the agent's memory).
+
 ## 74. "Forget me" left the customer's last ten messages in a column nobody reads
 
 - **Symptom:** found while retiring the legacy conversation ring (2026-09-18). `handleForgetMe` erased `conversation_turns` and cleared the customer's notes and interests, and told them "I have erased our chat memory and the things you told me". It never touched `Account.conversationData.history`, the ten-message JSON ring that every reply had been appended to since before the turns table existed. A customer who asked to be forgotten kept ten of their own messages, including anything they had typed into a flow, in the database indefinitely.

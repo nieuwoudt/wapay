@@ -158,12 +158,17 @@ test('C14: a money outcome the customer was not told about is written into the h
   const boom = { conversationTurn: { create: async () => { throw new Error('db down'); } } };
   assert.equal((await recordMoneyEvent({ prisma: boom, accountId: 'a1', text: 'x' })).ok, false);
 
-  // the sweep writes it exactly when nothing reached the customer
+  // The sweep writes it exactly when nothing reached the customer, on all
+  // three of the ways that can happen. Each path goes through one helper
+  // (2026-09-18); tests/money-events.test.mjs checks the three call sites.
   const payouts = read('../lib/payouts.js');
-  const block = payouts.slice(payouts.indexOf('counts.notifyFailed += 1;'), payouts.indexOf('counts.notifyFailed += 1;') + 700);
-  assert.match(block, /recordMoneyEvent\(\{/);
-  assert.match(block, /kind: 'reconcile'/);
-  assert.ok(payouts.indexOf('recordMoneyEvent({') > payouts.indexOf('counts.notifyFailed += 1;'), 'only on the failure path, so a delivered notice is not in history twice');
+  const helper = payouts.slice(payouts.indexOf('const recordUntold = async ()'), payouts.indexOf('const account = await prismaClient.account.findUnique'));
+  assert.match(helper, /recordMoneyEvent\(\{/);
+  assert.match(helper, /kind: 'reconcile'/);
+  assert.ok(
+    payouts.indexOf('recordUntold()') < payouts.indexOf('notified.push(r.reference)'),
+    'only on a failure path, so a delivered notice is not in history twice',
+  );
 });
 
 test('C13: the internal-auth gate fails CLOSED in production when the key is missing', async () => {

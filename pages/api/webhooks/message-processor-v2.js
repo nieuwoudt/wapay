@@ -1231,9 +1231,16 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     if (!reconError?.skipHook) logStructured('payout_reconcile_hook_failed', { from, error: reconError?.message });
   }
 
+  // A claim marks the gift DELIVERED before anything is sent, so every path
+  // out of this block that did not send must put it back: a bearer PIN must
+  // never strand. The send-failure branch has always done that; a THROW
+  // anywhere else in the loop did not, and left a gift marked delivered whose
+  // PIN nobody ever saw (2026-09-18).
+  const claimedUnsent = [];
   try {
     if (await hasPendingGifts({ recipientMsisdn: account.msisdn })) {
       const gifts = await claimPendingGifts({ recipientMsisdn: account.msisdn });
+      claimedUnsent.push(...gifts.map((g) => g.id));
       for (const gift of gifts) {
         let senderName = null;
         try {
@@ -1253,6 +1260,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           // The PIN definitively did not reach the recipient — put the gift
           // back so the next message retries (bearer PIN must never strand).
           await revertGiftDelivery({ giftId: gift.id }).catch(() => {});
+          claimedUnsent.splice(claimedUnsent.indexOf(gift.id), 1);
           logStructured('voucher_gift_claim_send_failed_reverted', {
             from,
             giftId: gift.id,
@@ -1261,6 +1269,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           continue;
         }
 
+        claimedUnsent.splice(claimedUnsent.indexOf(gift.id), 1);
         logStructured('voucher_gift_claim_delivered', {
           from,
           accountId: account.id,
@@ -1276,7 +1285,12 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       from,
       accountId: account.id,
       error: claimError?.message,
+      reverted: claimedUnsent.length,
     });
+    // Anything claimed but not sent goes back, so the next message retries.
+    for (const giftId of claimedUnsent) {
+      await revertGiftDelivery({ giftId }).catch(() => {});
+    }
   }
 
   // Check if user is in a conversation state (e.g., entering voucher PIN)

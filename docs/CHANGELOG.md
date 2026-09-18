@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-09-18 (51) — The rest of C14: every money outcome the customer was not told about now reaches the agent, and a claimed gift can no longer strand (BUGLOG #75)
+
+Entry 45 wrote the first of these producers. The handover asked for the other
+two, and a verification pass found two more holes inside the one that shipped.
+
+**The pay-out sweep.** There are three ways for the ledger to move and the
+customer to hear nothing, and only one of them wrote the fact. An account the
+sweep cannot address (no waId) simply `continue`d, and a throw inside the
+notify block was logged and dropped. Both now go through one `recordUntold`
+helper with the other, and all three are counted, so Mission Control shows
+them rather than reporting a quiet night.
+
+**The PayFast ITN.** A deposit that lands while the confirmation fails to send
+left the balance higher and the agent unable to say why. The failure and the
+throw now both write the ledger fact as an event turn. The happy path writes
+nothing extra: `lib/say.js` already recorded the confirmation, and a second
+row would read as two deposits.
+
+**The gift claim, where an event row would have been the wrong answer
+(BUGLOG #75).** A claim marks the gift DELIVERED before anything is sent. The
+send-failure branch has always put it back, because a bearer PIN must never
+strand; a throw anywhere else in the loop did not, so a gift could sit
+DELIVERED with the recipient holding nothing and nothing to retry it. Every
+claim is now tracked and the catch puts back whatever was never sent. No event
+turn here on purpose: writing "a voucher was delivered" when the PIN never
+arrived would put a false fact in the agent's memory.
+
+Unit 895/895, build green, chat QA harness 29/29.
+
 ## 2026-09-18 (50) — The first batch of source-text locks rewritten as behaviour, and the two format bugs that exposed
 
 Item 5 of the Phase 3 order, the one that blocks the rest: about 36 test files
