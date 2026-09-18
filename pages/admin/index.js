@@ -321,6 +321,11 @@ function Conversations() {
         {stat('Customer messages', c.conversation.inbound, 'last ' + c.windowDays + ' days')}
         {stat('WaPay replies', c.conversation.outbound, 'both sides recorded')}
         {stat('Agent turns', c.agent.turns, c.shadow.live ? c.agent.customers + ' on the pilot list' : 'pilot list empty')}
+        {stat(
+          'Clean days',
+          c.shadow.started ? c.shadow.cleanDays + ' / ' + c.shadow.cleanDaysNeeded : 'not started',
+          c.shadow.started ? (c.shadow.moneyGateFired ? 'clock reset by a gate' : 'no gate fired') : 'no agent turn yet',
+        )}
         {stat('Agent share', c.agent.shareOfInboundPct == null ? '—' : c.agent.shareOfInboundPct + '%', 'of customer messages')}
         {stat('Latency p50 / p95', ms(c.agent.p50Ms) + ' / ' + ms(c.agent.p95Ms), 'slowest ' + ms(c.agent.maxMs))}
         {stat('Model spend', c.agent.priced ? (c.agent.costZar != null ? 'R' + c.agent.costZar.toFixed(2) : usd(c.agent.costUsd)) : 'not priced', c.agent.priced ? (c.agent.costPerTurnZar != null ? 'R' + c.agent.costPerTurnZar.toFixed(4) + ' per turn' : usd(c.agent.costPerTurnUsd) + ' per turn') : 'prices not set')}
@@ -350,6 +355,24 @@ function Conversations() {
       <p className="note" style={{ marginTop: 8, marginBottom: 6 }}>
         The next phase opens when the eval passes in every language AND a full week of agent turns fires none of the three gates drawn in red. The rest are informational.
       </p>
+      {/* A pilot week that never starts looks exactly like a quiet one. Each
+          number on the list is shown by its last four digits with whether the
+          product can read it and whether it belongs to an account that has
+          written to us, so an empty week is never a mystery. */}
+      <div className="ops" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+        {(c.shadow.entries || []).length === 0 ? (
+          <span className="pill"><span className="dot" style={{ background: 'var(--ink3)' }} />Pilot list empty</span>
+        ) : (c.shadow.entries || []).map((e, i) => {
+          const bad = !e.valid || !e.hasAccount;
+          return (
+            <span key={i} className="pill" style={{ borderColor: bad ? 'var(--crit)' : undefined, color: bad ? 'var(--crit)' : undefined }}>
+              <span className="dot" style={{ background: bad ? 'var(--crit)' : 'var(--good)' }} />
+              {'•••' + (e.tail || '????')}{' '}
+              {!e.valid ? 'not a readable number' : !e.hasAccount ? 'no account has written from it' : e.turnsInWindow + ' turns'}
+            </span>
+          );
+        })}
+      </div>
       <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>
           Still with the rail: {c.payouts.parked}

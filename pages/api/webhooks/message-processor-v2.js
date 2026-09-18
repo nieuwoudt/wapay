@@ -80,6 +80,7 @@ import { matchHowItWorksAsk, howItWorksAnswer, howItWorksBrief, wantsSteps, dete
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
 import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
+import { agentV3For } from '../../../lib/shadow-list.js';
 import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '../../../lib/localize.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
@@ -5949,12 +5950,10 @@ const ACTION_CAPABILITY = {
 // the customer record and typed tools, behind the shadow list
 // WAPAY_AGENT_V3_MSISDNS. Shadow numbers skip the regex hooks after the
 // guard hooks; the money flows, confirm, PIN and receipts are unchanged.
+// The list itself is `lib/shadow-list.js`: one place, imported by the
+// Mission Control card that reports it, and tested by running it rather than
+// by slicing it out of this file's source text.
 // ============================================================================
-function agentV3For(waId) {
-  const raw = process.env.WAPAY_AGENT_V3_MSISDNS || '';
-  const list = raw.split(',').map((s) => s.trim()).filter(Boolean);
-  return list.includes(String(waId || '').trim());
-}
 
 /** A fact-built line from the record: the fallback when the model fails or a gate blocks. */
 function agentFallbackLine(pack) {

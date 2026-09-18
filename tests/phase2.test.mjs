@@ -25,23 +25,13 @@ test('the shadow gate: a listed number reaches the agent after the guard hooks a
   assert.ok(at < processor.indexOf('if (matchTransactionsAsk(text))'), 'before the transactions hook');
   assert.ok(at < processor.indexOf('const feeTopic = matchFeeAsk(text);'), 'before the fee hook');
   assert.ok(at < processor.indexOf('return await handleAIChat({'), 'before the two-tier engine');
-  // exact-match list, comma separated, never a prefix or substring match
-  const fn = between('function agentV3For(waId)', 'function agentFallbackLine');
-  assert.match(fn, /WAPAY_AGENT_V3_MSISDNS/);
-  assert.match(fn, /list\.includes\(String\(waId \|\| ''\)\.trim\(\)\)/);
-});
-
-test('agentV3For: exact numbers only', () => {
-  const src = between('function agentV3For(waId)', 'function agentFallbackLine');
-  const agentV3For = new Function('process', src + '\nreturn agentV3For;')({ env: { WAPAY_AGENT_V3_MSISDNS: ' 27600000901, 27831112222 ' } });
-  assert.equal(agentV3For('27600000901'), true);
-  assert.equal(agentV3For('27831112222'), true);
-  assert.equal(agentV3For('2760000090'), false, 'no prefix');
-  assert.equal(agentV3For('276000009011'), false, 'no superstring');
-  assert.equal(agentV3For(''), false);
-  assert.equal(agentV3For(null), false);
-  const off = new Function('process', src + '\nreturn agentV3For;')({ env: {} });
-  assert.equal(off('27600000901'), false, 'unset list = nobody');
+  // The list itself is lib/shadow-list.js and is tested by running it
+  // (tests/shadow-list.test.mjs). What stays a source assertion is the thing
+  // only the source can say: the processor uses THAT gate and does not grow a
+  // second, looser one of its own.
+  assert.ok(!/function agentV3For\s*\(/.test(processor), 'the gate is not redefined inside the processor');
+  assert.match(processor, /import \{ agentV3For \} from '\.\.\/\.\.\/\.\.\/lib\/shadow-list\.js'/);
+  assert.ok(!processor.includes('process.env.WAPAY_AGENT_V3_MSISDNS'), 'the processor never reads the list variable directly');
 });
 
 test('inside the turn: guards run before any model call, the budget before the context load, the ledger records every path', () => {

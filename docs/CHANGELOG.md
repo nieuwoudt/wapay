@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-09-18 (47) — The pilot week could not have started: the list matched one spelling of a number, and an empty week could not be told from a broken one (BUGLOG #73)
+
+The first read of the shadow week returned zero agent turns over seven days,
+with the list live and one number on it. The messages were landing and being
+answered; `agent_turns` had simply never received a row since the table was
+made.
+
+**The gate now matches the number, not the spelling.** `agentV3For` compared
+the list entry to Meta's wa_id as raw text. Meta sends `27787051175`; a human
+typing that number into the Vercel dashboard will as readily write
+`+27787051175`, `0787051175` or `+27 78 705 1175`, and three of those four
+matched nobody while the bot went on answering normally from the old engine.
+The list moves to `lib/shadow-list.js` and matches on the canonical digits
+through `normaliseMsisdn`, which every other number in the product already
+goes through. It never widens to a different number: a prefix, a superstring
+and a neighbouring number still do not match.
+
+**An empty week now says why it is empty.** The Mission Control card reported
+how many entries the list held and nothing else. It now shows each entry by
+its last four digits with whether the product can read it and whether an
+account has ever written from it, in red when either is false, beside whole
+clean days so far against the seven the gate needs. The clean clock starts at
+the first agent turn and is reset by the newest money gate, so the promotion
+condition is a number on the card rather than a judgement someone makes from
+a row count.
+
+**The first source-text lock is rewritten as behaviour.** The old test sliced
+`agentV3For` out of the processor with string offsets and `eval`ed it, so it
+asserted the shape of a line of code and would have passed unchanged while the
+pilot matched nobody. `tests/shadow-list.test.mjs` imports the module and runs
+it. `tests/phase2.test.mjs` keeps only the two assertions that need the source:
+the processor uses that gate, and never grows a looser one of its own.
+
+Also: the chat harness's airtime scenario was flaky by construction. "buy R30
+airtime" has two legitimate landings, and the one where the agent fills the
+number from the customer's own record reaches the preview route over HTTP,
+which the harness cannot serve. The flow doing the right thing read as a
+failure every other run. Reaching the preview now counts as the airtime flow
+answering; the menu and no-execution assertions are unchanged.
+
+Unit 878/878, build green, chat QA harness 29/29.
+
 ## 2026-09-18 (46) — The async tier: agent_jobs and its drain (C20), and a decision recorded about what does NOT belong in it
 
 One table for work that must not run while a customer waits, drained by the

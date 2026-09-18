@@ -13,6 +13,7 @@
  */
 import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
+import { shadowListDiagnostics } from '../../../lib/shadow-list.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -65,8 +66,21 @@ export default async function handler(req, res) {
           take: 50,
         })
         .catch(() => []),
-      Promise.resolve(process.env.WAPAY_AGENT_V3_MSISDNS || ''),
+      Promise.resolve(shadowListDiagnostics()),
     ]);
+
+    // Does each number on the pilot list belong to an account that has
+    // written to us? A week of shadow turns that never starts looks exactly
+    // like a quiet week, and the difference between them is this lookup
+    // (2026-09-18: the first pilot week read zero turns and nothing on the
+    // card could say whether the list was wrong or the founder simply had
+    // not messaged since it was set).
+    const pilotWaIds = shadowListRaw.map((s) => s.waId).filter(Boolean);
+    const pilotAccounts = pilotWaIds.length
+      ? await prisma.account
+          .findMany({ where: { waId: { in: pilotWaIds } }, select: { id: true, waId: true } })
+          .catch(() => [])
+      : [];
 
     const byRole = Object.fromEntries((turns || []).map((t) => [t.role, t._count?._all || 0]));
     const inbound = byRole.user || 0;
@@ -115,7 +129,38 @@ export default async function handler(req, res) {
     const heldCents = parkedRows.reduce((sum, p) => sum + (p.amountCents || 0) + (p.feeCents || 0), 0);
     const oldestMinutes = parkedRows.length ? Math.max(...parkedRows.map((p) => p.ageMinutes || 0)) : null;
 
-    const shadowCount = shadowListRaw.split(',').map((s) => s.trim()).filter(Boolean).length;
+    // The promotion gate, as a number rather than a judgement: how long the
+    // agent has been answering real customers with no money gate firing. The
+    // clock starts at the first agent turn and is RESET by the newest money
+    // gate, because a week that contains a RECEIPT, PARTNER or BETTING block
+    // is not a clean week (docs/AGENT_ARCHITECTURE_V2.md 13).
+    const MONEY_GATES = ['RECEIPT', 'PARTNER', 'BETTING'];
+    const firedMoneyGateAt = (agentRows || [])
+      .filter((r) => (Array.isArray(r.gatesFired) ? r.gatesFired : []).some((g) => MONEY_GATES.includes(String(g))))
+      .map((r) => new Date(r.createdAt).getTime());
+    const agentTimes = agent.map((r) => new Date(r.createdAt).getTime());
+    const firstAgentTurnAt = agentTimes.length ? Math.min(...agentTimes) : null;
+    const lastMoneyGateAt = firedMoneyGateAt.length ? Math.max(...firedMoneyGateAt) : null;
+    const cleanSince = firstAgentTurnAt === null ? null : Math.max(firstAgentTurnAt, lastMoneyGateAt || 0);
+    const cleanDays = cleanSince === null ? 0 : Math.floor((now - cleanSince) / DAY_MS);
+
+    const accountByWaId = new Map((pilotAccounts || []).map((a) => [a.waId, a.id]));
+    const agentTurnsByAccount = {};
+    for (const r of agentRows || []) {
+      if (r.accountId) agentTurnsByAccount[r.accountId] = (agentTurnsByAccount[r.accountId] || 0) + 1;
+    }
+    const pilotEntries = shadowListRaw.map((entry) => {
+      const accountId = entry.waId ? accountByWaId.get(entry.waId) || null : null;
+      return {
+        tail: entry.tail,
+        // A number the product cannot read is the loudest possible reason a
+        // pilot week is empty, so it is stated, not inferred.
+        valid: entry.valid,
+        hasAccount: Boolean(accountId),
+        turnsInWindow: accountId ? agentTurnsByAccount[accountId] || 0 : 0,
+      };
+    });
+    const shadowCount = shadowListRaw.length;
 
     return res.status(200).json({
       windowDays: days,
@@ -148,7 +193,19 @@ export default async function handler(req, res) {
       // The gates that decide promotion. The list lives here, not in the
       // console, because the console must carry none of these words as copy.
       gateWatch: ['RECEIPT', 'PARTNER', 'BETTING'],
-      shadow: { count: shadowCount, live: shadowCount > 0 },
+      shadow: {
+        count: shadowCount,
+        live: shadowCount > 0,
+        entries: pilotEntries,
+        // What the promotion gate actually needs, so nobody has to derive it
+        // from the numbers above: whole clean days so far, and whether the
+        // clock has started at all.
+        started: firstAgentTurnAt !== null,
+        firstTurnAt: firstAgentTurnAt ? new Date(firstAgentTurnAt).toISOString() : null,
+        moneyGateFired: firedMoneyGateAt.length > 0,
+        cleanDays,
+        cleanDaysNeeded: 7,
+      },
       payouts: { parked: parkedRows.length, heldCents, oldestMinutes, rows: parkedRows.slice(0, 12) },
     });
   } catch (error) {
