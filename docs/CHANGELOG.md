@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-09-18 (45) — Handover doc for the next session; two partial rows closed: the internal-auth gate fails closed in production, and a money outcome nobody was told about reaches the agent
+
+**docs/HANDOVER_V1.5.md** is new: the five rules that break things, where the
+build actually is, every amber row on the phase map with its exact gap and
+file, the order Phase 3 must happen in, how to know you have not broken it,
+the traps this session hit, and the open items that need the founder rather
+than an engineer. Written so a fresh session can continue without this thread.
+
+**C13.** lib/internal-auth.js passed every request when
+WAPAY_INTERNAL_API_KEY was unset, which was correct when nothing set it and
+dangerous now that everything does: one deleted variable would have silently
+reopened five money routes. It now answers 503 in production and keeps the
+bypass everywhere else. Verified before shipping that all five execute routes
+already answer 401 to an unauthenticated call, so nothing was closed on us.
+
+**C14.** Nothing anywhere wrote a turn with role event, so a pay-out that
+settled at 02:00 whose notification failed left the ledger moved and the agent
+unaware: its next turn read a movement list that had changed for reasons it
+could not explain. recordMoneyEvent in lib/notify.js writes the ledger fact
+into the same history the agent reads, and only when nothing reached the
+customer, so a delivered notice never appears twice.
+
+Unit 866/866, build green.
+
 ## 2026-09-18 (44) — The two gaps the map verification named: the eval has a frozen baseline that fails on regression, and the pay-out half of the Mission Control card reports what is held
 
 A five-agent pass verified every row of the phase map against the code before

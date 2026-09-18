@@ -141,3 +141,49 @@ test('the eval runner has a frozen baseline and a script that uses it, so a regr
   const runner = read('../scripts/eval-agent.mjs');
   assert.match(runner, /Exit 1: regression against baseline\./);
 });
+
+test('C14: a money outcome the customer was not told about is written into the history the agent reads', async () => {
+  const { recordMoneyEvent } = await import('../lib/notify.js');
+  const rows = [];
+  const db = { conversationTurn: { create: async ({ data }) => { rows.push(data); return { id: 't1' }; } } };
+  const ok = await recordMoneyEvent({ prisma: db, accountId: 'a1', text: '❌ Your withdrawal of R30 could not be completed.', kind: 'reconcile', refs: { reference: 'WP1' } });
+  assert.equal(ok.ok, true);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].role, 'event', 'the agent renders this as "[event] …", not as something WaPay said');
+  assert.equal(rows[0].kind, 'reconcile');
+  assert.match(rows[0].text, /could not be completed/);
+  // never throws, and never writes half a row
+  assert.deepEqual(await recordMoneyEvent({ prisma: db, accountId: null, text: 'x' }), { ok: false });
+  assert.deepEqual(await recordMoneyEvent({ prisma: db, accountId: 'a1', text: '' }), { ok: false });
+  const boom = { conversationTurn: { create: async () => { throw new Error('db down'); } } };
+  assert.equal((await recordMoneyEvent({ prisma: boom, accountId: 'a1', text: 'x' })).ok, false);
+
+  // the sweep writes it exactly when nothing reached the customer
+  const payouts = read('../lib/payouts.js');
+  const block = payouts.slice(payouts.indexOf('counts.notifyFailed += 1;'), payouts.indexOf('counts.notifyFailed += 1;') + 700);
+  assert.match(block, /recordMoneyEvent\(\{/);
+  assert.match(block, /kind: 'reconcile'/);
+  assert.ok(payouts.indexOf('recordMoneyEvent({') > payouts.indexOf('counts.notifyFailed += 1;'), 'only on the failure path, so a delivered notice is not in history twice');
+});
+
+test('C13: the internal-auth gate fails CLOSED in production when the key is missing', async () => {
+  const src = read('../lib/internal-auth.js');
+  assert.match(src, /if \(process\.env\.NODE_ENV === 'production'\) \{[\s\S]*?res\.status\(503\)[\s\S]*?return false;/);
+  assert.match(src, /internal_auth_misconfigured/);
+  const { requireInternalAuth } = await import('../lib/internal-auth.js');
+  const mkRes = () => { const r = { code: null, body: null }; r.status = (c) => { r.code = c; return r; }; r.json = (b) => { r.body = b; return r; }; return r; };
+  const prev = process.env.WAPAY_INTERNAL_API_KEY;
+  const prevEnv = process.env.NODE_ENV;
+  delete process.env.WAPAY_INTERNAL_API_KEY;
+  try {
+    process.env.NODE_ENV = 'production';
+    const res = mkRes();
+    assert.equal(requireInternalAuth({ url: '/api/vas/airtime/execute', headers: {} }, res), false, 'a missing key must never open a money route in production');
+    assert.equal(res.code, 503);
+    process.env.NODE_ENV = 'development';
+    assert.equal(requireInternalAuth({ url: '/x', headers: {} }, mkRes()), true, 'a local run still needs no key');
+  } finally {
+    if (prev === undefined) delete process.env.WAPAY_INTERNAL_API_KEY; else process.env.WAPAY_INTERNAL_API_KEY = prev;
+    if (prevEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = prevEnv;
+  }
+});
