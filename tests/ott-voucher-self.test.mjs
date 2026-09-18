@@ -17,27 +17,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { matchOttVoucherSelfRequest } from '../pages/api/webhooks/message-processor-v2.js';
 
 const processorSource = readFileSync(
   fileURLToPath(new URL('../pages/api/webhooks/message-processor-v2.js', import.meta.url)),
   'utf8'
 );
 
-/** Extract a small top-level helper function and evaluate it. */
-function extractFn(name) {
-  const start = processorSource.indexOf(`function ${name}(`);
-  assert.ok(start > -1, `processor must define ${name}`);
-  const end = processorSource.indexOf('\n}', start);
-  // eslint-disable-next-line no-new-func
-  return new Function(`${processorSource.slice(start, end + 2)}; return ${name};`)();
-}
 
 // ---------------------------------------------------------------------------
 // The self-purchase matcher
 // ---------------------------------------------------------------------------
 
 test('purchase phrasings match; redemption phrasings and gifts do not', () => {
-  const m = extractFn('matchOttVoucherSelfRequest');
+  const m = matchOttVoucherSelfRequest;
   for (const text of [
     'can I buy an ott voucher?',
     'buy OTT voucher',

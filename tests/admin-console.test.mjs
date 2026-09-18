@@ -25,6 +25,7 @@ import {
   requestAdminOtpInSession,
 } from '../lib/admin-auth.js';
 import { adminHostDecision } from '../lib/admin-host.js';
+import { matchAdminLoginAsk } from '../pages/api/webhooks/message-processor-v2.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const authLib = read('../lib/admin-auth.js');
@@ -469,12 +470,7 @@ test('in-session code: same throttle as the push path', async () => {
 });
 
 test('admin-login matcher: narrow enough that customer sentences never match', () => {
-  const src = readFileSync(fileURLToPath(new URL('../pages/api/webhooks/message-processor-v2.js', import.meta.url)), 'utf8');
-  const start = src.indexOf('function matchAdminLoginAsk(');
-  assert.ok(start > -1, 'the matcher exists');
-  const body = src.slice(start, src.indexOf('\n}', start) + 2);
-  // eslint-disable-next-line no-new-func
-  const match = new Function(`${body}; return matchAdminLoginAsk;`)();
+  const match = matchAdminLoginAsk;
   for (const yes of ['admin login', 'Admin Login', 'admin code', 'login code', 'console login']) {
     assert.equal(match(yes), true, yes);
   }

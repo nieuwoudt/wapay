@@ -10,6 +10,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { sanitizeUserText } from '../pages/api/webhooks/message-processor-v2.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -67,10 +68,7 @@ test('language confirmations carry no em or en dashes', () => {
 });
 
 test('sanitizeUserText: strips em dashes from AI replies, still blocks JSON', () => {
-  const start = processorSource.indexOf('function sanitizeUserText(');
-  const end = processorSource.indexOf('\n}', start);
-  // eslint-disable-next-line no-new-func
-  const fn = new Function(`${processorSource.slice(start, end + 2)}; return sanitizeUserText;`)();
+  const fn = sanitizeUserText;
   assert.equal(fn('Got it — I will remember that.'), 'Got it, I will remember that.');
   assert.equal(fn('range 9–5 works'), 'range 9, 5 works');
   assert.equal(fn('{"json": true}'), null);

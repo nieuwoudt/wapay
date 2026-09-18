@@ -6,6 +6,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { knownAmountsFromPack, looksLikeReceipt } from '../pages/api/webhooks/message-processor-v2.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -19,15 +20,6 @@ const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)),
 const processor = read('../pages/api/webhooks/message-processor-v2.js');
 const webhook = read('../pages/api/webhooks/whatsapp.js');
 
-/** Slice a top-level function's source and evaluate it (no external references). */
-function extractFn(src, name) {
-  const start = src.indexOf(`function ${name}(`);
-  assert.ok(start > -1, `${name} exists`);
-  let depth = 0; let i = src.indexOf('{', start); const open = i;
-  for (; i < src.length; i++) { if (src[i] === '{') depth++; else if (src[i] === '}') { depth--; if (depth === 0) break; } }
-  const body = src.slice(start, i + 1);
-  return new Function(`${body}; return ${name};`)();
-}
 function sliceFn(src, name) {
   const start = src.indexOf(`async function ${name}(`);
   assert.ok(start > -1, `${name} exists`);
@@ -143,8 +135,6 @@ test('recordInbound: a redelivered message id is stored once', async () => {
 
 // ---------------------------------------------------------------- provenance
 test('knownAmountsFromPack admits settled money only; the figure parser reads thousands separators', () => {
-  const knownAmountsFromPack = extractFn(processor, 'knownAmountsFromPack');
-  const looksLikeReceipt = extractFn(processor, 'looksLikeReceipt');
   const set = knownAmountsFromPack({
     balances: { spendCents: 6600, cashCents: 0, heldSpendCents: 0, heldCashCents: 0 },
     movements: [

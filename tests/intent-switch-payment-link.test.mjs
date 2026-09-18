@@ -13,35 +13,13 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { matchRequestMoneyAsk, detectStrongIntentSwitch } from '../pages/api/webhooks/message-processor-v2.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const processorSource = read('../pages/api/webhooks/message-processor-v2.js');
 
-function extractFns(names) {
-  const preamble = `
-    const DEPOSIT_CARD_PATTERN = /\\b(?:deposit|depsit|deposite|diposit)\\b(?:\\s+(?:money|funds|cash))?\\s*[:,-]?\\s*r?\\s*(\\d+(?:[.,]\\d{1,2})?)(?:\\s*(?:rand|rande|zar))?\\b/i;
-    const PAY_REQUEST_CODE_PATTERN = /\\bpay\\s+request\\s+(PR[A-HJKMNP-Z]{6})\\b/i;
-    const RECEIPT_CODE_PATTERN = /^\\s*receipt\\s+(PR[A-HJKMNP-Z]{6})\\s*[.!]?\\s*$/i;
-    const matchFuelPurchase = (t) => /\\b(buy|get|purchase)\\b/i.test(t) && /\\b(fuel|petrol|diesel)\\b/i.test(t);
-    const matchOttVoucherSelfRequest = (t) => /\\bott\\s*vouchers?\\b/i.test(t) && !/\\b(redeem\\w*|have|my)\\b/i.test(t);
-  `;
-  const bodies = names.map((name) => {
-    const start = processorSource.indexOf(`function ${name}(`);
-    assert.ok(start > -1, `processor must define ${name}`);
-    return processorSource.slice(start, processorSource.indexOf('\n}', start) + 2);
-  });
-  // eslint-disable-next-line no-new-func
-  return new Function(`${preamble}; ${bodies.join(';\n')}; return [${names.join(', ')}];`)();
-}
-
-// The REAL matcher feeds the REAL switch detector — no stubs, so a matcher
-// regression fails here even if the founder-feedback stub still passes.
-const [matchRequestMoneyAsk, detectStrongIntentSwitch] = extractFns([
-  'matchRequestMoneyAsk',
-  'detectStrongIntentSwitch',
-]);
 
 // ---------------------------------------------------------------------------
 // Layer 1: the matcher knows payment-LINK phrasings

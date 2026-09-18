@@ -4,6 +4,49 @@
 
 ---
 
+## 2026-09-18 (50) — The first batch of source-text locks rewritten as behaviour, and the two format bugs that exposed
+
+Item 5 of the Phase 3 order, the one that blocks the rest: about 36 test files
+read the processor as text, so nothing can move out of it. The worst kind is
+the source SURGERY: find a function by string offsets, slice it out, and `eval`
+it inside a `new Function` with hand-written fakes for whatever it calls. There
+were 19 of those. There are now 6.
+
+**Thirteen functions are exported from the processor, in place.** The design
+record has said since day one that relocating a function breaks the locks and
+exporting one where it stands breaks none, and that is exactly what this does:
+the file is unchanged except for an export list at the bottom. The tests import
+the real functions and run them. No database and no model key are needed,
+which was the open question: the processor imports cleanly and these matchers
+are pure.
+
+**Two real bugs fell out of it immediately**, both of the kind this style of
+test is built to hide.
+
+- `tests/phase2.test.mjs` injected a fake `formatRands` that printed `R30.00`.
+  The real one prints `R30`. The test had been asserting a format the product
+  has never produced.
+- `tests/founder-feedback-0825.test.mjs` and
+  `tests/intent-switch-payment-link.test.mjs` each stubbed `matchFuelPurchase`
+  and `matchOttVoucherSelfRequest` with two-line approximations of matchers
+  that are now much more particular, and then tested the intent-switch
+  detector against those approximations. The second file's own comment claimed
+  "the REAL matcher feeds the REAL switch detector, no stubs". It stubbed two.
+
+That is the argument for the whole migration in one place: a test of a COPY of
+the code, evaluated in a vacuum against fakes, passes while the real function
+is wrong, and its fakes drift from what they stand in for.
+
+Converted: fuel-flow, ott-voucher-self, payment-requests (two sites),
+admin-console, business-portal, founder-feedback-0825,
+intent-switch-payment-link, phase0-review (two), review-2026-09-18 (two),
+chat-qa-findings, orchestrator-routing (two) and phase2. What remains is six
+sites over four files that reach for something which is not a top-level
+function: a const array inside a function body, two object literals and a
+lookup map. Those need their own step and are not in anyone's way.
+
+Unit 892/892, build green, chat QA harness 29/29.
+
 ## 2026-09-18 (49) — Phase 3 prep: the three dead things deleted, each of them a second way to do something the product already does once
 
 Item 4 of the Phase 3 order, the one the handover marks safe to do at any time

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 import { VAS_CATEGORY_CONFIG } from '../lib/vas-config.js';
 import { FEES } from '../lib/ledger-core.js';
+import { matchFuelPurchase } from '../pages/api/webhooks/message-processor-v2.js';
 
 const processorSource = readFileSync(
   fileURLToPath(new URL('../pages/api/webhooks/message-processor-v2.js', import.meta.url)),
@@ -68,17 +69,9 @@ test('every fuel entry point checks the category gate before any flow', () => {
 // Matcher precision
 // ---------------------------------------------------------------------------
 
-function extractMatcher() {
-  const start = processorSource.indexOf('function matchFuelPurchase(');
-  assert.ok(start > -1);
-  const end = processorSource.indexOf('\n}', start);
-  const body = processorSource.slice(start, end + 2);
-  // eslint-disable-next-line no-new-func
-  return new Function(`${body}; return matchFuelPurchase;`)();
-}
 
 test('fuel matcher: purchase commands match, questions fall to the AI', () => {
-  const m = extractMatcher();
+  const m = matchFuelPurchase;
   // Purchase commands:
   for (const t of ['buy fuel', 'Buy R200 petrol', 'fuel voucher', 'petrol R100', 'diesel', 'thenga petrol']) {
     assert.ok(m(t), `should match: ${t}`);

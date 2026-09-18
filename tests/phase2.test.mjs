@@ -8,6 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { agentFallbackLine } from '../pages/api/webhooks/message-processor-v2.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -95,18 +96,20 @@ test('every reply and clarify passes the output gate and the provenance guard; a
 });
 
 test('agentFallbackLine states only record facts and no partner or betting word', () => {
-  const src = between('function agentFallbackLine(pack)', 'async function handleAgentTurn(');
-  const formatRands = (c) => 'R' + (c / 100).toFixed(2);
-  const formatSast = () => 'Tue 16 Sep, 11:00';
-  const fn = new Function('formatRands', 'formatSast', src + '\nreturn agentFallbackLine;')(formatRands, formatSast);
+  // The real function with the real formatters: the fakes this test used to
+  // inject could drift from lib/context-pack.js and hide a formatting change.
+  const fn = agentFallbackLine;
   const a = fn({ balances: { spendCents: 12345 }, movements: [{ at: new Date(), kind: 'AIRTIME', amountCents: 3000, status: 'SUCCESS' }] });
   assert.match(a, /Balance to spend: R123\.45\./);
-  assert.match(a, /last movement: Tue 16 Sep, 11:00, airtime R30\.00 \(success\)/);
+  // R30, not R30.00: formatRands drops a zero cents tail. The fake this test
+  // used to inject printed R30.00, so it asserted a format the product has
+  // never produced (found by importing the real one, 2026-09-18).
+  assert.match(a, /last movement: .+, airtime R30 \(success\)/);
   assert.doesNotMatch(a, /OTT|bet|wager|—/);
   const b = fn({ balances: { spendCents: 0 }, movements: [] });
-  assert.match(b, /Balance to spend: R0\.00\. What would you like to do next\?/);
+  assert.match(b, /Balance to spend: R0\. What would you like to do next\?/);
   assert.doesNotMatch(b, /type "help"/i, 'the fallback ends with an offer, not a menu hint');
-  assert.equal(fn(null).includes('R0.00'), true);
+  assert.equal(fn(null).includes('R0'), true, 'no pack at all still states a balance rather than nothing');
 });
 
 test('AGENT_CLARIFY: the state clears first, the answer goes back to the agent with the pending intent, and a de-listed number falls through to the normal router', () => {

@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { matchRequestMoneyAsk, matchChangeRequestAmount } from '../pages/api/webhooks/message-processor-v2.js';
 import {
   newRequestCode,
   createPaymentRequest,
@@ -205,17 +206,9 @@ test('processor: REQUEST_LIMIT gets its own honest reply, never the generic retr
 // Matchers (extracted from the shipped processor)
 // ---------------------------------------------------------------------------
 
-function extractFn(name) {
-  const start = processorSource.indexOf(`function ${name}(`);
-  assert.ok(start > -1, `processor must define ${name}`);
-  const end = processorSource.indexOf('\n}', start);
-  const preamble = "const PAY_REQUEST_CODE_PATTERN = /\\bpay\\s+request\\s+([A-Z]{6,12})\\b/i;";
-  // eslint-disable-next-line no-new-func
-  return new Function(`${preamble}; ${processorSource.slice(start, end + 2)}; return ${name};`)();
-}
 
 test('get-paid asks match; paying-someone and deposits do not', () => {
-  const m = extractFn('matchRequestMoneyAsk');
+  const m = matchRequestMoneyAsk;
   for (const text of [
     'please pay me',
     'Can you create a payme link of r100 for someone',
@@ -296,10 +289,7 @@ test('static: the public page exists and offers both legs', () => {
 });
 
 test('amount-change swap: change-phrasings match, product words and no-amount do not', () => {
-  const start = processorSource.indexOf('function matchChangeRequestAmount(');
-  const end = processorSource.indexOf('\n}', start);
-  // eslint-disable-next-line no-new-func
-  const m = new Function(`${processorSource.slice(start, end + 2)}; return matchChangeRequestAmount;`)();
+  const m = matchChangeRequestAmount;
   assert.ok(m('Can I change my amount to 1000', { amountCents: 100000 }));
   assert.ok(m('change my request to R500', { amountCents: 50000 }));
   assert.ok(m('make it R200', { amountCents: 20000 }));

@@ -16,6 +16,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { detectStrongIntentSwitch } from '../pages/api/webhooks/message-processor-v2.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -109,23 +110,9 @@ test('processor: founder-hit surfaces are localized', () => {
 // Universal intent-switch escape
 // ---------------------------------------------------------------------------
 
-function extractSwitch() {
-  const start = processorSource.indexOf('function detectStrongIntentSwitch(');
-  const end = processorSource.indexOf('\n}', start);
-  const preamble = `
-    const DEPOSIT_CARD_PATTERN = /\\b(?:deposit|depsit|deposite|diposit)\\b(?:\\s+(?:money|funds|cash))?\\s*[:,-]?\\s*r?\\s*(\\d+(?:[.,]\\d{1,2})?)(?:\\s*(?:rand|rande|zar))?\\b/i;
-    const PAY_REQUEST_CODE_PATTERN = /\\bpay\\s+request\\s+(PR[A-HJKMNP-Z]{6})\\b/i;
-    const RECEIPT_CODE_PATTERN = /^\\s*receipt\\s+(PR[A-HJKMNP-Z]{6})\\s*[.!]?\\s*$/i;
-    const matchRequestMoneyAsk = (t) => /\\b(please\\s+)?pay\\s?-?\\s?me\\b/i.test(t) || /\\bget\\s+paid\\b/i.test(t);
-    const matchOttVoucherSelfRequest = (t) => /\\bott\\s*vouchers?\\b/i.test(t) && !/\\b(redeem\\w*|have|my)\\b/i.test(t);
-    const matchFuelPurchase = (t) => /\\b(buy|get|purchase)\\b/i.test(t) && /\\b(fuel|petrol|diesel)\\b/i.test(t);
-  `;
-  // eslint-disable-next-line no-new-func
-  return new Function(`${preamble}; ${processorSource.slice(start, end + 2)}; return detectStrongIntentSwitch;`)();
-}
 
 test('escape: a NEW intent breaks out of an unrelated waiting state', () => {
-  const sw = extractSwitch();
+  const sw = detectStrongIntentSwitch;
   assert.ok(sw('I want to buy data', 'AIRTIME_MSISDN'), 'data ask escapes the airtime flow');
   assert.ok(sw('buy R50 airtime', 'VOUCHER_GIFT_AMOUNT'), 'airtime ask escapes send-money');
   assert.ok(sw('deposit R100', 'AIRTIME_AMOUNT'), 'deposit escapes airtime');
@@ -134,7 +121,7 @@ test('escape: a NEW intent breaks out of an unrelated waiting state', () => {
 });
 
 test('escape: in-flow answers NEVER escape their own flow', () => {
-  const sw = extractSwitch();
+  const sw = detectStrongIntentSwitch;
   assert.equal(sw('0781234567', 'AIRTIME_MSISDN'), null, 'a phone number is the answer, not an intent');
   assert.equal(sw('R150', 'REQUEST_MONEY_AMOUNT'), null, 'an amount is the answer');
   assert.equal(sw('buy R50 airtime', 'AIRTIME_AMOUNT'), null, 'same family stays');

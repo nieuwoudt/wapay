@@ -44,6 +44,7 @@ import {
   createPaymentRequest, getLatestPendingRequest, MAX_OPEN_REQUESTS, MAX_OPEN_BUSINESS_REQUESTS, MAX_BUSINESS_TTL_DAYS,
 } from '../lib/payment-requests.js';
 import { paymentRequestFeeCents } from '../lib/deposits.js';
+import { matchBusinessLoginAsk } from '../pages/api/webhooks/message-processor-v2.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const ROUTES = ['auth', 'overview', 'customers', 'customer', 'links', 'export', 'settings'].map((r) => [r, read(`../pages/api/business/${r}.js`)]);
@@ -678,11 +679,7 @@ test('static: schema + migration carry the new fields, idempotently, without tou
 });
 
 test('processor: business-login matcher is narrow, sits after the admin hook, replies only when a code was issued', () => {
-  const start = processor.indexOf('function matchBusinessLoginAsk(');
-  assert.ok(start > -1);
-  const body = processor.slice(start, processor.indexOf('\n}', start) + 2);
-  // eslint-disable-next-line no-new-func
-  const match = new Function(`${body}; return matchBusinessLoginAsk;`)();
+  const match = matchBusinessLoginAsk;
   for (const yes of ['business login', 'Business Code', 'business sign in', 'portal login', 'business portal']) assert.equal(match(yes), true, yes);
   for (const yes2 of ['business login please', 'Business code!', 'wapay business login']) assert.equal(match(yes2), true, yes2);
   for (const no of ['my business needs airtime', 'please pay me R50', 'buy airtime for my business', 'admin login', 'login code', 'help', '', 'is this a business account?',

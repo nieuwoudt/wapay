@@ -8034,3 +8034,35 @@ async function handleVoucherRedemption({ from, pin, account }) {
     return { ok: false, error: errorType || error.message };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Exported for tests, IN PLACE and never moved.
+//
+// docs/AGENT_ARCHITECTURE_V2.md section 11: relocating a function out of this
+// file breaks the roughly 27 tests that read it as source text; exporting one
+// where it stands breaks none. Every name below replaces a test that used to
+// find the function by string offsets, slice it out, and `eval` it inside a
+// `new Function` with hand-written fakes for whatever it called. That style
+// tests a COPY of the code evaluated in a vacuum: it passes when the real
+// function is dead, and its fakes drift from the real dependencies it stubs.
+// Importing the real one is both stricter and cheaper to keep.
+//
+// This is the first batch of docs/HANDOVER_V1.5.md section 4 item 5. Adding a
+// name here is how the next batch proceeds: export it, then change the test
+// to import it. Nothing here changes what the processor does.
+// ---------------------------------------------------------------------------
+export {
+  sanitizeUserText,
+  redactBearerDigits,
+  matchFuelPurchase,
+  matchOttVoucherSelfRequest,
+  matchRequestMoneyAsk,
+  matchChangeRequestAmount,
+  matchAdminLoginAsk,
+  matchBusinessLoginAsk,
+  memoryHistoryAsk,
+  detectStrongIntentSwitch,
+  knownAmountsFromPack,
+  looksLikeReceipt,
+  agentFallbackLine,
+};

@@ -15,6 +15,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { memoryHistoryAsk } from '../pages/api/webhooks/message-processor-v2.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -98,8 +99,6 @@ test('over the balance by this method: a cheaper method that still carries the f
 
 // --- the memory and history question -----------------------------------------
 
-const matcherSrc = processor.slice(processor.indexOf('const MEMORY_ASK_LOOSE'), processor.indexOf('/**\n * One question, one answer'));
-const memoryHistoryAsk = new Function('matchDepositStatusRequest', matcherSrc + '\nreturn memoryHistoryAsk;')((t) => /did my (payment|deposit|money)s? (go through|arrive|land|come)/i.test(t));
 
 test('the founder\'s own sentence is answered, and a product question or money command never is', () => {
   assert.equal(memoryHistoryAsk('Can you tell me a full history of what you know about me / and all my past transactions and questions?'), 'BOTH');
@@ -152,8 +151,7 @@ test('the list, the separate blocks and the recommend-the-best-step rules reach 
 // --- the work order from the streamlining review (five readers, one judge) ---
 
 test('A17: an erasure request is never answered with a disclosure, and a data-bundle or status question is not a memory question', () => {
-  const src = processor.slice(processor.indexOf('const MEMORY_ASK_LOOSE'), processor.indexOf('/**\n * One question, one answer'));
-  const ask = new Function('matchDepositStatusRequest', src + '\nreturn memoryHistoryAsk;')((t) => /did my (payment|deposit|money)s? (go through|arrive|land|come)/i.test(t));
+  const ask = memoryHistoryAsk;
   for (const t of ['forget my data', 'erase my memory', 'forget my history', 'delete my data', 'forget me', 'wipe my profile', 'remove my information']) {
     assert.equal(ask(t), null, `erasure must reach handleForgetMe, not the record: ${t}`);
   }

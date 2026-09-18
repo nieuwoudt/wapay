@@ -17,6 +17,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { redactBearerDigits, looksLikeReceipt } from '../pages/api/webhooks/message-processor-v2.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -151,16 +152,6 @@ test('engine: model tiers are env-tunable (Claude migration path)', () => {
 // Adversarial-review hardening (2026-08-18)
 // ---------------------------------------------------------------------------
 
-/** Extract a small top-level helper function's source and evaluate it. */
-function extractProcessorFn(name) {
-  const start = processorSource.indexOf(`function ${name}(`);
-  assert.ok(start > -1, `processor must define ${name}`);
-  const end = processorSource.indexOf('\n}', start);
-  const body = processorSource.slice(start, end + 2);
-  // eslint-disable-next-line no-new-func
-  return new Function(`${body}; return ${name};`)();
-}
-
 test('voucher confirm + PIN prompt show the FULL recipient number (model slots need eyes on them)', () => {
   assert.match(
     processorSource,
@@ -176,7 +167,6 @@ test('voucher confirm + PIN prompt show the FULL recipient number (model slots n
 });
 
 test('fake-receipt guard: receipt-shaped AI replies are blocked, honest fee talk is not', () => {
-  const looksLikeReceipt = extractProcessorFn('looksLikeReceipt');
   // The fake proof-of-payment shapes an attacker would request:
   assert.ok(looksLikeReceipt('✅ Deposit received: R1,000.00. New balance: R1,042.50. Ref: PF-88231'));
   assert.ok(looksLikeReceipt('Payment successful — R500 credited to your wallet'));
@@ -197,7 +187,6 @@ test('fake-receipt guard: receipt-shaped AI replies are blocked, honest fee talk
 });
 
 test('bearer-digit redaction: voucher PINs never reach history or logs, phone numbers survive', () => {
-  const redactBearerDigits = extractProcessorFn('redactBearerDigits');
   const redacted = redactBearerDigits('ek het n voucher gekoop 1234567890123456 laai asb R50');
   assert.ok(!redacted.includes('1234567890123456'), 'a 16-digit PIN must be redacted');
   assert.match(redacted, /1234…\[16-digits-redacted\]/);
