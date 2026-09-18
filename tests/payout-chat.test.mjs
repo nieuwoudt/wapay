@@ -205,7 +205,12 @@ test('below the minimum: the message names the methods that DO allow the amount,
   assert.equal(menu.state, 'PAYOUT_METHOD');
   const absa = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
   assert.equal(absa.state, 'PAYOUT_AMOUNT');
-  assert.match(absa.text, /R30 is below the R50 minimum for cash at an Absa ATM/); assert.match(absa.text, /\*3\* \(cash at a Nedbank ATM, from R20\)/); assert.match(absa.text, /\*4\* \(an FNB eWallet, from R20\)/); assert.match(absa.text, /Reply \*back\*/);
+  // 2026-09-18: the flow no longer lists menu numbers here. It names the one
+  // method that carries R30 and offers it as a yes/no (founder: "it already
+  // knows which option to choose"). 'back' still returns to the full menu.
+  assert.match(absa.text, /R30 is below the R50 minimum for cash at an Absa ATM, but /);
+  assert.match(absa.text, /takes R30 for a R\d+(\.\d\d)? fee, so R\d+(\.\d\d)? leaves your balance\. Reply \*YES\* to switch to that, or type another amount\.$/);
+  assert.ok(['NEDCASH', 'EWALLET'].includes(absa.data.offerMethod));
   const back = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: 'back' });
   assert.equal(back.state, 'PAYOUT_METHOD'); assert.match(back.text, /Withdraw from WaPay/);
   const ned = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: back.data, text: '3' });

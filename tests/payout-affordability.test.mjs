@@ -80,14 +80,17 @@ test('a bare option number typed at the amount step switches the method instead 
   const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
   const absa = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
   assert.equal(absa.state, 'PAYOUT_AMOUNT');
-  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '30' });
-  assert.match(low.text, /choose \*3\*/);
-  const switched = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: low.data, text: '3' });
+  // Since 2026-09-18 the below-minimum reply offers one switch as a yes/no
+  // instead of listing menu numbers, so a bare option number is tested on its
+  // own: at the amount step, '3' still means option 3, never R3.
+  const switched = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '3' });
   assert.equal(switched.data.method, 'NEDCASH', '"3" picks option 3');
   assert.equal(switched.state, 'PAYOUT_AMOUNT');
   assert.match(switched.text, /withdraw by Cash at a Nedbank ATM\? Between R20/);
   const nine = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '9' });
-  assert.match(nine.text, /R9 is below the R50 minimum/, 'a number above the option count is still an amount');
+  // R9 is under every method's minimum, so there is nothing to offer: the
+  // plain refusal, and still read as an amount rather than an option number.
+  assert.match(nine.text, /^R9 is below the R50 minimum for cash at an Absa ATM\. Please type an amount of R50 or more/, 'a number above the option count is still an amount');
   const real = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: switched.data, text: '30' });
   assert.notEqual(real.state, 'PAYOUT_AMOUNT', 'a real amount still moves on');
 });

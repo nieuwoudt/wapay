@@ -4,6 +4,13 @@
 
 ---
 
+## 70. "Tell me a full history of what you know about me and all my past transactions" got the canned how-it-works line, twice
+
+- **Symptom:** founder review 2026-09-18, on build 9bc355e. The sentence fell past every memory hook and landed on the how-it-works answer ("Say \"balance\" any time to see what you have..."), so the one question WaPay is built to answer, what it knows about this customer, was the one it would not answer. He asked twice and got the same line twice.
+- **Root cause:** `ABOUT_ME_ASK` and `TRANSACTIONS_ASK` are anchored to short exact phrases ("what do you know about me", "my transactions"). A natural sentence matched neither.
+- **Fix:** a loose layer beside the exact matchers. The memory half needs "about me", "on me" or "my data/profile/information/memory"; the history half needs a plural noun after "my" ("my past transactions", "my purchases"); a money verb anywhere in the message disqualifies both. When both halves match, one combined answer carries the record and the last ten movements in a single message (Meta bills every reply from 1 October 2026).
+- **Guard:** `tests/review-2026-09-18.test.mjs` locks the founder's exact sentence, the memory-only and history-only forms, and nine phrasings that must never match (a product question, a money command, a status ask).
+
 ## 69. Fuel and voucher-gift execute routes still spent a PIN attempt before proving ownership; a voucher crash after issue refunded the sender
 
 - **Symptom:** found by the architecture verification pass (2026-09-17). BUGLOG #56 closed the PIN-before-ownership order for airtime, data and electricity only. Fuel and voucher gifts still called `verifyPIN` before loading the preview and checking that the caller owns it, so an internal caller with someone else's preview id could burn that customer's PIN attempts and lock the account. The voucher route's crash guard also released the hold on any crash, including one after OTT had issued the voucher: the recipient would hold a live PIN and the sender would have the money back (a float leak).

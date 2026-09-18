@@ -280,7 +280,7 @@ async function run() {
       const m = await s.say('balance');
       verdict('Withdraw end to end: minimum explained, method changed, FNB eWallet paid with PIN, balance moves', [
         { level: 'FAIL', ok: has(e.replyText, /Withdraw from WaPay/) && has(e.replyText, /FNB eWallet/), what: '"Withdraw 30" shows the live menu incl. FNB eWallet' },
-        { level: 'FAIL', ok: has(f.replyText, /R30 is below the R50 minimum for cash at an Absa ATM/) && has(f.replyText, /from R20/), what: 'Absa at R30: the minimum and the methods that allow R30 are named' },
+        { level: 'FAIL', ok: has(f.replyText, /R30 is below the R50 minimum for cash at an Absa ATM, but /) && has(f.replyText, /Reply \*YES\* to switch to that/), what: 'Absa at R30: the one method that carries R30 is offered as a yes or no, no menu bounce (founder review 2026-09-18)' },
         { level: 'FAIL', ok: has(g.replyText, /Withdraw from WaPay/), what: '"back" returns to the method menu ("menu" goes home, like a banking app)' },
         { level: 'FAIL', ok: has(h.replyText, /FNB eWallet/) && has(h.replyText, /cellphone number/i), what: 'FNB eWallet keeps the R30 and asks for the cellphone number' },
         { level: 'FAIL', ok: has(i.replyText, /13-digit/), what: 'the ID number is asked because the provider requires it' },
@@ -338,6 +338,18 @@ async function run() {
     if (!hadSecret) delete process.env.WAPAY_BUSINESS_SESSION_SECRET;
   }
 
+  {
+    // Founder review 2026-09-18: this exact sentence got the canned
+    // how-it-works line twice instead of the record.
+    const a = await s.say("Can you tell me a full history of what you know about me and all my past transactions?");
+    verdict("Memory: the full-history sentence is answered from the record, in one message", [
+      { level: "FAIL", ok: !looksLikeMenu(a.replyText), what: "no menu, no canned how-it-works line" },
+      { level: "FAIL", ok: has(a.replyText, /What I know about you/i), what: "the record block" },
+      { level: "FAIL", ok: has(a.replyText, /movement|No movements/i), what: "the movement block in the SAME message" },
+      { level: "FAIL", ok: a.replies.length === 1, what: "exactly one outbound message (Meta bills every reply from 1 October 2026)" },
+      { level: "FAIL", ok: !has(a.replyText, /Say "balance" any time/i), what: "never the how-it-works fallback" },
+    ], s);
+  }
   // ---- The Pay agent (Phase 2, docs/AGENT_ARCHITECTURE_V2.md) under the
   // shadow list: the same founder review-4 asks, answered by one model call
   // over the customer record and typed tools. Money flows are unchanged:
@@ -363,9 +375,11 @@ async function run() {
       ], s);
 
       const b = await s.say('Where can I spend my OTT voucher?');
+      const bLines = String(b.replyText || '').split('\n').filter((l) => l.trim());
       verdict('Agent: spend question gets real destinations, not the menu', [
         { level: 'FAIL', ok: !looksLikeMenu(b.replyText), what: 'no menu' },
         { level: 'FAIL', ok: has(b.replyText, /airtime|data|electricity|voucher|fuel/i), what: 'names real spend destinations' },
+        { level: 'FAIL', ok: bLines.length >= 3, what: 'a list, one per line, not a paragraph (founder review 2026-09-18)' },
       ], s);
 
       const c = await s.say('what did I buy last week');

@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-09-18 (41) — The founder's streamlining review: the bot recommends the one next step instead of sending the customer back to a menu; lists, not paragraphs; the memory question is answered (BUGLOG #70)
+
+From his first live session on the new build. His words: "It's too systematic.
+It already knows which option to choose ... You should just recommend it ...
+rather than recommending going back to the menu. How can we save the
+customer's time, with all product recommendations ... to find the best
+matching product for our client at the lowest rates, always."
+
+Three changes.
+
+**The withdraw flow offers, it does not bounce.** Below the minimum, above the
+maximum, or over what the balance covers with the fee, the flow now names the
+one method that carries the amount the customer asked for, cheapest first, and
+offers it as a yes or no: "R30 is below the R50 minimum for cash at an Absa
+ATM, but cash at a Nedbank ATM takes R30 for a R18 fee, so R48 leaves your
+balance. Reply YES to switch to that, or type another amount." YES switches and
+keeps the amount; the menu is still there behind "back" for anyone who wants
+it. When nothing else can carry the amount the refusal states the minimum and
+asks for an amount, with no menu list.
+
+**Lists, and the best option named, for every customer.** The shape rules that
+the agent already followed are now a shared block, `REPLY_SHAPE` in
+`packages/ai/src/orchestrator.ts`, carried by the two-tier engine that still
+serves everyone: three or more items are a list one per line under a header,
+"accepted at" and "not accepted at" are separate blocks, and, new in both
+prompts, when the model already knows the single best next step it offers that
+step as one yes or no question, and when there is more than one way to do
+something it names the one that costs least or arrives soonest and says why.
+The reply rule that capped every answer at one to three sentences is gone; it
+was why "Where can I spend my OTT voucher?" came back as a paragraph.
+
+**The memory question is answered** (BUGLOG #70).
+
+Also recorded from the same session: the 23:00 message he asked about was his
+own "Home" at 23:00 SAST, answered in two seconds; nothing sends a customer a
+message on a schedule. His R20 Nedbank test pay-out was released by the
+reconcile after OTT answered "Failed to retrieve record" for the second time in
+three days, so nothing was paid and the money is back.
+
+Unit 852/852, build green, chat QA harness 29/29 (two new scenarios: the
+full-history sentence, and the OTT answer as a list).
+
 ## 2026-09-17 (40) — Three gaps from the architecture verification closed: execute-route ownership order for fuel and voucher gifts (BUGLOG #69), the output gate for every customer, the on-inbound reconcile covers INIT
 
 Four read-only verifiers established the status of every component of

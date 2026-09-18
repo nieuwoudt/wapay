@@ -1453,6 +1453,14 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   if (matchAboutMeAsk(text)) {
     return await handleAboutMe({ from, account });
   }
+  // The same asks phrased as a sentence; BOTH halves get one combined answer.
+  {
+    const ask = memoryHistoryAsk(text);
+    if (ask === 'BOTH') return await handleMemoryAndHistory({ from, account });
+    if (ask === 'MEMORY') return await handleAboutMe({ from, account });
+    if (ask === 'HISTORY') return await handleTransactions({ from, account, text });
+  }
+
   if (matchForgetMe(text)) {
     return await handleForgetMe({ from, account });
   }
@@ -3387,6 +3395,54 @@ function transactionLine(m) {
 
 const ABOUT_ME_ASK = /^\W*(?:what (?:do you|do u|does wapay) (?:know|remember) about me|what (?:have you|do you have) (?:got |stored )?(?:on|about) me|my (?:data|info|information|profile|memory)|what do you know)\W*$/i;
 function matchAboutMeAsk(text = '') { return ABOUT_ME_ASK.test(String(text || '').trim()); }
+
+// The same questions asked as a sentence (founder 2026-09-18: "Can you tell me
+// a full history of what you know about me and all my past transactions?" fell
+// through to the canned how-it-works line). "about me" or "my data" is required
+// for the memory half, a plural noun for the history half, so a product
+// question ("what do you know about airtime") and a money command never match.
+const MEMORY_ASK_LOOSE = /\b(?:know|knows|knew|remember|remembers|have|has|got|stored|store|hold|holds)\b[^.?!]{0,40}\b(?:about|on) me\b|\bmy (?:data|profile|information|memory)\b/i;
+const HISTORY_ASK_LOOSE = /\b(?:all )?(?:my|our) (?:past |previous |recent |full |complete )*(?:transactions?|history|statement|activity|payments|purchases|movements|withdrawals|deposits)\b|\b(?:full|complete|entire|whole) (?:transaction )?history\b/i;
+const MONEY_COMMAND = /\b(?:send|buy|withdraw|deposit|load|top ?up|request|cancel|delete)\b/i;
+function memoryHistoryAsk(text = '') {
+  const t = String(text || '').trim();
+  if (!t || t.length > 200 || MONEY_COMMAND.test(t)) return null;
+  const memory = MEMORY_ASK_LOOSE.test(t);
+  const history = HISTORY_ASK_LOOSE.test(t);
+  if (memory && history) return 'BOTH';
+  if (memory) return 'MEMORY';
+  if (history) return 'HISTORY';
+  return null;
+}
+
+/**
+ * One question, one answer: what WaPay knows AND the movements behind it.
+ * Every number comes from the record; nothing is composed by a model.
+ */
+async function handleMemoryAndHistory({ from, account }) {
+  const pack = await loadContextPack({ prisma, account, movementLimit: 10 });
+  const profile = await getProfile({ accountId: account.id }).catch(() => ({}));
+  const people = (pack.beneficiaries || []).map((b) => String(b.name || '').trim().split(/\s+/)[0]).filter(Boolean);
+  const notes = Array.isArray(profile?.notes) ? profile.notes.map((n) => n.text).filter(Boolean) : [];
+  const rows = (pack.movements || []).slice(0, 10);
+  const held = (pack.balances?.heldCashCents || 0) + (pack.balances?.heldSpendCents || 0);
+  const lines = [
+    '🧠 *What I know about you*',
+    '• ' + (pack.displayName || 'You') + ', ' + maskMsisdn(account.msisdn || from) + ' · ' + (pack.language || 'English') +
+      (pack.kyc ? ' · identity check ' + (pack.kyc === 'VERIFIED' ? 'done' : 'not done') : ''),
+    '• Balance to spend: ' + formatRands(pack.balances?.spendCents || 0) + (held > 0 ? ' (' + formatRands(held) + ' held for a pending withdrawal)' : ''),
+    people.length ? '• People you send to: ' + [...new Set(people)].slice(0, 5).join(', ') : null,
+    pack.habits?.summary ? '• Habits: ' + pack.habits.summary : null,
+    notes.length ? '• Things you told me: ' + notes.slice(0, 5).join('; ') : null,
+    '',
+    rows.length ? '📄 *Your last ' + rows.length + ' movement' + (rows.length === 1 ? '' : 's') + '*' : '📄 No movements on this account yet.',
+    rows.length ? rows.map(transactionLine).join('\n') : null,
+    '',
+    'I keep 30 days of our chat so I can follow the conversation, and I never store your PIN, voucher PINs or card details. Reply "forget me" to erase the chat memory and the things you told me; your transactions stay on record.',
+  ].filter((l) => l !== null);
+  logStructured('memory_and_history', { from, accountId: account.id, rows: rows.length });
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(lines.join('\n'), await userLang(account)), kind: 'flow' });
+}
 const FORGET_ME = /^\W*(?:forget (?:me|that|everything|our chats?|my (?:data|history|info))|delete my (?:data|history|memory|chats?)|erase (?:me|my (?:data|history|memory)))\W*$/i;
 function matchForgetMe(text = '') { return FORGET_ME.test(String(text || '').trim()); }
 
