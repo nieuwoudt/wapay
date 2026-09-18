@@ -49,7 +49,7 @@ test('happy path PayShap: menu → 1 → amount → account → bank → confirm
   const amt = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '1' });
   assert.equal(amt.state, 'PAYOUT_AMOUNT'); assert.equal(amt.data.method, 'PAYSHAP');
   const tooMuch = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: '999' });
-  assert.equal(tooMuch.state, 'PAYOUT_AMOUNT'); assert.match(tooMuch.text, /more than you have/);
+  assert.equal(tooMuch.state, 'PAYOUT_AMOUNT'); assert.match(tooMuch.text, /is the most you can take by PayShap right now .* Reply \*YES\*, or type a smaller amount\./);
   const tooSmall = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: '15' });   // a bare 1 to 5 is a menu choice now (BUGLOG 68); R15 still tests the minimum
   assert.match(tooSmall.text, /R15 is below the R20 minimum for PayShap/);
   const acc = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: 'R200' });
@@ -163,7 +163,7 @@ test('a question in the middle of the withdraw flow is answered, then the step r
   const q3 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: pick.data, text: 'what is the fee?' });
   assert.equal(q3.state, 'PAYOUT_AMOUNT'); assert.match(q3.text, /R18 up to R700/); assert.match(q3.text, /How much would you like to withdraw/);
   const amt = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: pick.data, text: '66' });
-  assert.equal(amt.state, 'PAYOUT_AMOUNT'); assert.match(amt.text, /more than you have/, 'numbers are still amounts');
+  assert.equal(amt.state, 'PAYOUT_AMOUNT'); assert.match(amt.text, /is the most you can take by cash at an Absa ATM right now/, 'numbers are still amounts, and the ceiling is offered');
 });
 
 test('FNB eWallet and Nedbank cardless are methods (founder ask 2026-09-15): menu, name matching, mobile + ID steps', async () => {
@@ -209,7 +209,7 @@ test('below the minimum: the message names the methods that DO allow the amount,
   // method that carries R30 and offers it as a yes/no (founder: "it already
   // knows which option to choose"). 'back' still returns to the full menu.
   assert.match(absa.text, /R30 is below the R50 minimum for cash at an Absa ATM, but /);
-  assert.match(absa.text, /takes R30 for a R\d+(\.\d\d)? fee, so R\d+(\.\d\d)? leaves your balance\. Reply \*YES\* to switch to that, or type another amount\.$/);
+  assert.match(absa.text, /takes R30 for an R\d+(\.\d\d)? fee, so R\d+(\.\d\d)? leaves your balance\. Reply \*YES\* to switch to that, or type another amount\.$/);
   assert.ok(['NEDCASH', 'EWALLET'].includes(absa.data.offerMethod));
   const back = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: 'back' });
   assert.equal(back.state, 'PAYOUT_METHOD'); assert.match(back.text, /Withdraw from WaPay/);

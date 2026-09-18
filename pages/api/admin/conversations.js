@@ -1,0 +1,144 @@
+/**
+ * Mission Control: the conversation card (C19 of docs/AGENT_ARCHITECTURE_V2.md).
+ *
+ * What a human needs to see while the Pay agent runs behind the shadow list:
+ * how many turns each brain answered, what the agent cost, how often an output
+ * gate had to rewrite a reply, how slow the slowest turns were, and which
+ * pay-outs are still parked with the rail. Read-only aggregates; no customer
+ * text and no bearer digits ever leave the database through this route (the
+ * agent_turns payloads are already masked at write time by lib/agent/turn-ledger.js,
+ * and this route does not read conversation_turns text at all).
+ *
+ * Session-cookie or internal-key gated, like every other admin route.
+ */
+import prisma from '../../../lib/prisma.js';
+import { requireAdmin } from '../../../lib/admin-auth.js';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Model prices in cents per million tokens; env so a price change is not a deploy. */
+const PRICE_IN = Number(process.env.WAPAY_EVAL_PRICE_IN || 0);
+const PRICE_OUT = Number(process.env.WAPAY_EVAL_PRICE_OUT || 0);
+const costCents = (inTok, outTok) => (inTok * PRICE_IN + outTok * PRICE_OUT) / 1_000_000;
+
+const pct = (n, d) => (d > 0 ? Math.round((n / d) * 1000) / 10 : null);
+
+function percentile(sorted, p) {
+  if (!sorted.length) return null;
+  const i = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  return sorted[i];
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'method' });
+  if (!requireAdmin(req).ok) return res.status(401).json({ error: 'UNAUTHORIZED' });
+
+  const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
+  const since = new Date(Date.now() - days * DAY_MS);
+
+  try {
+    const [turns, agentRows, parked, shadowListRaw] = await Promise.all([
+      // Both sides of every conversation, by role: the denominator.
+      prisma.conversationTurn
+        .groupBy({ by: ['role'], where: { createdAt: { gte: since } }, _count: { _all: true } })
+        .catch(() => []),
+      // Every agent turn in the window: outcome, gates, latency, tokens.
+      prisma.agentTurn
+        .findMany({
+          where: { createdAt: { gte: since } },
+          select: { path: true, outcome: true, gatesFired: true, ms: true, inputTokens: true, outputTokens: true, model: true, error: true, accountId: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+          take: 5000,
+        })
+        .catch(() => []),
+      // Pay-outs the rail has not settled: the drift a human must chase.
+      prisma.providerRequest
+        .findMany({
+          where: { route: 'ott-payout', status: { in: ['INIT', 'PENDING'] } },
+          select: { status: true, requestTs: true, metadata: true },
+          orderBy: { requestTs: 'asc' },
+          take: 50,
+        })
+        .catch(() => []),
+      Promise.resolve(process.env.WAPAY_AGENT_V3_MSISDNS || ''),
+    ]);
+
+    const byRole = Object.fromEntries((turns || []).map((t) => [t.role, t._count?._all || 0]));
+    const inbound = byRole.user || 0;
+
+    const agent = (agentRows || []).filter((r) => r.path === 'agent');
+    const guard = (agentRows || []).filter((r) => r.path !== 'agent');
+    const latencies = agent.map((r) => r.ms).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+    const tokensIn = agent.reduce((s, r) => s + (r.inputTokens || 0), 0);
+    const tokensOut = agent.reduce((s, r) => s + (r.outputTokens || 0), 0);
+
+    const outcomes = {};
+    for (const r of agent) outcomes[r.outcome || 'unknown'] = (outcomes[r.outcome || 'unknown'] || 0) + 1;
+
+    // Gates are the safety signal the promotion gate is measured on: a week of
+    // shadow turns with no gate firing on money copy is what opens Phase 3.
+    const gates = {};
+    for (const r of agentRows || []) {
+      const fired = Array.isArray(r.gatesFired) ? r.gatesFired : [];
+      for (const g of fired) gates[String(g)] = (gates[String(g)] || 0) + 1;
+    }
+
+    const errors = {};
+    for (const r of agent) if (r.error) errors[String(r.error)] = (errors[String(r.error)] || 0) + 1;
+
+    const accounts = new Set(agent.map((r) => r.accountId).filter(Boolean));
+    const models = [...new Set(agent.map((r) => r.model).filter(Boolean))];
+
+    const now = Date.now();
+    const parkedRows = (parked || []).map((p) => {
+      const m = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
+      return {
+        reference: m.reference || null,
+        status: p.status,
+        method: m.method || null,
+        amountCents: m.amountCents ?? null,
+        feeCents: m.feeCents ?? null,
+        ageMinutes: Math.round((now - new Date(p.requestTs).getTime()) / 60000),
+        lastCheckedAt: m.lastCheckedAt || null,
+      };
+    });
+
+    const shadowCount = shadowListRaw.split(',').map((s) => s.trim()).filter(Boolean).length;
+
+    return res.status(200).json({
+      windowDays: days,
+      since: since.toISOString(),
+      conversation: {
+        inbound,
+        outbound: byRole.assistant || 0,
+        events: byRole.event || 0,
+      },
+      agent: {
+        turns: agent.length,
+        guardTurns: guard.length,
+        customers: accounts.size,
+        shareOfInboundPct: pct(agent.length, inbound),
+        outcomes,
+        errors,
+        models,
+        p50Ms: percentile(latencies, 50),
+        p95Ms: percentile(latencies, 95),
+        maxMs: latencies.length ? latencies[latencies.length - 1] : null,
+        tokensIn,
+        tokensOut,
+        costCents: PRICE_IN || PRICE_OUT ? Math.round(costCents(tokensIn, tokensOut) * 100) / 100 : null,
+        costPerTurnCents: agent.length && (PRICE_IN || PRICE_OUT) ? Math.round((costCents(tokensIn, tokensOut) / agent.length) * 100) / 100 : null,
+        priced: Boolean(PRICE_IN || PRICE_OUT),
+      },
+      gates,
+      // The gates that decide promotion. The list lives here, not in the
+      // console, because the console must carry none of these words as copy.
+      gateWatch: ['RECEIPT', 'PARTNER', 'BETTING'],
+      shadow: { count: shadowCount, live: shadowCount > 0 },
+      payouts: { parked: parkedRows.length, rows: parkedRows.slice(0, 12) },
+    });
+  } catch (error) {
+    console.error(JSON.stringify({ type: 'admin_conversations_error', error: error?.message }));
+    return res.status(500).json({ error: 'UNAVAILABLE', message: error?.message || 'failed' });
+  }
+}

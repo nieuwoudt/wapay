@@ -156,7 +156,14 @@ test('knownAmountsFromPack admits settled money only; the figure parser reads th
     openPayLinks: [{ amountCents: 15000 }],
   });
   assert.ok(set.settled.has(2000) && set.balances.has(6600));
-  for (const c of [5000, 5800, 7500, 15000]) assert.ok(!set.settled.has(c) && !set.balances.has(c), 'pending, failed and open amounts are never provenance for a receipt');
+  // 2026-09-18: pending, failed and open figures ARE quotable (the record
+  // handed them to the model, and 'what did I buy' must be able to list them),
+  // but they are never settled, so they can never back a success claim. The
+  // assertions below are the security property; the bucket is the mechanism.
+  for (const c of [5000, 5800, 7500, 15000]) assert.ok(!set.settled.has(c), 'pending, failed and open amounts are never provenance for a receipt');
+  assert.ok(set.balances.has(15000) && set.balances.has(5000), 'but the agent may repeat what the record showed it');
+  assert.ok(!looksLikeReceipt('Your R150 pay link is still open and your R50 withdrawal is pending.', set), 'listing the record is allowed');
+  assert.ok(looksLikeReceipt('✅ Your R150 pay link was paid.', set), 'calling an open link paid is not');
   assert.ok(looksLikeReceipt('✅ Your R50 withdrawal was paid.', set), 'a pending amount cannot be spoken as paid');
   assert.ok(!looksLikeReceipt('✅ Your R20 deposit was received. Balance is R66.', set));
   assert.ok(looksLikeReceipt('✅ Deposit received R66', set), 'a balance figure alone never backs a success claim');

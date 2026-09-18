@@ -43,7 +43,7 @@ test('below the minimum: the flow offers the one method that carries this amount
   const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '30' });
   assert.equal(low.state, 'PAYOUT_AMOUNT');
   assert.match(low.text, /^R30 is below the R50 minimum for cash at an Absa ATM, but /);
-  assert.match(low.text, /takes R30 for a R\d+(\.\d\d)? fee, so R\d+(\.\d\d)? leaves your balance\. Reply \*YES\* to switch to that, or type another amount\.$/);
+  assert.match(low.text, /takes R30 for an R\d+(\.\d\d)? fee, so R\d+(\.\d\d)? leaves your balance\./);
   assert.doesNotMatch(low.text, /Reply \*back\*/, 'never sends the customer back to the menu');
   assert.doesNotMatch(low.text, /choose \*3\*/);
   assert.ok(['NEDCASH', 'EWALLET'].includes(low.data.offerMethod), 'a method whose minimum allows R30');
@@ -92,14 +92,14 @@ test('over the balance by this method: a cheaper method that still carries the f
     const yes = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: over.data, text: 'yes' });
     assert.equal(yes.data.amountCents, 6000, 'the full amount the customer asked for');
   } else {
-    assert.match(over.text, /You can withdraw up to R\d+/, 'otherwise the reachable ceiling');
+    assert.match(over.text, /is the most you can take by PayShap right now .* Reply \*YES\*, or type a smaller amount\.$/, 'otherwise the reachable ceiling, offered as a yes or no');
   }
 });
 
 // --- the memory and history question -----------------------------------------
 
 const matcherSrc = processor.slice(processor.indexOf('const MEMORY_ASK_LOOSE'), processor.indexOf('/**\n * One question, one answer'));
-const memoryHistoryAsk = new Function(matcherSrc + '\nreturn memoryHistoryAsk;')();
+const memoryHistoryAsk = new Function('matchDepositStatusRequest', matcherSrc + '\nreturn memoryHistoryAsk;')((t) => /did my (payment|deposit|money)s? (go through|arrive|land|come)/i.test(t));
 
 test('the founder\'s own sentence is answered, and a product question or money command never is', () => {
   assert.equal(memoryHistoryAsk('Can you tell me a full history of what you know about me / and all my past transactions and questions?'), 'BOTH');
@@ -147,4 +147,91 @@ test('the list, the separate blocks and the recommend-the-best-step rules reach 
   }
   assert.match(orch, /"Accepted at" and "not accepted at" are separate blocks/);
   assert.doesNotMatch(orch, /reply: 1–3 short sentences/, 'the old sentence-only rule is gone');
+});
+
+// --- the work order from the streamlining review (five readers, one judge) ---
+
+test('A17: an erasure request is never answered with a disclosure, and a data-bundle or status question is not a memory question', () => {
+  const src = processor.slice(processor.indexOf('const MEMORY_ASK_LOOSE'), processor.indexOf('/**\n * One question, one answer'));
+  const ask = new Function('matchDepositStatusRequest', src + '\nreturn memoryHistoryAsk;')((t) => /did my (payment|deposit|money)s? (go through|arrive|land|come)/i.test(t));
+  for (const t of ['forget my data', 'erase my memory', 'forget my history', 'delete my data', 'forget me', 'wipe my profile', 'remove my information']) {
+    assert.equal(ask(t), null, `erasure must reach handleForgetMe, not the record: ${t}`);
+  }
+  for (const t of ['did my payments go through', 'is my data still valid', 'my data bundle is finished', 'how much of my data is left']) {
+    assert.equal(ask(t), null, `not a memory question: ${t}`);
+  }
+  assert.equal(ask('Can you tell me a full history of what you know about me and all my past transactions?'), 'BOTH');
+  assert.equal(ask('tell me everything you know about me'), 'MEMORY');
+  assert.equal(ask('show me my transaction history'), 'HISTORY');
+  // and the hook itself sits below forget-me in the router
+  assert.ok(processor.indexOf('const ask = memoryHistoryAsk(text);') > processor.indexOf('if (matchForgetMe(text)) {'), 'the erasure hook runs first');
+  assert.match(processor, /if \(matchDepositStatusRequest\(t\)\) return null;/);
+});
+
+test('A1: the method step names one method the balance covers and offers it, and YES takes it', async () => {
+  env();
+  const d = { ...deps(6600), resolveProviders: async () => live };
+  const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
+  const absa = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
+  assert.equal(absa.state, 'PAYOUT_METHOD');
+  assert.match(absa.text, /^With R66 you cannot use cash at an Absa ATM yet: the R50 minimum plus the R\d+(\.\d\d)? fee is R\d+(\.\d\d)?\./);
+  assert.match(absa.text, / starts at R\d+(\.\d\d)? and you can take up to R\d+(\.\d\d)? today\./);
+  assert.match(absa.text, /Reply \*YES\* to use that, or say "add money"\.$/);
+  assert.doesNotMatch(absa.text, /Reply \*1\*|\*3\*|\*4\*/, 'no menu numbers');
+  assert.ok(['NEDCASH', 'EWALLET'].includes(absa.data.offerMethod));
+  const yes = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: absa.data, text: 'yes' });
+  assert.equal(yes.state, 'PAYOUT_AMOUNT');
+  assert.equal(yes.data.method, absa.data.offerMethod);
+  assert.equal(yes.data.offerMethod, null);
+});
+
+test('A2: a cash customer is offered cash, and a crossover to a bank rail says so', async () => {
+  env();
+  const d = { ...deps(21000), resolveProviders: async () => live };
+  const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
+  const absa = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
+  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '30' });
+  assert.ok(['NEDCASH', 'EWALLET'].includes(low.data.offerMethod), 'cash stays cash even when PayShap is cheaper');
+  assert.doesNotMatch(low.text, /pays into a bank account/);
+  const cashOnlyGone = live.filter((p) => ['PAYSHAP', 'CASHSEND'].includes(p.method));
+  const d2 = { ...deps(21000), resolveProviders: async () => cashOnlyGone };
+  const m2 = await startWithdraw({ account: verified, ask: {}, deps: d2 });
+  const absa2 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: m2.data, text: '2' });
+  const low2 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa2.data, text: '30' });
+  if (low2.data.offerMethod === 'PAYSHAP') assert.match(low2.text, /That one pays into a bank account, not cash\./);
+});
+
+test('A3: "no" to an offer keeps the withdrawal alive; "cancel" still cancels', async () => {
+  env();
+  const d = { ...deps(10000), resolveProviders: async () => live };
+  const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
+  const absa = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
+  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '30' });
+  assert.ok(low.data.offerMethod);
+  const no = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: low.data, text: 'no' });
+  assert.notEqual(no.cancelled, true, 'the withdrawal survives a "no"');
+  assert.equal(no.state, 'PAYOUT_AMOUNT');
+  assert.equal(no.data.offerMethod, null);
+  assert.match(no.text, /How much would you like to withdraw by/);
+  const cancelled = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: low.data, text: 'cancel' });
+  assert.equal(cancelled.cancelled, true);
+});
+
+test('A4: the ceiling is offered as a yes or no and priced at the ceiling, not at what was typed', async () => {
+  env();
+  const onlyAbsa = live.filter((p) => p.method === 'CASHSEND');
+  const d = { ...deps(6800), resolveProviders: async () => onlyAbsa };
+  const start = await startWithdraw({ account: verified, ask: { method: 'CASHSEND' }, deps: d });
+  assert.equal(start.state, 'PAYOUT_AMOUNT');
+  const over = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: start.data, text: '60' });
+  assert.equal(over.state, 'PAYOUT_AMOUNT');
+  assert.match(over.text, /^With the R\d+(\.\d\d)? fee, R\d+(\.\d\d)? is the most you can take by cash at an Absa ATM right now \(R\d+(\.\d\d)? to you, R\d+(\.\d\d)? off your balance\)\. Withdraw R\d+(\.\d\d)?\? Reply \*YES\*, or type a smaller amount\.$/);
+  assert.equal(over.data.offerMethod, null);
+  assert.ok(over.data.offerAmountCents > 0);
+  const { quotePayout } = await import('../lib/payouts.js');
+  const capQ = quotePayout({ method: 'CASHSEND', amountCents: over.data.offerAmountCents, minCents: 5000, maxCents: 300000 });
+  assert.ok(over.text.includes('With the R' + String(capQ.feeCents / 100).replace(/\.00$/, '')), 'the fee quoted is the fee at the ceiling');
+  const yes = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: over.data, text: 'yes' });
+  assert.notEqual(yes.state, 'PAYOUT_AMOUNT', 'YES moves on with the ceiling amount');
+  assert.equal(yes.data.amountCents, over.data.offerAmountCents);
 });

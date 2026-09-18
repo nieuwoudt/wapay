@@ -390,6 +390,19 @@ below is updated on every ship.
   gift-claim, state and business hooks rather than at the very top; the
   policy engine has nothing configured that can return anything but allow.
 
+- 2026-09-18, the streamlining review and the eval gate (changelog 41 and 42,
+  BUGLOG #70 and #71). The founder's principle is now composition policy in
+  both prompts: if you already know the answer, offer it rather than asking the
+  customer to find it; best matching product at the lowest rate, in the shape
+  they asked for, with the fee stated in the same breath; recommending is not
+  doing. The withdraw flow offers at every refusal instead of listing menu
+  numbers. **The eval half of the Phase 3 gate is met:** 156 cases across all
+  eleven languages, 99.4% overall and 100% on action and outcome, against the
+  two-tier engine's 100% on the shared 132, so the agent matches the engine it
+  replaces in every language (`docs/testing/agent-eval-2026-09-18.md`). The
+  remaining half is a week of shadow turns with no money gate firing, now
+  visible on the Mission Control conversations card (C19, shipped).
+
 ## 14. Open questions for the founder
 
 1. Vercel plan (Hobby or Pro): decides whether the 10-minute reconcile cron is

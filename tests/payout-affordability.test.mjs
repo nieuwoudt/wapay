@@ -50,8 +50,12 @@ test('R66 against CashSend: the menu names what it needs, the pick is refused wi
   assert.equal(pick.state, 'PAYOUT_METHOD', 'no amount question for a method the balance cannot cover');
   assert.equal(pick.data.method, null);
   assert.match(pick.text, new RegExp('^With R66 you cannot use cash at an Absa ATM yet: the R50 minimum plus the ' + R(needCash - 5000).replace('.', '\\.') + ' fee is ' + R(needCash).replace('.', '\\.') + '\\.'));
-  assert.match(pick.text, /Reply \*1\* or \*3\* or \*4\* for PayShap or cash at a Nedbank ATM or an FNB eWallet, or add money first\./);
-  assert.doesNotMatch(pick.text, /up to R48/);
+  // 2026-09-18: one named method with what it can pay, offered as a yes/no.
+  assert.match(pick.text, / starts at R\d+(\.\d\d)? and you can take up to R\d+(\.\d\d)? today\./);
+  assert.match(pick.text, /Reply \*YES\* to use that, or say "add money"\.$/);
+  assert.ok(['NEDCASH', 'EWALLET'].includes(pick.data.offerMethod));
+  // "up to R48" is now the TRUE affordable ceiling for the offered method,
+  // not the unreachable figure this test was written against in September.
 
   const ned = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: pick.data, text: '3' });
   assert.equal(ned.state, 'PAYOUT_AMOUNT');
@@ -59,7 +63,7 @@ test('R66 against CashSend: the menu names what it needs, the pick is refused wi
   assert.match(ned.text, new RegExp('Between R20 and ' + R(capNed).replace('.', '\\.') + '\\. You have R66 available'));
   const tooMuch = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ned.data, text: '66' });
   assert.equal(tooMuch.state, 'PAYOUT_AMOUNT');
-  assert.match(tooMuch.text, new RegExp('You can withdraw up to ' + R(capNed).replace('.', '\\.') + ' by Cash at a Nedbank ATM\\.'));
+  assert.match(tooMuch.text, new RegExp('With the R\\d+(\\.\\d\\d)? fee, ' + R(capNed).replace('.', '\\.') + ' is the most you can take by cash at a Nedbank ATM right now'));
   const ok = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ned.data, text: String(capNed / 100) });
   assert.notEqual(ok.state, 'PAYOUT_AMOUNT', 'the stated ceiling is accepted');
 

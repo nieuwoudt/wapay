@@ -4,6 +4,13 @@
 
 ---
 
+## 71. "Forget my data" answered with a full disclosure of that data
+
+- **Symptom:** shipped in `cf39b87` and caught the same afternoon by the streamlining review, before any customer used it. The loose memory matcher added that morning (BUGLOG #70) sat ABOVE the forget-me hook and its `my data` alternative matched "forget my data" and "erase my memory", so an erasure request rendered the customer's whole record instead of erasing it. "Delete my data" and "forget me" still erased, so casual testing would not have found it. The same matcher also stole "did my payments go through" from the handler that asks the rail live, and read "is my data still valid" and "my data bundle is finished" as memory questions.
+- **Root cause:** a disclosure hook placed above an erasure hook, and an over-broad alternative ("my data") for a phrase that in this product usually means a data bundle.
+- **Fix:** the hook moves below `matchForgetMe`; `forget`, `erase`, `wipe`, `clear` and `remove` disqualify a memory ask; the bare "my data" alternative is gone ("my profile", "my information", "my memory" stay); a deposit-status question returns null so the live rail check keeps it.
+- **Guard:** `tests/review-2026-09-18.test.mjs` asserts the route for seven erasure phrasings, four data-bundle and status phrasings, and the three that must still be answered, plus the hook order in the router.
+
 ## 70. "Tell me a full history of what you know about me and all my past transactions" got the canned how-it-works line, twice
 
 - **Symptom:** founder review 2026-09-18, on build 9bc355e. The sentence fell past every memory hook and landed on the how-it-works answer ("Say \"balance\" any time to see what you have..."), so the one question WaPay is built to answer, what it knows about this customer, was the one it would not answer. He asked twice and got the same line twice.

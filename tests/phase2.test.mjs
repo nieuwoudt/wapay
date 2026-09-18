@@ -114,7 +114,8 @@ test('agentFallbackLine states only record facts and no partner or betting word'
   assert.match(a, /last movement: Tue 16 Sep, 11:00, airtime R30\.00 \(success\)/);
   assert.doesNotMatch(a, /OTT|bet|wager|—/);
   const b = fn({ balances: { spendCents: 0 }, movements: [] });
-  assert.match(b, /Balance to spend: R0\.00\. Tell me what you need/);
+  assert.match(b, /Balance to spend: R0\.00\. What would you like to do next\?/);
+  assert.doesNotMatch(b, /type "help"/i, 'the fallback ends with an offer, not a menu hint');
   assert.equal(fn(null).includes('R0.00'), true);
 });
 

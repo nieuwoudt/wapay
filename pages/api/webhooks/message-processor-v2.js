@@ -1453,16 +1453,17 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   if (matchAboutMeAsk(text)) {
     return await handleAboutMe({ from, account });
   }
+  if (matchForgetMe(text)) {
+    return await handleForgetMe({ from, account });
+  }
   // The same asks phrased as a sentence; BOTH halves get one combined answer.
+  // Below forget-me on purpose: an erasure request must never be answered
+  // with a disclosure (review 2026-09-18).
   {
     const ask = memoryHistoryAsk(text);
     if (ask === 'BOTH') return await handleMemoryAndHistory({ from, account });
     if (ask === 'MEMORY') return await handleAboutMe({ from, account });
     if (ask === 'HISTORY') return await handleTransactions({ from, account, text });
-  }
-
-  if (matchForgetMe(text)) {
-    return await handleForgetMe({ from, account });
   }
 
   const feeTopic = matchFeeAsk(text);
@@ -3401,12 +3402,19 @@ function matchAboutMeAsk(text = '') { return ABOUT_ME_ASK.test(String(text || ''
 // through to the canned how-it-works line). "about me" or "my data" is required
 // for the memory half, a plural noun for the history half, so a product
 // question ("what do you know about airtime") and a money command never match.
-const MEMORY_ASK_LOOSE = /\b(?:know|knows|knew|remember|remembers|have|has|got|stored|store|hold|holds)\b[^.?!]{0,40}\b(?:about|on) me\b|\bmy (?:data|profile|information|memory)\b/i;
+// "my data" is deliberately NOT here: "is my data still valid", "my data
+// bundle is finished" and "how much of my data is left" are data-bundle
+// questions, not memory questions (review 2026-09-18).
+const MEMORY_ASK_LOOSE = /\b(?:know|knows|knew|remember|remembers|have|has|got|stored|store|hold|holds)\b[^.?!]{0,40}\b(?:about|on) me\b|\bmy (?:profile|information|memory)\b/i;
 const HISTORY_ASK_LOOSE = /\b(?:all )?(?:my|our) (?:past |previous |recent |full |complete )*(?:transactions?|history|statement|activity|payments|purchases|movements|withdrawals|deposits)\b|\b(?:full|complete|entire|whole) (?:transaction )?history\b/i;
-const MONEY_COMMAND = /\b(?:send|buy|withdraw|deposit|load|top ?up|request|cancel|delete)\b/i;
+// An erasure beats a disclosure, and a money command is never a question
+// about memory. "forget my data" must erase, never dump the record.
+const NOT_A_MEMORY_ASK = /\b(?:send|buy|withdraw|deposit|load|top ?up|request|cancel|delete|forget|erase|wipe|clear|remove)\b/i;
 function memoryHistoryAsk(text = '') {
   const t = String(text || '').trim();
-  if (!t || t.length > 200 || MONEY_COMMAND.test(t)) return null;
+  if (!t || t.length > 200 || NOT_A_MEMORY_ASK.test(t)) return null;
+  // "did my payments go through" belongs to the handler that asks the rail.
+  if (matchDepositStatusRequest(t)) return null;
   const memory = MEMORY_ASK_LOOSE.test(t);
   const history = HISTORY_ASK_LOOSE.test(t);
   if (memory && history) return 'BOTH';
@@ -3438,7 +3446,8 @@ async function handleMemoryAndHistory({ from, account }) {
     rows.length ? '📄 *Your last ' + rows.length + ' movement' + (rows.length === 1 ? '' : 's') + '*' : '📄 No movements on this account yet.',
     rows.length ? rows.map(transactionLine).join('\n') : null,
     '',
-    'I keep 30 days of our chat so I can follow the conversation, and I never store your PIN, voucher PINs or card details. Reply "forget me" to erase the chat memory and the things you told me; your transactions stay on record.',
+    'I keep 30 days of our chat so I can follow the conversation, and I never store your PIN, voucher PINs or card details. Reply *forget me* and the chat memory and what I have learned about how you use WaPay both go; your transactions stay on record, as the law requires.',
+    rows.length ? 'Want the detail on any one of them? Say the date or the amount.' : null,
   ].filter((l) => l !== null);
   logStructured('memory_and_history', { from, accountId: account.id, rows: rows.length });
   return await sendWhatsAppText({ to: from, text: await localizeOutbound(lines.join('\n'), await userLang(account)), kind: 'flow' });
@@ -5880,12 +5889,26 @@ function looksLikeReceipt(s, knownAmounts = null) {
  * held amounts are in neither (review 2026-09-16).
  */
 function knownAmountsFromPack(pack) {
+  // settled = money the ledger says has SETTLED. Only these may back a
+  // success claim. quotable = every other figure the record handed the model
+  // this turn (balances, pending and open and failed movements, open pay
+  // links): the agent may repeat them, but never call them paid. A figure
+  // from neither set is invented and the reply is blocked (2026-09-18: the
+  // guard was blocking honest answers that listed an open pay link).
   const settled = new Set();
   const balances = new Set();
   if (!pack) return { settled, balances };
-  const add = (set, c) => { if (Number.isInteger(c)) set.add(c); };
-  const b = pack.balances || {};
-  add(balances, b.spendCents); add(balances, b.cashCents);
+  const add = (set, c) => { if (Number.isInteger(c) && c > 0) set.add(c); };
+  const walk = (v, depth = 0) => {
+    if (v == null || depth > 6) return;
+    if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
+    if (typeof v !== 'object') return;
+    for (const [k, val] of Object.entries(v)) {
+      if (/Cents$/.test(k)) add(balances, val);
+      else walk(val, depth + 1);
+    }
+  };
+  walk(pack);
   for (const m of pack.movements || []) {
     if (m.status !== 'SUCCESS') continue;
     add(settled, m.amountCents); add(settled, m.feeCents);
@@ -5893,6 +5916,7 @@ function knownAmountsFromPack(pack) {
   }
   return { settled, balances };
 }
+
 
 // Which registry capability an orchestrator action proposes to start, for
 // the policy check (docs/AGENT_ARCHITECTURE_V2.md C11). Actions that only
@@ -5926,7 +5950,7 @@ function agentFallbackLine(pack) {
   const last = m
     ? ' Your last movement: ' + formatSast(m.at) + ', ' + String(m.kind || '').toLowerCase().replace(/_/g, ' ') + ' ' + formatRands(m.amountCents) + ' (' + String(m.status || '').toLowerCase() + ').'
     : '';
-  return '💰 Balance to spend: ' + formatRands(pack?.balances?.spendCents || 0) + '.' + last + ' Tell me what you need, or type "help" for everything I can do.';
+  return '💰 Balance to spend: ' + formatRands(pack?.balances?.spendCents || 0) + '.' + last + ' What would you like to do next?';
 }
 
 async function handleAgentTurn({ from, text, account, messageId = null, pendingIntent = null }) {

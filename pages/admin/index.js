@@ -287,6 +287,86 @@ function Floats() {
   );
 }
 
+function Conversations() {
+  // Mission Control C19: the shadow week in one card. Its own endpoint because
+  // the agent aggregates answer a different question than the money metrics.
+  const [c, setC] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/conversations?days=7')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setC(d); })
+      .catch(() => { if (!cancelled) setErr('Could not load conversation metrics.'); });
+    return () => { cancelled = true; };
+  }, []);
+  if (err) return <div className="empty">{err}</div>;
+  if (!c) return <div className="empty">Counting turns…</div>;
+  const gateNames = Object.keys(c.gates || {});
+  // The gates that decide promotion, named by the API so this file carries
+  // none of those words itself (the console copy policy).
+  const gateWatch = gateNames.filter((g) => (c.gateWatch || []).includes(g));
+  const ms = (v) => (v == null ? '—' : v >= 1000 ? (v / 1000).toFixed(1) + 's' : v + 'ms');
+  const rands = (cents) => 'R' + ((cents || 0) / 100).toFixed(2);
+  const stat = (k, v, sub) => (
+    <div key={k} style={{ padding: '7px 0' }}>
+      <div style={{ fontSize: 11, color: 'var(--ink3)' }}>{k}</div>
+      <div style={{ fontSize: 17, fontWeight: 700 }}>{v}</div>
+      {sub ? <div style={{ fontSize: 11, color: 'var(--ink3)' }}>{sub}</div> : null}
+    </div>
+  );
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+        {stat('Customer messages', c.conversation.inbound, 'last ' + c.windowDays + ' days')}
+        {stat('WaPay replies', c.conversation.outbound, 'both sides recorded')}
+        {stat('Agent turns', c.agent.turns, c.shadow.live ? c.agent.customers + ' on the pilot list' : 'pilot list empty')}
+        {stat('Agent share', c.agent.shareOfInboundPct == null ? '—' : c.agent.shareOfInboundPct + '%', 'of customer messages')}
+        {stat('Latency p50 / p95', ms(c.agent.p50Ms) + ' / ' + ms(c.agent.p95Ms), 'slowest ' + ms(c.agent.maxMs))}
+        {stat('Model spend', c.agent.priced ? rands(c.agent.costCents) : 'not priced', c.agent.priced ? rands(c.agent.costPerTurnCents) + ' per turn' : 'set WAPAY_EVAL_PRICE_IN and _OUT')}
+      </div>
+      <div className="ops" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+        {Object.entries(c.agent.outcomes || {}).map(([k, v]) => (
+          <span key={k} className="pill">
+            <span className="dot" style={{ background: k === 'error' || k === 'fallback' ? 'var(--crit)' : 'var(--good)' }} />
+            {k} {v}
+          </span>
+        ))}
+        {gateNames.length === 0 ? (
+          <span className="pill"><span className="dot" style={{ background: 'var(--good)' }} />No gate fired</span>
+        ) : gateNames.map((g) => (
+          <span key={g} className="pill" style={{ borderColor: gateWatch.includes(g) ? 'var(--crit)' : undefined, color: gateWatch.includes(g) ? 'var(--crit)' : undefined }}>
+            <span className="dot" style={{ background: gateWatch.includes(g) ? 'var(--crit)' : 'var(--ink3)' }} />
+            {g} {c.gates[g]}
+          </span>
+        ))}
+        {Object.entries(c.agent.errors || {}).map(([k, v]) => (
+          <span key={k} className="pill" style={{ borderColor: 'var(--crit)', color: 'var(--crit)' }}>
+            <span className="dot" style={{ background: 'var(--crit)' }} />
+            {k} {v}
+          </span>
+        ))}
+      </div>
+      <p className="note" style={{ marginTop: 8, marginBottom: 6 }}>
+        The next phase opens when the eval passes in every language AND a full week of agent turns fires none of the three gates drawn in red. The rest are informational.
+      </p>
+      <div style={{ marginTop: 6 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>Still with the rail: {c.payouts.parked}</div>
+        {c.payouts.rows.length === 0 ? (
+          <div className="empty" style={{ padding: '6px 0' }}>Nothing parked.</div>
+        ) : c.payouts.rows.map((p) => (
+          <div key={p.reference || String(p.ageMinutes)} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr', gap: 10, padding: '5px 0', borderBottom: '1px solid var(--grid)', fontSize: 12.5 }}>
+            <span style={{ color: 'var(--ink3)' }}>{p.reference || '(no reference)'}</span>
+            <span>{p.method || '—'} {p.amountCents != null ? R(p.amountCents) : ''}</span>
+            <span style={{ color: p.ageMinutes > 60 ? 'var(--crit)' : 'var(--ink2)' }}>{p.status} {p.ageMinutes}m</span>
+            <span style={{ color: 'var(--ink3)' }}>{p.lastCheckedAt ? 'checked ' + dt(p.lastCheckedAt) : 'not checked yet'}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function UniFuelPanel() {
   const [u, setU] = useState(null);
   const [err, setErr] = useState('');
@@ -658,6 +738,11 @@ function Dashboard() {
         <OpsHealth ops={m.ops} />
       </div>
 
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Conversations and the Pay agent</h2>
+        <p className="note">Both sides of every chat, what the agent answered behind the shadow list, what it cost, which output gates fired, and any pay-out still parked with the bank rail.</p>
+        <Conversations />
+      </div>
       <div className="card" style={{ marginTop: 14 }}>
         <h2>Supplier floats</h2>
         <p className="note">Prepaid balances at each counterparty, next to what the ledger believes. Top up before a low float fails a vend.</p>

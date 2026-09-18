@@ -4,6 +4,69 @@
 
 ---
 
+## 2026-09-18 (42) — The work order from the streamlining review: the withdraw flow offers at every refusal, cash stays cash, "no" no longer cancels, and an erasure is never answered with a disclosure (BUGLOG #71)
+
+Five read-only readers swept every flow, every product choice, the memory
+answer and every outbound sender against the founder's principle; one judge
+merged 49 findings into a ranked work order. Its first correction mattered:
+the branch his own repro reaches today is NOT the one this morning's fix
+touched. With R66 and cash at an Absa ATM chosen, the affordability check
+added in `4b3f478` returns at the METHOD step, and that step still listed menu
+numbers. Five items are closed here.
+
+**A1, the method step offers.** "With R66 you cannot use cash at an Absa ATM
+yet: the R50 minimum plus the R18 fee is R68. Cash at a Nedbank ATM starts at
+R20 and you can take up to R48 today. I will need your ID number for that one.
+Reply YES to use that, or say add money." One method, named, with what it can
+actually pay and any extra step it adds.
+
+**A2, the offer keeps the shape the customer asked for.** Someone collecting
+cash is offered cash, not sent to find a bank account, even when a bank rail is
+cheaper. It crosses only when nothing in the same family carries the amount,
+and says so when it does.
+
+**A3, "no" keeps the withdrawal alive.** Every new offer invites a yes, and
+`CANCEL_RE` matched "no", so a person answering the question would have thrown
+the whole withdrawal away. A bare no now clears the offer and re-asks;
+"cancel" and "stop" still cancel.
+
+**A4, the ceiling is a question, priced at the ceiling.** "With the R18 fee,
+R50 is the most you can take by cash at an Absa ATM right now (R50 to you, R68
+off your balance). Withdraw R50? Reply YES, or type a smaller amount." The fee
+is quoted at the ceiling because the cash fees are banded, and YES re-validates
+against the balance as it stands at that moment.
+
+**A17 is BUGLOG #71**, an erasure answered with a disclosure, shipped this
+morning and caught before any customer met it.
+
+The judge's three rules are now the composition policy: if you already know the
+answer, offer it rather than asking the customer to find it; best matching
+product at the lowest rate, in the shape they asked for, with the fee stated in
+the same breath; and recommending is not doing, so money still goes preview,
+confirm, PIN, execute with the number recomputed on yes.
+
+**The Phase 3 eval gate is met.** The full agent eval, 156 cases across all
+eleven languages: 99.4% overall, 100% on action and outcome, no errors, p50
+1.7 s, p95 4.8 s. On the 132 golden cases the two-tier engine also scores
+100%, so the agent matches the engine it replaces in every language. What
+remains before promotion is the week of shadow turns with no money gate firing,
+which the new Mission Control card now measures.
+
+**Mission Control gains its conversations card (C19).** Customer messages and
+WaPay replies, agent turns and their share, latency p50/p95, cost per turn,
+outcomes, every gate that fired (RECEIPT, PARTNER and BETTING in red, because
+those three are the promotion gate), and every pay-out still parked with the
+rail with its age and when it was last checked. New route
+`pages/api/admin/conversations.js`, read-only and admin-gated, reading only
+aggregates and the already-masked `agent_turns` payloads.
+
+Unit 857/857, build green. The chat QA harness run that followed hit a hard
+stop: the OpenAI account ran out of credit mid-run (429 credit_balance_exhausted,
+after the 156-case and 132-case evals above), so every model path fell back.
+Degraded mode behaved exactly as designed, no crash, no invented number, the
+guards and the record still answered, and the four red scenarios are all
+model-dependent. Re-run the harness once the account is topped up.
+
 ## 2026-09-18 (41) — The founder's streamlining review: the bot recommends the one next step instead of sending the customer back to a menu; lists, not paragraphs; the memory question is answered (BUGLOG #70)
 
 From his first live session on the new build. His words: "It's too systematic.
