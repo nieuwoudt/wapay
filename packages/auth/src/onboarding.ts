@@ -461,22 +461,28 @@ export async function handleS4PinSet(args: {
       return { ok: true }; // Don't transition, wait for acceptance
     }
     
-    // Record consents
-    await recordConsent({
-      accountId,
-      consentType: 'TERMS_AND_CONDITIONS',
-      granted: true,
-      version: 'v1.0',
-    });
-    
-    await recordConsent({
-      accountId,
-      consentType: 'PRIVACY_POLICY',
-      granted: true,
-      version: 'v1.0',
-    });
-    
-    console.log(`✅ Consents recorded for ${displayName}`);
+    // Record consents. recordConsent answers { ok: false } rather than
+    // throwing, and both returns used to be discarded, so a database hiccup
+    // here completed onboarding with no consent rows and no alarm anywhere:
+    // a customer transacting with nothing on file that says they accepted the
+    // terms. Onboarding still continues (refusing the customer their account
+    // over a transient write is worse), but the gap is now loud enough to
+    // find and repair (2026-09-18).
+    const consents = await Promise.all([
+      recordConsent({ accountId, consentType: 'TERMS_AND_CONDITIONS', granted: true, version: 'v1.0' }),
+      recordConsent({ accountId, consentType: 'PRIVACY_POLICY', granted: true, version: 'v1.0' }),
+    ]);
+    const missing = ['TERMS_AND_CONDITIONS', 'PRIVACY_POLICY'].filter((_, i) => !consents[i]?.ok);
+    if (missing.length > 0) {
+      console.error(JSON.stringify({
+        type: 'consent_record_failed',
+        accountId,
+        missing,
+        timestamp: new Date().toISOString(),
+      }));
+    } else {
+      console.log(`✅ Consents recorded for ${displayName}`);
+    }
     
     // Get user's balance
     const prisma = getPrisma();

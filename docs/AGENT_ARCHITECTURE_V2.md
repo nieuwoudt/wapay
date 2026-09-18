@@ -1,6 +1,6 @@
 # The Pay agent: architecture v2 (the moat)
 
-**Version 1.6 · 2026-09-17 · build 9bc355e** (the version table is section 15; the visual map is docs/architecture/pay-agent-architecture.html, published at https://claude.ai/artifact/LzMx7uSJLfbyJeRftpPuMB)
+**Version 1.8 · 2026-09-18 · build f91e317** (the version table is section 15; the visual map is docs/architecture/pay-agent-architecture.html, published at https://claude.ai/artifact/LzMx7uSJLfbyJeRftpPuMB)
 
 ## How this document is used
 
@@ -16,9 +16,19 @@ The version line sits at the top of this file and in the map's status heading:
 
 The major number changes when the target (sections 1 to 12) changes. The ship number changes with every section 13 entry. History: the version table below.
 
-## Where we are (2026-09-17)
+## Where we are (2026-09-18 evening)
 
-**Phase 2 is wired behind the shadow list. Phase 3 has not started.** Latest code build `9bc355e`.
+**Phase 2 is deployed behind the pilot list and Phase 3 has not started.** Latest code build `f91e317`.
+
+**The promotion gate: one condition met, one not started.** The eval half is
+met (156 cases, all eleven languages, 100% on action against the two-tier
+engine's 100% on the shared 132). The week of real agent turns has **not begun**:
+as of this build `agent_turns` holds zero rows. The list carries the founder's
+number and that number is correct, but until 2026-09-18 the gate matched the
+list entry as raw text, so three of the four ways a human writes the number
+would have matched nobody while the old engine answered normally
+(BUGLOG #73). The clock starts on the first message he sends from it, and the
+Mission Control card now reports whole clean days against the seven needed.
 
 Complete for every customer (Phases 0 and 1): the customer record and the last 12 turns, both sides, in every model turn; execute routes closed; strict PIN states; claim release, typing indicator; INIT pay-out reconcile; registry-rendered surfaces; habits, "what do you know about me" and "forget me"; nightly balance integrity; policy engine before proposals and withdrawals.
 
@@ -309,6 +319,43 @@ budget, the moat statement, the send rail rule, the narrower provenance guard,
 fewer persistence surfaces (one turn table; AuditLog only for proposals that
 reach a preview), voice and image explicitly deferred, and the calendar.
 
+### Added 2026-09-18 (session after `c1821e0`)
+
+- **Corrected: C11's "configure a real requirement".** The design row and the
+  handover both say the policy engine should be given a real requirement, a
+  consent for cross-user actions being the obvious first. **Verdict: amend the
+  row, do not configure it.** Evidence. (1) A `TERMS_AND_CONDITIONS`
+  requirement would be a tautology: `message-processor-v2.js` refuses every
+  capability until `onboardingState === 'S5_COMPLETED'`, and that state is only
+  reachable through the two `recordConsent` calls in
+  `packages/auth/src/onboarding.ts` `handleS4PinSet`, so every customer who can
+  reach a capability already holds the consent. It could never add a block,
+  only produce false negatives. (2) It would not address the risk the memory
+  rule `cross-user-actions-need-consent-gate` is about: the 2026-08-25 phishing
+  vector was A reaching an arbitrary stranger B, and the control for that is the
+  relationship gate plus informational-only delivery, both already shipped. A
+  checkbox on A's own account changes nothing about whether A may reach B, so
+  configuring one would LOOK like satisfying the rule while leaving the vector
+  untouched, which is worse than an honest amber row. (3) The blast radius is
+  every customer: `account.consents` is never loaded on the inbound path
+  (`getOrCreateUser` selects only `wallets`), and `evaluatePolicy` fails closed,
+  so one descriptor line would tell every customer to accept terms they cannot
+  accept in chat. **The engine stays a gate with nothing yet to gate, on
+  purpose. It becomes real when the first requirement that can actually refuse
+  something arrives; the candidate named in section 7 is the partner module
+  (bank-account verification), whose KYC tier is a requirement the flow does
+  not already own.**
+- **Corrected: the consent model has no `revokedAt`.** `lib/policy.js`
+  `isUnrevoked` reads `c.revokedAt`, which does not exist on the Prisma
+  `Consent` model, so against production data the branch is dead and only the
+  hand-built test fixtures exercise it. A revoked consent cannot be represented
+  today. Not fixed here: it needs a schema decision, and nothing depends on it
+  while no requirement is configured. Recorded so the first requirement does
+  not inherit it silently.
+- **Corrected: the legacy conversation ring was 63 call sites, not "about
+  twenty"** (`docs/HANDOVER_V1.5.md`). All 63 were in the processor and there
+  were no readers anywhere. Deleted 2026-09-18 with both helpers.
+
 ## 12. Invariants preserved (never weaken)
 
 Everything in `CLAUDE.md` money-safety 1 to 10 and `docs/AGENT_ARCHITECTURE_RECON.md`
@@ -403,6 +450,54 @@ below is updated on every ship.
   remaining half is a week of shadow turns with no money gate firing, now
   visible on the Mission Control conversations card (C19, shipped).
 
+- 2026-09-18, the async tier and the handover (changelog 43 to 46, BUGLOG #72).
+  C21 `notifyCustomer` picks the rail that crosses the 24 hour window; C18 has
+  a frozen baseline the runner fails against; C19's pay-out half reports what
+  the parked rows hold; C13's internal-auth gate fails closed in production;
+  C14 gains its first event-row producer; C20's `agent_jobs` table and drain
+  land early from Phase 4, with the recorded decision that the fuel reconcile
+  stays on the customer's turn until a ten-minute drain exists.
+
+- 2026-09-18 evening, the session after `c1821e0` (changelog 47 to 52,
+  BUGLOG #73 to #75). **The pilot week had not started and could not have been
+  seen to fail.** The first read of `GET /api/admin/conversations?days=7`
+  returned 19 customer messages, 20 replies, the list live with one number, and
+  zero agent turns; `agent_turns` had never received a row. The gate compared
+  the list entry to Meta's wa_id as raw text, so three of the four ways a human
+  writes a South African number matched nobody, silently, while the old engine
+  went on answering. The list moves to `lib/shadow-list.js` and matches on
+  canonical digits; the Mission Control card now reports each entry by its last
+  four digits with whether it is readable and whether an account has written
+  from it, beside whole clean days against the seven the gate needs, the clock
+  reset by the newest money gate. The number on the list was in fact correct,
+  so nothing had been lost yet; the failure mode was.
+  - **C16.** `propose_note` no longer writes. It is pure, returns a pending
+    note, and the runtime asks the customer and writes through the new
+    deterministic `addNote` on an explicit yes. The model is no longer the
+    author of any customer fact.
+  - **C14.** The legacy JSON ring is deleted: 63 write sites in the processor,
+    no readers, each one a read-modify-write of a column that also holds live
+    flow state. Migration `20260918_drop_conversation_ring` clears the residue
+    and the erasure path clears it per account (BUGLOG #74: "forget me" had
+    never touched it). Event rows now cover every way the pay-out sweep can
+    fail to tell a customer, and the PayFast ITN's deposit confirmation.
+    BUGLOG #75: a gift claimed but never sent is put back on any failure, not
+    only on a send that answers not-ok.
+  - **Phase 3 prep.** The three dead things are deleted (the second WhatsApp
+    client, `postBluDeposit`, `UserSavedAccount`). Thirteen functions are
+    exported from the processor IN PLACE and the first batch of source-text
+    locks is rewritten as behaviour: source surgery falls from 19 sites to 6,
+    and two tests that had been asserting against drifted fakes are now
+    asserting against the real code.
+  - **C11.** Amended rather than configured; see the section 11 entry.
+  - **C19.** The conversations card shows what the parked pay-outs hold against
+    the rail's float, fetched separately so a slow supplier cannot take the
+    card down.
+  - Not done, deliberately: C16's habits in SQL. The JavaScript version can
+    only UNDER-count over a 40-row window, the eval that gates Phase 3 renders
+    no habits at all, and two test stubs would silently warn on a ninth query.
+    It is an optimisation with a real chance of a quiet regression and it waits.
+
 ## 14. Open questions for the founder
 
 1. Vercel plan (Hobby or Pro): decides whether the 10-minute reconcile cron is
@@ -422,3 +517,5 @@ below is updated on every ship.
 | 1.4 | 2026-09-17 morning | `398475f` | Hotfix (changelog 38, BUGLOG #67): the missing `runWithSendScope` import that muted the bot since `3915d81`. No change to the target. C1's delivery contract is now proven by a runtime route test. Rule added: a webhook change ships only with that test green, and the first production message after a webhook deploy is watched before the deploy is called done. |
 | 1.5 | 2026-09-17 morning | `4b3f478` | Withdraw affordability (changelog 39, BUGLOG #68) from the founder's first live test after the hotfix. No change to the target. |
 | 1.6 | 2026-09-17 | `9bc355e` | Verification pass and three gaps closed (changelog 40, BUGLOG #69); the phase map, the preface, this table and section 13's backlog added; the page sources move into the repo under docs/architecture. |
+| 1.7 | 2026-09-18 | `c1821e0` | The streamlining review and the work order (changelog 41, 42; BUGLOG #70, #71); `notifyCustomer` (43, BUGLOG #72); the frozen eval baseline and the held total (44); the internal-auth gate closed and the first event row (45); `agent_jobs` and its drain (46). **The eval half of the Phase 3 gate is met**: 156 cases, all eleven languages, 99.4% overall and 100% on action and outcome. |
+| 1.8 | 2026-09-18 evening | `f91e317` | The pilot gate could not have started (BUGLOG #73) and an empty week could not be told from a broken one; `propose_note` stops writing customer facts; the 63-site JSON ring deleted with its erasure gap (BUGLOG #74); the three dead things retired; the first batch of source-text locks rewritten as behaviour, 19 surgery sites down to 6; the rest of C14's event rows and a gift that could strand (BUGLOG #75); C11 amended in section 11 rather than configured; C19 held against float. |

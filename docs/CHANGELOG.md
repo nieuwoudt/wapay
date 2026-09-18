@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-09-18 (52) — C19 shows held against the rail's float; a failed consent write is no longer silent; the record and the map redrawn at f91e317
+
+**C19.** The conversations card reported what the parked pay-outs hold; the
+design also asks for that figure against the float they are drawn from. The
+panel now fetches the float SEPARATELY and renders without it: reading it is a
+live call to OTT with its own eight second timeout, and a supplier having a bad
+minute must not take the conversation metrics down with it. When held exceeds
+the float the card says so.
+
+**A consent write that fails is now loud.** `recordConsent` answers
+`{ ok: false }` rather than throwing, and `handleS4PinSet` discarded both
+returns, so a database hiccup during onboarding completed the account with no
+consent rows and no alarm anywhere: a customer transacting with nothing on file
+saying they accepted the terms. Onboarding still continues, because refusing
+someone their account over a transient write is worse, but the gap is now
+logged as `consent_record_failed` with the missing types.
+
+**C11 is amended, not configured**, with the reasoning in section 11 of the
+design record: a consent requirement would be a tautology (every customer who
+can reach a capability already holds one, because `S5_COMPLETED` is only
+reachable through the two `recordConsent` calls), it would not address the
+cross-user risk it appears to (the control for that is the relationship gate,
+already shipped), and one descriptor line would tell every customer to accept
+terms they cannot accept in chat, because `account.consents` is never loaded on
+the inbound path and `evaluatePolicy` fails closed. Recorded with it: the
+`Consent` model has no `revokedAt` column, so `isUnrevoked` reads a field that
+does not exist and the revocation branch is dead against production data.
+
+**The record and the map.** Section 13 gains the 43 to 46 entries the previous
+session never added and the whole of this one; the version table gains 1.7 and
+1.8; section 11 gains three corrections. The phase map is republished as
+Version 7 with C13, C14 and C19 moved to shipped, each verified against the
+tree rather than the changelog: all five execute routes prove ownership before
+the PIN and the internal-auth gate fails closed, the conversation store has
+both sides and event rows with the ring gone, and both halves of the
+conversations card are live.
+
+Unit 895/895, build green, chat QA harness 29/29.
+
 ## 2026-09-18 (51) — The rest of C14: every money outcome the customer was not told about now reaches the agent, and a claimed gift can no longer strand (BUGLOG #75)
 
 Entry 45 wrote the first of these producers. The handover asked for the other

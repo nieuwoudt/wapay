@@ -65,7 +65,7 @@
 </style>
 
 <div class="wrap">
-  <div class="eyebrow">WaPay · engineering decision · 16 September 2026</div>
+  <div class="eyebrow">WaPay · engineering decision · 16 September 2026 · Version 6, redrawn 18 September evening at build f91e317</div>
   <h1>Pay Agent Architecture</h1>
   <p class="stand">The chat feels like a menu because the customer is talking to the pre-agent runtime: 29 deterministic intercepts, two serial classifier calls, and a model that has never been shown a single fact about the customer. The agent described in the recon was never built. This page shows what runs today, the target that six read-only readers, four independent designers, three judges and two refuters per claim converged on, and the order to build it in.</p>
 
@@ -86,7 +86,7 @@
     <p>Not the model, and not the number of agents. FNB already runs eWallet on WhatsApp, and any bank can rent the same model. The defensible asset is the per-customer record under one WhatsApp identity: every deposit, send, purchase, pay-out and pay link across every product, read on every turn, plus a policy-gated registry that any partner product (a bank link, a credit check, an insurance quote) plugs into as a module. That is what a bank cannot bolt onto a menu quickly, and it is the cheaper thing to build. So the order is plumbing first, brain second.</p>
   </div>
 
-  <h2>Status: Phases 0, 1 and 2 shipped on 16 September 2026 (builds 3915d81, ea48cd4, a803950); hotfix 398475f on 17 September</h2>
+  <h2>Status: Phases 0, 1 and 2 shipped; Phase 3 not started, and its shadow week has not begun</h2>
   <p>The target diagram below carries a badge on every component: ✓ shipped, ◐ partly or live only behind the pilot list, ◌ shadow, ○ next. Unit tests 839 of 839 across 82 files, build green, chat harness 29 of 29, three read-only adversarial reviews before the three pushes, and three migrations applied to production before the code that reads them. Design record in the repo: docs/AGENT_ARCHITECTURE_V2.md (section 13 is the shipped log); BUGLOG #56 to #64; CHANGELOG entries 35, 36 and 37.</p>
   <div class="verdict">
     <div class="card accent">
@@ -96,6 +96,7 @@
         <li><b>Phase 1 (ea48cd4).</b> Home, help, the fallback, the product list and the AI knowledge render from the registry; habits in the record; "what do you know about me" and "forget me"; the nightly balance integrity check; turns cascade from the account; the Phase 2 modules landed dormant.</li>
         <li><b>Phase 2 (a803950).</b> The Pay agent is wired: one model call over the record and typed tools, guards before the model, a per-customer budget, proposals through the same confirm and PIN steps, output gates and the provenance guard before every send, a clarify state, a ledger row per turn. Live for the numbers on WAPAY_AGENT_V3_MSISDNS only. First eval: 11 of 12 on the English golden subset, p50 1.9 s, p95 3.7 s.</li>
         <li><b>Hotfix 398475f (17 September).</b> The bot was mute from the Phase 0 deploy until the next morning: the webhook used its send-scope wrapper without importing it, so every text turn threw before its first send and Meta was told to retry (BUGLOG #67). One import fixed it; a new test now loads and runs the route with a signed payload, and the first real message after any webhook deploy is watched in the database before a deploy is called done.</li>
+        <li><b>18 September (c1821e0, f91e317).</b> The founder's streamlining review became composition policy in both prompts; the withdraw flow offers instead of listing; notifyCustomer picks the rail that crosses the 24 hour window; the eval gained a frozen baseline and passes 156 cases in all eleven languages; Mission Control gained the conversations card. In the evening: the pilot gate was found to match only one spelling of a number, and an empty pilot week could not be told from a broken one; the model stopped writing customer facts; the 63-site JSON conversation ring was deleted along with the erasure gap it hid; the three dead things were retired and the first batch of source-text test locks rewritten as behaviour.</li>
         <li><b>Two design corrections from the refuters, kept.</b> The context pack reads the source tables in one batch (an events table keyed by ledger idemKey cannot represent holds or pending pay-outs). Flow starters stay in the processor until Phase 3 (relocating breaks about 27 test locks; exporting in place breaks none).</li>
       </ul>
     </div>

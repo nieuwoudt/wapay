@@ -292,12 +292,26 @@ function Conversations() {
   // the agent aggregates answer a different question than the money metrics.
   const [c, setC] = useState(null);
   const [err, setErr] = useState('');
+  // The rail's float is a live call to the supplier with its own 8 second
+  // timeout, so it is fetched SEPARATELY and the card renders without it. The
+  // parked total is only half the picture a human needs (what is held against
+  // what is there to pay it), but a supplier having a bad minute must not
+  // take the conversation metrics down with it.
+  const [float, setFloat] = useState(null);
   useEffect(() => {
     let cancelled = false;
     fetch('/api/admin/conversations?days=7')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d) => { if (!cancelled) setC(d); })
       .catch(() => { if (!cancelled) setErr('Could not load conversation metrics.'); });
+    fetch('/api/admin/floats')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (cancelled) return;
+        const row = (d.floats || []).find((f) => f.key === 'OTT_PAYOUT');
+        setFloat(row?.api?.availableCents ?? null);
+      })
+      .catch(() => { if (!cancelled) setFloat(null); });
     return () => { cancelled = true; };
   }, []);
   if (err) return <div className="empty">{err}</div>;
@@ -379,6 +393,8 @@ function Conversations() {
           {c.payouts.parked > 0 ? (
             <span style={{ fontWeight: 400, color: 'var(--ink3)' }}>
               {' · holding '}{R(c.payouts.heldCents)}{' of customer money'}
+              {float != null ? ' · rail float ' + R(float) : ''}
+              {float != null && c.payouts.heldCents > float ? ' ⚠️ held exceeds the float' : ''}
               {c.payouts.oldestMinutes != null ? ' · oldest ' + c.payouts.oldestMinutes + 'm' : ''}
             </span>
           ) : null}
