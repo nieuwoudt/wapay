@@ -307,7 +307,7 @@ function Conversations() {
   // none of those words itself (the console copy policy).
   const gateWatch = gateNames.filter((g) => (c.gateWatch || []).includes(g));
   const ms = (v) => (v == null ? '—' : v >= 1000 ? (v / 1000).toFixed(1) + 's' : v + 'ms');
-  const rands = (cents) => 'R' + ((cents || 0) / 100).toFixed(2);
+  const usd = (v) => '$' + Number(v || 0).toFixed(4);
   const stat = (k, v, sub) => (
     <div key={k} style={{ padding: '7px 0' }}>
       <div style={{ fontSize: 11, color: 'var(--ink3)' }}>{k}</div>
@@ -323,7 +323,7 @@ function Conversations() {
         {stat('Agent turns', c.agent.turns, c.shadow.live ? c.agent.customers + ' on the pilot list' : 'pilot list empty')}
         {stat('Agent share', c.agent.shareOfInboundPct == null ? '—' : c.agent.shareOfInboundPct + '%', 'of customer messages')}
         {stat('Latency p50 / p95', ms(c.agent.p50Ms) + ' / ' + ms(c.agent.p95Ms), 'slowest ' + ms(c.agent.maxMs))}
-        {stat('Model spend', c.agent.priced ? rands(c.agent.costCents) : 'not priced', c.agent.priced ? rands(c.agent.costPerTurnCents) + ' per turn' : 'set WAPAY_EVAL_PRICE_IN and _OUT')}
+        {stat('Model spend', c.agent.priced ? (c.agent.costZar != null ? 'R' + c.agent.costZar.toFixed(2) : usd(c.agent.costUsd)) : 'not priced', c.agent.priced ? (c.agent.costPerTurnZar != null ? 'R' + c.agent.costPerTurnZar.toFixed(4) + ' per turn' : usd(c.agent.costPerTurnUsd) + ' per turn') : 'prices not set')}
       </div>
       <div className="ops" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
         {Object.entries(c.agent.outcomes || {}).map(([k, v]) => (

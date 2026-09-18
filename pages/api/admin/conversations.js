@@ -16,10 +16,15 @@ import { requireAdmin } from '../../../lib/admin-auth.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Model prices in cents per million tokens; env so a price change is not a deploy. */
-const PRICE_IN = Number(process.env.WAPAY_EVAL_PRICE_IN || 0);
-const PRICE_OUT = Number(process.env.WAPAY_EVAL_PRICE_OUT || 0);
-const costCents = (inTok, outTok) => (inTok * PRICE_IN + outTok * PRICE_OUT) / 1_000_000;
+// Model prices in US dollars per MILLION tokens: the same two env names and
+// the same unit the eval runner uses (scripts/eval-agent.mjs), so a price is
+// set once and read the same way in both places. Optional WAPAY_USD_ZAR adds
+// a rand figure; without it the card shows dollars and never guesses a rate.
+const PRICE_IN = Number(process.env.WAPAY_EVAL_PRICE_INPUT_USD_PER_M || 0);
+const PRICE_OUT = Number(process.env.WAPAY_EVAL_PRICE_OUTPUT_USD_PER_M || 0);
+const USD_ZAR = Number(process.env.WAPAY_USD_ZAR || 0);
+const costUsd = (inTok, outTok) => (inTok * PRICE_IN + outTok * PRICE_OUT) / 1_000_000;
+const round4 = (n) => Math.round(n * 1e4) / 1e4;
 
 const pct = (n, d) => (d > 0 ? Math.round((n / d) * 1000) / 10 : null);
 
@@ -126,8 +131,10 @@ export default async function handler(req, res) {
         maxMs: latencies.length ? latencies[latencies.length - 1] : null,
         tokensIn,
         tokensOut,
-        costCents: PRICE_IN || PRICE_OUT ? Math.round(costCents(tokensIn, tokensOut) * 100) / 100 : null,
-        costPerTurnCents: agent.length && (PRICE_IN || PRICE_OUT) ? Math.round((costCents(tokensIn, tokensOut) / agent.length) * 100) / 100 : null,
+        costUsd: PRICE_IN || PRICE_OUT ? round4(costUsd(tokensIn, tokensOut)) : null,
+        costPerTurnUsd: agent.length && (PRICE_IN || PRICE_OUT) ? round4(costUsd(tokensIn, tokensOut) / agent.length) : null,
+        costZar: USD_ZAR && (PRICE_IN || PRICE_OUT) ? round4(costUsd(tokensIn, tokensOut) * USD_ZAR) : null,
+        costPerTurnZar: USD_ZAR && agent.length && (PRICE_IN || PRICE_OUT) ? round4((costUsd(tokensIn, tokensOut) / agent.length) * USD_ZAR) : null,
         priced: Boolean(PRICE_IN || PRICE_OUT),
       },
       gates,

@@ -2,7 +2,7 @@
 
 Conversational end-to-end run against the REAL message processor (live DB, live OpenAI, outbound WhatsApp captured, no money moved). QA account: `27600000901` (seeded and torn down by the run).
 
-**24 pass · 1 warn · 4 fail**
+**29 pass · 0 warn · 0 fail**
 
 ## ✅ Founder repro: "payment link" escapes the meter ask
 
@@ -43,12 +43,12 @@ Please enter your meter number:
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll receive the full *R20* however they pay. No fees on this one. 🎉
-[button:View my payment page -> https://pleasepayme.co.za/PRQJRBBH]
+[button:View my payment page -> https://pleasepayme.co.za/PRKEVGYU]
 ···
 🙏 *Pay WaPay QA Harness now* · R20 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRQJRBBH
+https://pleasepayme.co.za/PRKEVGYU
 ```
 
 </details>
@@ -151,12 +151,12 @@ Reply *1* or *2*, or "cancel".
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll get the full *R250* if they pay from their WaPay (free), or R237.20 if they pay by card.
-[button:View my payment page -> https://pleasepayme.co.za/PRTCYYBY]
+[button:View my payment page -> https://pleasepayme.co.za/PRBJTWPV]
 ···
 🙏 *Pay WaPay QA Harness now* · R250 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRTCYYBY
+https://pleasepayme.co.za/PRBJTWPV
 ```
 
 </details>
@@ -196,36 +196,37 @@ Just tell me what you need, in any language.
 
 </details>
 
-## ❌ Memory: AI recalls a fact from earlier in the chat
+## ✅ Memory: AI recalls a fact from earlier in the chat
 
-- ❌ the name comes back on request
+- ✅ the name comes back on request
 
 <details><summary>Transcript</summary>
 
 **User:** My name is Thabo and I run a spaza shop in Soweto.
 
 ```
-😅 Sorry, I didn't quite catch that. Could you say it another way? Or type "help" to see everything I can do.
+Pleasure to meet you, Thabo 😊
+Nice, spaza shops can use WaPay for airtime, data, electricity, sending money and getting paid.
 ```
 
 **User:** What did I tell you my name was?
 
 ```
-😅 Sorry, I didn't quite catch that. Could you say it another way? Or type "help" to see everything I can do.
+You said your name is Thabo 😊
 ```
 
 </details>
 
-## ❌ Memory: a flow in between does not amnesia the AI (BUGLOG #30)
+## ✅ Memory: a flow in between does not amnesia the AI (BUGLOG #30)
 
-- ❌ the fact survives entering AND leaving a flow
+- ✅ the fact survives entering AND leaving a flow
 
 <details><summary>Transcript</summary>
 
 **User:** Please remember that my favourite colour is green.
 
 ```
-😅 Sorry, I didn't quite catch that. Could you say it another way? Or type "help" to see everything I can do.
+Got it, Thabo 😊 I’ll remember that your favourite colour is green.
 ```
 
 **User:** buy electricity
@@ -248,15 +249,15 @@ Reply with an amount (e.g., R50, R100, R500)
 **User:** What is my favourite colour?
 
 ```
-😅 Sorry, I didn't quite catch that. Could you say it another way? Or type "help" to see everything I can do.
+Your favourite colour is green 😊
 ```
 
 </details>
 
-## ❌ Questions: the founder repro gets a real spend answer, never the menu
+## ✅ Questions: the founder repro gets a real spend answer, never the menu
 
-- ❌ no bare menu for the exact founder phrasing
-- ❌ the answer names real spend destinations
+- ✅ no bare menu for the exact founder phrasing
+- ✅ the answer names real spend destinations
 - ✅ the reply carries warmth (emoji)
 
 <details><summary>Transcript</summary>
@@ -264,7 +265,8 @@ Reply with an amount (e.g., R50, R100, R500)
 **User:** Where can I spend my WaPay money!
 
 ```
-😅 Sorry, I didn't quite catch that. Could you say it another way? Or type "help" to see everything I can do.
+You can spend it on airtime and data for any SA number, prepaid electricity for any meter, sending money, getting paid, and OTT vouchers for online use 💰
+Want the quick list of OTT voucher partners too?
 ```
 
 </details>
@@ -537,7 +539,21 @@ No monthly fees, ever. 😊
 **User:** cancel
 
 ```
-😅 Sorry, I didn't quite catch that. Could you say it another way? Or type "help" to see everything I can do.
+👋 *Hi WaPay QA Harness!*
+💰 Balance: *R0.00*
+━━━━━━━━━━━━━━━
+
+🛒 *Buy*: airtime, data, electricity
+💸 *Send*: "send R10 airtime to 083..."
+🙏 *Get Paid*: "please pay me R50" → share your link
+💳 *Deposit*: "deposit R100" or a Blu voucher
+⛽ *Fuel vouchers*: coming soon
+🏧 *Withdraw*: coming soon
+📄 *Transactions* · ⚙️ *Settings*
+
+⚡ Quick: Buy airtime · Buy data · Check balance
+
+Just tell me what you need, in any language.
 ```
 
 </details>
@@ -708,7 +724,7 @@ Reply *YES* to continue to your PIN, or *NO* to cancel.
 **User:** 1934
 
 ```
-✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WP166733AAD2DE44. Fee R18.
+✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WP6684C2EE482D49. Fee R18.
 ```
 
 **User:** balance
@@ -725,12 +741,12 @@ Need anything else? Just ask me!
 
 </details>
 
-## ⚠️ Language: switch to isiZulu, localized replies, Afrikaans inbound
+## ✅ Language: switch to isiZulu, localized replies, Afrikaans inbound
 
 - ✅ "speak zulu" locks the preference
-- ⚠️ balance reply is localized (English here = localizer failed open, worth eyes)
+- ✅ balance reply is localized (English here = localizer failed open, worth eyes)
 - ✅ money figures survive localization untranslated
-- ⚠️ Afrikaans "wat is my balans" still reads as a balance ask
+- ✅ Afrikaans "wat is my balans" still reads as a balance ask
 - ✅ "speak english" switches back
 
 <details><summary>Transcript</summary>
@@ -744,19 +760,25 @@ Need anything else? Just ask me!
 **User:** balance
 
 ```
-💰 *Your WaPay Balance*
+💰 *Ibhalansi yakho ye-WaPay*
 
-Hi WaPay QA Harness!
+Sawubona WaPay QA Harness!
 
-💵 Current Balance: R 52.00
+💵 Ibhalansi yamanje: R 52.00
 
-Need anything else? Just ask me!
+Ufunani okunye? Ngicela ungibuze!
 ```
 
 **User:** wat is my balans
 
 ```
-😅 Sorry, I didn't quite catch that. Could you say it another way? Or type "help" to see everything I can do.
+💰 *Ibhalansi yakho ye-WaPay*
+
+Sawubona WaPay QA Harness!  
+Ibhalansi yakho yamanje ingu-R 52.00
+
+  
+Uthanda ukwenza ini kulandela?
 ```
 
 **User:** speak english
@@ -810,7 +832,7 @@ Manage customers, payment links and revenue at https://wapay.co.za/business. To 
 **User:** business login
 
 ```
-🔐 *WaPay for Business code: 068983*
+🔐 *WaPay for Business code: 268895*
 
 Type it into the business portal within 10 minutes. One attempt only.
 
@@ -838,9 +860,9 @@ Not you? Ignore this and tell us right away.
 • Habits: 1 completed movement in the last 30 days
 
 📄 *Your last 3 movements*
-• 18 Sep 11:06  Withdrawal (FNB eWallet)  R30  ✅ done  WaPay QA Harness
-• 18 Sep 11:03  Payment link  R250  🔗 open
-• 18 Sep 11:03  Payment link  R20  🔗 open
+• 18 Sep 13:58  Withdrawal (FNB eWallet)  R30  ✅ done  WaPay QA Harness
+• 18 Sep 13:54  Payment link  R250  🔗 open
+• 18 Sep 13:54  Payment link  R20  🔗 open
 
 I keep 30 days of our chat so I can follow the conversation, and I never store your PIN, voucher PINs or card details. Reply *forget me* and the chat memory and what I have learned about how you use WaPay both go; your transactions stay on record, as the law requires.
 Want the detail on any one of them? Say the date or the amount.
@@ -862,23 +884,45 @@ Want the detail on any one of them? Say the date or the amount.
 **User:** How can I withdraw money?
 
 ```
-💰 Balance to spend: R52. Your last movement: 18 Sep 11:06, payout R30 (success). What would you like to do next?
+🏧 Taking money out of WaPay is not available just yet, but it is coming soon.
+For now, your R52 balance can be used for airtime, data, electricity, WaPay vouchers, sending money and getting paid. 💡
 ```
 
 </details>
 
-## ❌ Agent: spend question gets real destinations, not the menu
+## ✅ Agent: spend question gets real destinations, not the menu
 
 - ✅ no menu
-- ❌ names real spend destinations
-- ❌ a list, one per line, not a paragraph (founder review 2026-09-18)
+- ✅ names real spend destinations
+- ✅ a list, one per line, not a paragraph (founder review 2026-09-18)
 
 <details><summary>Transcript</summary>
 
 **User:** Where can I spend my OTT voucher?
 
 ```
-💰 Balance to spend: R52. Your last movement: 18 Sep 11:06, payout R30 (success). What would you like to do next?
+OTT vouchers work online and in apps, not at shop tills. Choose *OTT Voucher* at checkout and enter the PIN. 💡
+
+Accepted at:
+Talk360
+fibertime
+ikeja
+Capitec Connect
+megsApp
+Pay@
+Xash
+FoondaMate
+LAYAWAY
+
+Not accepted at:
+Supermarket tills
+Takealot
+Netflix
+Showmax
+Spotify
+Mobile networks' own sites
+
+The full live list is on ottvoucher.com. ✨
 ```
 
 </details>
@@ -894,7 +938,14 @@ Want the detail on any one of them? Say the date or the amount.
 **User:** what did I buy last week
 
 ```
-💰 Balance to spend: R52. Your last movement: 18 Sep 11:06, payout R30 (success). What would you like to do next?
+Last week, you did not buy airtime, data, electricity or vouchers. 💡
+
+Your activity was:
+• Withdrawal: R30 successful, ref WP6684C2EE482D49
+• Payment link: R250 open, ref PRBJTWPV
+• Payment link: R20 open, ref PRKEVGYU
+
+Completed total shown by the ledger: R30. Pending or open items are separate. ✨
 ```
 
 </details>
@@ -909,7 +960,7 @@ Want the detail on any one of them? Say the date or the amount.
 **User:** did my payment go through
 
 ```
-💰 Balance to spend: R52. Your last movement: 18 Sep 11:06, payout R30 (success). What would you like to do next?
+Do you mean the newest successful payout of R30, or one of your open payment links PRBJTWPV for R250 and PRKEVGYU for R20? 💡
 ```
 
 </details>
@@ -924,7 +975,9 @@ Want the detail on any one of them? Say the date or the amount.
 **User:** Okay
 
 ```
-💰 Balance to spend: R52. Your last movement: 18 Sep 11:06, payout R30 (success). What would you like to do next?
+No stress 😊
+
+If you want me to check one, send the amount or reference. The newest movement I can see is the R30 payout, ref WP6684C2EE482D49. 💡
 ```
 
 </details>
@@ -940,7 +993,9 @@ Want the detail on any one of them? Say the date or the amount.
 **User:** send R50 to my brother
 
 ```
-💰 Balance to spend: R52. Your last movement: 18 Sep 11:06, payout R30 (success). What would you like to do next?
+Which number should I send it to? Send the recipient's cellphone number.
+
+I'll send them a WaPay voucher they can spend online at any store that accepts OTT vouchers.
 ```
 
 </details>
@@ -956,13 +1011,33 @@ Want the detail on any one of them? Say the date or the amount.
 **User:** cancel
 
 ```
-💰 Balance to spend: R52. Your last movement: 18 Sep 11:06, payout R30 (success). What would you like to do next?
+👍 Voucher gift cancelled.
+···
+👋 *Hi WaPay QA Harness!*
+💰 Balance: *R52.00*
+━━━━━━━━━━━━━━━
+
+🛒 *Buy*: airtime, data, electricity
+💸 *Send*: "send R10 airtime to 083..."
+🙏 *Get Paid*: "please pay me R50" → share your link
+💳 *Deposit*: "deposit R100" or a Blu voucher
+⛽ *Fuel vouchers*: coming soon
+🏧 *Withdraw*: coming soon
+📄 *Transactions* · ⚙️ *Settings*
+
+⚡ Quick: Buy airtime · Buy data · Check balance
+
+Just tell me what you need, in any language.
 ```
 
 **User:** buy R30 airtime
 
 ```
-💰 Balance to spend: R52. Your last movement: 18 Sep 11:06, payout R30 (success). What would you like to do next?
+📱 *Buy R30 Airtime*
+
+Which phone number should I send the airtime to?
+
+Reply with the number (e.g., 0781234567) or "me" for your own number.
 ```
 
 </details>
@@ -977,7 +1052,23 @@ Want the detail on any one of them? Say the date or the amount.
 **User:** cancel
 
 ```
-💰 Balance to spend: R52. Your last movement: 18 Sep 11:06, payout R30 (success). What would you like to do next?
+👍 Airtime purchase cancelled.
+···
+👋 *Hi WaPay QA Harness!*
+💰 Balance: *R52.00*
+━━━━━━━━━━━━━━━
+
+🛒 *Buy*: airtime, data, electricity
+💸 *Send*: "send R10 airtime to 083..."
+🙏 *Get Paid*: "please pay me R50" → share your link
+💳 *Deposit*: "deposit R100" or a Blu voucher
+⛽ *Fuel vouchers*: coming soon
+🏧 *Withdraw*: coming soon
+📄 *Transactions* · ⚙️ *Settings*
+
+⚡ Quick: Buy airtime · Buy data · Check balance
+
+Just tell me what you need, in any language.
 ```
 
 **User:** voucher pin 1234
