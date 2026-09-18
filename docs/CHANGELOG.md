@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-09-18 (43) — notifyCustomer: the one message WaPay starts on its own now uses a rail that crosses the 24 hour window (BUGLOG #72)
+
+C21 of the design record. The pay-out sweep runs at 02:00 and from a cron, so
+the customer it tells is usually outside their window, where Meta accepts a
+free-form send and then drops it. `lib/notify.js` reads the window from the
+last inbound turn and picks the rail: a plain text inside it, then Direct Send,
+an approved UTILITY template and free-form outside it. Every rail records the
+assistant turn, so the agent can see what the customer was told while away.
+The template name is `WAPAY_TEMPLATE_PAYOUT_OUTCOME` and its three body
+parameters are amount, method and reference, produced by `payoutOutcomeParams`
+beside the message it mirrors so the two cannot drift.
+
+Also in this entry: the Mission Control cost figure now uses the same two env
+names and the same unit as the eval runner (`WAPAY_EVAL_PRICE_INPUT_USD_PER_M`
+and `WAPAY_EVAL_PRICE_OUTPUT_USD_PER_M`, dollars per million tokens), with an
+optional `WAPAY_USD_ZAR` to show rands instead of dollars. They were two
+different names and two different units for the same thing, which is how a
+wrong number gets set.
+
+Unit 862/862, build green, chat QA harness 29/29 with credit restored.
+
 ## 2026-09-18 (42) — The work order from the streamlining review: the withdraw flow offers at every refusal, cash stays cash, "no" no longer cancels, and an erasure is never answered with a disclosure (BUGLOG #71)
 
 Five read-only readers swept every flow, every product choice, the memory

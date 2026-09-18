@@ -4,6 +4,14 @@
 
 ---
 
+## 72. A pay-out that settled overnight was never reported to the customer
+
+- **Symptom:** found while building C21 (2026-09-18). `sweepPayoutsAndNotify` sent the outcome with a plain free-form text. The sweep runs at 02:00 and from a cron route, so the customer it is telling is usually far outside their 24 hour window, and Meta ACCEPTS a free-form send there before dropping it silently (the same trap as BUGLOG #33). The sweep counted those as notified.
+- **Root cause:** no rail choice. The one message WaPay starts on its own used the rail that only works when the customer has just written.
+- **Fix:** `lib/notify.js` `notifyCustomer`: the window is read from the customer's last inbound turn, and when it is closed the message goes by Direct Send, then an approved UTILITY template, then free-form as a last resort. Whatever goes out is recorded as an assistant turn so the agent sees what the customer was told while away. The window check fails OPEN, because an unnecessary template costs a little and a dropped pay-out notice costs a customer.
+- **Guard:** `tests/notify.test.mjs` (5 cases: the window boundary, the rail order, the memory row on every rail, never throws, and that the template parameters mirror the message).
+- **To switch the template rail on:** set `WAPAY_TEMPLATE_PAYOUT_OUTCOME` to an approved UTILITY template whose body takes amount, method and reference in that order (`payoutOutcomeParams` in `lib/payouts.js` is the contract). Until it is set the other two rails are used.
+
 ## 71. "Forget my data" answered with a full disclosure of that data
 
 - **Symptom:** shipped in `cf39b87` and caught the same afternoon by the streamlining review, before any customer used it. The loose memory matcher added that morning (BUGLOG #70) sat ABOVE the forget-me hook and its `my data` alternative matched "forget my data" and "erase my memory", so an erasure request rendered the customer's whole record instead of erasing it. "Delete my data" and "forget me" still erased, so casual testing would not have found it. The same matcher also stole "did my payments go through" from the handler that asks the rail live, and read "is my data still valid" and "my data bundle is finished" as memory questions.
