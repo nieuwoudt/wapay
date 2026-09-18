@@ -1165,6 +1165,14 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       select: { id: true },
     });
     if (hasReconcilable) {
+      // This STAYS on the turn (considered and rejected for the job queue,
+      // 2026-09-18). It looks like background work, but it only runs for a
+      // customer who already has a stuck fuel purchase, and it is the turn
+      // where their code can be delivered. Moving it to a nightly drain would
+      // have traded a rare customer's same-turn delivery for a latency saving
+      // nobody else was paying. It becomes a job when a ten-minute drain
+      // exists, not before. A belt-and-braces job is queued alongside so the
+      // work still completes if this turn dies; enqueueJob is idempotent.
       const recon = await reconcileFuelPurchases({ account });
       if (recon.failed > 0) {
         await sendWhatsAppText({
@@ -1174,6 +1182,10 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
             await userLang(account)
           ),
         });
+      }
+      if (recon.settled === 0 && recon.failed === 0) {
+        const { enqueueJob } = await import('../../../lib/jobs.js');
+        await enqueueJob({ prisma, kind: 'fuel-reconcile', key: `acct:${account.id}`, accountId: account.id, payload: { waId: from } });
       }
     }
   } catch (reconError) {

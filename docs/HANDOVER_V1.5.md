@@ -152,10 +152,28 @@ Nothing here starts before the gate closes.
 
 ## 5. Phase 4
 
-`agent_jobs` and its drain (everything slow leaves the chat path), fuel reconcile
-off the per-turn path, additive per-account journal columns so the movement read
-is indexed, a second model provider run through the corpus, an optional
-number-free memory summary behind a flag, and the first partner module, which is
+**`agent_jobs` and its drain are built** (`lib/jobs.js`, migration
+`20260918_agent_jobs` already applied to production, drained by the daily cron).
+The contract is in the module comment; the short version is that enqueue is
+idempotent on `(kind, key)`, claims are atomic, a vanished worker's claim goes
+stale after ten minutes, and a job that exhausts its attempts is FAILED for a
+human rather than retried forever. To add a worker, add a handler to the
+`handlers` map in `pages/api/cron/daily-vas-sync.js` and enqueue from wherever
+the work is noticed.
+
+**A decision recorded so it is not re-litigated:** the fuel reconcile was moved
+into the queue and then moved back. It looks like background work, but it only
+runs for a customer who already has a stuck fuel purchase, and it is the turn on
+which their voucher code can be delivered. A nightly drain would have traded
+that customer's same-turn delivery for a latency saving nobody else was paying.
+It queues a belt-and-braces job only when the inline reconcile resolved nothing,
+so the work still completes if the turn dies. **Move it to the queue when a
+ten-minute drain exists, not before.** The same test applies to anything else
+you are tempted to push off the turn: ask who is waiting for it.
+
+Still to do: additive per-account journal columns so the movement read is
+indexed, a second model provider run through the corpus, an optional number-free
+memory summary behind a flag, and the first partner module, which is
 bank-account verification. Voice notes and photos are explicitly deferred.
 
 ---

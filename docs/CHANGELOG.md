@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-09-18 (46) — The async tier: agent_jobs and its drain (C20), and a decision recorded about what does NOT belong in it
+
+One table for work that must not run while a customer waits, drained by the
+nightly cron. lib/jobs.js: enqueue is idempotent on kind and key, so a per-turn
+hook can queue freely; claims are atomic, so two drains cannot take the same
+row; a claim older than ten minutes is reclaimable, because a serverless worker
+can vanish without ever writing DONE or FAILED; a job that exhausts its
+attempts is FAILED and left for a human, because a job retried forever is an
+outage wearing a queue for clothes; backoff is exponential and capped, so a
+supplier having a bad hour is not hammered. Nothing in it throws at the caller.
+Migration 20260918_agent_jobs applied to production before this code.
+
+**The fuel reconcile was moved into the queue and then moved back, on purpose.**
+It looks like background work, and a test caught what that framing costs: it
+only runs for a customer who already has a stuck fuel purchase, and it is the
+turn on which their voucher code can be delivered. Queueing it would have
+traded that customer a same-turn delivery for a latency saving nobody else was
+paying. It stays inline and queues a belt-and-braces job only when it resolved
+nothing, so the work still completes if the turn dies. It moves to the queue
+when a ten-minute drain exists. The test to apply to anything else: ask who is
+waiting for it.
+
+Unit 874/874, build green, chat QA harness 29/29.
+
 ## 2026-09-18 (45) — Handover doc for the next session; two partial rows closed: the internal-auth gate fails closed in production, and a money outcome nobody was told about reaches the agent
 
 **docs/HANDOVER_V1.5.md** is new: the five rules that break things, where the

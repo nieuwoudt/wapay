@@ -355,7 +355,7 @@ test('static: the cron route is cron/secret/internal-key gated, calls the sweep,
   assert.ok(before.lastIndexOf('try {') > before.lastIndexOf('catch'), 'the sweep call sits inside its own try');
   assert.match(vas.slice(at), /catch \(e\) \{[\s\S]*cron_payout_sweep_failed/);
   assert.match(vas, /type: 'cron_payout_sweep'/);
-  assert.match(vas, /return res\.status\(200\)\.json\(\{ \.\.\.out, turnsPurged, integrity: .*?, embeddings, payoutSweep \}\)/, 'the cron response never depends on the sweep');
+  assert.match(vas, /return res\.status\(200\)\.json\(\{ \.\.\.out, turnsPurged, integrity: .*?, embeddings, payoutSweep, jobs \}\)/, 'the cron response never depends on the sweep');
 });
 
 test('static: the reconcile route is internal-key gated, asks OTT only GetPaymentStatus, and uses the shared customer wording', () => {

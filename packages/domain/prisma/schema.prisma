@@ -442,6 +442,31 @@ model ConversationTurn {
 // msisdn-masked and capped by lib/agent/turn-ledger.js before insert. No
 // relation to Account on purpose: a turn row must outlive nothing and block
 // nothing (best-effort write, never throws).
+/// Work that must not run on the customer's turn (C20, Phase 4). The chat path
+/// has a 60 second budget and someone waiting; a supplier reconcile, a
+/// retention purge or a backfill is queued here and drained by the cron.
+model AgentJob {
+  id          String    @id @default(cuid())
+  kind        String // fuel-reconcile | payout-sweep | …
+  key         String // the caller's idempotency handle; unique with kind
+  accountId   String?
+  status      String    @default("PENDING") // PENDING | RUNNING | DONE | FAILED
+  payload     Json?
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  runAfter    DateTime  @default(now())
+  lockedAt    DateTime?
+  lastError   String?
+  result      Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([kind, key])
+  @@index([status, runAfter])
+  @@index([accountId, status])
+  @@map("agent_jobs")
+}
+
 model AgentTurn {
   id             String   @id @default(cuid())
   accountId      String

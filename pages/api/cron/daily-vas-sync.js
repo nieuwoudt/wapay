@@ -91,7 +91,43 @@ export default async function handler(req, res) {
       console.error(JSON.stringify({ type: 'cron_ledger_integrity_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
     }
 
-    return res.status(200).json({ ...out, turnsPurged, integrity: integrity ? { checked: integrity.checked, mismatches: integrity.mismatches.length } : null, embeddings, payoutSweep });
+    // The async tier (C20): work queued off the customer's turn. Bounded by a
+    // batch size and its own deadline, because this function has a budget too.
+    // Best effort: a stuck worker must never fail the rest of the nightly run.
+    let jobs = null;
+    try {
+      const { drainJobs } = await import('../../../lib/jobs.js');
+      const { reconcileFuelPurchases } = await import('../../../lib/fuel-settlement.js');
+      const { notifyCustomer } = await import('../../../lib/notify.js');
+      jobs = await drainJobs({
+        prisma,
+        limit: 10,
+        deadlineMs: 20 * 1000,
+        handlers: {
+          // Moved off the per-turn path on 2026-09-18: a slow supplier used to
+          // slow the whole conversation for every fuel customer.
+          'fuel-reconcile': async (job) => {
+            const account = await prisma.account.findUnique({ where: { id: job.accountId } });
+            if (!account) return { skipped: 'NO_ACCOUNT' };
+            const recon = await reconcileFuelPurchases({ account });
+            if (recon.failed > 0 && account.waId) {
+              await notifyCustomer({
+                to: account.waId,
+                accountId: account.id,
+                text: '💚 Quick update: a fuel voucher purchase from earlier could not be completed, so nothing was charged. Your money is back in your balance.',
+                kind: 'receipt',
+              });
+            }
+            return { settled: recon.settled ?? null, failed: recon.failed ?? null };
+          },
+        },
+      });
+      console.log(JSON.stringify({ type: 'cron_jobs_drained', ...jobs, timestamp: new Date().toISOString() }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_jobs_drain_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
+    return res.status(200).json({ ...out, turnsPurged, integrity: integrity ? { checked: integrity.checked, mismatches: integrity.mismatches.length } : null, embeddings, payoutSweep, jobs });
   } catch (e) {
     console.error('cron_daily_vas_sync_failed', e);
     return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: e?.message || String(e) });

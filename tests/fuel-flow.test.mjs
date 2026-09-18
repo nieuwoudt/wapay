@@ -174,7 +174,15 @@ test('the reconciler exists and the processor retries indeterminate purchases on
   assert.match(settlementSource, /export async function reconcileFuelPurchases/);
   assert.match(settlementSource, /status: \{ in: \['RECONCILE', 'EXECUTING'\] \}/);
   assert.match(settlementSource, /releaseHold\(\{[\s\S]{0,20}idemKey: `wapay-fuel-exec-\$\{row\.id\}`/);
-  assert.match(processorSource, /reconcileFuelPurchases\(\{ account \}\)/);
+  // 2026-09-18: considered for the job queue and deliberately kept on the turn.
+  // It only runs for a customer who already has a stuck fuel purchase, and this
+  // is the turn their code can be delivered; a nightly drain would have cost
+  // them that. A job is queued only when the reconcile resolved nothing, so the
+  // work still completes if this turn dies.
+  assert.match(processorSource, /await reconcileFuelPurchases\(\{ account \}\)/);
+  assert.match(processorSource, /kind: .fuel-reconcile./);
+  const cronSource = readFileSync(fileURLToPath(new URL('../pages/api/cron/daily-vas-sync.js', import.meta.url)), 'utf8');
+  assert.match(cronSource, /reconcileFuelPurchases\(\{ account \}\)/, 'the cron runs it now');
   const hookAt = processorSource.indexOf('reconcileFuelPurchases({ account })');
   const claimAt = processorSource.indexOf('hasPendingGifts({ recipientMsisdn: account.msisdn })');
   assert.ok(hookAt > -1 && claimAt > hookAt, 'reconcile runs BEFORE the claim block so fresh codes deliver same-turn');
