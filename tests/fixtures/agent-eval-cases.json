@@ -14,19 +14,27 @@
     "id": "withdraw-can-i",
     "group": "withdraw",
     "text": "Kan ek geld onttrek na my bank toe?",
-    "expectOutcome": ["reply", "clarify"],
+    "expectOutcome": [
+      "reply",
+      "clarify"
+    ],
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
     "maxLines": 3,
-    "rejectAction": ["WITHDRAW"]
+    "rejectAction": [
+      "WITHDRAW"
+    ]
   },
   {
     "language": "zu",
     "id": "withdraw-amount",
     "group": "withdraw",
     "text": "Ngifuna ukukhipha imali engu-R100 iye ebhange lami",
-    "expectOutcome": ["proposal", "clarify"],
+    "expectOutcome": [
+      "proposal",
+      "clarify"
+    ],
     "expectAction": "WITHDRAW",
     "amountCents": 10000,
     "msisdn": null
@@ -40,7 +48,9 @@
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "expectText": ["R\\d"]
+    "expectText": [
+      "R\\d"
+    ]
   },
   {
     "language": "af",
@@ -51,7 +61,9 @@
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "expectText": ["R\\d|%"]
+    "expectText": [
+      "R\\d|%"
+    ]
   },
   {
     "language": "zu",
@@ -62,7 +74,9 @@
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "expectText": ["R\\d"]
+    "expectText": [
+      "R\\d"
+    ]
   },
   {
     "language": "en",
@@ -73,8 +87,12 @@
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "expectText": ["WPC15800A7BD6637|R50"],
-    "rejectText": ["\\bR20\\b"]
+    "expectText": [
+      "WPC15800A7BD6637|R50"
+    ],
+    "rejectText": [
+      "\\bR20\\b"
+    ]
   },
   {
     "language": "af",
@@ -85,7 +103,9 @@
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "expectText": ["R20"]
+    "expectText": [
+      "R20"
+    ]
   },
   {
     "language": "zu",
@@ -96,18 +116,26 @@
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "expectText": ["WPC15800A7BD6637|R50"]
+    "expectText": [
+      "WPC15800A7BD6637|R50"
+    ]
   },
   {
     "language": "en",
     "id": "discovery-what-can-i-do",
     "group": "discovery",
     "text": "what can i actually do with wapay?",
-    "expectOutcome": ["reply", "proposal"],
+    "expectOutcome": [
+      "reply",
+      "proposal"
+    ],
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "acceptActions": ["HELP", "HOME"],
+    "acceptActions": [
+      "HELP",
+      "HOME"
+    ],
     "expectList": true
   },
   {
@@ -115,127 +143,199 @@
     "id": "discovery-electricity",
     "group": "discovery",
     "text": "Kan ek elektrisiteit hier koop?",
-    "expectOutcome": ["reply", "clarify"],
+    "expectOutcome": [
+      "reply",
+      "clarify"
+    ],
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
     "maxLines": 3,
-    "rejectAction": ["BUY_ELECTRICITY"]
+    "rejectAction": [
+      "BUY_ELECTRICITY"
+    ]
   },
   {
     "language": "zu",
     "id": "discovery-data",
     "group": "discovery",
     "text": "Ngingakwazi yini ukuthenga i-data lapha?",
-    "expectOutcome": ["reply", "clarify"],
+    "expectOutcome": [
+      "reply",
+      "clarify"
+    ],
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
     "maxLines": 3,
-    "rejectAction": ["BUY_DATA"]
+    "rejectAction": [
+      "BUY_DATA"
+    ]
   },
   {
     "language": "en",
     "id": "disambiguation-payment",
     "group": "disambiguation",
     "text": "did my payment go through?",
-    "expectOutcome": ["reply", "clarify"],
+    "expectOutcome": [
+      "reply",
+      "clarify"
+    ],
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "expectText": ["R50|WPC15800A7BD6637"],
-    "rejectAction": ["DEPOSIT_START", "WITHDRAW", "SEND_VOUCHER"]
+    "expectText": [
+      "R50|WPC15800A7BD6637"
+    ],
+    "rejectAction": [
+      "DEPOSIT_START",
+      "WITHDRAW",
+      "SEND_VOUCHER"
+    ]
   },
   {
     "language": "af",
     "id": "disambiguation-payment",
     "group": "disambiguation",
     "text": "het my betaling deurgegaan?",
-    "expectOutcome": ["reply", "clarify"],
+    "expectOutcome": [
+      "reply",
+      "clarify"
+    ],
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "expectText": ["R50|R20|WPC15800A7BD6637"],
-    "rejectAction": ["DEPOSIT_START", "WITHDRAW", "SEND_VOUCHER"]
+    "expectText": [
+      "R50|R20|WPC15800A7BD6637"
+    ],
+    "rejectAction": [
+      "DEPOSIT_START",
+      "WITHDRAW",
+      "SEND_VOUCHER"
+    ]
   },
   {
     "language": "en",
     "id": "complaint-airtime",
     "group": "complaint",
     "text": "I didn't get my airtime",
-    "expectOutcome": ["reply", "clarify"],
+    "expectOutcome": [
+      "reply",
+      "clarify"
+    ],
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "rejectAction": ["BUY_AIRTIME", "BUY_DATA"]
+    "rejectAction": [
+      "BUY_AIRTIME",
+      "BUY_DATA"
+    ]
   },
   {
     "language": "af",
     "id": "complaint-send",
     "group": "complaint",
     "text": "Die geld wat ek vir Philly gestuur het, het nooit aangekom nie",
-    "expectOutcome": ["reply", "clarify"],
+    "expectOutcome": [
+      "reply",
+      "clarify"
+    ],
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "rejectAction": ["SEND_VOUCHER", "BUY_AIRTIME"]
+    "rejectAction": [
+      "SEND_VOUCHER",
+      "BUY_AIRTIME"
+    ]
   },
   {
     "language": "zu",
     "id": "complaint-airtime",
     "group": "complaint",
     "text": "Angikayitholi i-airtime yami",
-    "expectOutcome": ["reply", "clarify"],
+    "expectOutcome": [
+      "reply",
+      "clarify"
+    ],
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "rejectAction": ["BUY_AIRTIME", "BUY_DATA"]
+    "rejectAction": [
+      "BUY_AIRTIME",
+      "BUY_DATA"
+    ]
   },
   {
     "language": "en",
     "id": "aside-fee-mid-deposit",
     "group": "aside",
     "history": [
-      { "role": "user", "content": "deposit R100" },
-      { "role": "assistant", "content": "Sure. R100 by card comes to R103.50 with the fee. Shall I send you the payment link?" }
+      {
+        "role": "user",
+        "content": "deposit R100"
+      },
+      {
+        "role": "assistant",
+        "content": "Sure. R100 by card comes to R103.50 with the fee. Shall I send you the payment link?"
+      }
     ],
     "text": "wait, how much is the fee for that again?",
     "expectOutcome": "reply",
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "expectText": ["R\\d|%"],
-    "rejectAction": ["DEPOSIT_START"]
+    "expectText": [
+      "R\\d|%"
+    ],
+    "rejectAction": [
+      "DEPOSIT_START"
+    ]
   },
   {
     "language": "af",
     "id": "aside-why-pin",
     "group": "aside",
     "history": [
-      { "role": "user", "content": "stuur R50 vir Philly" },
-      { "role": "assistant", "content": "R50 vir Philly, geen fooi nie. Tik jou PIN om te bevestig." }
+      {
+        "role": "user",
+        "content": "stuur R50 vir Philly"
+      },
+      {
+        "role": "assistant",
+        "content": "R50 vir Philly, geen fooi nie. Tik jou PIN om te bevestig."
+      }
     ],
     "text": "hoekom vra jy my PIN?",
     "expectOutcome": "reply",
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "rejectAction": ["SEND_VOUCHER"]
+    "rejectAction": [
+      "SEND_VOUCHER"
+    ]
   },
   {
     "language": "zu",
     "id": "aside-fee-mid-airtime",
     "group": "aside",
     "history": [
-      { "role": "user", "content": "thenga i-airtime engu-R20" },
-      { "role": "assistant", "content": "I-airtime engu-R20 enombolweni yakho. Faka i-PIN yakho ukuqinisekisa." }
+      {
+        "role": "user",
+        "content": "thenga i-airtime engu-R20"
+      },
+      {
+        "role": "assistant",
+        "content": "I-airtime engu-R20 enombolweni yakho. Faka i-PIN yakho ukuqinisekisa."
+      }
     ],
     "text": "kulungile, ake ngibuze kuqala, ikhona yini imali engikhokhiswa yona?",
     "expectOutcome": "reply",
     "expectAction": null,
     "amountCents": null,
     "msisdn": null,
-    "rejectAction": ["BUY_AIRTIME"]
+    "rejectAction": [
+      "BUY_AIRTIME"
+    ]
   },
   {
     "language": "en",
@@ -247,7 +347,9 @@
     "amountCents": null,
     "msisdn": null,
     "maxLines": 2,
-    "rejectAction": ["*"]
+    "rejectAction": [
+      "*"
+    ]
   },
   {
     "language": "en",
@@ -259,7 +361,9 @@
     "amountCents": null,
     "msisdn": null,
     "maxLines": 2,
-    "rejectAction": ["*"]
+    "rejectAction": [
+      "*"
+    ]
   },
   {
     "language": "af",
@@ -271,7 +375,9 @@
     "amountCents": null,
     "msisdn": null,
     "maxLines": 2,
-    "rejectAction": ["*"]
+    "rejectAction": [
+      "*"
+    ]
   },
   {
     "language": "zu",
@@ -283,6 +389,111 @@
     "amountCents": null,
     "msisdn": null,
     "maxLines": 2,
-    "rejectAction": ["*"]
+    "rejectAction": [
+      "*"
+    ]
+  },
+  {
+    "language": "en",
+    "id": "paylink-amount",
+    "group": "paylink",
+    "text": "please pay me R250",
+    "expectOutcome": "proposal",
+    "expectAction": "REQUEST_MONEY",
+    "amountCents": 25000,
+    "msisdn": null
+  },
+  {
+    "language": "af",
+    "id": "paylink-amount-af",
+    "group": "paylink",
+    "text": "stuur vir my 'n betaalskakel vir R250",
+    "expectOutcome": "proposal",
+    "expectAction": "REQUEST_MONEY",
+    "amountCents": 25000,
+    "msisdn": null
+  },
+  {
+    "language": "zu",
+    "id": "paylink-amount-zu",
+    "group": "paylink",
+    "text": "ngidinga ilinki yokukhokhelwa u-R250 ngumngani wami",
+    "expectOutcome": "proposal",
+    "expectAction": "REQUEST_MONEY",
+    "amountCents": 25000,
+    "msisdn": null
+  },
+  {
+    "language": "en",
+    "id": "fuel-amount",
+    "group": "not-live",
+    "text": "I want to buy R200 of petrol",
+    "expectOutcome": "reply",
+    "expectAction": null,
+    "amountCents": null,
+    "msisdn": null
+  },
+  {
+    "language": "af",
+    "id": "fuel-amount-af",
+    "group": "not-live",
+    "text": "ek wil R200 se petrol koop",
+    "expectOutcome": "reply",
+    "expectAction": null,
+    "amountCents": null,
+    "msisdn": null
+  },
+  {
+    "language": "en",
+    "id": "browse-products",
+    "group": "discovery",
+    "text": "what can I buy with my WaPay money",
+    "expectOutcome": "reply",
+    "expectAction": null,
+    "amountCents": null,
+    "msisdn": null
+  },
+  {
+    "language": "zu",
+    "id": "browse-products-zu",
+    "group": "discovery",
+    "text": "ngingathenga ini nge-WaPay",
+    "expectOutcome": "reply",
+    "expectAction": null,
+    "amountCents": null,
+    "msisdn": null
+  },
+  {
+    "language": "en",
+    "id": "bare-amount-no-context",
+    "group": "aside",
+    "text": "R50",
+    "expectOutcome": "reply",
+    "expectAction": null,
+    "amountCents": null,
+    "msisdn": null
+  },
+  {
+    "language": "en",
+    "id": "howto-steps",
+    "group": "discovery",
+    "text": "how do I load a voucher into my wallet",
+    "expectOutcome": [
+      "reply",
+      "proposal"
+    ],
+    "expectAction": null,
+    "amountCents": null,
+    "msisdn": null
+  },
+  {
+    "language": "af",
+    "id": "howto-steps-af",
+    "group": "discovery",
+    "text": "hoe werk dit om geld te stuur",
+    "expectOutcome": "reply",
+    "expectAction": null,
+    "amountCents": null,
+    "msisdn": null
   }
 ]

@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-09-19 (57) — Phase 3, everything that is not gated: the source-text locks are finished, and "the eval as the gate" is now a mechanism rather than a slogan
+
+Promotion is gated on the founder's pilot week, so nothing was promoted and no
+hook was deleted. Everything else in Phase 3 that does not need the gate is
+done.
+
+**The source-text surgery is gone: 19 sites on 18 September, 6 this morning,
+zero now.** The last five each rebuilt a literal by scraping this file with a
+regex, so each literal was hoisted to a named module-level constant and
+exported: `PRODUCT_QUERY_INDICATORS`, `MENU_ASK_RE`,
+`PRODUCT_QUERY_STOPWORDS_RE` and `ACTION_CAPABILITY`, plus
+`onboardingOtpDisabled`, which was already exported from `@wapay/auth` and had
+simply never been imported. Behaviour is unchanged; the tests now run the real
+code. This was the thing the handover called the blocker on everything else:
+nothing could move out of the processor while the tests read it as text.
+
+**"Delete the regex groups with the eval as the gate" did not work, because the
+eval did not exercise what would be deleted.** The golden corpus covers
+airtime, data, electricity, send, redeem, deposit, balance and help in all
+eleven languages, but REQUEST_MONEY, BUY_FUEL, the product-browse hook and the
+category-context hook had **no cases at all**. Deleting those four would have
+proved nothing. Ten cases were added, and
+`tests/phase3-deletion-readiness.test.mjs` now holds the deletion list itself:
+every hook must still exist in the processor, so the table cannot rot, and must
+either have a covering case or be recorded as blocked WITH A REASON.
+
+**Running it immediately found three of my own expectations to be wrong, and
+one real limit.** Fuel is a founder pilot, so the registry correctly keeps
+`start_fuel` out of the tool list and the agent explains rather than proposes:
+the cases now assert THAT, which is the better property, and the fuel hook is
+recorded as blocked until fuel goes live. A steps question may be answered or
+answered-and-offered, which is the founder's own rule, so both outcomes pass.
+And an isiZulu phrasing of "please pay me" was genuinely ambiguous, reading as
+a withdrawal; it was rewritten to ask for the link.
+
+The corpus is 166 cases. Action accuracy 98.8%, no regression against the
+frozen baseline. Unit 910/910, build green, chat QA harness 29/29.
+
 ## 2026-09-19 (56) — Airtime's flow is fixed and proven; the vend cannot reach a real number yet, and that is now said honestly. The same lesson applied to every VAS product (BUGLOG #78, #79)
 
 The founder's retest went all the way through for the first time: "buy r10

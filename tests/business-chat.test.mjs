@@ -5,6 +5,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { onboardingOtpDisabled } from '@wapay/auth';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -195,10 +196,6 @@ test('processor: the question is asked exactly when onboarding completes, both s
 // ---------------------------------------------------------------------------
 
 test('onboarding OTP flag: default ON; off skips S1→S2 straight to the PIN step and audits it', () => {
-  const fnSrc = onboardingTs.slice(onboardingTs.indexOf('export function onboardingOtpDisabled(): boolean {'));
-  const body = fnSrc.slice(0, fnSrc.indexOf('\n}') + 2).replace('export function onboardingOtpDisabled(): boolean {', 'function onboardingOtpDisabled() {');
-  // eslint-disable-next-line no-new-func
-  const onboardingOtpDisabled = new Function(`${body}; return onboardingOtpDisabled;`)();
   delete process.env.WAPAY_ONBOARDING_OTP;
   assert.equal(onboardingOtpDisabled(), false, 'unset: the OTP stays (unchanged behaviour)');
   for (const v of ['on', 'true', '1', 'yes', 'anything']) { process.env.WAPAY_ONBOARDING_OTP = v; assert.equal(onboardingOtpDisabled(), false, v); }

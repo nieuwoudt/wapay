@@ -13,6 +13,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { MENU_ASK_RE, PRODUCT_QUERY_STOPWORDS_RE } from '../pages/api/webhooks/message-processor-v2.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -99,10 +100,8 @@ test('HELP dispatch: question-shaped input gets the spend answer, not the menu',
   const menuAt = helpCase.indexOf('WaPay Help Menu');
   assert.ok(gateAt > -1 && menuAt > gateAt, 'the menu renders only after the explicit-ask gate');
   // The explicit gate itself only fires on bare commands.
-  const gateMatch = helpCase.match(/const explicitMenuAsk = (\/.*\/i)\.test/);
-  assert.ok(gateMatch, 'explicitMenuAsk is a plain one-line regex');
-  // eslint-disable-next-line no-new-func
-  const gate = new Function(`return ${gateMatch[1]};`)();
+  assert.match(helpCase, /const explicitMenuAsk = MENU_ASK_RE\.test/, 'the gate is the shared, importable one');
+  const gate = MENU_ASK_RE;
   assert.ok(gate.test('help'));
   assert.ok(gate.test('menu'));
   assert.ok(gate.test('  Options '));
@@ -149,10 +148,8 @@ test('a product question about something we do not sell reaches the AI, not the 
   assert.match(processorSource, /if \(residue && !viaAi\) \{\s*\n\s*return await handleAIChat\(\{ from, text, account \}\);/);
   assert.match(processorSource, /handleSmartProductQuery\(\{ from, account, text: result\.slots\.productQuery, entities: \{\}, viaAi: true \}\)/);
   // Behavioral: rebuild the shipped residue strip and drive it.
-  const m = processorSource.match(/const residue = lowerText\s*\n\s*\.replace\((\/.*\/gi), ' '\)/);
-  assert.ok(m, 'residue strip is a one-line regex');
-  // eslint-disable-next-line no-new-func
-  const frame = new Function(`return ${m[1]};`)();
+  assert.match(processorSource, /\.replace\(PRODUCT_QUERY_STOPWORDS_RE, ' '\)/, 'the strip is the shared, importable one');
+  const frame = PRODUCT_QUERY_STOPWORDS_RE;
   const residueOf = (t) =>
     t.toLowerCase().replace(frame, ' ').replace(/[^a-z]/gi, ' ').trim();
   assert.equal(residueOf('what can i buy'), '', 'bare browse ask keeps the product list');

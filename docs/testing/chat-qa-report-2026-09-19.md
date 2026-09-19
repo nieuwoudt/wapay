@@ -43,12 +43,12 @@ Please enter your meter number:
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll receive the full *R20* however they pay. No fees on this one. 🎉
-[button:View my payment page -> https://pleasepayme.co.za/PRDBSCYH]
+[button:View my payment page -> https://pleasepayme.co.za/PRKUCDES]
 ···
 🙏 *Pay WaPay QA Harness now* · R20 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRDBSCYH
+https://pleasepayme.co.za/PRKUCDES
 ```
 
 </details>
@@ -151,12 +151,12 @@ Reply *1* or *2*, or "cancel".
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll get the full *R250* if they pay from their WaPay (free), or R237.20 if they pay by card.
-[button:View my payment page -> https://pleasepayme.co.za/PREHQNUV]
+[button:View my payment page -> https://pleasepayme.co.za/PRQFENBC]
 ···
 🙏 *Pay WaPay QA Harness now* · R250 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PREHQNUV
+https://pleasepayme.co.za/PRQFENBC
 ```
 
 </details>
@@ -205,13 +205,15 @@ Just tell me what you need, in any language.
 **User:** My name is Thabo and I run a spaza shop in Soweto.
 
 ```
-Nice to meet you, Thabo 💰 A spaza shop in Soweto is a great fit for WaPay. If you want, I can help you set up a business account next.
+Hi Thabo, nice to meet you 😊
+
+If you want, I can help you set up a WaPay for Business portal so you can get paid with shareable links and see who has paid. Just say *business account*.
 ```
 
 **User:** What did I tell you my name was?
 
 ```
-You said your name is Thabo 😊
+You said your name was Thabo 😊
 ```
 
 </details>
@@ -225,7 +227,7 @@ You said your name is Thabo 😊
 **User:** Please remember that my favourite colour is green.
 
 ```
-Got it, Thabo 💚 I’ll remember that your favourite colour is green.
+Got it, I’ll remember that your favourite colour is green 💚
 ```
 
 **User:** buy electricity
@@ -264,14 +266,13 @@ Your favourite colour is green 💚
 **User:** Where can I spend my WaPay money!
 
 ```
-You can use WaPay for:
-• Airtime and data for any SA number
-• Prepaid electricity for any meter
-• Sending money to friends and family
-• Getting paid with a please pay me link
-• WaPay vouchers for online stores and apps
+You can spend your WaPay money on:
+• Airtime and data for any SA number 📱
+• Prepaid electricity for any meter 💡
+• Sending money to friends and family on WhatsApp 💸
+• WaPay vouchers for online apps and stores 🎟️
 
-Want me to show you where OTT vouchers are accepted? 💰📱
+Want me to tell you where OTT vouchers are accepted?
 ```
 
 </details>
@@ -544,7 +545,7 @@ No monthly fees, ever. 😊
 **User:** cancel
 
 ```
-No problem 😊 The electricity purchase is cancelled. If you want, you can start again anytime with the amount.
+No problem, I’ve stopped that here 😊
 ```
 
 </details>
@@ -715,7 +716,7 @@ Reply *YES* to continue to your PIN, or *NO* to cancel.
 **User:** 1934
 
 ```
-✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WP8E54265F58AC3B. Fee R18.
+✅ *Done.* R30 is on its way to you by FNB eWallet. Reference WPC522D0285C19DB. Fee R18.
 ```
 
 **User:** balance
@@ -755,7 +756,7 @@ Need anything else? Just ask me!
 
 Sawubona WaPay QA Harness!
 
-💵 Ibhalansi yamanje: R 52.00
+💵 Ibhalansi Yamanje: R 52.00
 
 Ufunani okunye? Ngicela ungibuze!
 ```
@@ -766,10 +767,9 @@ Ufunani okunye? Ngicela ungibuze!
 💰 *Ibhalansi yakho ye-WaPay*
 
 Sawubona WaPay QA Harness!  
-Ibhalansi yakho yamanje ingu-R 52.00
+Ibhalansi yakho yamanje ingu R 52.00
 
-  
-Uthanda ukwenza ini kulandela?
+. Uthanda ukwenza ini kulandela?
 ```
 
 **User:** speak english
@@ -823,7 +823,7 @@ Manage customers, payment links and revenue at https://wapay.co.za/business. To 
 **User:** business login
 
 ```
-🔐 *WaPay for Business code: 183213*
+🔐 *WaPay for Business code: 072087*
 
 Type it into the business portal within 10 minutes. One attempt only.
 
@@ -851,9 +851,9 @@ Not you? Ignore this and tell us right away.
 • Habits: 1 completed movement in the last 30 days
 
 📄 *Your last 3 movements*
-• 19 Sep 17:21  Withdrawal (FNB eWallet)  R30  ✅ done  WaPay QA Harness
-• 19 Sep 17:19  Payment link  R250  🔗 open
-• 19 Sep 17:18  Payment link  R20  🔗 open
+• 19 Sep 17:43  Withdrawal (FNB eWallet)  R30  ✅ done  WaPay QA Harness
+• 19 Sep 17:40  Payment link  R250  🔗 open
+• 19 Sep 17:39  Payment link  R20  🔗 open
 
 I keep 30 days of our chat so I can follow the conversation, and I never store your PIN, voucher PINs or card details. Reply *forget me* and the chat memory and what I have learned about how you use WaPay both go; your transactions stay on record, as the law requires.
 Want the detail on any one of them? Say the date or the amount.
@@ -875,7 +875,7 @@ Want the detail on any one of them? Say the date or the amount.
 **User:** How can I withdraw money?
 
 ```
-🏧 Withdrawals are not available just yet, but they are coming soon.
+🏧 Taking money out of WaPay is not available just yet, but it is coming soon.
 
 For now, your R52 balance can be used for airtime, data, electricity, WaPay vouchers, sending money, or getting paid. 💡
 ```
@@ -893,28 +893,28 @@ For now, your R52 balance can be used for airtime, data, electricity, WaPay vouc
 **User:** Where can I spend my OTT voucher?
 
 ```
-OTT vouchers work online and in apps, not at shop tills 💡
+OTT vouchers work online and in partner apps, not at shop tills 💡
 
 Accepted at:
-Talk360
-fibertime
-ikeja
-Capitec Connect
-megsApp
-Pay@
-Xash
-FoondaMate
-LAYAWAY
+• Talk360
+• fibertime
+• ikeja
+• Capitec Connect
+• megsApp
+• Pay@
+• Xash
+• FoondaMate
+• LAYAWAY
 
 Not accepted at:
-Supermarket tills like Checkers, Shoprite, Pick n Pay, Spar, Boxer
-Takealot
-Netflix
-Showmax
-Spotify
-Mobile networks’ own sites
+• Supermarket tills
+• Takealot
+• Netflix
+• Showmax
+• Spotify
+• Mobile networks’ own sites
 
-At checkout, choose OTT Voucher and enter the 12 digit PIN. The full live list is on ottvoucher.com. ✨
+At checkout, choose OTT Voucher and enter the voucher PIN. The full live list is on ottvoucher.com ✨
 ```
 
 </details>
@@ -930,14 +930,14 @@ At checkout, choose OTT Voucher and enter the 12 digit PIN. The full live list i
 **User:** what did I buy last week
 
 ```
-Last week you did not buy any airtime, data, electricity, or vouchers. 💡
+Last week, you did not buy airtime, data, electricity or vouchers. 💡
 
-Your activity was:
-• Withdrawal: R30, successful, ref WP8E54265F58AC3B
-• Pay link: R250, open, ref PREHQNUV
-• Pay link: R20, open, ref PRDBSCYH
+Your completed movement was:
+• Withdrawal  R30  fee R18  ref WPC522D0285C19DB
 
-Completed total shown for the week: R30. Fees shown: R18.
+You also opened these pay links:
+• R250  ref PRQFENBC
+• R20  ref PRKUCDES
 ```
 
 </details>
@@ -953,7 +953,7 @@ Completed total shown for the week: R30. Fees shown: R18.
 **User:** did my payment go through
 
 ```
-Do you mean your newest R30 payout ref WP8E54265F58AC3B, or one of your open please-pay-me links? 💡
+I can check the newest one first, the withdrawal ref WPC522D0285C19DB. Do you mean that, or one of your open payment links PRQFENBC or PRKUCDES? 💡
 ```
 
 </details>
@@ -968,9 +968,9 @@ Do you mean your newest R30 payout ref WP8E54265F58AC3B, or one of your open ple
 **User:** Okay
 
 ```
-No problem 😊
+Yes, your newest payment went through ✅
 
-If you mean the newest movement, your R30 payout ref WP8E54265F58AC3B is marked successful.
+Withdrawal ref WPC522D0285C19DB is SUCCESS for R30 by eWallet. Fee was R18. 💰
 ```
 
 </details>

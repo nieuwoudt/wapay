@@ -6,6 +6,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { ACTION_CAPABILITY } from '../pages/api/webhooks/message-processor-v2.js';
 import { knownAmountsFromPack, looksLikeReceipt } from '../pages/api/webhooks/message-processor-v2.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -44,9 +45,7 @@ test('the withdraw gate and the dispatcher gate leave KYC to the flow (only cons
 });
 
 test('every action the dispatcher gates maps to a registered capability with no requirements, and never to WITHDRAW', () => {
-  const src = processor.match(/const ACTION_CAPABILITY = (\{[\s\S]*?\});/);
-  assert.ok(src, 'ACTION_CAPABILITY exists');
-  const map = new Function(`return ${src[1]};`)();
+  const map = ACTION_CAPABILITY;
   for (const id of [...Object.values(map), 'OTT_SELF']) {
     const cap = capabilityById(id);
     assert.ok(cap, `${id} is registered`);

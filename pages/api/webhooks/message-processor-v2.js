@@ -2280,18 +2280,7 @@ function detectExplicitIntent(text = '') {
   // and route them to the smart category matcher
   // =====================================================================
   
-  // Check if this looks like a product query (buy/get/show/list + anything)
-  const productQueryIndicators = [
-    /\b(can\s+i|do\s+you|where\s+can\s+i|how\s+do\s+i)\s+(buy|get|purchase|pay|top\s*up)/i,
-    /\b(buy|get|purchase|pay|top\s*up)\s+/i,
-    // Requires a commerce noun: the old bare /\b(show|list|what|which)\s+/
-    // matched EVERY "what ..." sentence, so "What did I tell you my name
-    // was?" answered with the products menu (chat QA harness 2026-08-27,
-    // BUGLOG #31). Personal/general questions now fall through to the AI.
-    /\b(show|list|what|which)\b[^\n]{0,40}\b(airtime|data|bundles?|electricity|vouchers?|products?|deals?|prices?|buy|sell|top\s*up)\b/i,
-  ];
-  
-  const looksLikeProductQuery = productQueryIndicators.some(p => p.test(squashed));
+  const looksLikeProductQuery = PRODUCT_QUERY_INDICATORS.some((p) => p.test(squashed));
   
   if (looksLikeProductQuery) {
     // Route to smart category matcher (will query database)
@@ -3476,6 +3465,30 @@ async function handleMemoryAndHistory({ from, account }) {
 }
 const FORGET_ME = /^\W*(?:forget (?:me|that|everything|our chats?|my (?:data|history|info))|delete my (?:data|history|memory|chats?)|erase (?:me|my (?:data|history|memory)))\W*$/i;
 function matchForgetMe(text = '') { return FORGET_ME.test(String(text || '').trim()); }
+
+/**
+ * Does this look like someone shopping? Hoisted out of detectExplicitIntent
+ * 2026-09-19 so a test can import and run it instead of scraping it out of
+ * this file with a regex. Behaviour unchanged.
+ *
+ * The third pattern REQUIRES a commerce noun: the old bare
+ * /\b(show|list|what|which)\s+/ matched every "what ..." sentence, so "What
+ * did I tell you my name was?" answered with the products menu (BUGLOG #31).
+ */
+const PRODUCT_QUERY_INDICATORS = Object.freeze([
+  /\b(can\s+i|do\s+you|where\s+can\s+i|how\s+do\s+i)\s+(buy|get|purchase|pay|top\s*up)/i,
+  /\b(buy|get|purchase|pay|top\s*up)\s+/i,
+  /\b(show|list|what|which)\b[^\n]{0,40}\b(airtime|data|bundles?|electricity|vouchers?|products?|deals?|prices?|buy|sell|top\s*up)\b/i,
+]);
+
+/** A bare "help"/"menu"/"options" is the only thing that renders the menu. */
+const MENU_ASK_RE = /^\W*(help|help me|menu|options|\?+)\W*$/i;
+
+/**
+ * Conversational filler stripped before deciding whether a product question
+ * carried a real product word. What is LEFT after this is the residue.
+ */
+const PRODUCT_QUERY_STOPWORDS_RE = /\b(hi|hello|hey|please|thanks?|what|whats|which|where|when|why|can|could|do|does|did|how|is|are|i|we|you|u|me|my|your|it|to|a|an|the|some|any|all|buy|get|purchase|pay|sell|offer|have|need|want|top\s*up|spend|use|with|from|on|at|here|there|now|today|wapay|wa-pay|products?|things?|stuff|items?|options?|deals?|prices?|list|show|see|available|for|of|in)\b/gi;
 
 /**
  * "Send it to my own number." Every natural way of saying it, because the
@@ -6471,7 +6484,7 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
       // last resort, reserved for explicit menu asks in any language that
       // slipped through. A tier-2 composed reply (already in the user's
       // language) wins; otherwise the localized spend-destinations answer.
-      const explicitMenuAsk = /^\W*(help|help me|menu|options|\?+)\W*$/i.test(String(text || '').trim());
+      const explicitMenuAsk = MENU_ASK_RE.test(String(text || '').trim());
       if (!explicitMenuAsk) {
         if (reply && !looksLikeReceipt(reply, knownAmounts)) {
           return await sendWhatsAppText({ to: from, text: reply });
@@ -6880,7 +6893,7 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
     // path against recursion: a model-originated query never loops back.
     if (matches.length === 0) {
       const residue = lowerText
-        .replace(/\b(hi|hello|hey|please|thanks?|what|whats|which|where|when|why|can|could|do|does|did|how|is|are|i|we|you|u|me|my|your|it|to|a|an|the|some|any|all|buy|get|purchase|pay|sell|offer|have|need|want|top\s*up|spend|use|with|from|on|at|here|there|now|today|wapay|wa-pay|products?|things?|stuff|items?|options?|deals?|prices?|list|show|see|available|for|of|in)\b/gi, ' ')
+        .replace(PRODUCT_QUERY_STOPWORDS_RE, ' ')
         .replace(/[^a-z]/gi, ' ')
         .trim();
       if (residue && !viaAi) {
@@ -8132,4 +8145,8 @@ export {
   looksLikeReceipt,
   agentFallbackLine,
   matchSelfNumber,
+  PRODUCT_QUERY_INDICATORS,
+  MENU_ASK_RE,
+  PRODUCT_QUERY_STOPWORDS_RE,
+  ACTION_CAPABILITY,
 };

@@ -31,6 +31,16 @@ const ACCEPTABLE = {
   'data-want': ['BUY_DATA', 'LIST_CATEGORY'],
   help: ['HELP', 'LIST_PRODUCTS', 'NONE'],
   greeting: ['NONE', 'HELP', 'HOME'],
+  // Added 2026-09-19 with the cases that cover the hooks Phase 3 deletes.
+  // A browse question may answer OR offer the list; it may never buy.
+  'browse-products': ['NONE', 'HELP', 'LIST_PRODUCTS'],
+  'browse-products-zu': ['NONE', 'HELP', 'LIST_PRODUCTS'],
+  // A bare amount with no category in play is a question, not a purchase.
+  'bare-amount-no-context': ['NONE', 'HELP'],
+  'fuel-amount': ['NONE'],
+  'fuel-amount-af': ['NONE'],
+  'howto-steps': ['NONE', 'REDEEM_VOUCHER'],
+  'howto-steps-af': ['NONE', 'SEND_VOUCHER'],
 };
 
 function parseArgs() {

@@ -10,6 +10,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { PRODUCT_QUERY_INDICATORS } from '../pages/api/webhooks/message-processor-v2.js';
 import { sanitizeUserText } from '../pages/api/webhooks/message-processor-v2.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -21,16 +22,8 @@ const processorSource = readFileSync(
   'utf8'
 );
 
-function extractIndicators() {
-  const start = processorSource.indexOf('const productQueryIndicators = [');
-  assert.ok(start > -1);
-  const end = processorSource.indexOf('];', start);
-  // eslint-disable-next-line no-new-func
-  return new Function(`${processorSource.slice(start, end + 2)}; return productQueryIndicators;`)();
-}
-
 test('product-query indicators: personal questions never look like product asks (BUGLOG #31)', () => {
-  const indicators = extractIndicators();
+  const indicators = PRODUCT_QUERY_INDICATORS;
   const isProductQuery = (t) => indicators.some((p) => p.test(t.toLowerCase()));
   for (const q of [
     'What did I tell you my name was?',
