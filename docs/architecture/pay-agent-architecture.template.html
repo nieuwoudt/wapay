@@ -65,7 +65,7 @@
 </style>
 
 <div class="wrap">
-  <div class="eyebrow">WaPay · engineering decision · 16 September 2026 · Version 8, redrawn 19 September at build 0deb5b7</div>
+  <div class="eyebrow">WaPay · engineering decision · 16 September 2026 · Version 10, redrawn 19 September at build 96d7048</div>
   <h1>Pay Agent Architecture</h1>
   <p class="stand">The chat feels like a menu because the customer is talking to the pre-agent runtime: 29 deterministic intercepts, two serial classifier calls, and a model that has never been shown a single fact about the customer. The agent described in the recon was never built. This page shows what runs today, the target that six read-only readers, four independent designers, three judges and two refuters per claim converged on, and the order to build it in.</p>
 
@@ -86,7 +86,7 @@
     <p>Not the model, and not the number of agents. FNB already runs eWallet on WhatsApp, and any bank can rent the same model. The defensible asset is the per-customer record under one WhatsApp identity: every deposit, send, purchase, pay-out and pay link across every product, read on every turn, plus a policy-gated registry that any partner product (a bank link, a credit check, an insurance quote) plugs into as a module. That is what a bank cannot bolt onto a menu quickly, and it is the cheaper thing to build. So the order is plumbing first, brain second.</p>
   </div>
 
-  <h2>Status: the pilot week is running, and its first day found airtime broken</h2>
+  <h2>Status: the pilot week is running, and all of Phase 3 that is not gated is done</h2>
   <p>The target diagram below carries a badge on every component: ✓ shipped, ◐ partly or live only behind the pilot list, ◌ shadow, ○ next. Unit tests 839 of 839 across 82 files, build green, chat harness 29 of 29, three read-only adversarial reviews before the three pushes, and three migrations applied to production before the code that reads them. Design record in the repo: docs/AGENT_ARCHITECTURE_V2.md (section 13 is the shipped log); BUGLOG #56 to #64; CHANGELOG entries 35, 36 and 37.</p>
   <div class="verdict">
     <div class="card accent">
