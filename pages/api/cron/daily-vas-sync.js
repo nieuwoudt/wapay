@@ -62,6 +62,17 @@ export default async function handler(req, res) {
       const sweep = await sweepPayoutsAndNotify({ limit: 5, deadlineMs: 20 * 1000 });
       payoutSweep = { skipped: sweep.skipped || null, ...sweep.counts };
       console.log(JSON.stringify({ type: 'cron_payout_sweep', ...payoutSweep, timestamp: new Date().toISOString() }));
+      // A backlog on a DAILY floor means rows wait a full day each. Loud on
+      // purpose: this is the number that decides whether the ten-minute
+      // schedule is still optional (docs/AGENT_ARCHITECTURE_V2.md 14.1).
+      if (payoutSweep.backlog > 0) {
+        console.error(JSON.stringify({
+          type: 'cron_payout_sweep_backlog',
+          backlog: payoutSweep.backlog,
+          note: 'eligible pay-outs the daily sweep could not reach; each waits another day',
+          timestamp: new Date().toISOString(),
+        }));
+      }
     } catch (e) {
       console.error(JSON.stringify({
         type: 'cron_payout_sweep_failed',

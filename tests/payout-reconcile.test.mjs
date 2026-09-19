@@ -329,7 +329,7 @@ test('sweepPayoutsAndNotify reconciles PENDING + INIT rows and tells each finali
   const sent = []; const send = async ({ to, text }) => { sent.push({ to, text }); };
   const out = await sweepPayoutsAndNotify({ prisma, ledger, client: c, send, olderThanMs: 0, initOlderThanMs: 0, now: Date.now() + 5000 });
   assert.equal(out.results.length, 2);
-  assert.deepEqual(out.counts, { swept: 2, settled: 1, failed: 1, pending: 0, needsOperator: 0, unchecked: 0, errors: 0, notified: 2, notifyFailed: 0 });
+  assert.deepEqual(out.counts, { backlog: 0, swept: 2, settled: 1, failed: 1, pending: 0, needsOperator: 0, unchecked: 0, errors: 0, notified: 2, notifyFailed: 0 });
   assert.deepEqual(out.notified.sort(), [i.reference, pendingRef].sort());
   assert.equal(sent.length, 2); assert.ok(sent.every((s) => s.to === '27731234567'));
   assert.ok(sent.some((s) => /✅ .*has been paid/.test(s.text))); assert.ok(sent.some((s) => /❌ .*could not be completed/.test(s.text)));

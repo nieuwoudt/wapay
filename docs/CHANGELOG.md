@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-09-19 (58) — Phase 4: the daily pay-out sweep stops hiding its own backlog, and a recorded decision about what must NOT move into the queue yet
+
+**The sweep takes five rows a day and never said how many it left.** With a
+daily floor that is a real hole: the sixth parked pay-out waits another
+twenty-four hours, and so does the seventh, and nothing anywhere says so. The
+sweep now reports `backlog`, the eligible rows it could not reach, and the
+cron logs it at error level when it is non-zero. It is a floor, never an
+overstatement: if it is above zero there is at least that much waiting. That
+number is also the one that decides whether the ten-minute schedule is still
+optional, so it belongs in front of the founder rather than in a row count
+nobody derives.
+
+**What was deliberately NOT done, so the next session does not redo the
+thinking.** The design puts the pay-out sweep, the retention purge and the
+nightly integrity check into `agent_jobs`. Moving them today would add
+indirection and buy nothing, because the drain runs inside the same daily cron
+that already runs them inline: the same invocation, the same sixty seconds, one
+more layer. The value of the async tier arrives with a ten-minute drain, and
+that waits on the Vercel plan. This is the same test the previous session
+applied to the fuel reconcile and recorded: ask who is waiting for it.
+
+Also not done, and why: additive per-account journal columns are an indexed
+read for a movement list that today spans five accounts, and they are a schema
+change on the money tables. The cost is real and the benefit is invisible at
+this size. A second model provider through the corpus needs a second provider's
+key. The first partner module, bank-account verification, needs a partner.
+
+Unit 910/910, build green, chat QA harness 29/29.
+
 ## 2026-09-19 (57) — Phase 3, everything that is not gated: the source-text locks are finished, and "the eval as the gate" is now a mechanism rather than a slogan
 
 Promotion is gated on the founder's pilot week, so nothing was promoted and no
