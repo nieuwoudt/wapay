@@ -390,9 +390,18 @@ async function run() {
       ], s);
 
       const d = await s.say('did my payment go through');
+      // This run really does settle an R30 FNB eWallet pay-out earlier (the
+      // PerformPayout assertion above), so "the R30 withdrawal succeeded" is
+      // TRUE and must be allowed. It used to be blocked by the receipt guard
+      // and replaced with the fallback line, which is what the founder saw on
+      // 2026-09-19. What must still never happen is a success claimed for an
+      // amount this wallet never settled.
+      const successClaim = has(d.replyText, /✅|went through|was successful|has gone through|paid/i);
+      const figures = [...String(d.replyText || '').matchAll(/R\s?(\d+)/g)].map((m) => Number(m[1]));
       verdict('Agent: status question is answered from the record, never invented', [
         { level: 'FAIL', ok: !looksLikeMenu(d.replyText), what: 'no menu' },
-        { level: 'FAIL', ok: !has(d.replyText, /✅.*(paid|success|went through)|has gone through|was successful/i) || has(d.replyText, /no (recent|pending)|nothing|don't see|can't see|haven't/i), what: 'no invented success (the QA wallet has no payment)' },
+        { level: 'FAIL', ok: !successClaim || figures.includes(30) || has(d.replyText, /no (recent|pending)|nothing|don't see|can't see|haven't/i), what: 'a success is claimed only for the R30 pay-out this run settled' },
+        { level: 'FAIL', ok: !successClaim || figures.every((r) => [30, 18, 48, 52, 100].includes(r)), what: 'no figure this wallet never saw is called paid' },
       ], s);
 
       const e = await s.say('Okay');

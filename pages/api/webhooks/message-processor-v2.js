@@ -3454,6 +3454,17 @@ async function handleMemoryAndHistory({ from, account }) {
 const FORGET_ME = /^\W*(?:forget (?:me|that|everything|our chats?|my (?:data|history|info))|delete my (?:data|history|memory|chats?)|erase (?:me|my (?:data|history|memory)))\W*$/i;
 function matchForgetMe(text = '') { return FORGET_ME.test(String(text || '').trim()); }
 
+/**
+ * "Send it to my own number." Every natural way of saying it, because the
+ * whole point of the orchestration layer is that the customer should not have
+ * to guess our vocabulary (founder, 2026-09-19: "If I say 'mine' it must know
+ * what my number is and must be able to execute"). Until then only a bare
+ * "me" worked: "mine" carried no digits, so it fell through to the
+ * not-a-phone-number branch and CANCELLED the purchase.
+ */
+const SELF_NUMBER = /^\W*(?:me|mine|myself|my\s*(?:own|number|phone|cell|line|sim)?|my\s*own\s*(?:number|phone|cell)?|this\s*(?:one|number|phone)|same\s*(?:number|one)?|self|for\s*me|to\s*me|my\s*side)\W*$/i;
+function matchSelfNumber(text = '') { return SELF_NUMBER.test(String(text || '').trim()); }
+
 // The customer's off-switch for memory. Deliberately NOT the same thing as
 // "forget me": stopping is about the future, erasing is about the past, and
 // answering one with the other either deletes a history they wanted or keeps
@@ -4154,16 +4165,33 @@ async function handleConversationState({ from, text, state, data, account }) {
           return await renderHome({ from, account });
         }
 
+        // "Send it to mine" and every other way of saying "my own number".
+        // This runs FIRST because none of these words carry digits, and the
+        // not-a-phone-number branch below reads that as "cancel" (live
+        // failure 2026-09-19: "mine" cancelled a R10 airtime purchase).
+        if (matchSelfNumber(text) && account.msisdn && data?.amountCents) {
+          return await startAirtimePreviewAndConfirm({
+            from,
+            account,
+            amountCents: data.amountCents,
+            msisdn: account.msisdn,
+            intent: 'STATE_AIRTIME_MSISDN_SELF',
+            rawText: text,
+          });
+        }
+
         // Slot-fill inside state: if user provides MSISDN (and maybe amount) in one message, skip.
         const filledSlots = parseSlots(text, { waId: from, accountId: account.id });
-        // The chosen amount survives: when the reply IS the phone number,
-        // its digits must never be re-parsed as a rand amount (QA
-        // 2026-08-21: '0781234567' overrode a R20 choice as R7,815,234.56).
-        const amountCents =
-          filledSlots.msisdn && String(filledSlots.amountCents || '').replace(/\D/g, '') ===
-            String(filledSlots.msisdn || '').replace(/\D/g, '').slice(0, String(filledSlots.amountCents || '').length)
-            ? data?.amountCents
-            : filledSlots.amountCents || data?.amountCents;
+        // THE CHOSEN AMOUNT WINS, always. The question we asked was "which
+        // number", so the reply is a number, and a number is a long run of
+        // digits that the slot parser will also read as a rand amount:
+        // parseSlots('0787051175') returns R787,051,175.00. This used to be
+        // guarded by comparing the parsed amount's digits to a prefix of the
+        // msisdn's, which silently stopped working for any number typed in
+        // the normal 0-form, so the preview rejected every purchase with
+        // "Amount must be between R5 and R1000" (live failure 2026-09-19).
+        // Preferring what the customer already chose needs no heuristic.
+        const amountCents = data?.amountCents || filledSlots.amountCents;
         if (amountCents && filledSlots.msisdn) {
           logSlotFill({
             intent: 'STATE_AIRTIME_MSISDN',
@@ -4184,8 +4212,8 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
-        // "me" buys for your own number — the prompt offers exactly that.
-        if (/^me\.?$/i.test(text.trim()) && account.msisdn) {
+        // Kept for the case where the amount was not carried: ask again below.
+        if (matchSelfNumber(text) && account.msisdn) {
           const ownAmount = data?.amountCents;
           if (ownAmount) {
             return await startAirtimePreviewAndConfirm({
@@ -4216,7 +4244,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
         
-        const isMe = /^(me|my\s*number|my\s*phone|myself)$/i.test(normalized);
+        const isMe = matchSelfNumber(normalized);
         const rawMsisdnInput = isMe ? account.msisdn : (filledSlots.msisdn || text.trim());
         const normalisedMsisdn = normaliseMsisdn(rawMsisdnInput || '');
         
@@ -4361,9 +4389,8 @@ async function handleConversationState({ from, text, state, data, account }) {
           return await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Data purchase cancelled.`, await userLang(account)) });
         }
 
-        const rawMsisdnInput = /^(me|my\s*number|my\s*phone|myself)$/i.test(normalized)
-          ? account.msisdn
-          : text.trim();
+        // Same generous self-matcher as the airtime flow: "mine" must work.
+        const rawMsisdnInput = matchSelfNumber(normalized) ? account.msisdn : text.trim();
         const normalisedMsisdn = normaliseMsisdn(rawMsisdnInput || '');
         if (!isValidSaMsisdn(normalisedMsisdn)) {
             if (isConversationalEscape(text)) {
@@ -5887,7 +5914,11 @@ function looksLikeReceipt(s, knownAmounts = null) {
     const figures = [...text.matchAll(/\bR\s?(\d{1,3}(?:[ ,]\d{3})+|\d+)(?:[.,](\d{1,2}))?(?!\d)/g)]
       .map((m) => Number(m[1].replace(/[ ,]/g, '')) * 100 + (m[2] ? Number(m[2].padEnd(2, '0')) : 0));
     const balances = known.balances instanceof Set ? known.balances : new Set();
-    const allKnown = figures.length > 0 && figures.every((c) => known.settled.has(c) || balances.has(c));
+    // R0 is always known: "you received R0" is not a claim anyone can be
+    // defrauded by, and an honest summary that ends "completed spending
+    // total: R0" was being blocked as an invented figure (live failure
+    // 2026-09-19).
+    const allKnown = figures.length > 0 && figures.every((c) => c === 0 || known.settled.has(c) || balances.has(c));
     // A success claim ("received", "paid", ✅) must name settled money, not
     // merely a balance figure the customer happens to hold.
     const successClaim = /✅|✔|🟢|\b(received|credited|successful|cleared|confirmed|paid)\b/i.test(text);
@@ -6075,7 +6106,12 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   } else {
     out = gate.text;
   }
-  if (!blocked && looksLikeReceipt(out, knownAmountsFromPack(pack))) {
+  // The record OR a tool result this turn: both halves, at last. Tool figures
+  // are QUOTABLE, never settled, so the agent may list and total them while a
+  // success claim still has to name money the ledger says has settled.
+  const known = knownAmountsFromPack(pack);
+  for (const c of result.toolAmountsCents || []) if (Number.isInteger(c) && c > 0) known.balances.add(c);
+  if (!blocked && looksLikeReceipt(out, known)) {
     gatesFired.push('RECEIPT');
     logStructured('agent_reply_blocked', { from, accountId: account.id, rule: 'RECEIPT' });
     blocked = true;
@@ -8051,4 +8087,5 @@ export {
   knownAmountsFromPack,
   looksLikeReceipt,
   agentFallbackLine,
+  matchSelfNumber,
 };

@@ -78,7 +78,7 @@ test('every reply and clarify passes the output gate and the provenance guard; a
   const rep = turn.slice(turn.indexOf('// A reply or a clarifying question'));
   const sanAt = rep.indexOf('sanitizeUserText(result.text');
   const gateAt = rep.indexOf('outputGate(out, { withdrawLive })');
-  const receiptAt = rep.indexOf('looksLikeReceipt(out, knownAmountsFromPack(pack))');
+  const receiptAt = rep.indexOf('looksLikeReceipt(out, known)');
   const sendAt = rep.indexOf("deliver({ to: from, text: out, kind: blocked ? 'fallback' : 'agent' })");
   const parkAt = rep.indexOf("updateConversationState(from, 'AGENT_CLARIFY', { pendingIntent: result.pendingIntent })");
   const ledgerAt = rep.indexOf('await ledger(');

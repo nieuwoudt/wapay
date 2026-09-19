@@ -4,6 +4,43 @@
 
 ---
 
+## 2026-09-19 (54) — The founder's live session: airtime could not be bought at all, and two true answers about his own money were suppressed (BUGLOG #76, #77)
+
+Six messages on his own phone, and the `agent_turns` rows behind them, found
+three things. Two were serious.
+
+**Airtime was broken end to end (BUGLOG #76).** "buy R10 airtime", then the
+number, then "❌ Amount must be between R5 and R1000", three times. The slot
+parser reads a bare `0787051175` as both a phone number and R787,051,175.00,
+which is fair enough because the digits are genuinely ambiguous; the guard
+that was supposed to keep the chosen amount compared digit-string prefixes and
+silently stopped working for any number typed in the normal 0-form. The state
+now simply prefers the amount the customer already chose, which needs no
+heuristic: the question asked was "which number". Answering "mine" cancelled
+the purchase outright, because it carries no digits and the not-a-phone-number
+branch treats that as "get me out of here"; one generous self matcher now runs
+first and covers every natural way of saying it.
+
+**Two true answers were being thrown away (BUGLOG #77).** "What do you know
+about me" and "a breakdown of my spend for last month" both came back as the
+fallback line. Both fired the RECEIPT gate, which is one of the three that
+decide promotion, so each also reset his clean-day clock. The guard only ever
+knew the context pack, although the design has always said a figure may come
+from the record OR a tool result this turn; and zero was in no set, so an
+honest "completed spending total: R0" was treated as an invented figure. Tool
+figures are now merged in as QUOTABLE, never settled, so the agent may list and
+total them while a success claim still has to name money the ledger says
+settled.
+
+**And a test that was passing for the wrong reason.** The harness scenario
+"status question is answered from the record, never invented" assumed the QA
+wallet had no payment. That run really does settle an R30 pay-out, so the
+agent naming it was correct and the scenario had only been passing because the
+guard was suppressing a true statement. It now allows the R30 and checks that
+no figure the wallet never saw is called paid.
+
+Unit 900/900, build green, chat QA harness 29/29.
+
 ## 2026-09-19 (53) — Memory: remember as much as possible, and actually USE it. The notes had never reached the model at all
 
 **Founder direction, and it reverses yesterday's change.** "We want to

@@ -97,10 +97,30 @@ export interface AgentTurnResult {
   pendingIntent: AgentPendingIntent | null;
   proposal: AgentProposal | null;
   toolCalls: AgentToolCallRecord[];
+  /**
+   * Every rand figure, in cents, that a tool handed the model THIS turn.
+   * Numbers only, never tool text, so nothing a tool returned can leak
+   * through here. The output guard needs them: the design has always said a
+   * figure may come from the record OR a tool result this turn, and only the
+   * record half was implemented, so an honest history list built from
+   * get_transactions read as an invented receipt and was blocked.
+   */
+  toolAmountsCents?: number[];
   timings: { totalMs: number; modelMs: number[] };
   usage: { inputTokens: number; outputTokens: number };
   model: string;
   error?: string;
+}
+
+/** Integer `*Cents` fields anywhere in a tool result, capped so a huge list cannot grow the turn. */
+function collectCents(value: unknown, out: number[], depth = 0): void {
+  if (value == null || depth > 6 || out.length > 400) return;
+  if (Array.isArray(value)) { for (const v of value) collectCents(v, out, depth + 1); return; }
+  if (typeof value !== 'object') return;
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (/Cents$/.test(k)) { if (Number.isInteger(v) && (v as number) >= 0) out.push(v as number); }
+    else collectCents(v, out, depth + 1);
+  }
 }
 
 export const AGENT_MODEL = (): string =>
@@ -214,6 +234,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<AgentTurn
     pendingIntent: null,
     proposal: null,
     toolCalls: [],
+    toolAmountsCents: [],
     timings: { totalMs: 0, modelMs: [] },
     usage: { inputTokens: 0, outputTokens: 0 },
     model,
@@ -286,6 +307,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<AgentTurn
             res = { ok: false, error: String(error?.message || error || 'TOOL_FAILED').slice(0, 200) };
           }
           result.toolCalls.push({ name, ms: Date.now() - started, ok: res.ok === true });
+          if (res.ok) collectCents(res, result.toolAmountsCents!);
           return { call, name, res };
         })
       );
