@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-09-19 (55) — The phase map moves, and a graded table of what a customer can actually buy
+
+Founder: the map does not look like we are moving, and show me the products
+that are really live, with a tested-end-to-end column and a grade.
+
+**The map moves.** Four rows turned green since 17 September and the header now
+names them: C13 (all five execute routes), C14 (the conversation store), C16
+(the customer model) and C19 (Mission Control), with C18 on the 18th. The
+build, the date, the you-are-here marker and the per-column tallies all move on
+every ship, and the gate box says the pilot week is RUNNING with its clock at
+zero rather than "open".
+
+**The new table is graded on production evidence, not on what the code
+supports.** Every figure is a count of real rows in the production database on
+19 September. It is not flattering and it is not meant to be:
+
+- A, real money end to end: card and EFT deposits (4 settled, newest 12 Sep),
+  pay links (4 paid, newest created 19 Sep), and reading your own money back.
+- B, proven but on a supplier's test host: OTT vouchers (3 issued, 4 gifts
+  delivered, none ever redeemed at a real till) and WaPay for Business.
+- C, proven once: send money (1), fuel (1, no wiCode has worked at a pump).
+- D: airtime. It last vended successfully on **2 January 2026**, nine months
+  ago, which is what the founder meant by "this used to work".
+- F, nobody has ever completed it in production: data bundles (zero rows),
+  electricity (zero rows), loading a voucher, and withdrawals (3 attempts, 3
+  failed, no money has ever reached a bank).
+
+The three F grades on data, electricity and airtime are one story: the code is
+live, the Blu credentials are QA, and nobody has ever pushed a single purchase
+all the way through. One end-to-end purchase each is what moves them, and that
+is now the first item on the founder list.
+
+Published as Version 8.
+
 ## 2026-09-19 (54) — The founder's live session: airtime could not be bought at all, and two true answers about his own money were suppressed (BUGLOG #76, #77)
 
 Six messages on his own phone, and the `agent_turns` rows behind them, found

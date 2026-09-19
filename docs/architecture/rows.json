@@ -165,12 +165,13 @@
     ]
   ],
   "fixNow": [
-    "<b>The pilot week has not started.</b> Zero agent turns have ever been recorded. Send the first message from the number on the list and the clock starts; the conversations card now counts whole clean days toward the seven.",
-    "<b>An approved UTILITY template for pay-out outcomes.</b> Until WAPAY_TEMPLATE_PAYOUT_OUTCOME names one whose body takes amount, method and reference in that order, a pay-out that settles outside the customer's 24 hour window is told by a rail Meta can drop.",
-    "<b>The Vercel plan.</b> It decides whether the ten-minute pay-out sweep is a cron entry or a trigger from elsewhere. Until it is answered the sweep runs daily and the fuel reconcile stays on the customer's turn, which is a recorded decision and not an oversight.",
-    "<b>What OTT's sandbox actually returns for a pay-out.</b> Two live tests both came back \"Failed to retrieve record\" with nothing paid. The reconciler must not be changed on a guess.",
-    "<b>The leaked Blu QA and Meta secrets are still unrotated.</b>",
-    "<b>apps/ is dead weight but removing it is not a one-liner:</b> it touches the workspace file and two root scripts, and four tests reach into package dist/ folders by relative path while CI never builds the packages. A founder call, written up in the handover."
+    "<b>Buy R10 airtime on your phone.</b> The fix is deployed and untested in production; airtime has not vended successfully since 2 January 2026. That one purchase is the difference between a D and a B on the table above, and it is the only way to know the fix works.",
+    "<b>Then buy one data bundle and one electricity token.</b> Neither has EVER been bought in production, not one row. Until someone does, we do not know they work.",
+    "<b>Keep messaging from the pilot number.</b> The week restarted at zero on 19 September. Seven clean days opens Phase 3.",
+    "<b>An approved UTILITY template</b> for WAPAY_TEMPLATE_PAYOUT_OUTCOME, body taking amount, method and reference in that order. Env changes only take effect on redeploy.",
+    "<b>Ask OTT what their sandbox returns for a pay-out.</b> Three attempts, three FAILED, no money has ever reached a bank.",
+    "<b>The Vercel plan</b>, so the ten-minute pay-out sweep can be scheduled.",
+    "<b>Rotate the leaked Blu QA and Meta secrets.</b>"
   ],
   "disagree": [
     "<b>\"A main Pay agent that talks to specialist agents.\"</b> No, not as separate model calls. The two-tier engine already is an orchestrator talking to category agents, and it is the source of the slow, fact-free answers. Specialists become tools, knowledge modules and off-path workers; one model composes per turn. Your mental model survives as the brain's tool list.",
@@ -184,17 +185,16 @@
     "<b>\"Like ChatGPT or Claude\"</b> should not mean open-ended chat inside a money product. Every off-topic turn costs a model call and a Meta message and adds risk. The persona stays warm and stays on the customer's money and the life around it; it declines the rest in one line.",
     "<b>The calendar.</b> The work is about twenty-four working days of Claude sessions, but with one founder reviewing, deploying and testing on his own phone, that is six to eight calendar weeks. The founder-visible milestone stays early: ledger-aware answers in the first week, his own number on the new brain in the second or third."
   ],
-  "phaseMapCaption": "Five phase columns in build order; every component carries the badge a verifier gave it at HEAD with file and line evidence, re-checked against the tree on this ship (C13, C14 and C19 moved to shipped after checking the code, not the changelog); the rust bar is the Phase 3 gate, whose eval condition is met and whose shadow week has not yet started; the dashed line is where the build stands. The bottom strip names the test files that lock each phase. Regenerated on every ship.",
+  "phaseMapCaption": "Five phase columns in build order; every badge is re-checked against the tree on each ship, not taken from the changelog. Four rows turned green since 17 September: C13, C14, C16 and C19. The rust bar is the Phase 3 gate, whose eval condition is met and whose pilot week is now running with its clock at zero. The dashed line is where the build stands. The table below it is the honest answer to what a customer can actually buy today.",
   "whereWeAre": [
-    "Phase 2 is deployed behind the pilot list and Phase 3 has not started. Latest code build f91e317, 18 September evening.",
-    "The pilot week had not started, and could not have been seen to fail. The first reading of the Mission Control conversations card showed 19 customer messages, 20 WaPay replies, the list live with one number on it, and zero agent turns; the agent_turns table had never received a row since it was created. The gate compared the list entry to the wa_id Meta sends as raw text, so of the four ways a person writes a South African number into the Vercel dashboard, three matched nobody, silently, while the old engine went on answering perfectly well. The list now matches on the canonical digits, and the card reports each entry by its last four digits with whether the product can read it and whether an account has ever written from it, beside whole clean days against the seven the gate needs. The number on the list was in fact the right one, so nothing was lost; the failure mode was.",
-    "Complete for every customer (Phases 0 and 1): the customer record and the last 12 turns, both sides, in every model turn; execute routes closed, all five proving ownership before the PIN, with the internal-auth gate now failing closed in production; strict PIN states; claim release and the typing indicator; the INIT pay-out reconcile; registry-rendered surfaces; habits, \"what do you know about me\" and \"forget me\"; nightly balance integrity; the policy engine before proposals and withdrawals.",
-    "Shipped for every customer on 18 September: the output gate rewrites any model reply that breaks the money rules; the withdraw flow offers the one method that carries the amount instead of a menu, a bare no no longer throws the withdrawal away, and a stated ceiling is offered priced at the ceiling; the full-history question is answered from the record; an erasure is never answered with a disclosure; notifyCustomer picks the rail that crosses the 24 hour window; agent_jobs and its drain landed early from Phase 4.",
-    "And in the evening: the model no longer writes customer facts at all. propose_note proposes, the runtime asks the customer once, and only an explicit yes writes the note. The legacy JSON conversation ring is deleted, 63 write sites in the processor with no readers anywhere, each one a read-modify-write of a column that also holds live flow state; the erasure path never cleared it, so a customer who asked to be forgotten kept ten of their own messages, and a migration clears the residue. Every way the pay-out sweep can fail to tell a customer now writes the ledger fact into the history the agent reads, as does a deposit whose confirmation does not send. A voucher gift claimed but never sent is put back on any failure, not only on a send that answers not-ok.",
-    "Phase 3 preparation, which needs no gate: the three dead things are gone (a second WhatsApp client, the bypassing ledger writer postBluDeposit, and a Prisma model for a table that never existed), and the first batch of source-text test locks is rewritten as behaviour. Thirteen functions are exported from the processor in place, which the design record has always said breaks no lock, and source surgery falls from 19 sites to 6. Two tests were found to have been asserting against fakes that had drifted from the real code, which is the argument for the whole migration.",
-    "For the pilot list only (Phase 2): one model call over the record and typed tools; pre-model guards; a per-customer budget; proposals through the same confirm and PIN steps; output gates and the provenance guard; the clarify state; an agent_turns row per turn. The eval runs 156 cases in all eleven languages against a frozen baseline: 100% on action in every language, no regression on this build. Everyone else: regex hooks and the two-tier engine.",
-    "Phase 3 gate, verbatim: the eval on the full set per language at or above the two-tier engine's pass rate, and a week of shadow turns with no gate firing on money copy. The first is MET. The second has NOT STARTED: zero agent turns have ever been recorded. It begins on the first message from the number on the list.",
-    "Two rows are amber on purpose rather than for want of time. C11's policy engine has nothing configured that can refuse anything, and a consent requirement would be a tautology (every customer who can reach a capability already holds one) that would not address the cross-user risk it appears to; the reasoning is section 11 of the record. C16's habits are still computed in JavaScript over 40 rows rather than in SQL: the JavaScript can only under-count, the eval that gates Phase 3 renders no habits at all, and two test stubs would silently warn on a ninth query, so it is an optimisation with a real chance of a quiet regression."
+    "Phase 2 is deployed behind the pilot list and THE PILOT WEEK IS RUNNING. It started on 19 September with 18 real agent turns, the first this build has ever had. Latest code 0deb5b7.",
+    "What the first day of it found, on the founder's own phone. Airtime could not be bought at all: the slot parser reads a bare 0787051175 as both a phone number and R787,051,175.00, and the guard meant to keep the amount he had already chosen compared digit-string prefixes and had silently stopped working for any number typed in the normal 0-form, so the preview rejected every attempt with \"Amount must be between R5 and R1000\". Answering \"mine\" cancelled the purchase outright, because it carries no digits and the not-a-phone-number branch reads that as an exit. Both are fixed (BUGLOG #76): the chosen amount now simply wins, which needs no heuristic, and one generous self matcher runs first.",
+    "And two true answers about his own money were being thrown away. \"What do you know about me\" and \"a breakdown of my spend for last month\" both came back as the fallback line, and the agent_turns rows show both firing the RECEIPT gate, which is one of the three the promotion week is measured on, so each false positive also reset the clean-day clock to zero. The provenance guard only ever knew the context pack, although the design has always said a figure may come from the record OR a tool result this turn; and zero was in no set, so an honest \"completed spending total: R0\" read as an invented figure. Fixed (BUGLOG #77): tool figures are merged in as quotable, never settled, so a success claim still has to name money the ledger says settled.",
+    "Memory changed direction on 19 September, on the founder's instruction: remember as much as possible from every interaction, unless the customer says not to. The confirmation turn added the day before is gone. The bigger fault found while removing it: the string notes did not occur once in lib/context-pack.js, so everything ever remembered had been written and never shown to the model. Notes are now in the customer record every turn. Three distinct controls: \"stop remembering\" refuses future writes and destroys nothing, \"what do you know about me\" shows everything, \"forget me\" erases.",
+    "Complete for every customer (Phases 0 and 1): the customer record and the last 12 turns, both sides, in every model turn; all five execute routes proving ownership before the PIN with the internal-auth gate failing closed; strict PIN states; claim release and the typing indicator; the INIT pay-out reconcile; registry-rendered surfaces; habits, memory and erasure; nightly balance integrity; the policy engine before proposals and withdrawals.",
+    "Phase 3 preparation is DONE, which is why four rows turned green. The three dead things are deleted (a second WhatsApp client, the bypassing ledger writer postBluDeposit, a Prisma model for a table that never existed), and the first batch of source-text test locks is rewritten as behaviour: thirteen functions exported from the processor in place, surgery down from 19 sites to 6. Two tests were found to have been asserting against fakes that had drifted from the real code.",
+    "Phase 3 gate: the eval half is MET (156 cases, eleven languages, 100% on action). The week half is RUNNING and its clock is at zero, reset by the two false-positive gates on 19 September. It restarts on the next agent turn.",
+    "One row is amber on purpose. C11's policy engine has nothing configured that can refuse anything, and a consent requirement would be a tautology that does not address the cross-user risk it appears to; the reasoning is section 11 of the record."
   ],
   "founderTests": [
     [
@@ -386,5 +386,104 @@
       "partial",
       "the pay-out allowlist"
     ]
-  ]
+  ],
+  "products": [
+    [
+      "Deposit by card or EFT",
+      "Put real money into your wallet (PayFast)",
+      "LIVE, real money",
+      "YES. 4 settled deposits, newest 12 Sep 2026. Real rand left a real bank.",
+      "A",
+      "Nothing. This is the one rail where real money moves."
+    ],
+    [
+      "Pay links (Please Pay Me)",
+      "Send someone a link that charges them and pays you",
+      "LIVE, real money on the card leg",
+      "YES. 4 links PAID, 12 open, newest created 19 Sep 2026.",
+      "A",
+      "Nothing outstanding."
+    ],
+    [
+      "Balance, transactions, history",
+      "Read your own money back",
+      "LIVE",
+      "YES. Answered from the ledger on every turn, and on your phone today.",
+      "A",
+      "The RECEIPT guard was suppressing two true answers; fixed 19 Sep."
+    ],
+    [
+      "OTT voucher, buy for yourself or gift",
+      "A voucher PIN you can spend at OTT partners",
+      "LIVE but on OTT's TEST host",
+      "PARTLY. 3 vouchers issued, 4 gifts delivered, newest 25 Aug 2026. No voucher has ever been redeemed at a real till.",
+      "B",
+      "Apply the live OTT credentials and drop test- from OTT_BASE_URL, then redeem one for real."
+    ],
+    [
+      "Send money to a person",
+      "Send to a WaPay number, or a voucher to anyone",
+      "LIVE",
+      "PARTLY. 1 P2P send, 26 Aug 2026. The voucher leg rides the TEST host above.",
+      "C",
+      "A second live send, and the same OTT cutover."
+    ],
+    [
+      "Fuel voucher (UniFuel, wiCode)",
+      "A code for a pump at Shell or Engen",
+      "Founder pilot only, Yoyo TEST",
+      "PARTLY. 1 purchase, 31 Aug 2026. No wiCode has worked at a real pump.",
+      "C",
+      "Yoyo campaign IDs and signed retainer, then one real pump test."
+    ],
+    [
+      "Airtime",
+      "Top up any SA mobile number",
+      "Code live, Blu QA credentials",
+      "NO, AND IT WAS BROKEN. Last successful vend 2 Jan 2026, nine months ago. Your three attempts on 19 Sep all failed on a bug now fixed (BUGLOG #76).",
+      "D",
+      "Buy R10 airtime end to end on your phone. That single test moves this to B."
+    ],
+    [
+      "Data bundles",
+      "Buy a data bundle for any number",
+      "Code live, Blu QA credentials",
+      "NO. Zero purchases in production, ever. Not one row.",
+      "F",
+      "One end-to-end purchase. Until then we do not know it works."
+    ],
+    [
+      "Electricity",
+      "Prepaid electricity token for a meter",
+      "Code live, Blu QA credentials",
+      "NO. Zero purchases in production, ever. Not one row.",
+      "F",
+      "One end-to-end purchase against a real meter."
+    ],
+    [
+      "Load a voucher into your wallet",
+      "Redeem an OTT or Blu voucher as balance",
+      "Code live, OTT TEST host",
+      "NO. No redemption in production.",
+      "F",
+      "The OTT live cutover, then redeem one real voucher."
+    ],
+    [
+      "Withdraw to a bank or ATM",
+      "Cash out to PayShap, an ATM or an eWallet",
+      "ON, pilot allowlist only, OTT sandbox",
+      "NO. 3 attempts, 3 FAILED, newest 17 Sep 2026. OTT answered \"Failed to retrieve record\" every time. No money has ever reached a bank.",
+      "F",
+      "OTT must say what their sandbox returns, then production pay-out credentials."
+    ],
+    [
+      "WaPay for Business",
+      "Take payments as a business, customer CRM",
+      "LIVE, invite list only",
+      "PARTLY. The portal and links work; it rides the same pay-link rail graded A above.",
+      "B",
+      "Attach business.wapay.co.za and onboard one real merchant."
+    ]
+  ],
+  "productsNote": "Graded on what production actually did, not on what the code supports. Every figure is a count of real rows in the production database on 19 September 2026. A is real money end to end; B is proven but on a supplier's test host; C is proven once; D means it used to work and does not; F means no customer has ever completed it in production. The three F grades on airtime, data and electricity are the same story: the code is live and the Blu credentials are QA, and nobody has ever pushed one purchase all the way through."
 }
