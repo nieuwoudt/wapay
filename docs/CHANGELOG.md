@@ -4,6 +4,47 @@
 
 ---
 
+## 2026-09-19 (53) — Memory: remember as much as possible, and actually USE it. The notes had never reached the model at all
+
+**Founder direction, and it reverses yesterday's change.** "We want to
+deliberately remember as much as possible from each and every interaction,
+unless the user tells us not to remember anything." Yesterday `propose_note`
+was changed to ask before keeping anything. Asking is the wrong default: a
+question most people never answer means almost nothing is ever kept, and a
+wallet that forgets what you just told it is the thing we are trying to stop
+being. The confirmation turn and its state are gone.
+
+**The bigger fault, found while fixing it: nothing we remembered had ever
+reached the model.** The string `notes` did not occur once in
+`lib/context-pack.js`. Notes were written to the profile and rendered only by
+the "what do you know about me" command, so the agent composing a reply had
+never seen a single one of them. Remembering was pointless. They are now part
+of the CUSTOMER RECORD every turn, newest eight, under "What they have told
+you about themselves"; the record cap rose from 1800 to 2600 characters to
+make room, which is a deliberate trade of prompt tokens for a chat that knows
+who it is talking to. The prompt now tells the model to record what it hears
+and to use what is there, instead of telling it the tool remembers nothing.
+
+**What did NOT change, because it is money safety and not preference.** The
+model still writes no figure anywhere: `noteRejection` refuses any note with a
+digit in it, so a balance, an amount, a PIN or an account number cannot enter
+memory. The write happens in one place, `addNote` in `lib/user-profile.js`,
+with one validator. The cap rose from 10 notes to 60.
+
+**The customer's three controls are now three different things.** "Stop
+remembering" sets `memoryOptOut` and every write is refused from then on,
+while leaving what is already there alone; "what do you know about me" shows
+them everything; "forget me" erases it. Conflating stopping with erasing would
+delete a history when all someone asked for was quiet. The switch sits above
+the loose memory matcher, so a request to stop can never be answered with a
+disclosure of the data (the BUGLOG #71 shape).
+
+The standing rule in `lib/user-profile.js` said "never by the model" and now
+says what is true; the design record carries the change as a section 11 entry,
+which is the documented way to move the target.
+
+Unit 896/896, build green, chat QA harness 29/29.
+
 ## 2026-09-18 (52) — C19 shows held against the rail's float; a failed consent write is no longer silent; the record and the map redrawn at f91e317
 
 **C19.** The conversations card reported what the parked pay-outs hold; the

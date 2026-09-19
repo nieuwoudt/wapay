@@ -45,6 +45,7 @@ import {
   noteMeterNumber,
   noteInterest,
   addNote,
+  setMemoryOptOut,
   formatProfileContext,
 } from '../../../lib/user-profile.js';
 import crypto from 'crypto';
@@ -1004,12 +1005,9 @@ async function handleSharedContact({ from, account, sharedContact }) {
   // Any OTHER active flow (electricity, deposit amount, a pending confirm…)
   // must not be silently hijacked into send-money (QA 2026-08-21). The
   // contact is saved; the user decides what happens next.
-  if (state === 'AGENT_CLARIFY' || state === 'AGENT_NOTE_CONFIRM') {
+  if (state === 'AGENT_CLARIFY') {
     // The agent asked a question; a shared contact answers "who": the
-    // fresh-share path below asks the amount. A pending note is dropped
-    // rather than treated as a flow the customer must finish first: sharing
-    // a contact is not an answer to "shall I remember this", and nothing is
-    // written without a yes.
+    // fresh-share path below asks the amount.
     await updateConversationState(from, null);
   } else if (state) {
     const name2 = name ? ` (${name})` : '';
@@ -1341,38 +1339,6 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     state = null; data = null;
   }
 
-  // The one customer fact the model may ask to keep, kept here and nowhere
-  // else (2026-09-18). The model proposes a note; the previous turn asked the
-  // customer; this writes it only on an explicit yes. Anything that is not a
-  // yes or a no keeps nothing and is answered as a fresh message, so a
-  // question asked at the wrong moment never swallows the next thing said.
-  if (state === 'AGENT_NOTE_CONFIRM') {
-    const pendingNote = data?.pendingNote || null;
-    await updateConversationState(from, null);
-    const answer = String(text || '').trim();
-    if (pendingNote?.text && /^\W*(yes|yep|yeah|y|sure|ok|okay|alright|confirm|please|yebo|ewe|ja|ee|eya)\W*$/i.test(answer)) {
-      const wrote = await addNote({ accountId: account.id, text: pendingNote.text });
-      logStructured('agent_note_written', { from, accountId: account.id, ok: !!wrote });
-      return await sendWhatsAppText({
-        to: from,
-        text: await localizeOutbound(
-          wrote ? '👍 Noted. What would you like to do next?' : '👍 Thanks. I could not keep that just now. What would you like to do next?',
-          await userLang(account),
-        ),
-        kind: 'flow',
-      });
-    }
-    if (/^\W*(no|nope|n|nee|cha|hayi|cancel|stop)\W*$/i.test(answer)) {
-      logStructured('agent_note_declined', { from, accountId: account.id });
-      return await sendWhatsAppText({
-        to: from,
-        text: await localizeOutbound('👍 I will not keep that. What would you like to do next?', await userLang(account)),
-        kind: 'flow',
-      });
-    }
-    state = null; data = null;
-  }
-
   if (state) {
     // Universal intent-switch escape (founder feedback 2026-08-25): a
     // clearly-stated NEW intent always beats a waiting state — flows must
@@ -1506,6 +1472,8 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   if (matchForgetMe(text)) {
     return await handleForgetMe({ from, account });
   }
+  if (matchMemoryOff(text)) return await handleMemorySwitch({ from, account, on: false });
+  if (matchMemoryOn(text)) return await handleMemorySwitch({ from, account, on: true });
   // The same asks phrased as a sentence; BOTH halves get one combined answer.
   // Below forget-me on purpose: an erasure request must never be answered
   // with a disclosure (review 2026-09-18).
@@ -3485,6 +3453,25 @@ async function handleMemoryAndHistory({ from, account }) {
 }
 const FORGET_ME = /^\W*(?:forget (?:me|that|everything|our chats?|my (?:data|history|info))|delete my (?:data|history|memory|chats?)|erase (?:me|my (?:data|history|memory)))\W*$/i;
 function matchForgetMe(text = '') { return FORGET_ME.test(String(text || '').trim()); }
+
+// The customer's off-switch for memory. Deliberately NOT the same thing as
+// "forget me": stopping is about the future, erasing is about the past, and
+// answering one with the other either deletes a history they wanted or keeps
+// storing when they asked us to stop (2026-09-19).
+const MEMORY_OFF = /^\W*(?:(?:stop|don'?t|do not|no more) (?:remember\w*|saving|storing)(?: (?:anything|things|stuff|about me|my (?:stuff|things|details)))?|(?:turn off|disable) (?:your )?memory|remember nothing(?: about me)?)\W*$/i;
+const MEMORY_ON = /^\W*(?:(?:you (?:can|may)|start|please) remember(?: again| things| about me| me)?|(?:turn on|enable) (?:your )?memory)\W*$/i;
+function matchMemoryOff(text = '') { return MEMORY_OFF.test(String(text || '').trim()); }
+function matchMemoryOn(text = '') { return MEMORY_ON.test(String(text || '').trim()); }
+
+/** "Stop remembering things about me" / "you can remember again". */
+async function handleMemorySwitch({ from, account, on }) {
+  await setMemoryOptOut({ accountId: account.id, optOut: !on }).catch(() => {});
+  logStructured('memory_opt_out_set', { from, accountId: account.id, optOut: !on });
+  const text = on
+    ? '🧠 Done. I will keep track of what you tell me again, so you do not have to repeat yourself.'
+    : '🧠 Done. I will stop keeping notes about you. What you have already told me is still there: say "what do you know about me" to see it, or "forget me" to erase it.';
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(text, await userLang(account)), kind: 'flow' });
+}
 
 /** The customer's record, in their own words: what WaPay knows and uses. */
 async function handleAboutMe({ from, account }) {
@@ -6079,18 +6066,6 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
 
   // A reply or a clarifying question: the output gates, then one message.
   let out = sanitizeUserText(result.text || '') || '';
-  // The model asked to remember something the customer said about themself.
-  // The question is OURS, not the model's: its own words for that round could
-  // promise a memory that does not exist yet, and nothing is written until
-  // the customer answers yes. The note text is model-authored, so it goes
-  // through the same output gate as any other model text, below.
-  const pendingNote = result.outcome === 'clarify' && result.pendingNote?.text ? result.pendingNote : null;
-  if (pendingNote) {
-    out = await localizeOutbound(
-      `🧠 Want me to remember this? "${sanitizeUserText(pendingNote.text)}" Reply *yes* to keep it, or *no*.`,
-      await userLang(account),
-    );
-  }
   let blocked = false;
   const gate = outputGate(out, { withdrawLive });
   if (gate.rule) gatesFired.push(gate.rule);
@@ -6111,9 +6086,6 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   // A clarifying question is remembered only when the customer saw it.
   const parked = !blocked && result.outcome === 'clarify' && !!result.pendingIntent;
   if (parked) await updateConversationState(from, 'AGENT_CLARIFY', { pendingIntent: result.pendingIntent });
-  // Same rule for the note: parked only if the question was actually sent, so
-  // a gated or failed turn leaves nothing waiting for a yes.
-  else if (!blocked && pendingNote) await updateConversationState(from, 'AGENT_NOTE_CONFIRM', { pendingNote });
   await ledger({ ...base, outcome: blocked ? 'fallback' : result.outcome, gatesFired, proposal: parked ? result.pendingIntent : null });
   return sent;
 }

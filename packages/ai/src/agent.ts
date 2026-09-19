@@ -57,12 +57,6 @@ export interface ToolExecResult {
   reply?: { kind: 'reply' | 'clarify'; text: string; pendingIntent: AgentPendingIntent | null };
   accepted?: boolean;
   note?: unknown;
-  /**
-   * propose_note asks to remember a fact the customer stated. It is a
-   * PROPOSAL: nothing is written until the customer confirms it, which the
-   * processor asks and records (2026-09-18).
-   */
-  pendingNote?: { text: string } | null;
 }
 
 export type ToolExecutor = (name: string, args: Record<string, unknown>) => Promise<ToolExecResult> | ToolExecResult;
@@ -103,8 +97,6 @@ export interface AgentTurnResult {
   pendingIntent: AgentPendingIntent | null;
   proposal: AgentProposal | null;
   toolCalls: AgentToolCallRecord[];
-  /** A customer fact the model asked to remember; written only after a yes. */
-  pendingNote?: { text: string } | null;
   timings: { totalMs: number; modelMs: number[] };
   usage: { inputTokens: number; outputTokens: number };
   model: string;
@@ -304,17 +296,6 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<AgentTurn
       const proposed = execs.find((e) => e.res.ok && e.res.proposal && typeof e.res.proposal.action === 'string');
       if (proposed) {
         return finish({ outcome: 'proposal', text: content, proposal: proposed.res.proposal! });
-      }
-
-      // A note the model wants to remember ends the loop too, BELOW the
-      // proposal check so money always wins, and above the reply check so a
-      // reply composed in the same round can never narrate a write that has
-      // not happened yet. The processor asks the question; only a yes writes.
-      const noted = execs.find(
-        (e) => e.res.ok && e.res.pendingNote && typeof e.res.pendingNote.text === 'string' && e.res.pendingNote.text
-      );
-      if (noted) {
-        return finish({ outcome: 'clarify', text: content, pendingIntent: null, pendingNote: noted.res.pendingNote! });
       }
 
       // The reply tool is the model's final answer.

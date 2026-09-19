@@ -4,7 +4,7 @@
  * offered only for capabilities live for THIS customer; every read tool
  * answers from fixtures and never throws; totals are summed server-side;
  * start_withdraw proposes WITHDRAW; no proposal ever carries a PIN;
- * propose_note refuses digits and long notes and only ever proposes;
+ * propose_note refuses digits and long notes and keeps the rest;
  * get_payout_status asks the rail with GetPaymentStatus only; and no tool
  * file imports a model client or the localizer.
  */
@@ -548,25 +548,23 @@ test('propose_note refuses digits, long notes and notes not about the customer',
   assert.ok(!prisma._calls.some((c) => c[0] === '$executeRaw'), 'nothing written');
 });
 
-test('propose_note proposes and writes nothing: the customer confirms before anything is kept', async () => {
-  // The rule this protects: the model never authors a customer fact. Until
-  // 2026-09-18 this tool wrote the note the moment the model called it.
-  const prisma = stubPrisma({ profile: { language: 'zu', lastMeterNumber: '01234567890' } });
-  const proposed = await executeTool({ name: 'propose_note', args: { note: 'You usually buy airtime for your mum.' }, ctx: { prisma, account: ACCOUNT, now: NOW } });
-  assert.equal(proposed.ok, true);
-  assert.equal(proposed.accepted, false, 'nothing is accepted without the customer');
-  assert.equal(proposed.note, null, 'no stored note comes back');
-  assert.deepEqual(proposed.pendingNote, { text: 'You usually buy airtime for your mum.' });
-  assert.equal(proposed.reason, 'NEEDS_CONFIRM');
-  assert.ok(!prisma._calls.some((c) => c[0] === '$executeRaw'), 'nothing written');
-  assert.equal(prisma._calls.length, 0, 'the tool does not even read the database');
-  assert.deepEqual(prisma._accounts.get('acc-1').profile.notes, undefined, 'the profile is untouched');
+test('propose_note keeps what the customer said, and still refuses a figure', async () => {
+  // Founder direction 2026-09-19: remember as much as possible. The write is
+  // immediate; the digit ban is money safety and stays. The full behaviour,
+  // including the opt-out and the prompt rendering, is tests/agent-memory.test.mjs.
+  const prisma = stubPrisma({ profile: { language: 'zu' } });
+  const kept = await executeTool({ name: 'propose_note', args: { note: 'You usually buy airtime for your mum.' }, ctx: { prisma, account: ACCOUNT, now: NOW } });
+  assert.equal(kept.ok, true);
+  assert.equal(kept.accepted, true);
+  assert.equal(kept.note.text, 'You usually buy airtime for your mum.');
+  assert.equal(prisma._accounts.get('acc-1').profile.language, 'zu', 'other keys untouched');
 
-  // No context at all is still fine: the tool is pure.
-  const noCtx = await executeTool({ name: 'propose_note', args: { note: 'You like data.' }, ctx: {} });
-  assert.equal(noCtx.ok, true);
-  assert.equal(noCtx.accepted, false);
-  assert.deepEqual(noCtx.pendingNote, { text: 'You like data.' });
+  const noAccount = await executeTool({ name: 'propose_note', args: { note: 'You like data.' }, ctx: {} });
+  assert.equal(noAccount.ok, false);
+  assert.equal(noAccount.accepted, false);
+  const failing = await executeTool({ name: 'propose_note', args: { note: 'You like data.' }, ctx: { prisma: { account: { async findUnique() { return null; } }, async $executeRaw() { throw new Error('db down'); } }, account: ACCOUNT } });
+  assert.equal(failing.ok, false);
+  assert.equal(failing.accepted, false);
 });
 
 // ---------------------------------------------------------------------------
