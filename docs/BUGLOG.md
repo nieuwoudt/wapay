@@ -4,6 +4,21 @@
 
 ---
 
+## 79. Electricity would silently buy R50 if the chosen amount was ever lost
+
+- **Symptom:** found on 2026-09-19 while applying the airtime lesson to the other VAS products, before any customer met it. `ELECTRICITY_METER` read `existingData.amountCents || 5000`, so a state that had lost its amount (an expiry, a redelivery, a flow entered sideways) would quote and charge R50 for electricity the customer never asked for.
+- **Root cause:** a default standing in for a missing decision. Every other flow treats a missing amount as a question; this one treated it as R50.
+- **Fix:** the meter is kept and the amount is asked for. Nothing is quoted until the customer has chosen one.
+- **Guard:** `tests/vas-flow-invariants.test.mjs` invariant 2 asserts the default is gone AND sweeps the whole processor for any `amountCents = ….amountCents || <number>` pattern, so the shape cannot reappear in another flow.
+
+## 78. Airtime has never been able to vend to a real number, and the failure told the customer their own number was broken
+
+- **Symptom:** founder live test 2026-09-19 17:14, after BUGLOG #76 was fixed. The flow now worked perfectly end to end: "buy r10 airtime" → "mine" resolved to his own number → the confirm named R10 and MTN → his PIN was accepted → "❌ Sorry, I couldn't process that purchase. The network is rejecting this phone number. Please try with a different number or contact support."
+- **Root cause:** `BLU_BASE_URL` points at Blu's QA host, and QA only vends to the four whitelisted numbers in `lib/msisdn.js`. The production evidence is unambiguous: of every airtime purchase ever attempted, exactly one succeeded, on 2 January 2026, to `0840012300` — a QA test number. Both failures that day, and this one, were to real numbers. Nothing about the flow was wrong; the supplier account cannot serve a real customer. The provider's own `userMessage` then blamed the customer's number, which is both untrue and the worst possible thing to tell someone who has just typed their PIN.
+- **Fix:** `bluIsQa()` and `bluCanVendTo()` in `lib/msisdn.js`. The airtime and data flows check before the preview is even requested, so no confirm is shown and no PIN attempt is spent on a purchase that cannot complete, and the copy says plainly that it is our supplier account on test access, that this is our side and not theirs, and that their money has not moved. No date is promised and the supplier is never named.
+- **Guard:** `tests/vas-flow-invariants.test.mjs` invariant 4: the check sits before the preview in both products, the QA set is the four numbers, and the copy carries no partner name, no date and no em dash.
+- **To close it properly:** cut Blu over to production credentials. Until then airtime and data are demonstrable only on `0840012300` (Cell C), `0720012345` (Vodacom), `0830012300` (MTN) and `0850012345` (Telkom).
+
 ## 77. Two honest answers about the customer's own history were replaced by the fallback line, and each one reset the promotion clock
 
 - **Symptom:** founder live test 2026-09-19. "What do you know about me?" and "Can you give me a breakdown of my spend and earnings for last month?" both came back as the fact-built fallback, "💰 Balance to spend: R66. Your last movement: 19 Sep 10:41, pay link R200 (open). What would you like to do next?" The `agent_turns` rows show both as `outcome: fallback` with `gatesFired: ["RECEIPT"]`, one of them after a `get_transactions` call. RECEIPT is one of the three gates the Phase 3 promotion week is measured on, so each false positive also reset his clean-day count to zero.

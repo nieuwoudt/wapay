@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-09-19 (56) — Airtime's flow is fixed and proven; the vend cannot reach a real number yet, and that is now said honestly. The same lesson applied to every VAS product (BUGLOG #78, #79)
+
+The founder's retest went all the way through for the first time: "buy r10
+airtime", "mine" resolved to his own number, the confirm named R10 and MTN, his
+PIN was accepted. Then the vend failed with "the network is rejecting this
+phone number".
+
+**That message was untrue, and the truth matters (BUGLOG #78).** `BLU_BASE_URL`
+points at Blu's QA host, which only vends to four whitelisted numbers. Of every
+airtime purchase ever attempted in production, exactly one succeeded: 2 January
+2026, to `0840012300`, a QA test number. Every attempt to a real number has
+failed, in January and again now. The flow was never the problem after #76; the
+supplier account cannot serve a real customer. Both airtime and data now check
+before the preview is requested, so no confirm is shown and no PIN attempt is
+spent on something that cannot complete, and the copy says it is our supplier
+account on test access, that it is our side and not theirs, and that their money
+has not moved.
+
+**The founder asked for the lesson to be applied across the board, so it was**,
+and it found another bug before a customer did. `ELECTRICITY_METER` defaulted a
+missing amount to R50 (BUGLOG #79), which would have bought power nobody asked
+for; it now asks. `tests/vas-flow-invariants.test.mjs` locks four invariants
+for every VAS product rather than one product at a time: the chosen amount
+always beats anything re-parsed from a reply (with the real parse of a bare
+`0787051175` pinned as evidence, R787,051,175.00); no flow may ever default an
+amount, swept across the whole processor so the shape cannot reappear; "mine"
+and nine other phrasings mean self and are understood before any cancel branch,
+while "my mother" is not; and a supplier limit is explained as ours, before the
+confirm and the PIN, with no partner named and no date promised.
+
+Unit 904/904, build green, chat QA harness 29/29.
+
 ## 2026-09-19 (55) — The phase map moves, and a graded table of what a customer can actually buy
 
 Founder: the map does not look like we are moving, and show me the products

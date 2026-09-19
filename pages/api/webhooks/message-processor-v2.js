@@ -81,7 +81,7 @@ import { matchFeeAsk, feeAnswer, feeAskAmountCents, feeFacts } from '../../../li
 import { matchHowItWorksAsk, howItWorksAnswer, howItWorksBrief, wantsSteps, detectMethod, TOPICS as HOWTO_TOPICS } from '../../../lib/how-it-works.js';
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
 import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
-import { isValidSaMsisdn, normaliseMsisdn } from '../../../lib/msisdn.js';
+import { isValidSaMsisdn, normaliseMsisdn, bluCanVendTo } from '../../../lib/msisdn.js';
 import { agentV3For } from '../../../lib/shadow-list.js';
 import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '../../../lib/localize.js';
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
@@ -218,7 +218,30 @@ function detectNetworkCodeFromMsisdn(msisdn = '') {
   return null;
 }
 
+/**
+ * The truth about why a Blu purchase cannot complete right now. It is OUR
+ * supplier account that is limited, not the customer's number, and the copy
+ * says so. No date is promised (money rule) and the partner is not named.
+ */
+function qaCredentialsLine(product) {
+  return `⚠️ I cannot buy ${product} for that number yet.\n\nOur supplier account is still on test access, so only a few test numbers can be topped up. This is on our side, not yours. Your money has not moved.\n\nEverything else works: say "balance", "send", or "please pay me".`;
+}
+
 async function startAirtimePreviewAndConfirm({ from, account, amountCents, msisdn, intent = 'BUY_AIRTIME', rawText = '' }) {
+  // On Blu's QA credentials only four test numbers can actually be vended to.
+  // Saying so HERE costs the customer nothing; finding out after the confirm
+  // and the PIN costs them a PIN attempt and tells them their own number is
+  // broken, which is not true (live failure 2026-09-19; the only airtime
+  // purchase that has ever succeeded went to a QA test number in January).
+  if (!bluCanVendTo(msisdn)) {
+    await updateConversationState(from, null);
+    logStructured('vas_blocked_qa_credentials', { from, accountId: account.id, product: 'AIRTIME' });
+    return await sendWhatsAppText({
+      to: from,
+      text: await localizeOutbound(qaCredentialsLine('airtime'), await userLang(account)),
+      kind: 'flow',
+    });
+  }
   const previewUrl = apiUrl('/api/vas/airtime/preview');
   logInternalFetchCall({ url: previewUrl, path: '/api/vas/airtime/preview' });
 
@@ -4828,7 +4851,18 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
       const existingData = data || {};
-      const amountCents = existingData.amountCents || 5000;
+      // NEVER default an amount. A quote is what the customer chose; a silent
+      // R50 here would buy electricity nobody asked for (found 2026-09-19
+      // while applying the airtime lesson across the products).
+      const amountCents = existingData.amountCents;
+      if (!Number.isInteger(amountCents) || amountCents <= 0) {
+        await updateConversationState(from, 'ELECTRICITY_AMOUNT', { ...existingData, meterNumber });
+        return await sendWhatsAppText({
+          to: from,
+          text: await localizeOutbound(`💡 Got the meter. How much electricity would you like to buy?\n\nReply with an amount (e.g., R50, R100).`, await userLang(account)),
+          kind: 'flow',
+        });
+      }
 
       try {
         const previewUrl = apiUrl('/api/vas/electricity/preview');
@@ -7256,6 +7290,16 @@ async function handleListDataBundles({ from, account, entities }) {
 
 async function handleDataPurchaseFromSlots({ from, account, slots }) {
   const { msisdn, dataMb } = slots;
+  // Same supplier limit as airtime: say so before the confirm and the PIN.
+  if (!bluCanVendTo(msisdn)) {
+    await updateConversationState(from, null);
+    logStructured('vas_blocked_qa_credentials', { from, accountId: account.id, product: 'DATA' });
+    return await sendWhatsAppText({
+      to: from,
+      text: await localizeOutbound(qaCredentialsLine('a data bundle'), await userLang(account)),
+      kind: 'flow',
+    });
+  }
   const networkCode = slots.networkCode || detectNetworkCodeFromMsisdn(msisdn || '');
   const periodType = slots.periodType || null;
 
