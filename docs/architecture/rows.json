@@ -165,9 +165,9 @@
     ]
   ],
   "fixNow": [
-    "<b>Buy R10 airtime on your phone.</b> The fix is deployed and untested in production; airtime has not vended successfully since 2 January 2026. That one purchase is the difference between a D and a B on the table above, and it is the only way to know the fix works.",
-    "<b>Then buy one data bundle and one electricity token.</b> Neither has EVER been bought in production, not one row. Until someone does, we do not know they work.",
-    "<b>Keep messaging from the pilot number.</b> The week restarted at zero on 19 September. Seven clean days opens Phase 3.",
+    "<b>Prove airtime with a supplier test number.</b> Send \"buy R10 airtime\", then 0830012300 (MTN). That is a whitelisted Blu QA number and should vend for real. It is the last untested link in the chain, and it takes one minute.",
+    "<b>Then the Blu production cutover.</b> It is the single highest-value switch left: it turns airtime, data and electricity from three D and C grades into three live products in one move. Nothing in the chat is in the way.",
+    "<b>Keep messaging from the pilot number.</b> The promotion week restarted at zero on 19 September; the two false-positive gates that were resetting it are fixed.",
     "<b>An approved UTILITY template</b> for WAPAY_TEMPLATE_PAYOUT_OUTCOME, body taking amount, method and reference in that order. Env changes only take effect on redeploy.",
     "<b>Ask OTT what their sandbox returns for a pay-out.</b> Three attempts, three FAILED, no money has ever reached a bank.",
     "<b>The Vercel plan</b>, so the ten-minute pay-out sweep can be scheduled.",
@@ -440,25 +440,25 @@
       "Airtime",
       "Top up any SA mobile number",
       "Code live, Blu QA credentials",
-      "NO, AND IT WAS BROKEN. Last successful vend 2 Jan 2026, nine months ago. Your three attempts on 19 Sep all failed on a bug now fixed (BUGLOG #76).",
-      "D",
-      "Buy R10 airtime end to end on your phone. That single test moves this to B."
+      "FLOW YES, VEND NO. 19 Sep: \"mine\" resolved, R10 survived, confirm and PIN accepted, vend refused. The only airtime that ever vended was 2 Jan 2026 to 0840012300, a supplier TEST number. No real number has ever worked.",
+      "C",
+      "Blu production credentials. The chat half is done and proven; nothing else in the flow is in the way."
     ],
     [
       "Data bundles",
       "Buy a data bundle for any number",
       "Code live, Blu QA credentials",
-      "NO. Zero purchases in production, ever. Not one row.",
-      "F",
-      "One end-to-end purchase. Until then we do not know it works."
+      "NO. Zero purchases in production, ever. Shares the airtime code path, so the same supplier limit applies.",
+      "D",
+      "Blu production credentials, then one end-to-end purchase."
     ],
     [
       "Electricity",
       "Prepaid electricity token for a meter",
       "Code live, Blu QA credentials",
-      "NO. Zero purchases in production, ever. Not one row.",
-      "F",
-      "One end-to-end purchase against a real meter."
+      "NO. Zero purchases in production, ever. A silent R50 default was found and removed on 19 Sep before any customer met it (BUGLOG #79).",
+      "D",
+      "Blu production credentials, then one token against a real meter."
     ],
     [
       "Load a voucher into your wallet",
@@ -485,5 +485,5 @@
       "Attach business.wapay.co.za and onboard one real merchant."
     ]
   ],
-  "productsNote": "Graded on what production actually did, not on what the code supports. Every figure is a count of real rows in the production database on 19 September 2026. A is real money end to end; B is proven but on a supplier's test host; C is proven once; D means it used to work and does not; F means no customer has ever completed it in production. The three F grades on airtime, data and electricity are the same story: the code is live and the Blu credentials are QA, and nobody has ever pushed one purchase all the way through."
+  "productsNote": "Graded on what production actually did, not on what the code supports. Every figure is a count of real rows in the production database on 19 September 2026. A is real money end to end; B is proven but on a supplier's test host; C is proven in the chat with the supplier account in the way; D means nobody has ever completed one; F means it has been tried and has never worked. The airtime, data and electricity line is one story and it is not a chat problem: BLU_BASE_URL points at Blu's QA host, which vends only to four whitelisted test numbers, so no real customer number can be topped up on any of the three until the production cutover. The chat now says that honestly before taking a PIN, instead of telling the customer their own number is broken."
 }
