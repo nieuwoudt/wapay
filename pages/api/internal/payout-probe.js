@@ -7,7 +7,8 @@
  * ledger or a customer row; refuses any base URL whose host does not start
  * with "test-", and any amount above R50.
  *
- *   POST { method: 'PAYSHAP'|'NEDCASH'|…, amountCents: 2000, recipient: {…}, encoding?: 'form' }
+ *   POST { method: 'PAYSHAP'|'NEDCASH'|…, amountCents: 2000, recipient: {…}, encoding?: 'form', variants?: [hashStyle…] }
+ *   GET  ?reference=WP…   GetPaymentStatus for a probe reference (read-only; the probe writes no row, so the sweep cannot see it)
  */
 import crypto from 'node:crypto';
 import { OttPayoutClient, DEFAULT_HASH_STYLE } from '../../../lib/ott-payout.js';
@@ -35,11 +36,23 @@ function maskDeep(v) {
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
-  if (req.method !== 'POST') return res.status(405).json({ error: 'method' });
+  if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ error: 'method' });
   if (!keyOk(req)) return res.status(401).json({ error: 'unauthorized' });
   if (!payoutConfigured()) return res.status(503).json({ error: 'OTT_PAYOUT_* incomplete in this deployment' });
   const host = new URL(process.env.OTT_PAYOUT_BASE_URL).hostname;
   if (!host.startsWith('test-')) return res.status(403).json({ error: 'SANDBOX_ONLY', host });
+
+  if (req.method === 'GET') {
+    const reference = String(req.query.reference || '').trim();
+    if (!/^WP[0-9A-F]{14}$/.test(reference)) return res.status(400).json({ error: 'reference required (WP + 14 hex)' });
+    const client = new OttPayoutClient({ timeoutMs: 20000 });
+    try {
+      const probe = await client.getPaymentStatus({ yourUniqueReference: reference });
+      return res.status(200).json({ checkedAt: new Date().toISOString(), host, reference, status: probe.status ?? null, outcome: probe.outcome, settlement: probe.settlement, body: maskDeep(probe.body) });
+    } catch (e) {
+      return res.status(200).json({ checkedAt: new Date().toISOString(), host, reference, error: e?.code || 'TRANSPORT', message: String(e?.message || '').slice(0, 120) });
+    }
+  }
 
   const { method = 'PAYSHAP', amountCents = 2000, recipient = {}, encoding } = req.body && typeof req.body === 'object' ? req.body : {};
   if (!Number.isInteger(amountCents) || amountCents <= 0 || amountCents > 5000) return res.status(400).json({ error: 'amountCents must be an integer from 1 to 5000' });
@@ -76,7 +89,8 @@ export default async function handler(req, res) {
     build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || null,
     host,
     provider: { method, providerCode: provider.providerCode, providerName: provider.providerName, requiredFields: provider.requiredFields },
-    accepted: last.response.outcome !== 'INVALID_HASH' ? last.hashStyle : null,
+    // "accepted" means OTT answered with a real payout status for this hash; a transport failure proves nothing.
+    accepted: last.response.status != null && last.response.outcome !== 'INVALID_HASH' ? last.hashStyle : null,
     attempts,
   });
 }

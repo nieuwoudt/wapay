@@ -63,8 +63,14 @@ sends one request exactly as the withdraw flow does and returns the masked
 wire request and raw response. Run on the sandbox the same evening it found
 the second defect: OTT hashes an absent `bank_id` as its Int32 default "0",
 not ""; with that rendering the sandbox answered status 100 "Payment
-successful" (paymentReference 126141), the first pay-out OTT has ever
-accepted from WaPay. `DEFAULT_HASH_STYLE` carries the proven convention. Note for the record: HEAD carried five red
+successful" (paymentReference 126141): the first request from WaPay's
+client that OTT has ever accepted. This proves the WIRE FORMAT through the
+probe, which writes no ledger and no row; no customer withdrawal has
+completed yet, and the next informative test is one R50 withdrawal through
+the chat. `DEFAULT_HASH_STYLE` carries the proven convention. Two PayShap
+probes the same evening got no response within the 20 s client timeout
+while Nedbank answered in 1 to 12 s; the probe's GET now asks
+GetPaymentStatus for a probe reference so that can be settled. Note for the record: HEAD carried five red
 tests in `tests/agent-note-confirm.test.mjs` before this change; the test
 was obsolete (it asserted the confirmation step the founder reversed on
 19 September), the sources were right, and the peer session deleted it in

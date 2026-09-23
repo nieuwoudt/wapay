@@ -120,7 +120,11 @@ test('the customer hears that the fault is ours, and nothing left the balance', 
 
 test('static: the sandbox probe route is gated, sandbox-only, ledger-free, single-shot and masked', () => {
   const src = read('../pages/api/internal/payout-probe.js');
-  assert.match(src, /if \(req\.method !== 'POST'\) return res\.status\(405\)/);
+  assert.match(src, /if \(req\.method !== 'POST' && req\.method !== 'GET'\) return res\.status\(405\)/);
+  const getBranch = src.slice(src.indexOf("if (req.method === 'GET')"), src.indexOf('const { method ='));
+  assert.match(getBranch, /getPaymentStatus\(/); assert.ok(!/performPayout/.test(getBranch), 'GET only reads a status, never pays');
+  assert.match(getBranch, /\^WP\[0-9A-F\]\{14\}\$/, 'GET takes only a well-formed reference');
+  assert.match(src, /accepted: last\.response\.status != null && last\.response\.outcome !== 'INVALID_HASH'/, 'a transport failure is never reported as an accepted hash');
   assert.match(src, /if \(!keyOk\(req\)\) return res\.status\(401\)/); assert.match(src, /timingSafeEqual/);
   assert.match(src, /if \(!host\.startsWith\('test-'\)\) return res\.status\(403\)\.json\(\{ error: 'SANDBOX_ONLY'/);
   assert.match(src, /amountCents > 5000/);
