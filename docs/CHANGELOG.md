@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-09-23 (59) — Pay-out requests reach OTT: empty optionals off the wire, problem documents recognised, a sandbox probe for supplier questions
+
+OTT could not find either of the founder's pay-outs because neither was
+ever created: our recipient object carried every optional field as an
+empty string and OTT's .NET model rejected `bank_id: ""` at validation
+with HTTP 400, and the problem document's `status: 400` was read as an
+unknown OTT payout status and parked the money (BUGLOG #80). Empty
+optionals are now omitted on the wire and integer-typed fields sent as
+numbers, with the hash unchanged; RFC 7807 problem documents are
+recognised, a 400 that names fields releases the hold at once, anything
+else keeps it for reconcile; FAILED rows keep the HTTP status and a masked
+body; the customer is told the fault is ours. `POST
+/api/internal/payout-probe` (internal key, sandbox host only, no ledger)
+sends one request exactly as the withdraw flow does and returns the masked
+wire request and raw response. Note for the record: HEAD carried five red
+tests in `tests/agent-note-confirm.test.mjs` from commit a581961 before
+this change (the BUGLOG #74 implementation did not reach the tree); this
+commit does not touch them.
+
 ## 2026-09-19 (58) — Phase 4: the daily pay-out sweep stops hiding its own backlog, and a recorded decision about what must NOT move into the queue yet
 
 **The sweep takes five rows a day and never said how many it left.** With a

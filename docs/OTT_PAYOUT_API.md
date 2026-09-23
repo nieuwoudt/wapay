@@ -151,7 +151,21 @@ customer spend money we then also pay out.
 
 ---
 
-## 6. Two open questions to resolve in sandbox
+## 6. Two open questions to resolve in sandbox — ANSWERED 2026-09-23
+
+**Answer to 1 (encoding): JSON is accepted.** The trap was not the encoding but the TYPES:
+OTT's API is a .NET service and `bank_id` is an `Int32`. Sending `"bank_id": ""` (our old
+"absent optional" convention on the wire) fails model binding with HTTP 400 and an RFC 7807
+problem document (`{ title: "One or more validation errors occurred.", status: 400, errors:
+{ "$.recipient.bank_id": [...], purchase: ["The purchase field is required."] } }`), and no
+payout is created. `wireRecipient` now omits empty optionals and sends integer fields as
+numbers; the hash still uses `""` for absents (BUGLOG #80). A problem document's `status`
+is the HTTP code, never a payout status: `isProblemDetails` keeps it out of the status table.
+
+**Answer to 2 (hash formatting):** unchanged and unconfirmed by a successful sandbox pay-out
+until the probe after the fix (see `docs/PAYOUTS.md`, 2026-09-23).
+
+### The original questions
 
 The spec is internally inconsistent on two points we cannot settle without live credentials. The
 client handles both defensively; confirm both on the first sandbox calls.
