@@ -167,7 +167,7 @@
   "fixNow": [
     "<b>Prove airtime with a supplier test number.</b> Send \"buy R10 airtime\", then 0830012300 (MTN). That is a whitelisted Blu QA number and should vend for real. It is the last untested link in the chain, and it takes one minute.",
     "<b>Then the Blu production cutover.</b> It is the single highest-value switch left: it turns airtime, data and electricity from three D and C grades into three live products in one move. Nothing in the chat is in the way.",
-    "<b>Try a withdrawal again.</b> Every pay-out request used to die at OTT's front door on the wire format; that is fixed and the sandbox accepted a request on 23 September. Nothing has been proven through the actual flow, and the three rows in production are still three failures, so a R50 withdrawal is now a genuinely informative test rather than a repeat of a known failure.",
+    "<b>Try a withdrawal again, and choose cash at a Nedbank ATM.</b> Every pay-out used to die at OTT's front door on the wire format; that is fixed. On the sandbox Nedbank now completes at the rail and PayShap is created and then fails, so Nedbank is the method that can actually prove the flow. PayShap is worth one try afterwards to see the new honest wording rather than \"Sent\".",
     "<b>Keep messaging from the pilot number.</b> The promotion week restarted at zero on 19 September; the two false-positive gates that were resetting it are fixed.",
     "<b>An approved UTILITY template</b> for WAPAY_TEMPLATE_PAYOUT_OUTCOME, body taking amount, method and reference in that order. Env changes only take effect on redeploy.",
     "<b>The Vercel plan</b>, so the ten-minute pay-out sweep can be scheduled.",
@@ -474,9 +474,9 @@
       "Withdraw to a bank or ATM",
       "Cash out to PayShap, an ATM or an eWallet",
       "ON, pilot allowlist only, OTT sandbox",
-      "NO CUSTOMER WITHDRAWAL HAS EVER SUCCEEDED: 3 attempts, 3 FAILED, newest 17 Sep 2026, and the production database still shows exactly those three rows. What DID change on 23 Sep is the wire format: OTT's sandbox accepted a request for the first time (status 100) through the new internal probe, which deliberately writes no ledger and moves no money. So the request is now known to be well formed; the flow is still unproven end to end.",
+      "NO CUSTOMER WITHDRAWAL HAS EVER SUCCEEDED: 3 attempts, 3 FAILED, newest 17 Sep, and production still holds exactly those three rows. What changed on 23 Sep, through an internal probe that writes no ledger and moves no money: the wire format is proven for both providers, a NEDBANK CASH request was accepted AND succeeded at the rail (status 100), and PAYSHAP is created but then FAILS at the provider on the sandbox (status 97) after taking longer than the 20 second client timeout.",
       "F",
-      "One real withdrawal through the chat flow, now that the wire format is proven. Then OTT production credentials, which the founder holds."
+      "One real withdrawal through the chat, and it should be NEDBANK CASH, not PayShap: Nedbank is the method that completes on the sandbox today. Then OTT production credentials, which the founder holds."
     ],
     [
       "WaPay for Business",
