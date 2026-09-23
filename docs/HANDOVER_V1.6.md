@@ -1,6 +1,12 @@
 # Handover v1.6 — the Pay agent, after the pilot gate was found broken
 
-**Written 2026-09-18 evening at build `1d9f1b8`. Read this before touching anything.**
+**Written 2026-09-18 evening at build `1d9f1b8`, corrected 2026-09-23 at
+`1b044ca`. Read this before touching anything.**
+
+> **Corrections since it was written.** Two things below were overtaken by the
+> founder and by his live testing, and both are flagged in place:
+> `propose_note` REMEMBERS BY DEFAULT now (section 4), and the pilot week has
+> STARTED (sections 2 and 3). Everything else still holds.
 
 This replaces `docs/HANDOVER_V1.5.md`, which is still accurate about the rules
 and the traps; where the two differ on where the build stands, this one is
@@ -73,8 +79,12 @@ Unchanged from v1.5, and all five still earn their place.
 - **Condition one is MET.** 156 cases in all eleven languages, 100% on action
   in every language against a frozen baseline, no regression on this build
   (`pnpm eval:agent`, `docs/testing/agent-eval-baseline.json`).
-- **Condition two has NOT STARTED.** Not "is open": `agent_turns` held **zero
-  rows** when this session began and still does. See section 3.
+- **Condition two is RUNNING** (corrected 2026-09-23; it had not started when
+  this was written). The founder began testing on 19 September and there are
+  real agent turns now. The clean-day clock counts from the newest money gate,
+  and two RECEIPT gates fired that day on honest answers about his own history
+  (BUGLOG #77, both false positives, both fixed), so the count restarted from
+  them. Read `shadow.cleanDays` on the card in section 3.
 
 **Do not promote anyone off the pilot list until both hold.**
 
@@ -127,15 +137,21 @@ needed: the variable is set in production and the number resolves to an account.
 Six pushes, `047e07e` → `1d9f1b8`. Changelog entries 47 to 52, BUGLOG #73 to #75.
 
 - **The pilot gate** (§3 above), plus the Mission Control diagnostics and clean-day count.
-- **`propose_note` no longer writes** (C16). It is pure: no database, no clock,
-  no context, `accepted: false` on every path. It returns a pending note; the
-  agent loop ends the turn on it, **below** the proposal check so money always
-  wins and **above** the reply check so the model cannot narrate a memory it has
-  not got; the runtime asks in its own words, gates the model-authored text,
-  parks only once the customer has seen it, and writes through the new
-  deterministic `addNote` on an explicit yes. Anything that is not a yes or a no
-  keeps nothing and is answered as a fresh message. The model is now the author
-  of no customer fact anywhere.
+- **`propose_note` no longer writes** (C16). ⚠️ **REVERSED ON 2026-09-19 BY THE
+  FOUNDER. Do not restore this.** His instruction: "We want to deliberately
+  remember as much as possible from each and every interaction, unless the user
+  tells us not to remember anything." Asking first is the wrong default, because
+  a question most people never answer means almost nothing is ever kept. So
+  `propose_note` writes immediately again, through the single validated writer
+  `addNote`, and the `AGENT_NOTE_CONFIRM` state and its plumbing are gone. What
+  did NOT change, because it is money safety and not preference: no note may
+  contain a digit, so no balance, amount, PIN or account number can enter
+  memory. The customer's controls are three different things: "stop
+  remembering" refuses future writes and destroys nothing, "what do you know
+  about me" shows everything, "forget me" erases. The bigger fault found while
+  reversing it: the word `notes` had never appeared in `lib/context-pack.js`, so
+  everything ever remembered had been written and shown to nobody; notes now
+  reach the model every turn. See changelog 53 and `tests/agent-memory.test.mjs`.
 - **The legacy JSON conversation ring is deleted** (C14). **63** write sites in
   the processor, not the "about twenty" v1.5 recorded, and no readers anywhere.
   Each was a read-modify-write of a column that also carries live flow state and
