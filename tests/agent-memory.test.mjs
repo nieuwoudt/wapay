@@ -17,7 +17,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { executeProposeNote, noteRejection } from '../lib/agent/tools/proposals.js';
 import { addNote, setMemoryOptOut, NOTES_MAX } from '../lib/user-profile.js';
@@ -140,6 +140,25 @@ test('the three memory commands are distinct, and stopping is never answered wit
   const sw = processor.slice(processor.indexOf('async function handleMemorySwitch('), processor.indexOf('async function handleAboutMe('));
   assert.ok(!/eraseTurns|notes: \[\]/.test(sw), 'stopping keeps what is already there');
   assert.match(sw, /setMemoryOptOut\(/);
+});
+
+test('the obsolete confirmation test cannot come back from the dead', () => {
+  // tests/agent-note-confirm.test.mjs asserted the OPPOSITE contract: that
+  // propose_note writes nothing without a confirming turn. The founder
+  // reversed that on 2026-09-19 ("remember as much as possible ... unless the
+  // user tells us not to"), and this file replaced it.
+  //
+  // It survived deletion once, because the rsync from the fast copy to the
+  // iCloud repo deliberately carries no --delete (a --delete once removed
+  // brand fonts that live only in iCloud), so removing a file in one tree
+  // never removes it from the other. A peer session found it red at HEAD.
+  // Deleting a file must be done with `git rm` in the iCloud repo; this test
+  // is the backstop that says so out loud instead of five confusing failures.
+  const dir = fileURLToPath(new URL('.', import.meta.url));
+  const offenders = readdirSync(dir)
+    .filter((f) => f.endsWith('.test.mjs') && f !== 'agent-memory.test.mjs')
+    .filter((f) => readFileSync(`${dir}${f}`, 'utf8').includes('AGENT_NOTE_CONFIRM'));
+  assert.deepEqual(offenders, [], 'a test still asserts the confirmation contract the founder reversed: delete it with `git rm`, not rm');
 });
 
 test('the model asks no permission and the runtime holds no pending note', () => {
