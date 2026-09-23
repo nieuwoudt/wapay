@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-09-23 (60) — A stale test that made HEAD red for four days, the handover corrected where the founder had overtaken it, and the promotion clock made trustworthy (BUGLOG #81)
+
+Three things, all found by someone else looking.
+
+**A peer session found HEAD red, and it was mine.**
+`tests/agent-note-confirm.test.mjs` asserted the contract the founder reversed
+on 19 September: that `propose_note` writes nothing without a confirming turn.
+Five failures, all of them that old contract. Its replacement,
+`tests/agent-memory.test.mjs`, had been green throughout, which is exactly why
+I never saw it. It survived deletion because it was removed with `rm` in the
+fast copy, and the rsync to the repo deliberately carries no `--delete` (a
+`--delete` once wiped brand fonts that exist only in iCloud), so the removal
+never reached the repo, `git add -A` staged nothing, and the file stayed
+tracked. **A file is deleted with `git rm` in the iCloud repo.** The handover
+carries the rule and the orphan check; a backstop in `agent-memory.test.mjs`
+fails one test with that instruction if any test mentions `AGENT_NOTE_CONFIRM`
+again.
+
+**The handover was telling the next session to restore a behaviour the founder
+had rejected.** It still read "propose_note no longer writes". Corrected in
+place with his words and the reason, alongside what did NOT change: no note may
+contain a digit, so no balance, amount, PIN or account number can enter memory.
+
+**The promotion clock is measured over all time now.** It was computed from the
+agent turns inside the card's `days` window, which looks right until the week
+is nearly won: on day seven the money gate that reset the clock falls out of a
+seven-day window, so the count would jump rather than reach seven honestly, and
+a quiet week would empty the window and report "not started" for a clock that
+had been running. Same fault as the original pilot gate, a number that cannot
+tell "nothing happened" from "something is broken". The card also shows the date
+it opens.
+
+That change took the card down with a 500 for four minutes (BUGLOG #81), which
+is BUGLOG #67's shape again: an identifier used and never declared, accepted by
+both `node --check` and the build.
+
+**Where the pilot week stands:** 4 clean days of 7, 21 agent turns, no errors,
+no gate since the two false positives of 19 September. It opens 26 September if
+nothing fires.
+
+Unit 919/919, build green.
+
 ## 2026-09-23 (59) — Pay-out requests reach OTT: empty optionals off the wire, problem documents recognised, a sandbox probe for supplier questions
 
 OTT could not find either of the founder's pay-outs because neither was

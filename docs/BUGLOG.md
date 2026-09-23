@@ -4,6 +4,13 @@
 
 ---
 
+## 81. The Mission Control conversations card answered 500 for four minutes: a variable deleted out from under its own use
+
+- **Symptom:** 2026-09-23, immediately after `c78d8f8`. Every request to `GET /api/admin/conversations` answered `500 {"error":"UNAVAILABLE","message":"firedMoneyGateAt is not defined"}`. Caught by the post-deploy check in this session, not by a customer: the route is admin-only, so no customer path, no money path and no data were affected.
+- **Root cause:** that commit replaced the windowed money-gate scan with an all-time read and removed `firedMoneyGateAt`, but the response body still used it to compute `moneyGateFired`. **This is BUGLOG #67 exactly**: `node --check` and `next build` both accept an identifier that is used and never declared, and the unit suite never loads the route. The handover prescribes a `tsc --allowJs --checkJs` sweep grepping `TS2304` for precisely this; it was run earlier the same day on other files and not on this one.
+- **Fix:** `moneyGateFired` reads `lastMoneyGateAt !== null`, which is the variable that replaced it and means the same thing. Verified recovered in production before the deploy was called done.
+- **Guard:** the same one #67 left, used properly. The rule is now explicit: the `TS2304` sweep runs over EVERY file a change touches, not the ones that feel risky. A route with no runtime test is exactly where an undeclared identifier survives to production, which is why `tests/webhook-route-runtime.test.mjs` exists for the webhook; the admin routes have no equivalent, and that is the standing gap this exploited.
+
 ## 80. Every pay-out request died at OTT's front door: an empty string in an integer field (HTTP 400), and the 400 was read as a payout status
 
 - **Symptom:** the founder's two live pay-outs never existed at OTT. 2026-09-15 21:52, PayShap R50, reference WPC15800A7BD6637: parked PENDING/UNKNOWN, no response recorded (old code), reconciled the next day to "Failed to retrieve record". 2026-09-17 07:27, Nedbank cardless R20, reference WP801A17C629E860: the new record shows `httpStatus 400` and the body `{"title":"One or more validation errors occurred.","status":400,"errors":{"purchase":["The purchase field is required."],"$.recipient.bank_id":["The JSON value could not be converted to System.Int32 …"]}}`. OTT (Yaku, 2026-09-23): "I am unable to find any transactions made on the account."

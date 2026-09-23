@@ -65,7 +65,7 @@
 </style>
 
 <div class="wrap">
-  <div class="eyebrow">WaPay · engineering decision · 16 September 2026 · Version 10, redrawn 19 September at build 96d7048</div>
+  <div class="eyebrow">WaPay · engineering decision · 16 September 2026 · Version 11, redrawn 23 September at build adc4d6d</div>
   <h1>Pay Agent Architecture</h1>
   <p class="stand">The chat feels like a menu because the customer is talking to the pre-agent runtime: 29 deterministic intercepts, two serial classifier calls, and a model that has never been shown a single fact about the customer. The agent described in the recon was never built. This page shows what runs today, the target that six read-only readers, four independent designers, three judges and two refuters per claim converged on, and the order to build it in.</p>
 
@@ -86,7 +86,7 @@
     <p>Not the model, and not the number of agents. FNB already runs eWallet on WhatsApp, and any bank can rent the same model. The defensible asset is the per-customer record under one WhatsApp identity: every deposit, send, purchase, pay-out and pay link across every product, read on every turn, plus a policy-gated registry that any partner product (a bank link, a credit check, an insurance quote) plugs into as a module. That is what a bank cannot bolt onto a menu quickly, and it is the cheaper thing to build. So the order is plumbing first, brain second.</p>
   </div>
 
-  <h2>Status: the pilot week is running, and all of Phase 3 that is not gated is done</h2>
+  <h2>Status: 4 of 7 clean days, opening 26 September</h2>
   <p>The target diagram below carries a badge on every component: ✓ shipped, ◐ partly or live only behind the pilot list, ◌ shadow, ○ next. Unit tests 839 of 839 across 82 files, build green, chat harness 29 of 29, three read-only adversarial reviews before the three pushes, and three migrations applied to production before the code that reads them. Design record in the repo: docs/AGENT_ARCHITECTURE_V2.md (section 13 is the shipped log); BUGLOG #56 to #64; CHANGELOG entries 35, 36 and 37.</p>
   <div class="verdict">
     <div class="card accent">
@@ -149,20 +149,20 @@
 <title>WaPay Pay agent phase map</title>
 <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
 <text x="24" y="32" font-size="18" font-weight="600">WaPay Pay agent · phase map</text>
-<text x="1372" y="32" font-size="12" text-anchor="end" opacity="0.85">Status at HEAD 96d7048 · 2026-09-19 · design record docs/AGENT_ARCHITECTURE_V2.md §3 to §8, §13</text>
+<text x="1372" y="32" font-size="12" text-anchor="end" opacity="0.85">Status at HEAD adc4d6d · 2026-09-23 · design record docs/AGENT_ARCHITECTURE_V2.md §3 to §8, §13</text>
 <text x="24" y="54" font-size="12" opacity="0.8">39 components in build order: ✓ 16 shipped · ◐ 4 partial · ◌ 10 shadow · ○ 9 next. Seven turned green since 17 Sep, three of them today: the dead code retired, the source-text test locks rewritten, and the jobs table drained. The rust bar is the promotion gate; the dashed green line is where the build stands.</text>
 <line x1="24" y1="96" x2="782" y2="96" stroke="currentColor" stroke-width="1.5" opacity="0.7" marker-end="url(#ah)"/>
 <text x="24" y="80" font-size="11" opacity="0.85">Build order → Phases 0, 1 shipped; Phase 2 deployed, pilot week running (each on the previous one)</text>
 <line x1="858" y1="96" x2="1372" y2="96" stroke="currentColor" stroke-width="1.5" opacity="0.7" marker-end="url(#ah)"/>
 <text x="858" y="80" font-size="11" opacity="0.85">→ after the gate: Phase 3, then Phase 4 (two rows landed early)</text>
 <rect x="619" y="66" width="171" height="18" rx="9" fill="#359853"/>
-<text x="704.5" y="79" font-size="11" text-anchor="middle" font-weight="600" fill="#fff">YOU ARE HERE · 96d7048</text>
+<text x="704.5" y="79" font-size="11" text-anchor="middle" font-weight="600" fill="#fff">YOU ARE HERE · adc4d6d</text>
 <line x1="790" y1="84" x2="790" y2="598" stroke="#359853" stroke-width="2" stroke-dasharray="5 4"/>
 <path d="M785 598 l10 0 l-5 8 z" fill="#359853"/>
 <rect x="798" y="88" width="56" height="510" rx="6" fill="#B3541E" fill-opacity="0.14" stroke="#B3541E" stroke-width="1.5"/>
-<text x="815" y="588" font-size="11" font-weight="600" fill="#B3541E" transform="rotate(-90 815 588)">GATE · Phase 2 → 3 · 1 OF 2 MET · week RUNNING since 19 Sep</text>
+<text x="815" y="588" font-size="11" font-weight="600" fill="#B3541E" transform="rotate(-90 815 588)">GATE · Phase 2 → 3 · 1 OF 2 MET · 4 of 7 clean days</text>
 <text x="829" y="588" font-size="11" transform="rotate(-90 829 588)">1. full eval per language at or above the two-tier engine pass rate · MET</text>
-<text x="843" y="588" font-size="11" transform="rotate(-90 843 588)">2. one week of pilot turns with no gate firing on money copy · RUNNING, clock reset 19 Sep</text>
+<text x="843" y="588" font-size="11" transform="rotate(-90 843 588)">2. one week of pilot turns with no gate firing on money copy · 4 OF 7 CLEAN DAYS, opens 26 Sep</text>
 <rect x="24" y="110" width="246" height="488" rx="8" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4"/>
 <path d="M32 110 h230 a8 8 0 0 1 8 8 v72 h-246 v-72 a8 8 0 0 1 8 -8 z" fill="#359853" fill-opacity="0.13"/>
 <text x="34" y="132" font-size="16" font-weight="600" fill="#359853">Phase 0</text>
@@ -429,13 +429,13 @@
 <rect x="24" y="729" width="14" height="14" rx="3" fill="#B3541E" fill-opacity="0.14" stroke="#B3541E" stroke-width="1.5"/>
 <text x="46" y="740" font-size="11" opacity="0.9">GATE bar: Phase 2 → 3 promotion test, one of two met (box below)</text>
 <line x1="453.92" y1="728" x2="453.92" y2="744" stroke="#359853" stroke-width="2" stroke-dasharray="4 3"/>
-<text x="465.92" y="740" font-size="11" opacity="0.9">You are here: HEAD 96d7048, Phase 2 deployed, the pilot week RUNNING</text>
+<text x="465.92" y="740" font-size="11" opacity="0.9">You are here: HEAD adc4d6d, pilot week 4 of 7 clean days</text>
 <path d="M880 736 h12" stroke="currentColor" stroke-width="1.5" opacity="0.7" marker-end="url(#ah)"/>
-<text x="902" y="740" font-size="11" opacity="0.9">Build order: 3915d81 P0 · ea48cd4 P1 · a803950 P2 · c1821e0 · 9f7ba9a · 96d7048 HEAD</text>
+<text x="902" y="740" font-size="11" opacity="0.9">Build order: 3915d81 P0 · ea48cd4 P1 · a803950 P2 · c1821e0 · 96d7048 · adc4d6d HEAD</text>
 <rect x="24" y="752" width="1348" height="78" rx="8" fill="#B3541E" fill-opacity="0.06" stroke="#B3541E" stroke-width="1.5"/>
 <text x="34" y="769" font-size="12" font-weight="600" fill="#B3541E">The gate between Phase 2 and Phase 3 · ONE OF TWO CONDITIONS MET · both must hold before anyone is promoted off the pilot list</text>
 <text x="34" y="787" font-size="11" opacity="0.95">1. Full eval per language at or above the two-tier engine pass rate.   MET: 156 of 156 run in eleven languages, 99.4% overall and 100% on action and outcome, against the engine's 100% on the shared 132.</text>
-<text x="34" y="802" font-size="11" opacity="0.95">2. One week of pilot turns with no gate firing on money copy.   RUNNING: 18 real agent turns on 19 Sep, the first ever. The RECEIPT gate fired TWICE on honest answers about his own history, which reset the clean-day clock to zero; both were false positives and both are fixed (BUGLOG #77). The clock restarts on the next turn.</text>
+<text x="34" y="802" font-size="11" opacity="0.95">2. One week of pilot turns with no gate firing on money copy.   4 OF 7 CLEAN DAYS, opening 26 September: 21 agent turns, no errors, and no gate since the two false positives of 19 September (BUGLOG #77, both fixed). The clock is measured over all history, not over the card window.</text>
 <text x="34" y="817" font-size="11" opacity="0.75">Since 18 Sep: the pilot gate matched one spelling of a number so the week had never started (#73); the JSON ring deleted with its erasure gap (#74); a gift could strand (#75); airtime could not be bought at all and "mine" cancelled it (#76); two true answers were suppressed (#77); airtime's flow is now proven but Blu QA vends only to four test numbers (#78); electricity defaulted a missing amount to R50 (#79).</text>
 </svg>
     </div>
@@ -458,7 +458,7 @@
     <tr><td><b>Data bundles</b></td><td>Buy a data bundle for any number</td><td>Code live, Blu QA credentials</td><td>NO. Zero purchases in production, ever. Shares the airtime code path, so the same supplier limit applies.</td><td><span class="pill change">D</span></td><td>Blu production credentials, then one end-to-end purchase.</td></tr>
     <tr><td><b>Electricity</b></td><td>Prepaid electricity token for a meter</td><td>Code live, Blu QA credentials</td><td>NO. Zero purchases in production, ever. A silent R50 default was found and removed on 19 Sep before any customer met it (BUGLOG #79).</td><td><span class="pill change">D</span></td><td>Blu production credentials, then one token against a real meter.</td></tr>
     <tr><td><b>Load a voucher into your wallet</b></td><td>Redeem an OTT or Blu voucher as balance</td><td>Code live, OTT TEST host</td><td>NO. No redemption in production.</td><td><span class="pill drop">F</span></td><td>The OTT live cutover, then redeem one real voucher.</td></tr>
-    <tr><td><b>Withdraw to a bank or ATM</b></td><td>Cash out to PayShap, an ATM or an eWallet</td><td>ON, pilot allowlist only, OTT sandbox</td><td>NO. 3 attempts, 3 FAILED, newest 17 Sep 2026. OTT answered "Failed to retrieve record" every time. No money has ever reached a bank.</td><td><span class="pill drop">F</span></td><td>OTT must say what their sandbox returns, then production pay-out credentials.</td></tr>
+    <tr><td><b>Withdraw to a bank or ATM</b></td><td>Cash out to PayShap, an ATM or an eWallet</td><td>ON, pilot allowlist only, OTT sandbox</td><td>NO CUSTOMER WITHDRAWAL HAS EVER SUCCEEDED: 3 attempts, 3 FAILED, newest 17 Sep 2026, and the production database still shows exactly those three rows. What DID change on 23 Sep is the wire format: OTT's sandbox accepted a request for the first time (status 100) through the new internal probe, which deliberately writes no ledger and moves no money. So the request is now known to be well formed; the flow is still unproven end to end.</td><td><span class="pill drop">F</span></td><td>One real withdrawal through the chat flow, now that the wire format is proven. Then OTT production credentials, which the founder holds.</td></tr>
     <tr><td><b>WaPay for Business</b></td><td>Take payments as a business, customer CRM</td><td>LIVE, invite list only</td><td>PARTLY. The portal and links work; it rides the same pay-link rail graded A above.</td><td><span class="pill add">B</span></td><td>Attach business.wapay.co.za and onboard one real merchant.</td></tr>
     </tbody>
   </table></div>
@@ -1067,9 +1067,9 @@
   <ul>
     <li><b>Prove airtime with a supplier test number.</b> Send "buy R10 airtime", then 0830012300 (MTN). That is a whitelisted Blu QA number and should vend for real. It is the last untested link in the chain, and it takes one minute.</li>
     <li><b>Then the Blu production cutover.</b> It is the single highest-value switch left: it turns airtime, data and electricity from three D and C grades into three live products in one move. Nothing in the chat is in the way.</li>
+    <li><b>Try a withdrawal again.</b> Every pay-out request used to die at OTT's front door on the wire format; that is fixed and the sandbox accepted a request on 23 September. Nothing has been proven through the actual flow, and the three rows in production are still three failures, so a R50 withdrawal is now a genuinely informative test rather than a repeat of a known failure.</li>
     <li><b>Keep messaging from the pilot number.</b> The promotion week restarted at zero on 19 September; the two false-positive gates that were resetting it are fixed.</li>
     <li><b>An approved UTILITY template</b> for WAPAY_TEMPLATE_PAYOUT_OUTCOME, body taking amount, method and reference in that order. Env changes only take effect on redeploy.</li>
-    <li><b>Ask OTT what their sandbox returns for a pay-out.</b> Three attempts, three FAILED, no money has ever reached a bank.</li>
     <li><b>The Vercel plan</b>, so the ten-minute pay-out sweep can be scheduled.</li>
     <li><b>Rotate the leaked Blu QA and Meta secrets.</b></li>
   </ul>
