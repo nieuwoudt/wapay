@@ -87,8 +87,14 @@ test('bank transfer: account → bank name → confirm; ATM cash: number typed; 
   assert.equal(ok.state, 'PAYOUT_CONFIRM'); assert.equal(ok.data.recipient.mobile, '0821112222'); assert.equal(ok.data.feeCents, 1800);
   assert.equal((await handleWithdrawReply({ account: verified, state: 'PAYOUT_CONFIRM', data: ok.data, text: 'cancel' })).cancelled, true);
   assert.equal((await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: c.data, text: 'stop' })).state, null);
-  const pending = await executeWithdraw({ account: verified, data: ok.data, deps: deps(100000, { ok: true, status: 'PENDING', reference: 'WPPEND', amountCents: 30000, feeCents: 1600 }) });
-  assert.match(pending.text, /Sent\./); assert.match(pending.text, /WPPEND/);
+  const pending = await executeWithdraw({ account: verified, data: ok.data, deps: deps(100000, { ok: true, status: 'PENDING', reference: 'WPPEND', amountCents: 30000, feeCents: 1600, outcome: 'PENDING_FINALISATION' }) });
+  assert.match(pending.text, /In progress\./); assert.match(pending.text, /handed to the bank rail/); assert.match(pending.text, /WPPEND/); assert.ok(!/within minutes/.test(pending.text), 'no time promise (BUGLOG #82)');
+  // A transport timeout is not a hand-over: nothing is claimed, the held money is named, no "Sent" (BUGLOG #82).
+  for (const outcome of ['TRANSPORT_INDETERMINATE', 'UNKNOWN', 'HTTP_502', undefined]) {
+    const unsure = await executeWithdraw({ account: verified, data: ok.data, deps: deps(100000, { ok: true, status: 'PENDING', reference: 'WPUNK', amountCents: 30000, feeCents: 1600, outcome }) });
+    assert.match(unsure.text, /could not get confirmation from the bank rail just now/); assert.match(unsure.text, /R300 plus the R16 fee is held, not spent/); assert.match(unsure.text, /WPUNK/);
+    assert.ok(!/Sent|handed to the bank rail|within minutes/.test(unsure.text), `nothing claimed for ${outcome}`);
+  }
   const failed = await executeWithdraw({ account: verified, data: ok.data, deps: deps(100000, { ok: false, status: 'FAILED', error: 'INVALID_MOBILE', reference: 'WPX' }) });
   assert.match(failed.text, /did not go through/); assert.match(failed.text, /Nothing has left your balance/);
   const broke = await executeWithdraw({ account: verified, data: ok.data, deps: deps(100000, { ok: false, error: 'INSUFFICIENT_FUNDS', totalCents: 31600 }) });

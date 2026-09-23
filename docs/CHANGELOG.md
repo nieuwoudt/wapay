@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-09-23 (61) — A withdrawal that nobody confirmed is no longer announced as sent
+
+The PENDING reply after a withdrawal said "Sent … usually within minutes"
+whether OTT had acknowledged the request or our call had simply timed out
+(BUGLOG #82). It now tells the two truths apart: a real OTT pending is
+"In progress, handed to the bank rail", a transport timeout is "I could
+not get confirmation just now, so I am checking; your R50 plus the fee is
+held, not spent". Neither names a time.
+
 ## 2026-09-23 (60) — A stale test that made HEAD red for four days, the handover corrected where the founder had overtaken it, and the promotion clock made trustworthy (BUGLOG #81)
 
 Three things, all found by someone else looking.

@@ -4,6 +4,13 @@
 
 ---
 
+## 82. A pay-out nobody had confirmed was announced as "Sent … usually within minutes"
+
+- **Symptom (peer review of the timeout path, 2026-09-23):** the single PENDING reply in `executeWithdraw` said "⏳ Sent. R50 has been handed to the bank rail … I'll message you the moment the bank confirms it, usually within minutes" for every PENDING outcome, including `TRANSPORT_INDETERMINATE` (the request may never have arrived) and an unreadable answer. On the sandbox PayShap took over 20 s and then failed at the provider, so the customer's lived sequence was "Sent, usually within minutes" followed by "it failed, your money is back": the founder's own first PayShap on 15 September read exactly like that.
+- **Root cause:** one string for two truths, and a time promise the money rules forbid.
+- **Fix:** `requestPayout` returns `outcome` with a PENDING result; `payoutHandedOver(outcome)` is true only for a real OTT status (98/99, duplicate-reconcile); a genuine hand-over says "In progress … handed to the bank rail … if it does not go through the amount and the fee come straight back", a transport timeout or unreadable answer says "I could not get confirmation from the bank rail just now, so I am checking on it … your R50 plus the R8 fee is held, not spent, and I will message you here either way". No time in either.
+- **Guard:** `tests/payout-chat.test.mjs` (both strings; four unconfirmed outcomes never say Sent, handed over, or within minutes).
+
 ## 81. The Mission Control conversations card answered 500 for four minutes: a variable deleted out from under its own use
 
 - **Symptom:** 2026-09-23, immediately after `c78d8f8`. Every request to `GET /api/admin/conversations` answered `500 {"error":"UNAVAILABLE","message":"firedMoneyGateAt is not defined"}`. Caught by the post-deploy check in this session, not by a customer: the route is admin-only, so no customer path, no money path and no data were affected.
