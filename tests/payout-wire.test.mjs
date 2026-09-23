@@ -61,9 +61,9 @@ test('performPayout: the wire body carries no empty fields and the hash is the s
   assert.ok(!('bank_id' in seen.body.recipient) && !('email' in seen.body.recipient), 'no "" on the wire');
   assert.equal(seen.body.amount, '50.00');
   const expected = payoutHash([
-    '', '62525898394', '50.00', '', 'FNB', '250655', '', '', '', 'Nieuwoudt', '9001185079083', '', '', '27787051175', '', '127', 'PayShap Account', 'Nieuwoudt', '', '', 'WPC15800A7BD6637',
+    '', '62525898394', '50.00', '0', 'FNB', '250655', '', '', '', 'Nieuwoudt', '9001185079083', '', '', '27787051175', '', '127', 'PayShap Account', 'Nieuwoudt', '', '', 'WPC15800A7BD6637',
   ], API_KEY);
-  assert.equal(seen.body.hashcheck, expected, 'absent optionals hash as "" exactly as before');
+  assert.equal(seen.body.hashcheck, expected, 'absent string optionals hash as "", the absent bank_id as "0" (OTT sandbox, 2026-09-23)');
   assert.equal(out.settlement, 'SETTLE'); assert.equal(out.wire.url, seen.url); assert.equal(out.wire.body.hashcheck, expected);
 });
 
@@ -134,9 +134,9 @@ test('static: the sandbox probe route is gated, sandbox-only, ledger-free, singl
   assert.match(src, /k === 'hashcheck' \?/, 'the hash never leaves whole');
 });
 
-test('hash styles: plain amount renders like double.ToString, bank_id can default to "0"; the default style is unchanged', async () => {
+test('hash styles: plain amount renders like double.ToString, bank_id defaults to "0"; the proven style is the default', async () => {
   assert.equal(plainAmountString(2000), '20'); assert.equal(plainAmountString(2050), '20.5'); assert.equal(plainAmountString(2005), '20.05'); assert.equal(plainAmountString(300000), '3000');
-  assert.deepEqual(DEFAULT_HASH_STYLE, { amount: '2dp', bankId: 'empty' });
+  assert.deepEqual(DEFAULT_HASH_STYLE, { amount: '2dp', bankId: 'zero' }, 'the proven convention is the default');
   const recipient = { firstname: 'A', surname: 'B', id_number: '9001185079083', mobile: '27787051175' };
   const order = (amt, bank) => ['', '', amt, bank, '', '', '', '', '', 'A', '9001185079083', '', '', '27787051175', '', '4', 'Nedbank Cardless Withdrawal', 'B', '', '', 'WPX'];
   for (const [style, amt, bank] of [[{ amount: '2dp', bankId: 'empty' }, '20.00', ''], [{ amount: 'plain', bankId: 'empty' }, '20', ''], [{ amount: '2dp', bankId: 'zero' }, '20.00', '0'], [{ amount: 'plain', bankId: 'zero' }, '20', '0']]) {

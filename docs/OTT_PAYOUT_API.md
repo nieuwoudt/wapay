@@ -162,8 +162,15 @@ payout is created. `wireRecipient` now omits empty optionals and sends integer f
 numbers; the hash still uses `""` for absents (BUGLOG #80). A problem document's `status`
 is the HTTP code, never a payout status: `isProblemDetails` keeps it out of the status table.
 
-**Answer to 2 (hash formatting):** unchanged and unconfirmed by a successful sandbox pay-out
-until the probe after the fix (see `docs/PAYOUTS.md`, 2026-09-23).
+**Answer to 2 (hash formatting): PROVEN 2026-09-23.** The amount hashes as the documented 2dp
+string (`"20.00"`; a plain `"20"` fails with status 2). An ABSENT `bank_id` hashes as `"0"`, OTT's
+Int32 default, not as `""`; every absent string optional hashes as `""`. OTT echoes the request as
+it parsed it in every response (`request: {...}`), and every default it fills there is a value it
+hashed. `DEFAULT_HASH_STYLE = { amount: '2dp', bankId: 'zero' }` in `lib/ott-payout.js`; the probe
+route can try the other renderings if OTT ever changes. First accepted sandbox pay-out: Nedbank
+cardless R20, status 100, paymentReference 126141. Fields OTT's model carries that the document
+does not list: `gender`, `client_account` (recipient) and `optionalData.field1..field5`; none are in
+the hash order.
 
 ### The original questions
 

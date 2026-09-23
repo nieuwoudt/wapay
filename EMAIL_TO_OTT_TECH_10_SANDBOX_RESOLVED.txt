@@ -1,0 +1,46 @@
+To: Yaku <[OTT technical contact email]>
+Cc: Keamogetsoe Modikwe <keamo@ott-mobile.com>
+Subject: Re: OTT Payout sandbox: request and responses, and what we found
+
+Hi Yaku,
+
+Thank you, and apologies for the loose wording in my last email: I did mean the status code in the JSON body, not the HTTP status. Here are the exact details you asked for, and the answer, which turned out to be on our side.
+
+URL AND REQUEST
+
+POST https://test-payoutapi.ott-mobile.com/api/purchase/v1/PerformPayout
+Authorization: Basic (API username : API password), Content-Type: application/json
+
+The body we sent on 15 and 17 September (values masked):
+
+{"yourUniqueReference":"WPC15800A7BD6637","amount":"50.00","provider":{"providerCode":"127","providerName":"PayShap Account"},"recipient":{"firstname":"Nieuwoudt","surname":"Gresse","id_number":"***083","mobile":"***175","account_number":"***394","branch_code":"250655","branch_name":"FNB","bank_id":"","email":"","title":"","middle_name":"","date_of_birth":"","id_type":"","country_of_issue":"","nationality":"","account_name":"","swift_code":""},"hashcheck":"..."}
+
+WHAT CAME BACK
+
+Our request of 17 September (reference WP801A17C629E860, Nedbank cardless, R20.00) is recorded on our side as:
+
+HTTP 400
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400,"errors":{"purchase":["The purchase field is required."],"$.recipient.bank_id":["The JSON value could not be converted to System.Int32. Path: $.recipient.bank_id ..."]}}
+
+So the request was rejected at model validation, before a payout could be created, which is why you cannot find any transactions: we were sending the optional fields we did not have as empty strings, and bank_id is an integer on your side. The 15 September request failed the same way. Nothing to fix on your side; we have corrected our client.
+
+WHAT WE CHANGED, AND THE RESULT
+
+1. Optional fields we do not have are no longer sent at all, and bank_id is sent as a number when we have one.
+2. With that change your sandbox processed the request and answered status 2, Invalid Hash, echoing the request as parsed (amount 20, providerCode 4, bank_id 0). We then matched your hashing: the amount as the 2 decimal string, and an absent bank_id hashed as "0" (your integer default) rather than as an empty string.
+3. Result on 23 September at 17:58 SAST, Nedbank Cardless Withdrawal, R20.00: status 100, "Payment successful", paymentReference 126141 (our reference starts WPD64CD). You should be able to see that transaction on the test account now.
+
+THREE SMALL CONFIRMATIONS
+
+1. Please confirm that an absent bank_id must be hashed as "0" in production as well, and that every other absent optional hashes as an empty string. The Payout API document does not describe this.
+2. Does the test environment send the status webhook for a successful payout? We did not receive one for paymentReference 126141 at https://pleasepayme.co.za/api/webhooks/ott-payout.
+3. Your parsed request shows recipient fields the document does not list (gender, client_account) and optionalData.field1 to field5. Please confirm none of them take part in the hash.
+
+PRODUCTION
+
+Thank you for the production approval and credentials. Before we switch, we will activate the providers on the production merchant, set the webhook URL there and fund the float. If there is anything else on your checklist for a first production payout, please let us know.
+
+Thank you again
+
+Niev
+WaPay

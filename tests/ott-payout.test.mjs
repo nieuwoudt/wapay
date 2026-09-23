@@ -175,7 +175,7 @@ test('performPayout: sends Basic auth + JSON, hashes the documented field order,
   // Body carries the computed hash in the documented order.
   const expectedHash = payoutHash(
     [
-      recipient.account_name, recipient.account_number, '50.00', undefined /*bank_id*/,
+      recipient.account_name, recipient.account_number, '50.00', '0' /*bank_id absent: OTT hashes its Int32 default, proven 2026-09-23*/,
       recipient.branch_name, recipient.branch_code, undefined, undefined, undefined,
       recipient.firstname, recipient.id_number, undefined, undefined, recipient.mobile,
       undefined, 5, 'PAYSHAP', recipient.surname, undefined, undefined, 'WAPAY-PO-ABC123',
