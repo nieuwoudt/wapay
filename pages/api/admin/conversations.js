@@ -135,14 +135,32 @@ export default async function handler(req, res) {
     // gate, because a week that contains a RECEIPT, PARTNER or BETTING block
     // is not a clean week (docs/AGENT_ARCHITECTURE_V2.md 13).
     const MONEY_GATES = ['RECEIPT', 'PARTNER', 'BETTING'];
-    const firedMoneyGateAt = (agentRows || [])
-      .filter((r) => (Array.isArray(r.gatesFired) ? r.gatesFired : []).some((g) => MONEY_GATES.includes(String(g))))
-      .map((r) => new Date(r.createdAt).getTime());
-    const agentTimes = agent.map((r) => new Date(r.createdAt).getTime());
-    const firstAgentTurnAt = agentTimes.length ? Math.min(...agentTimes) : null;
-    const lastMoneyGateAt = firedMoneyGateAt.length ? Math.max(...firedMoneyGateAt) : null;
+    // The promotion clock is measured over ALL TIME, never over the `days`
+    // window. Windowing it looks right until the week is nearly won: on day
+    // seven the gate that reset the clock falls out of a seven-day window, so
+    // the count would jump; and a quiet week would empty the window entirely
+    // and report "not started" for a clock that had been running the whole
+    // time. That is the same fault as the original pilot gate, a number that
+    // cannot tell "nothing happened" from "something is broken" (2026-09-23).
+    const [firstTurnRow, lastGateRow] = await Promise.all([
+      prisma.agentTurn
+        .findFirst({ where: { path: 'agent' }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } })
+        .catch(() => null),
+      prisma.agentTurn
+        .findMany({
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true, gatesFired: true },
+          take: 500,
+        })
+        .then((rows) => (rows || []).find((r) => (Array.isArray(r.gatesFired) ? r.gatesFired : []).some((g) => MONEY_GATES.includes(String(g)))) || null)
+        .catch(() => null),
+    ]);
+    const firstAgentTurnAt = firstTurnRow ? new Date(firstTurnRow.createdAt).getTime() : null;
+    const lastMoneyGateAt = lastGateRow ? new Date(lastGateRow.createdAt).getTime() : null;
     const cleanSince = firstAgentTurnAt === null ? null : Math.max(firstAgentTurnAt, lastMoneyGateAt || 0);
     const cleanDays = cleanSince === null ? 0 : Math.floor((now - cleanSince) / DAY_MS);
+    // What the founder actually wants to know: the date it opens if nothing fires.
+    const readyAt = cleanSince === null ? null : new Date(cleanSince + 7 * DAY_MS).toISOString();
 
     const accountByWaId = new Map((pilotAccounts || []).map((a) => [a.waId, a.id]));
     const agentTurnsByAccount = {};
@@ -205,6 +223,7 @@ export default async function handler(req, res) {
         moneyGateFired: firedMoneyGateAt.length > 0,
         cleanDays,
         cleanDaysNeeded: 7,
+        readyAt,
       },
       payouts: { parked: parkedRows.length, heldCents, oldestMinutes, rows: parkedRows.slice(0, 12) },
     });

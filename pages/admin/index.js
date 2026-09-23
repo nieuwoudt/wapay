@@ -338,7 +338,11 @@ function Conversations() {
         {stat(
           'Clean days',
           c.shadow.started ? c.shadow.cleanDays + ' / ' + c.shadow.cleanDaysNeeded : 'not started',
-          c.shadow.started ? (c.shadow.moneyGateFired ? 'clock reset by a gate' : 'no gate fired') : 'no agent turn yet',
+          c.shadow.started
+            ? (c.shadow.cleanDays >= c.shadow.cleanDaysNeeded
+                ? 'the week is won'
+                : 'opens ' + new Date(c.shadow.readyAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) + (c.shadow.moneyGateFired ? ', clock reset by a gate' : ''))
+            : 'no agent turn yet',
         )}
         {stat('Agent share', c.agent.shareOfInboundPct == null ? '—' : c.agent.shareOfInboundPct + '%', 'of customer messages')}
         {stat('Latency p50 / p95', ms(c.agent.p50Ms) + ' / ' + ms(c.agent.p95Ms), 'slowest ' + ms(c.agent.maxMs))}
