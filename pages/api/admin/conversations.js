@@ -220,7 +220,7 @@ export default async function handler(req, res) {
         // clock has started at all.
         started: firstAgentTurnAt !== null,
         firstTurnAt: firstAgentTurnAt ? new Date(firstAgentTurnAt).toISOString() : null,
-        moneyGateFired: firedMoneyGateAt.length > 0,
+        moneyGateFired: lastMoneyGateAt !== null,
         cleanDays,
         cleanDaysNeeded: 7,
         readyAt,
