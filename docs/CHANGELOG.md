@@ -19,9 +19,10 @@ body; the customer is told the fault is ours. `POST
 /api/internal/payout-probe` (internal key, sandbox host only, no ledger)
 sends one request exactly as the withdraw flow does and returns the masked
 wire request and raw response. Note for the record: HEAD carried five red
-tests in `tests/agent-note-confirm.test.mjs` from commit a581961 before
-this change (the BUGLOG #74 implementation did not reach the tree); this
-commit does not touch them.
+tests in `tests/agent-note-confirm.test.mjs` before this change; the test
+was obsolete (it asserted the confirmation step the founder reversed on
+19 September), the sources were right, and the peer session deleted it in
+6992691.
 
 ## 2026-09-19 (58) — Phase 4: the daily pay-out sweep stops hiding its own backlog, and a recorded decision about what must NOT move into the queue yet
 

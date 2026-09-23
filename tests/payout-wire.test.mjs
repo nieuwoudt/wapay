@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { OttPayoutClient, wireRecipient, isProblemDetails, problemPaths, payoutHash } from '../lib/ott-payout.js';
+import { OttPayoutClient, wireRecipient, isProblemDetails, problemPaths, payoutHash, plainAmountString, DEFAULT_HASH_STYLE } from '../lib/ott-payout.js';
 import { requestPayout, cleanRecipient } from '../lib/payouts.js';
 import { executeWithdraw } from '../lib/payout-chat.js';
 
@@ -127,8 +127,25 @@ test('static: the sandbox probe route is gated, sandbox-only, ledger-free, singl
   const imports = src.split('\n').filter((l) => l.startsWith('import '));
   assert.ok(!imports.some((l) => /prisma\.js|ledger-post|ledger-core/.test(l)), 'no ledger, no customer row');
   assert.ok(!/requestPayout\(|reserveHold\(|finalisePayout\(/.test(src), 'never moves money');
-  assert.equal((src.match(/performPayout\(/g) || []).length, 1, 'exactly one pay-out request per call');
+  assert.equal((src.match(/performPayout\(/g) || []).length, 1, 'one pay-out request per hash variant, in one loop');
+  assert.match(src, /variants\.slice\(0, 4\)/, 'at most four variants per call'); assert.match(src, /if \(result\.outcome !== 'INVALID_HASH'\) break;/, 'stops at the first accepted hash');
   assert.match(src, /cleanRecipient\(method, recipient, provider\.requiredFields\)/, 'the same recipient cleaning as the withdraw flow');
   assert.match(src, /request: maskDeep\(result\.wire\)/); assert.match(src, /body: maskDeep\(result\.body\)/);
   assert.match(src, /k === 'hashcheck' \?/, 'the hash never leaves whole');
 });
+
+test('hash styles: plain amount renders like double.ToString, bank_id can default to "0"; the default style is unchanged', async () => {
+  assert.equal(plainAmountString(2000), '20'); assert.equal(plainAmountString(2050), '20.5'); assert.equal(plainAmountString(2005), '20.05'); assert.equal(plainAmountString(300000), '3000');
+  assert.deepEqual(DEFAULT_HASH_STYLE, { amount: '2dp', bankId: 'empty' });
+  const recipient = { firstname: 'A', surname: 'B', id_number: '9001185079083', mobile: '27787051175' };
+  const order = (amt, bank) => ['', '', amt, bank, '', '', '', '', '', 'A', '9001185079083', '', '', '27787051175', '', '4', 'Nedbank Cardless Withdrawal', 'B', '', '', 'WPX'];
+  for (const [style, amt, bank] of [[{ amount: '2dp', bankId: 'empty' }, '20.00', ''], [{ amount: 'plain', bankId: 'empty' }, '20', ''], [{ amount: '2dp', bankId: 'zero' }, '20.00', '0'], [{ amount: 'plain', bankId: 'zero' }, '20', '0']]) {
+    const { seen, out } = await withFetch({ status: 401, body: { status: 2, message: 'Invalid Hash' } }, () =>
+      client().performPayout({ amountCents: 2000, providerCode: '4', providerName: 'Nedbank Cardless Withdrawal', recipient, yourUniqueReference: 'WPX', hashStyle: style }));
+    assert.equal(seen.body.hashcheck, payoutHash(order(amt, bank), API_KEY), `style ${JSON.stringify(style)}`);
+    assert.equal(seen.body.amount, '20.00', 'the wire amount never changes with the hash style');
+    assert.ok(!('bank_id' in seen.body.recipient), 'and an absent bank_id stays absent on the wire');
+    assert.equal(out.outcome, 'INVALID_HASH'); assert.deepEqual(out.wire.hashStyle, style);
+  }
+});
+

@@ -10,7 +10,7 @@
  *   POST { method: 'PAYSHAP'|'NEDCASH'|…, amountCents: 2000, recipient: {…}, encoding?: 'form' }
  */
 import crypto from 'node:crypto';
-import { OttPayoutClient } from '../../../lib/ott-payout.js';
+import { OttPayoutClient, DEFAULT_HASH_STYLE } from '../../../lib/ott-payout.js';
 import { resolveProviders, cleanRecipient, payoutReference, payoutConfigured, _resetProviderCache } from '../../../lib/payouts.js';
 
 export const config = { maxDuration: 25 };
@@ -55,15 +55,28 @@ export default async function handler(req, res) {
   } catch (e) {
     return res.status(400).json({ error: e.code || 'BAD_RECIPIENT', field: e.field || null });
   }
-  const reference = payoutReference(`probe-${crypto.randomBytes(8).toString('hex')}`);
-  const result = await client.performPayout({ amountCents, providerCode: provider.providerCode, providerName: provider.providerName, recipient: cleaned, yourUniqueReference: reference });
+  // Hash renderings to try, in order; the first answer that is not "Invalid Hash" ends the run
+  // (a real status means OTT accepted the hash, whatever it then decided about the pay-out).
+  const variants = Array.isArray(req.body?.variants) && req.body.variants.length ? req.body.variants.slice(0, 4) : [DEFAULT_HASH_STYLE];
+  const attempts = [];
+  for (const hashStyle of variants) {
+    const reference = payoutReference(`probe-${crypto.randomBytes(8).toString('hex')}`);
+    const result = await client.performPayout({ amountCents, providerCode: provider.providerCode, providerName: provider.providerName, recipient: cleaned, yourUniqueReference: reference, hashStyle });
+    attempts.push({
+      reference,
+      hashStyle,
+      request: maskDeep(result.wire),
+      response: { httpStatus: result.httpStatus, status: result.status, outcome: result.outcome, settlement: result.settlement, paymentReference: result.paymentReference || null, errors: result.errors || null, body: maskDeep(result.body) },
+    });
+    if (result.outcome !== 'INVALID_HASH') break;
+  }
+  const last = attempts[attempts.length - 1];
   return res.status(200).json({
     checkedAt: new Date().toISOString(),
     build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || null,
     host,
-    reference,
     provider: { method, providerCode: provider.providerCode, providerName: provider.providerName, requiredFields: provider.requiredFields },
-    request: maskDeep(result.wire),
-    response: { httpStatus: result.httpStatus, status: result.status, outcome: result.outcome, settlement: result.settlement, paymentReference: result.paymentReference || null, errors: result.errors || null, body: maskDeep(result.body) },
+    accepted: last.response.outcome !== 'INVALID_HASH' ? last.hashStyle : null,
+    attempts,
   });
 }
