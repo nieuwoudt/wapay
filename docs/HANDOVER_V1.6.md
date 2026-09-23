@@ -26,6 +26,21 @@ Unchanged from v1.5, and all five still earn their place.
    fonts that exist only in iCloud (`marketing/brand/fonts/Archivo-*`,
    `Public-Sans-*`); `git checkout -- marketing/` restored them and the fast
    copy now has them too, but the next `--delete` will find something else.
+
+   **The corollary, which cost a red HEAD on 2026-09-23: because the rsync
+   never deletes, DELETING A FILE WITH `rm` IN THE FAST COPY DOES NOTHING TO
+   THE REPO.** `git add -A` sees no deletion, the file stays tracked, and your
+   local suite is green while everyone else's is red. `tests/agent-note-confirm.test.mjs`
+   lived on like that for four days after the behaviour it tested was
+   reversed, and a peer session found it, not me. **Delete with `git rm` in
+   the iCloud repo.** After removing anything, check:
+   `for f in $(git ls-files); do [ -f ~/Projects/wapay/"$f" ] || echo "ORPHAN: $f"; done`
+
+   **And when another session is live, stage by path, never `git add -A`.**
+   A peer had uncommitted pay-out work sitting in the shared fast copy; an
+   `add -A` would have committed their work in progress under my message
+   (this is BUGLOG #25 happening again). `git status` in the iCloud repo shows
+   what is really yours.
 2. **Never run `pnpm qa:chat` while `pnpm build` is running.** Suite, then
    build, then harness, sequentially.
 3. **Never write JavaScript with backticks or JSX inside `node -e "…"`.** Write
