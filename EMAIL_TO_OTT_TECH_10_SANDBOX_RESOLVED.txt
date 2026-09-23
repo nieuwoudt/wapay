@@ -30,11 +30,16 @@ WHAT WE CHANGED, AND THE RESULT
 2. With that change your sandbox processed the request and answered status 2, Invalid Hash, echoing the request as parsed (amount 20, providerCode 4, bank_id 0). We then matched your hashing: the amount as the 2 decimal string, and an absent bank_id hashed as "0" (your integer default) rather than as an empty string.
 3. Result on 23 September at 17:58 SAST, Nedbank Cardless Withdrawal, R20.00: status 100, "Payment successful", paymentReference 126141 (our reference starts WPD64CD). You should be able to see that transaction on the test account now.
 
-THREE SMALL CONFIRMATIONS
+PAYSHAP ON THE TEST ENVIRONMENT
+
+With the same request format, two PayShap Account payouts (provider code 127, R50.00, an FNB account with branch code 250655) were created on your side (paymentReference 126142 and 126143) but took longer than 20 seconds to answer, and GetPaymentStatus later returned status 97 for both. A Nedbank Cardless Withdrawal sent the same way (paymentReference 126144) answered status 100 within seconds.
+
+FOUR SMALL CONFIRMATIONS
 
 1. Please confirm that an absent bank_id must be hashed as "0" in production as well, and that every other absent optional hashes as an empty string. The Payout API document does not describe this.
-2. Does the test environment send the status webhook for a successful payout? We did not receive one for paymentReference 126141 at https://pleasepayme.co.za/api/webhooks/ott-payout.
-3. Your parsed request shows recipient fields the document does not list (gender, client_account) and optionalData.field1 to field5. Please confirm none of them take part in the hash.
+2. Is status 97 the expected result for PayShap on the test environment (no live bank behind it), or did those two fail for a reason we should fix? And is a PayShap response normally slower than 20 seconds, so that we size our timeout correctly for production?
+3. Does the test environment send the status webhook for a completed payout? We did not receive one for 126141, 126142, 126143 or 126144 at https://pleasepayme.co.za/api/webhooks/ott-payout.
+4. Your parsed request shows recipient fields the document does not list (gender, client_account) and optionalData.field1 to field5. Please confirm none of them take part in the hash.
 
 PRODUCTION
 

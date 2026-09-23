@@ -69,8 +69,11 @@ probe, which writes no ledger and no row; no customer withdrawal has
 completed yet, and the next informative test is one R50 withdrawal through
 the chat. `DEFAULT_HASH_STYLE` carries the proven convention. Two PayShap
 probes the same evening got no response within the 20 s client timeout
-while Nedbank answered in 1 to 12 s; the probe's GET now asks
-GetPaymentStatus for a probe reference so that can be settled. Note for the record: HEAD carried five red
+while Nedbank answered in 1 to 12 s; the probe's GET (GetPaymentStatus)
+showed both PayShap requests were created (126142, 126143) and ended
+status 97, failed at provider, so the format is right for both providers
+and PayShap on the test environment is slow and then rejected on OTT's
+side (asked in the email to OTT). Note for the record: HEAD carried five red
 tests in `tests/agent-note-confirm.test.mjs` before this change; the test
 was obsolete (it asserted the confirmation step the founder reversed on
 19 September), the sources were right, and the peer session deleted it in
