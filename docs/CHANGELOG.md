@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-09-29 (62) — Adumo finished to the edge of our credentials: webhook per transaction, outcome on the intent, Enterprise reporting and reconcile, proven on staging
+
+From the Virtual spec and the public Postman workspace (Enterprise REST API,
+Reporting folder): every Adumo checkout now carries `notificationURL` in its
+signed claims so an async method or a payer who closes the tab still
+settles; a `flow` from the documented allowlist can land the payer on one
+method (CARD, EFT_OZOW, OTT_VOUCHER, …); the return route and the webhook
+store what Adumo said (method and class, masked PAN, card country, bank
+error, 3-D Secure status, `puid`) on the intent, approved or not. New
+`lib/adumo-reporting.js`: OAuth client credentials on `apiv3`, `getState`
+by transaction id or by our merchant reference, and a reconciler that
+credits a PENDING pay-link intent once when Adumo reports AUTHORISED or
+SETTLED for the same gross, through the shared idempotent settlement.
+Routes: `GET /api/internal/adumo-status[?mref=|?tx=]` and
+`GET /api/cron/adumo-reconcile`. Proven on staging with a real hosted-page
+payment (`PRBRJKGW`, R38, test card, non-3DS application): PAID, journal
+`LOAD_ADUMO` 3800, outcome recorded, `getState` AUTHORISED by both keys,
+and a reset intent reconciled to SETTLED with no double credit. What is left
+is credentials, not code: our merchant/application ids and JWT secret, our
+OAuth client, auto-settlement on the live application, SHB's written answer
+on third-party processing. `scripts/dev-adumo-staging.sh` + launch config
+`adumo-staging` repeat the cycle. Suite 925/925, build green.
+
 ## 2026-09-23 (61) — A withdrawal that nobody confirmed is no longer announced as sent
 
 The PENDING reply after a withdrawal said "Sent … usually within minutes"

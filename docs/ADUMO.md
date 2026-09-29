@@ -7,10 +7,13 @@
 | Piece | State |
 |---|---|
 | Hosted-page ("Virtual") integration: signed request, redirect, signed response, settlement | ✅ built, **proven on Adumo's staging** with the published test merchant: a R38 request was paid with test card 4111… (non-3DS application), the browser returned a signed token, the request went PAID and the ledger posted `LOAD_ADUMO`; a declined 3DS attempt came back as `TDS_AUTH_REQUIRED` and showed the "did not go through" notice with nothing credited |
-| Webhook for asynchronous methods (Instant EFT / Capitec Pay) | ✅ built (`/api/webhooks/adumo`), same verification and idempotent settlement; **enable with support@adumoonline.com** once we have a live application |
+| Webhook for asynchronous methods (Instant EFT / Capitec Pay) | ✅ built (`/api/webhooks/adumo`), same verification and idempotent settlement; since 2026-09-29 every checkout also carries `notificationURL` in its signed claims (a per-transaction webhook, virtual.php), so the portal-level enablement with support@adumoonline.com is belt and braces |
+| Outcome on the intent (2026-09-29) | ✅ the return route and the webhook store `adumoOutcome` (method and its class, masked PAN `411111******1111`, card country, bank error code and message, 3-D Secure status, `puid`) on the intent whether or not it paid: the fee truth per method (debit vs credit vs EFT) and every decline reason live on the row, never in a log line |
+| Direct method flows (2026-09-29) | ✅ `flow` (CARD, EFT_OZOW, CLICK_TO_PAY, OTT_VOUCHER, …) accepted by the checkout from an allowlist and passed to the hosted page; empty = Adumo's options page. Not yet surfaced as separate buttons on the pay page |
+| Enterprise reporting + reconcile (2026-09-29) | ✅ `lib/adumo-reporting.js`: OAuth client credentials, `getState` by transaction id or by our merchant reference; `reconcileAdumoIntents` credits a PENDING pay-link intent once when Adumo reports AUTHORISED or SETTLED for the same gross; `GET /api/internal/adumo-status[?mref=\|?tx=]` (internal key) and `GET /api/cron/adumo-reconcile` (cron header / `CRON_SECRET` / internal key). **Proven live on staging** against a real hosted-page payment (section 6) |
 | Our merchant credentials | ⛔ waiting on the SHB / Adumo onboarding (MerchantID, ApplicationID, JWT secret) |
 | The model question | ⛔ the merchant application form's declaration ("not to process transactions on behalf of any third party") describes WaPay's collect-on-behalf model exactly; written confirmation that Nedbank/Adumo accept it (payment facilitator / TPPP with Nedbank as sponsor) is required before going live |
-| Live switch | `WAPAY_ADUMO_ENABLED=true` + the three `ADUMO_*` envs (+ `ADUMO_SANDBOX=true` for staging) |
+| Live switch | `WAPAY_ADUMO_ENABLED=true` + the three `ADUMO_*` envs (+ `ADUMO_SANDBOX=true` for staging); reporting needs `ADUMO_CLIENT_ID` + `ADUMO_CLIENT_SECRET` (merchant portal; the staging pair is published on enterprise.php) |
 
 Nothing changes for anyone until the switch is on: with it off the pay page and checkout behave exactly as before (PayFast only).
 
@@ -39,5 +42,59 @@ To repeat the run: create a scratch schema (`?schema=wapay_qa_adumo_…`, `prism
 
 1. Written answer from SHB/Nedbank on the third-party-processing declaration (facilitator / TPPP, Nedbank as sponsor). Without it, do not enable.
 2. Our own MerchantID / ApplicationID / JWT secret from Adumo; webhook enablement (support@adumoonline.com) pointing at `https://pleasepayme.co.za/api/webhooks/adumo`.
-3. One real R5 payment on the live merchant per method, reconciled against the Adumo console and our journal.
-4. Decide the receiver fee (§3) and set the two env values; then `WAPAY_ADUMO_ENABLED=true` and redeploy. PayFast stays on for everything Adumo does not carry.
+3. **Auto settlement ON for our live application** (Adumo onboarding option). The hosted page leaves an approved card AUTHORISED and Adumo captures it in its batch; we credit on the signed approval, so deferred settlement would mean money we credited that Adumo never captures unless we call Settle, which we never do.
+4. Our OAuth client id + secret from the merchant portal into `ADUMO_CLIENT_ID` / `ADUMO_CLIENT_SECRET`, then `GET /api/internal/adumo-status` must show `reporting.tokenOk: true`.
+5. One real R5 payment on the live merchant per method, reconciled against the Adumo console, `getState` and our journal.
+6. Decide the receiver fee (§3) and set the two env values; then `WAPAY_ADUMO_ENABLED=true` and redeploy. PayFast stays on for everything Adumo does not carry.
+
+## 6. Enterprise reporting and the staging proof (2026-09-29)
+
+Sources read on 2026-09-29: the public Postman workspace "Adumo Online" (collections
+*Enterprise (Rest API)* with folders Without/With Saving Card, Reporting, Tokenization; and
+*Virtual (Hosted Payment Pages)*) and developers.adumoonline.com/enterprise.php + virtual.php.
+
+| Call | Where | Auth |
+|---|---|---|
+| OAuth token | `POST {base}/oauth/token?grant_type=client_credentials&client_id=…&client_secret=…` → `{access_token, token_type: bearer, expires_in, scope: read}` | none |
+| State by transaction id | `GET {base}/products/payments/v1/card/getState/{transactionId}` | Bearer |
+| State by our reference | `GET {base}/products/payments/v1/card/getState?merchantReference=…&applicationUid=…` (or `&merchantUid=…`) | Bearer |
+| Card lifecycle (Enterprise, we do not use it: PCI scope) | `…/card/initiate`, `/authorise`, `/settle`, `/reverse`, `/refund`; 3DS `…/product/authentication/v2/tds/authenticate/{id}`; tokens `…/product/security/tokenization/v1/{applicationUid}/profile/{puid}` | Bearer |
+
+`{base}` = `https://staging-apiv3.adumoonline.com` (test) / `https://apiv3.adumoonline.com`
+(the Postman links mention `staging-apiv2` for the swagger pages; the API calls documented on
+enterprise.php are `apiv3`, and the client follows the document). `getState` answers a
+well-formed 404 `{"errorCode":"404 NOT_FOUND","message":"Merchant reference not found."}` for
+an unknown reference. States seen: `TDS_AUTH_NOT_REQUIRED`, `TDS_AUTH_REQUIRED`, `AUTHORISED`,
+`SETTLED`, `REFUNDED`. Amounts are rand with two decimals (`amount`, `authorisedAmount`,
+`settledAmount`, `refundedAmount`).
+
+**Staging proof, 2026-09-29 (scratch schema, local dev server on port 3010, the published
+test merchant with the non-3DS application):** pay link `PRBRJKGW`, R38 →
+`/api/pay/checkout` (Adumo rail, JWT with `notificationURL`) → hosted page
+`staging-gateway.adumoonline.com/virtual-v2/card/add` → card 4111 1111 1111 1111, 05/2028,
+CVV 123, Joe Soap → Adumo returned the browser to `/api/pay/adumo-return` with the signed
+token → `/pay/PRBRJKGW?r=1` **PAID**. On the intent: `status SUCCESS`, `providerRef
+5825a3ef-a946-49e1-a066-e02cfd72d989` (Adumo's transaction id), `adumoOutcome { method CARD,
+panMasked 411111******1111, cardCountry PL, threeDStatus 07, bankErrorCode 00 "Approved or
+Completed Successfully", puid … }`; journal `LOAD_ADUMO`: `CLEARING:ADUMO` debit 3800,
+wallet credit 3800. Reporting with the published test client credentials: `getState` by
+merchant reference and by transaction id both return **`AUTHORISED`, amount 38, authorised
+38, settled 0**: the hosted page's end state for an approved card is AUTHORISED; Adumo
+captures in batch. The intent was then reset to PENDING to simulate a payer who never came
+back and `GET /api/cron/adumo-reconcile?olderThanMinutes=0` reconciled it: `SETTLED`,
+replayed, journal still one entry / 3800. `GET /api/internal/adumo-status?mref=PRBRJKGW-1`
+reported `tokenOk: true` and the transaction.
+
+## 7. Repeating the test cycle
+
+`scripts/dev-adumo-staging.sh` starts `next dev -p 3010` on a scratch schema with the
+published staging merchant, the non-3DS application and the published OAuth test client;
+the workspace `.claude/launch.json` entry `adumo-staging` runs it (it reads the scratch
+`DATABASE_URL` from `SCRATCH_URL_FILE`). Steps: create the schema (`prisma db push` with
+`?schema=wapay_qa_adumo_<date>`), seed an account + `createPaymentRequest`, open
+`/pay/<code>`, pay with a test card, then verify the intent, the journal, `getState`, the
+probe and the cron; drop the schema afterwards. Never run `pnpm build` while the dev server
+is up: they share `.next` and the running server breaks (seen 2026-09-29). The 3-D Secure
+challenge does not accept the in-app browser's synthetic input; the non-3DS application is
+the automated path. Record: `docs/testing/adumo-staging-2026-09-29.md`.
+

@@ -6,7 +6,7 @@
  * credits exactly once. Enable webhooks with support@adumoonline.com.
  */
 import prisma from '../../../lib/prisma.js';
-import { verifyAdumoResponse, codeFromMerchantReference } from '../../../lib/adumo.js';
+import { verifyAdumoResponse, codeFromMerchantReference, adumoOutcomeRecord } from '../../../lib/adumo.js';
 import { settleCardPayment } from '../../../lib/card-settlement.js';
 
 export const config = { maxDuration: 25 };
@@ -30,8 +30,9 @@ export default async function handler(req, res) {
     console.error(JSON.stringify({ type: 'adumo_webhook_rejected', reason: v.error, detail: v.detail, requestCode: code }));
     return res.status(401).json({ ok: false, error: v.error });
   }
+  await prisma.providerRequest.update({ where: { idemKey: intent.idemKey }, data: { metadata: { ...intent.metadata, ...adumoOutcomeRecord(v, { via: 'webhook' }) } } }).catch(() => {});
   if (!v.approved) {
-    console.log(JSON.stringify({ type: 'adumo_webhook_not_approved', requestCode: code, status: v.status }));
+    console.log(JSON.stringify({ type: 'adumo_webhook_not_approved', requestCode: code, status: v.status, method: v.method }));
     return res.status(200).json({ ok: true, ignored: true });
   }
   const out = await settleCardPayment({ intent, rail: 'ADUMO', providerRef: v.transactionIndex || mref, payerMsisdn: intent.metadata?.payerMsisdn || null });

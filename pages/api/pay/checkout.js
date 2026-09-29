@@ -24,7 +24,7 @@ import { buildCheckoutUrl } from '@wapay/providers-payfast';
 import prisma from '../../../lib/prisma.js';
 import { getPaymentRequest } from '../../../lib/payment-requests.js';
 import { paymentRequestFeeCents } from '../../../lib/deposits.js';
-import { adumoEnabled, primaryCardRail, buildVirtualCheckout, adumoMerchantReference, autoSubmitHtml } from '../../../lib/adumo.js';
+import { adumoEnabled, primaryCardRail, buildVirtualCheckout, adumoMerchantReference, autoSubmitHtml, adumoFlow } from '../../../lib/adumo.js';
 import { businessRequestPayable } from '../../../lib/business.js';
 import { normaliseMsisdn, isValidSaMsisdn } from '../../../lib/msisdn.js';
 
@@ -177,6 +177,10 @@ export default async function handler(req, res) {
       failUrl: `${base}/api/pay/adumo-return?code=${code}`,
       description: `WaPay payment request ${code}`,
       ipAddress: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || undefined,
+      // Per-transaction webhook: an async method or a payer who closes the tab still settles.
+      notificationUrl: `${base}/api/webhooks/adumo`,
+      // A button may ask for one method straight away (CARD, EFT_OZOW, OTT_VOUCHER…); anything else = the options page.
+      flow: adumoFlow(req.method === 'POST' ? req.body?.flow : req.query?.flow),
     });
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');

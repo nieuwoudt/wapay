@@ -7,7 +7,7 @@
  * intent's idemKey. Unsigned fields are stored for forensics, never trusted.
  */
 import prisma from '../../../lib/prisma.js';
-import { verifyAdumoResponse, codeFromMerchantReference } from '../../../lib/adumo.js';
+import { verifyAdumoResponse, codeFromMerchantReference, adumoOutcomeRecord } from '../../../lib/adumo.js';
 import { settleCardPayment } from '../../../lib/card-settlement.js';
 import { recordItnDebug } from '../../../lib/deposits.js';
 
@@ -34,11 +34,14 @@ export default async function handler(req, res) {
     // approve, its webhook (verified independently) still settles it.
     return res.redirect(302, `/pay/${code}?e=unverified`);
   }
+  // What Adumo said (method, masked PAN, bank error) goes on the intent whether or not it paid:
+  // the fee truth per method and the decline reasons live here, never in a log line.
+  await prisma.providerRequest.update({ where: { idemKey: intent.idemKey }, data: { metadata: { ...intent.metadata, ...adumoOutcomeRecord(v, { via: 'return' }) } } }).catch(() => {});
   if (!v.approved) {
-    console.log(JSON.stringify({ type: 'adumo_return_not_approved', requestCode: code, status: v.status, errorCode: v.errorCode }));
+    console.log(JSON.stringify({ type: 'adumo_return_not_approved', requestCode: code, status: v.status, errorCode: v.errorCode, bankErrorCode: v.bankErrorCode, method: v.method }));
     return res.redirect(302, `/pay/${code}?e=${encodeURIComponent(v.status || 'declined')}`);
   }
   const out = await settleCardPayment({ intent, rail: 'ADUMO', providerRef: v.transactionIndex || expectedMref || code, payerMsisdn: intent.metadata?.payerMsisdn || null });
-  console.log(JSON.stringify({ type: 'adumo_return_settled', requestCode: code, ok: out.ok, replayed: out.replayed, transactionIndex: v.transactionIndex }));
+  console.log(JSON.stringify({ type: 'adumo_return_settled', requestCode: code, ok: out.ok, replayed: out.replayed, transactionIndex: v.transactionIndex, method: v.method, methodClass: v.methodClass }));
   return res.redirect(302, `/pay/${code}?r=1`);
 }
