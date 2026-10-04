@@ -6,14 +6,14 @@
 
 OTT quotes every rail cost **excluding VAT** and WaPay is **not VAT-registered**, so the VAT is a real cost we cannot reclaim. Every cost below is therefore the addendum rate multiplied by 1.15, rounded up to the cent. Comparing an ex-VAT cost to an inc-VAT customer fee overstates margin by 15%; `inclVatCents` in the ledger grosses every cost up before any margin is computed, and `tests/payout-fees.test.mjs` refuses a rail cost that is not grossed up.
 
-## 2. What OTT charges us (2026 Addendum to the Payout Agreement, `OTT Onboarding /2026 - OTT-Addendum to Payout Agreement.pdf`)
+## 2. What OTT charges us (Annexure A of the Payout Agreement, signed by WaPay 2026-08-25 and co-signed by OTT 2026-09-10; the 2026 Addendum template in `OTT Onboarding /` restates the same rates)
 
 | Provider on the merchant | OTT code | Addendum clause | Fixed, ex VAT | Switching | Fixed, inc VAT (ours) | Status |
 |---|---|---|---|---|---|---|
-| PayShap Account | 127 | 1.3 | R2.50 | none (Bank EFT product) | R2.88 | addendum rate, **unsigned template**, 30 days' notice to change |
-| RTC (bank transfer) | not on the test merchant | 1.4 | R4.50 | none | R5.18 | addendum rate; RTC not enabled for us (asked in email 9) |
-| Nedbank Cardless Withdrawal | 4 | 1.1 | R9.96 | 0.3% of monthly completed value, ex VAT | R11.46 + 0.345% | addendum rate |
-| ABSA CashSend | 112 | 1.2 | R9.96 | 0.3% of monthly completed value, ex VAT | R11.46 + 0.345% | addendum rate |
+| PayShap Account | 127 | 1.3 | R2.50 | none (Bank EFT product) | R2.88 | **SIGNED** (Annexure A); applied rate unverified until OTT's statement; OTT may reprice on 30 days' notice |
+| RTC (bank transfer) | not on the test merchant | 1.4 | R4.50 | none | R5.18 | **SIGNED** (Annexure A); RTC not enabled for us (asked in email 9) |
+| Nedbank Cardless Withdrawal | 4 | 1.1 | R9.96 | 0.3% of monthly completed value, ex VAT | R11.46 + 0.345% | **SIGNED** (Annexure A); applied rate unverified until OTT's statement |
+| ABSA CashSend | 112 | 1.2 | R9.96 | 0.3% of monthly completed value, ex VAT | R11.46 + 0.345% | **SIGNED** (Annexure A); applied rate unverified until OTT's statement |
 | FNB e-wallet | 1 | **not in the addendum** | **unknown** | unknown | assumed = CashSend | **ASSUMED** since 2026-09-15; asked in email 9, no answer |
 | Reversals (Nedbank, ABSA) | | 1.6 | R10.00 each | | R11.50 | not modelled in the ledger (see §7) |
 | VAS products | | 1.5 | 1% commission + 0.3% switching | | | not a pay-out |
@@ -97,4 +97,4 @@ Not recommended: any percentage fee (the flat rule of 2026-08-10 stands), any fe
 4. The per-transaction fee lines for 2026-10-04 so the R82.69 can be reconciled (email 11).
 5. SMS and platform fees for the cash collection codes (email 9).
 
-Until 1 to 3 are answered in writing, every cost in §2 is **ASSUMED** at the addendum rate, and the Money Map marks it so.
+The four rail costs in §2 are **SIGNED** (Annexure A of the executed Payout Agreement); what is unverified until OTT's statement answers 3 and 4 is the rate OTT actually applies to the float (today's R12.69). FNB e-wallet stays ASSUMED until 2 is answered. The Money Map (`docs/COMMERCIALS.md` §6) uses the same vocabulary.
