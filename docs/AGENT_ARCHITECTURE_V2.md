@@ -16,39 +16,49 @@ The version line sits at the top of this file and in the map's status heading:
 
 The major number changes when the target (sections 1 to 12) changes. The ship number changes with every section 13 entry. History: the version table below.
 
-## Where we are (2026-09-18 evening)
+## Where we are (2026-10-04)
 
-**Phase 2 is deployed behind the pilot list and Phase 3 has not started.** Latest code build `f91e317`.
+**Phase 2 is deployed behind the pilot list; the pilot week restarted on 4 October.** Latest code `5249fd3` (production `13f0422` + docs).
 
-**The promotion gate: one condition met, one not started.** The eval half is
-met (156 cases, all eleven languages, 100% on action against the two-tier
-engine's 100% on the shared 132). The week of real agent turns has **not begun**:
-as of this build `agent_turns` holds zero rows. The list carries the founder's
-number and that number is correct, but until 2026-09-18 the gate matched the
-list entry as raw text, so three of the four ways a human writes the number
-would have matched nobody while the old engine answered normally
-(BUGLOG #73). The clock starts on the first message he sends from it, and the
-Mission Control card now reports whole clean days against the seven needed.
+**The promotion gate: one condition met, the other counting again from day one.** The eval
+half is met (166 cases, eleven languages, 98.8% action, no regression against the frozen
+baseline). The week of real agent turns began on 19 September (21 turns, two false-positive
+RECEIPT gates, both fixed), then nobody messaged WaPay until 2 October, so no days accrued. On
+4 October the founder ran 14 agent turns (7 replies, 7 proposals, 0 gates, 0 errors, p50
+about 3 s): **day 1 of 7 is clean.** The Mission Control card reports the clean days.
 
-Complete for every customer (Phases 0 and 1): the customer record and the last 12 turns, both sides, in every model turn; execute routes closed; strict PIN states; claim release, typing indicator; INIT pay-out reconcile; registry-rendered surfaces; habits, "what do you know about me" and "forget me"; nightly balance integrity; policy engine before proposals and withdrawals.
+**The first customer withdrawal in WaPay's history completed on 4 October 08:39**: Nedbank
+cardless R20 on OTT's sandbox, through the chat, OTT reference 126382, settled in our ledger.
+PayShap stayed pending at OTT (hold kept) and ABSA CashSend failed at OTT's provider (hold
+released): the money rules held in all three cases. The product table's withdrawal row moves
+from F to C.
 
-For the shadow list `WAPAY_AGENT_V3_MSISDNS` only (Phase 2): one model call over the record and typed tools; pre-model guards; per-customer budget; proposals through the same confirm and PIN steps; output gates, provenance guard; clarify state; an `agent_turns` row per turn. First live eval: 11 of 12, p50 1.9 s, p95 3.7 s. Everyone else: regex hooks and the two-tier engine.
+Complete for every customer (Phases 0 and 1): the customer record and the last 12 turns, both
+sides, in every model turn; execute routes closed; strict PIN states; claim release, typing
+indicator; INIT and PENDING pay-out reconcile with a cron route, a daily floor and the
+on-inbound hook; registry-rendered surfaces; habits and notes in the record, "what do you know
+about me" and "forget me"; nightly balance integrity; policy engine before proposals and
+withdrawals.
 
-Phase 3 gate (section 13, verbatim): the eval on the full set per language at or above the two-tier engine's pass rate, and a week of shadow turns with no gate firing on money copy.
+For the shadow list `WAPAY_AGENT_V3_MSISDNS` only (Phase 2): one model call over the record and
+typed tools; pre-model guards; per-customer budget; proposals through the same confirm and PIN
+steps; output gates, provenance guard; clarify state; an `agent_turns` row per turn.
 
-Incident: the bot was mute from the Phase 0 deploy (2026-09-16) to hotfix `398475f` (2026-09-17) because the webhook used `runWithSendScope` without importing it (BUGLOG #67). Rule: a webhook change ships only with the route runtime test green, and the first production message is watched in `processed_messages` before the deploy is called done.
+Work in flight that touches this record, owned by side threads reporting to the main session
+(2026-10-04): remembered pay-out beneficiaries as two encrypted tables outside the profile,
+exposed to the context pack as labels and masks only (design approved 4 October, section 13
+will carry it when it lands); `parseCompoundWithdraw` as the one function both the state
+machine and the agent's clarify step use for "50 and 2" answers; the Money Map commercials
+dashboard (`docs/HANDOVER_COMMERCIALS_V1.md`) as the fee source of truth the registry will
+read from.
 
+Phase 3 gate (section 13, verbatim): the eval on the full set per language at or above the
+two-tier engine's pass rate, and a week of shadow turns with no gate firing on money copy.
 
-*Decision record and engineering reference, written 2026-09-16 from a 39-agent
-review (6 read-only readers, 4 independent designers, 3 judges, 1 synthesis, 24
-refuters, 1 completeness critic) run against commit `240526c`. The founder's
-page with the diagrams is "Pay Agent Architecture"
-(https://claude.ai/artifact/LzMx7uSJLfbyJeRftpPuMB). This file is the version a
-Claude session builds from. It supersedes the phasing in
-`docs/AGENT_ARCHITECTURE_RECON.md` §5.3 and amends `docs/HANDOVER_V1.4.md`
-tasks 1 to 6 (section 10 below says how). Version 2.0.*
-
----
+Incident history: the bot was mute from the Phase 0 deploy (2026-09-16) to hotfix `398475f`
+(2026-09-17) because the webhook used `runWithSendScope` without importing it (BUGLOG #67).
+Rule: a webhook change ships only with the route runtime test green, and the first production
+message is watched in `processed_messages` before the deploy is called done.
 
 ## 1. The decision
 
@@ -519,3 +529,4 @@ below is updated on every ship.
 | 1.6 | 2026-09-17 | `9bc355e` | Verification pass and three gaps closed (changelog 40, BUGLOG #69); the phase map, the preface, this table and section 13's backlog added; the page sources move into the repo under docs/architecture. |
 | 1.7 | 2026-09-18 | `c1821e0` | The streamlining review and the work order (changelog 41, 42; BUGLOG #70, #71); `notifyCustomer` (43, BUGLOG #72); the frozen eval baseline and the held total (44); the internal-auth gate closed and the first event row (45); `agent_jobs` and its drain (46). **The eval half of the Phase 3 gate is met**: 156 cases, all eleven languages, 99.4% overall and 100% on action and outcome. |
 | 1.8 | 2026-09-18 evening | `f91e317` | The pilot gate could not have started (BUGLOG #73) and an empty week could not be told from a broken one; `propose_note` stops writing customer facts; the 63-site JSON ring deleted with its erasure gap (BUGLOG #74); the three dead things retired; the first batch of source-text locks rewritten as behaviour, 19 surgery sites down to 6; the rest of C14's event rows and a gift that could strand (BUGLOG #75); C11 amended in section 11 rather than configured; C19 held against float. |
+| 1.9 | 2026-10-04 | `5249fd3` | Re-baseline after eleven quiet days: the pilot week restarted on 4 October (14 clean turns, day 1 of 7); the first customer withdrawal completed (Nedbank cardless R20, OTT 126382) and the product table's withdrawal row moves from F to C; the pay-out wire format (BUGLOG #80, #82) and the Adumo reporting/reconcile work (23 and 29 September) recorded as rail work outside this architecture; three side threads opened (Blu VAS, payouts + commercials, Money Map) with the main session as the architecture owner; the beneficiary record design (encrypted tables outside the profile, labels and masks into the pack) approved for section 13 when it lands. Map Version 13. |
