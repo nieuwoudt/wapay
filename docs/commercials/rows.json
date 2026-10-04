@@ -1,6 +1,6 @@
 {
   "title": "WaPay Money Map",
-  "version": "1.2",
+  "version": "1.3",
   "date": "2026-10-04",
   "referenceAmountsCents": [
     5000,
@@ -25,7 +25,7 @@
     },
     "out": {
       "title": "Money out",
-      "blurb": "Withdrawals on OTT's pay-out rail and Pay@: what OTT charges, what the customer pays, what is left. The rail in depth, the benchmark and the +R2 options are in docs/PAYOUT_COMMERCIALS.md (payouts thread, commit 24d07f8, 2026-10-04)."
+      "blurb": "Withdrawals on OTT's pay-out rail and Pay@: what OTT charges, what the customer pays, what is left. The rail in depth, the benchmark and the +R2 options are in docs/PAYOUT_COMMERCIALS.md (payouts thread, commit bea9856, 2026-10-04)."
     },
     "vend": {
       "title": "Vending",
@@ -520,7 +520,7 @@
         "bps": 0,
         "exVat": true,
         "status": "SIGNED",
-        "source": "OTT Payout Agreement signed by WaPay 2026-08-25, co-signed by OTT 2026-09-10, Annexure A (the 2026 Addendum repeats the same prices): R2.50 per transaction ex VAT, no percentage on Bank EFT products (WaPay /OTT Onboarding /). Applied rate unverified: R12.69 of sandbox float deductions on 2026-10-04 do not reconcile to the addendum (docs/PAYOUT_COMMERCIALS.md section 2; OTT asked in emails 9 and 11). PAYOUT_COMMERCIALS.md words this as ASSUMED until OTT's statement; this map keeps SIGNED for the contract rate and flags the applied rate."
+        "source": "OTT Payout Agreement signed by WaPay 2026-08-25, co-signed by OTT 2026-09-10, Annexure A (the 2026 Addendum template restates the same rates): R2.50 per transaction ex VAT, no percentage on Bank EFT products (WaPay /OTT Onboarding /). Applied rate unverified until OTT's statement: R12.69 of sandbox float deductions on 2026-10-04 do not reconcile to the rates (docs/PAYOUT_COMMERCIALS.md section 2; OTT asked in emails 9 and 11)."
       },
       "price": {
         "kind": "bands",
@@ -557,7 +557,7 @@
         }
       ],
       "notes": "The margin rail: a constant R5.12 at every amount. Dearer than every bank's own PayShap (R0 to R2), so the story is reach, never price (benchmark 2026-09-11).",
-      "question": "Pay-out fees: keep the +R2 of 2026-09-11 (PayShap R8, bank transfer R10, cash R18/R23/R30) or return to R6/R8/R16 so CashSend sits under Absa's R16 and FNB's R11? docs/PAYOUT_COMMERCIALS.md section 7 (commit 24d07f8) sets out options A, B and C and recommends C: keep PayShap at R8, drop the +R2 on the cash methods only (R16 / R21 / R28), which leaves R2.12 at the R700 band top and matches Absa's own R16.",
+      "question": "Pay-out fees: keep the +R2 of 2026-09-11 (PayShap R8, bank transfer R10, cash R18/R23/R30) or return to R6/R8/R16 so CashSend sits under Absa's R16 and FNB's R11? docs/PAYOUT_COMMERCIALS.md section 7 (commit bea9856) sets out options A, B and C and recommends C: keep PayShap at R8, drop the +R2 on the cash methods only (R16 / R21 / R28), which leaves R2.12 at the R700 band top and matches Absa's own R16.",
       "owner": "Founder"
     },
     {
