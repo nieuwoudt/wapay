@@ -1,6 +1,6 @@
 {
   "title": "WaPay Money Map",
-  "version": "1.0",
+  "version": "1.1",
   "date": "2026-10-04",
   "referenceAmountsCents": [
     5000,
@@ -557,7 +557,7 @@
         }
       ],
       "notes": "The margin rail: a constant R5.12 at every amount. Dearer than every bank's own PayShap (R0 to R2), so the story is reach, never price (benchmark 2026-09-11).",
-      "question": "Pay-out fees: keep the +R2 of 2026-09-11 (PayShap R8, bank transfer R10, cash R18/R23/R30) or return to R6/R8/R16 so CashSend sits under Absa's R16 and FNB's R11? docs/PAYOUT_COMMERCIALS.md (payouts thread) carries the recommendation.",
+      "question": "Pay-out fees: keep the +R2 of 2026-09-11 (PayShap R8, bank transfer R10, cash R18/R23/R30) or return to R6/R8/R16 so CashSend sits under Absa's R16 and FNB's R11? docs/PAYOUT_COMMERCIALS.md (payouts thread) sets out options A, B and C and recommends C: drop the +R2 on the cash methods only and keep PayShap at R8.",
       "owner": "Founder"
     },
     {
@@ -682,7 +682,7 @@
       "name": "Withdraw as cash at a Nedbank ATM (cardless)",
       "counterparty": "OTT Payout (Nedbank Cardless Withdrawal, provider 4)",
       "productState": "PILOT",
-      "productNote": "The first customer withdrawal ever to complete: R20 + R18 on 2026-10-04 08:39 (OTT reference 126382, sandbox).",
+      "productNote": "The first customer withdrawal ever to complete: R20 + R18 on 2026-10-04 08:39 (OTT reference 126382, sandbox). The ledger booked a rail cost of R11.53 (R9.96 + 0.3% of R20, times 1.15) against the R18 fee: margin R6.47, exactly what this map computes (payouts thread evidence file, 2026-10-04).",
       "payer": "customer",
       "limits": {
         "minCents": 2000,

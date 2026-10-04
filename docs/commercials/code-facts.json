@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-04T08:06:11.182Z",
-  "build": "5249fd3",
+  "generatedAt": "2026-10-04T08:13:04.690Z",
+  "build": "3355df3",
   "vatBps": 1500,
   "feeStyle": "FLAT",
   "deposit": {
@@ -440,7 +440,7 @@
       }
     }
   },
-  "rowsVersion": "1.0",
+  "rowsVersion": "1.1",
   "rowsDate": "2026-10-04",
   "referenceAmountsCents": [
     5000,
