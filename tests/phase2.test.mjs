@@ -52,8 +52,8 @@ test('inside the turn: guards run before any model call, the budget before the c
   assert.match(turn, /if \(sent && sent\.ok === false\) throw Object\.assign\(new Error\('AGENT_SEND_FAILED'\)/);
   assert.doesNotMatch(turn.slice(turn.indexOf('const guard = agentGuard(text);')), /await sendWhatsAppText\(/, 'every send goes through deliver()');
   assert.match(turn, /WAPAY_AGENT_TURNS_PER_HOUR \|\| 60/);
-  // ledger rows on: guard, budget, error, proposal, reply/clarify
-  assert.equal((turn.match(/await ledger\(/g) || []).length, 5);
+  // ledger rows on: guard, budget, slot rescue (2026-10-04), error, proposal, reply/clarify
+  assert.equal((turn.match(/await ledger\(/g) || []).length, 6);
   assert.match(turn, /outcome: 'BUDGET'/);
   // the current inbound never appears twice in the messages
   assert.match(turn, /excludeWaMessageId: messageId/);

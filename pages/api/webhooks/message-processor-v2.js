@@ -12,6 +12,7 @@ import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, outboundSendCount } from '@wa
 import { sendWhatsAppText, recordInbound } from '../../../lib/say.js';
 import { recentTurns, renderTurns, redactForMemory } from '../../../lib/turns.js';
 import { loadContextPack, renderCustomerRecord, statusCandidates, rankCandidates, preferredKind, formatRands, formatSast } from '../../../lib/context-pack.js';
+import { rescueWithdrawSlots } from '../../../lib/agent/slot-rescue.js';
 import { evaluatePolicy, requirementMessage } from '../../../lib/policy.js';
 import { capabilityById, homeLines, helpLines, welcomeLines, promptLines, fuelLiveFor as registryFuelLiveFor } from '../../../lib/capabilities.js';
 import { eraseTurns } from '../../../lib/turns.js';
@@ -6142,6 +6143,25 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
     ? turnsRaw.slice(0, -1)
     : turnsRaw;
   const withdrawLive = payoutAllowedFor(from);
+  // In-flow slot rescue (2026-10-04, the founder's "50 and 2"): a clarify
+  // answer that plainly carries the amount or the method of a withdrawal goes
+  // straight into the withdraw flow, no model call, exactly as a proposal
+  // would. The flow re-validates the slots and asks for what is still missing
+  // (its numbered method menu is where a bare "2" means something). Only for
+  // a number withdrawals are open to; everything else still goes to the model.
+  if (pendingIntent?.action === 'WITHDRAW' && withdrawLive) {
+    const rescued = rescueWithdrawSlots({ pendingIntent, text });
+    if (rescued) {
+      const proposal = { action: 'WITHDRAW', slots: { amountCents: rescued.amountCents, method: rescued.method } };
+      logStructured('agent_slot_rescue', { from, accountId: account.id, rescued: rescued.rescued });
+      const handled = await dispatchOrchestratorAction({
+        from, text, account, pack,
+        result: { ...proposal, reply: '', language: profile?.language || 'en', domain: 'AGENT', tier: 'agent' },
+      });
+      await ledger({ path: 'rescue', outcome: 'proposal', proposal, gatesFired });
+      return handled;
+    }
+  }
   let customerRecord = renderCustomerRecord(pack);
   if (pendingIntent) {
     customerRecord += '\nPENDING INTENT (you asked a question last turn and this message answers it; when the answer completes it, call the matching start tool): ' + JSON.stringify(pendingIntent);

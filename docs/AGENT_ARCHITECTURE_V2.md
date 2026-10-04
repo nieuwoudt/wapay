@@ -508,6 +508,33 @@ below is updated on every ship.
     no habits at all, and two test stubs would silently warn on a ninth query.
     It is an optimisation with a real chance of a quiet regression and it waits.
 
+- 2026-10-04, main session (changelog entry 65, BUGLOG #83), the morning the first
+  customer withdrawal completed and the pilot week restarted:
+  - **C6.** The pack carries `payoutDestinations` (the masked labels from
+    `lib/payout-beneficiaries.js`, newest use first, at most five) and
+    `payoutIdentity` (name, ID tail, consent date), read in the same batch and
+    rendered as two record lines or one "Saved pay-out details: none." line.
+    The module masks before it returns; the pack never sees a full number.
+  - **C19, the pay-outs half.** A Pay-out reconciliation card
+    (`lib/payout-books.js`, `/api/admin/payout-reconciliation`): customer
+    liabilities by wallet type, held against open rows, journal pay-outs, fee
+    revenue, rail cost per our table, the live float with implied funding and
+    drift against a recorded funding figure, seven checks across provider row,
+    hold and journal, and an anomaly list that names reference, method and
+    amount only. This closes the "no held total in rand and no drift against
+    the rail's float" gap recorded on 23 September. First run against production
+    data (4 October 08:20 UTC): six rows, all seven checks green, R58 held for
+    the pending PayShap, R20 paid out, R11.53 rail cost booked.
+  - **C3 / C12, clarify.** `rescueWithdrawSlots` (`lib/agent/slot-rescue.js`)
+    runs on a WITHDRAW pending intent before the model: an amount or a method
+    named in words is dispatched into the withdraw flow as a proposal would be;
+    a bare menu number waits for the flow's own menu; negations go to the model.
+    The parser is the payouts thread's `parseCompoundWithdraw`, so the state
+    machine and the agent read "50 and 2" the same way. Ledger path `rescue`.
+  - Not done, deliberately: generalising the rescue to airtime and sends. The
+    withdraw question is the only clarify the founder has hit; the other flows
+    get the same treatment when a real answer fails, not before.
+
 ## 14. Open questions for the founder
 
 1. Vercel plan (Hobby or Pro): decides whether the 10-minute reconcile cron is

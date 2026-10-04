@@ -116,8 +116,45 @@ function stubPrisma(fx = fixtures(), { fail = [] } = {}) {
       return rows.map((g) => Object.fromEntries(Object.entries(g).filter(([k]) => a.select?.[k])));
     } },
     paymentRequest: model('paymentRequest'), beneficiary: model('beneficiary'),
+    // Remembered pay-out details (2026-10-04): read through
+    // lib/payout-beneficiaries.js, which masks before returning. Not counted
+    // among the seven source queries because the module owns the read.
+    payoutDestination: { async findMany() { return (fx.payoutDestination || []).map((r) => ({ ...r })); } },
+    payoutIdentity: { async findUnique() { return fx.payoutIdentity ? { ...fx.payoutIdentity } : null; } },
   };
 }
+
+test('saved pay-out details reach the pack and the record as labels and masks only', async () => {
+  const fx = fixtures();
+  fx.payoutDestination = [
+    { id: 'd1', accountId: 'acc-1', method: 'PAYSHAP', label: 'FNB account •••394', bankName: 'FNB', lastUsedAt: ago(2 * H), timesUsed: 3, accountNumberEnc: 'enc1:SHOULD-NEVER-SHOW', fingerprint: 'abc' },
+    { id: 'd2', accountId: 'acc-1', method: 'NEDCASH', label: 'Nedbank cash to •••175', bankName: null, lastUsedAt: ago(5 * 24 * H), timesUsed: 1, mobileEnc: 'enc1:SHOULD-NEVER-SHOW', fingerprint: 'def' },
+  ];
+  fx.payoutIdentity = { accountId: 'acc-1', fullName: 'Nieuwoudt Gresse', idType: 'RSAID', idLast3: '083', idNumberEnc: 'enc1:SHOULD-NEVER-SHOW', consentAt: ago(5 * 24 * H) };
+  const pack = await loadContextPack({ prisma: stubPrisma(fx), account, now: NOW });
+  assert.deepEqual(pack.payoutDestinations.map((d) => d.label), ['FNB account •••394', 'Nedbank cash to •••175']);
+  assert.equal(pack.payoutDestinations[0].family, 'BANK');
+  assert.equal(pack.payoutIdentity.idLast3, '083');
+  assert.ok(!JSON.stringify(pack).includes('SHOULD-NEVER-SHOW'), 'no encrypted or full field leaves the module');
+  const text = renderCustomerRecord(pack, { now: NOW });
+  assert.match(text, /Saved pay-out destinations: FNB account •••394 \(last used [^)]+\); Nedbank cash to •••175 \(last used [^)]+\)\./);
+  assert.match(text, /Pay-out identity on file: yes \(Nieuwoudt Gresse, ID ending 083\); they need not type it again\./);
+  assert.ok(!text.includes('Saved pay-out details: none'));
+});
+
+test('no saved pay-out details: one line, and a missing table is not an error', async () => {
+  const pack = await loadContextPack({ prisma: stubPrisma(), account, now: NOW });
+  assert.deepEqual(pack.payoutDestinations, []);
+  assert.equal(pack.payoutIdentity, null);
+  assert.match(renderCustomerRecord(pack, { now: NOW }), /Saved pay-out details: none\./);
+  // Production before the migration: the models do not exist on the client.
+  const bare = stubPrisma();
+  delete bare.payoutDestination; delete bare.payoutIdentity;
+  const pack2 = await loadContextPack({ prisma: bare, account, now: NOW });
+  assert.deepEqual(pack2.payoutDestinations, []);
+  assert.equal(pack2.payoutIdentity, null);
+  assert.equal(pack2.warnings.length, 0, 'the module swallows its own read failures; the pack does not warn');
+});
 
 test('all seven source queries start before any resolves: one Promise.all batch', async () => {
   const prisma = stubPrisma();
@@ -274,7 +311,7 @@ test('renderCustomerRecord truncates the movement list to stay under 1,800 chara
   const text = renderCustomerRecord(pack, { now: NOW });
   assert.ok(text.length <= RECORD_MAX_CHARS, `${text.length}`);
   assert.ok(text.startsWith(RECORD_HEADER));
-  assert.match(text, /Saved people: X\.$/, 'the footer always survives; only movements are cut');
+  assert.match(text, /Saved people: X\.\nSaved pay-out details: none\.$/, 'the footer always survives; only movements are cut');
   const shown = (text.match(/^- \d\d \w{3} /gm) || []).length;
   assert.ok(shown > 5 && shown < 60, `${shown} shown`);
   assert.match(text, new RegExp(`- \\(${90 - shown} older not shown\\)`));

@@ -423,6 +423,92 @@ function Conversations() {
   );
 }
 
+function PayoutBooks() {
+  // The reconciliation the founder asked for on 2026-10-04: client funds,
+  // what is held for pay-outs, what the journal says left, and whether the
+  // three records of every pay-out agree. The supplier float is fetched from
+  // the floats route (its own timeout) so a slow OTT never hides the books.
+  const [b, setB] = useState(null);
+  const [err, setErr] = useState('');
+  const [float, setFloat] = useState(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/payout-reconciliation')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setB(d); })
+      .catch(() => { if (!cancelled) setErr('Could not load the pay-out books.'); });
+    fetch('/api/admin/floats')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (cancelled) return;
+        const row = (d.floats || []).find((f) => f.key === 'OTT_PAYOUT');
+        setFloat(row?.api?.availableCents ?? null);
+      })
+      .catch(() => { if (!cancelled) setFloat(null); });
+    return () => { cancelled = true; };
+  }, []);
+  if (err) return <div className="empty">{err}</div>;
+  if (!b) return <div className="empty">Reading the books…</div>;
+  const funds = b.clientFunds || {};
+  const p = b.payouts || {};
+  const l = b.ledger || {};
+  const st = (k) => (p.byStatus || {})[k] || { count: 0, amountCents: 0, feeCents: 0 };
+  const stat = (k, v, sub, bad) => (
+    <div key={k} style={{ padding: '7px 0' }}>
+      <div style={{ fontSize: 11, color: 'var(--ink3)' }}>{k}</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: bad ? 'var(--crit)' : undefined }}>{v}</div>
+      {sub ? <div style={{ fontSize: 11, color: 'var(--ink3)' }}>{sub}</div> : null}
+    </div>
+  );
+  // What the float should read if nothing but our pay-outs ever drew on it:
+  // the live float plus everything the journal says left it. Compared with
+  // the funded amount only when the founder has recorded one.
+  const implied = float != null ? float + (l.paidOutCents || 0) + (l.railCostCents || 0) : null;
+  const funded = b.supplier?.fundedCents ?? null;
+  const drift = implied != null && funded != null ? implied - funded : null;
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+        {stat('Owed to customers', R(funds.totalCents), `${R(funds.spendCents)} spend · ${R(funds.cashCents)} cash · ${R(funds.pendingCents)} pending · ${funds.wallets || 0} wallets`)}
+        {stat('Held for pay-outs', R(p.activeHeldCents), `${p.activeHolds || 0} active holds · ${p.openCount || 0} open pay-outs say ${R(p.openHeldCents)}`, p.activeHeldCents !== p.openHeldCents)}
+        {stat('Paid out (journal)', R(l.paidOutCents), `${l.paidOutEntries || 0} journal entries · rows say ${R(p.successAmountCents)} over ${st('SUCCESS').count}`, l.paidOutCents !== p.successAmountCents)}
+        {stat('Fees earned', R(l.feeRevenueCents), 'the pay-out fee account in the journal')}
+        {stat('Rail cost (our table)', R(l.railCostCents), `${l.railCostEntries || 0} entries · not OTT’s invoice`)}
+        {stat('OTT pay-out float', float === undefined ? '…' : float == null ? 'unavailable' : R(float), implied != null ? `float + paid out + rail cost = ${R(implied)}` : 'see Supplier floats')}
+        {funded != null ? stat('Funded (your record)', R(funded), drift == null ? 'float unavailable' : drift === 0 ? 'matches' : `${R(Math.abs(drift))} ${drift > 0 ? 'more than funded' : 'unexplained draw'}`, drift != null && drift !== 0) : null}
+      </div>
+      <div className="ops" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
+        {['INIT', 'PENDING', 'SUCCESS', 'FAILED'].map((k) => (
+          <span key={k} className="pill" style={{ color: 'var(--ink2)' }}>
+            <span className="dot" style={{ background: k === 'SUCCESS' ? 'var(--good)' : k === 'FAILED' ? 'var(--crit)' : 'var(--ink3)' }} />
+            {k} {st(k).count}{st(k).count ? ` · ${R(st(k).amountCents)} + ${R(st(k).feeCents)} fees` : ''}
+          </span>
+        ))}
+      </div>
+      <div className="ops" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+        {(b.checks || []).map((c) => (
+          <span key={c.id} className="pill" style={{ borderColor: c.ok === false ? 'var(--crit)' : undefined, color: c.ok === false ? 'var(--crit)' : 'var(--ink2)' }}>
+            <span className="dot" style={{ background: c.ok === null ? 'var(--ink3)' : c.ok ? 'var(--good)' : 'var(--crit)' }} />
+            {c.label}{c.ok === false ? (c.id === 'held_total' || c.id === 'ledger_total' ? ` · off by ${R(c.count)}` : ` · ${c.count}`) : ''}
+          </span>
+        ))}
+      </div>
+      {(b.anomalies || []).length === 0 ? (
+        <div className="empty" style={{ padding: '6px 0' }}>Every pay-out agrees with its hold and its journal entry.</div>
+      ) : (b.anomalies || []).map((a, i) => (
+        <div key={(a.reference || 'hold') + i} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 3fr', gap: 10, padding: '5px 0', borderBottom: '1px solid var(--grid)', fontSize: 12.5 }}>
+          <span style={{ color: 'var(--ink3)' }}>{a.reference || '(hold only)'}</span>
+          <span>{a.status} {a.method || ''} {a.amountCents != null ? R(a.amountCents) : ''}{a.ageMinutes != null ? ` · ${a.ageMinutes}m` : ''}</span>
+          <span style={{ color: 'var(--crit)' }}>{a.problem}</span>
+        </div>
+      ))}
+      <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>
+        Three records per pay-out must agree: the rail’s answer (provider row), the customer’s parked money (hold) and what settled (journal). “Owed to customers” is every wallet summed: the liability the floats and the bank account must cover. The rail cost is our fee table’s figure until OTT’s statement is reconciled. Set WAPAY_OTT_PAYOUT_FUNDED_CENTS to what was wired to the pay-out float to see drift.
+      </p>
+    </div>
+  );
+}
+
 function UniFuelPanel() {
   const [u, setU] = useState(null);
   const [err, setErr] = useState('');
@@ -798,6 +884,11 @@ function Dashboard() {
         <h2>Conversations and the Pay agent</h2>
         <p className="note">Both sides of every chat, what the agent answered behind the shadow list, what it cost, which output gates fired, and any pay-out still parked with the bank rail.</p>
         <Conversations />
+      </div>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Pay-out reconciliation</h2>
+        <p className="note">What WaPay owes its customers, what is held for pay-outs, what the journal says was paid out, and whether every pay-out’s three records agree. Red means a customer or the float is out of pocket until someone looks.</p>
+        <PayoutBooks />
       </div>
       <div className="card" style={{ marginTop: 14 }}>
         <h2>Supplier floats</h2>
