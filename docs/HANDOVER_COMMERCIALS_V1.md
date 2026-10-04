@@ -31,7 +31,10 @@ section 2.
    on every cost line: WaPay is not VAT-registered, so a supplier's ex-VAT price costs us
    ×1.15 and we charge no VAT (memory `payfast-fee-reality`; `WAPAY_VAT_REGISTERED` is the
    switch for registration day).
-2. **The WaPay Money Map artifact**: a private claude.ai artifact (favicon 💰), built from
+2. **The WaPay Money Map artifact**: https://claude.ai/artifact/RbexUbHWCjyAbmJEKqTj9K
+   (published 2026-10-04, Version 1, Money Map data v1.0, verified against build 5249fd3;
+   sources in `docs/commercials/`, republish `docs/commercials/money-map.html` passing this
+   URL). A private claude.ai artifact (favicon 💰), built from
    sources in the repo under `docs/commercials/` the way the architecture map is
    (`docs/architecture/README.md`: template + data JSON + `assemble.js`, publish the
    assembled HTML, republish keeping the URL). Sections: Money in · Money out · Vending ·
@@ -130,3 +133,22 @@ live sibling threads before committing anything they own (`ListAgents`, `SendMes
 for docs-only pushes but never run it while another thread's dev server or harness is up.
 Keep `WAPAY_STATUS.md` current (bump its version) and add a dated delta at the top of
 `WAPAY_BUILD_TRACKER.md` when you stop.
+
+---
+
+## 5. Delivered 2026-10-04 (the Money Map thread)
+
+- `docs/COMMERCIALS.md` (text master: findings, generated row tables, the sign-off list),
+  `docs/commercials/` (rows.json, model.js, template, assemble.mjs, sync-from-code.mjs,
+  code-facts.json, money-map.html, README), `tests/commercials-consistency.test.mjs`
+  (12 tests; suite 964/964 at the time of writing).
+- The artifact: https://claude.ai/artifact/RbexUbHWCjyAbmJEKqTj9K (49 rows; numbers:
+  28 SIGNED, 38 LIVE, 15 ASSUMED, 17 PROPOSED, 14 UNKNOWN; 29 sign-off questions).
+- Facts established with the peers on 2026-10-04: the OTT Reseller agreement is executed
+  (countersigned 13 Aug 2026, 4% on face, booked 0 in code); the Merchant agreement's
+  countersignature is not on file; Blu's and OTT's 6% redemption commissions exclude VAT, so
+  face-less-6% crediting loses 90c per R100; no Blu VAS rate card exists anywhere; Eskom
+  electricity commission is per unit; Yoyo has nothing signed; OTT has not answered the
+  commercials email; R12.69 of sandbox pay-out deductions are unreconciled.
+- Still to consume when it lands: `docs/PAYOUT_COMMERCIALS.md` (payouts thread).
+

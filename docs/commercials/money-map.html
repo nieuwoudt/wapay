@@ -1,0 +1,680 @@
+<title>WaPay Money Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column of money components, a sticky amount control above them, a decisions panel at the end. Brand green from the WaPay kit, Inter as the kit's face, Plex Mono for every rand figure. */
+:root{
+  --bg:#F4F7F5; --surface:#FFFFFF; --surface-2:#EDF3EF; --ink:#1D2026; --muted:#4E5C54; --line:#D9E3DD; --line-soft:#E8EFEA;
+  --brand:#359853; --brand-ink:#155F30; --brand-soft:#E6F2EA;
+  --signed:#1F6F3A; --signed-bg:#DFF2E5;
+  --live:#2F5C93; --live-bg:#E1EBF7;
+  --assumed:#8A5A00; --assumed-bg:#FBEFCF;
+  --proposed:#5B3FA6; --proposed-bg:#ECE6F8;
+  --unknown:#9E2F24; --unknown-bg:#F8E3E0;
+  --pos:#1F6F3A; --neg:#B3321F; --zero:#9AA69F;
+  --focus:#1F6F3A;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --bg:#0F1512; --surface:#161C18; --surface-2:#1C2420; --ink:#EAF1EC; --muted:#A9B5AD; --line:#27312B; --line-soft:#1F2823;
+  --brand:#5FC084; --brand-ink:#A9E3BF; --brand-soft:#17281D;
+  --signed:#8FD3AC; --signed-bg:#17301F;
+  --live:#8FB4E6; --live-bg:#162230;
+  --assumed:#F3C453; --assumed-bg:#2E2612;
+  --proposed:#C3B1F0; --proposed-bg:#241C33;
+  --unknown:#F08B7C; --unknown-bg:#2E1815;
+  --pos:#8FD3AC; --neg:#F08B7C; --zero:#56635B;
+  --focus:#8FD3AC;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F1512; --surface:#161C18; --surface-2:#1C2420; --ink:#EAF1EC; --muted:#A9B5AD; --line:#27312B; --line-soft:#1F2823;
+  --brand:#5FC084; --brand-ink:#A9E3BF; --brand-soft:#17281D;
+  --signed:#8FD3AC; --signed-bg:#17301F;
+  --live:#8FB4E6; --live-bg:#162230;
+  --assumed:#F3C453; --assumed-bg:#2E2612;
+  --proposed:#C3B1F0; --proposed-bg:#241C33;
+  --unknown:#F08B7C; --unknown-bg:#2E1815;
+  --pos:#8FD3AC; --neg:#F08B7C; --zero:#56635B;
+  --focus:#8FD3AC;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--brand-ink)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:0 96px}
+h1{font-size:clamp(28px,4vw,40px);font-weight:700;letter-spacing:-.025em;line-height:1.08;margin:.2em 0 .3em;text-wrap:balance}
+h2{font-size:22px;font-weight:700;letter-spacing:-.015em;margin:0 0 4px;text-wrap:balance}
+h3{font-size:15px;font-weight:700;margin:0 0 6px}
+p{margin:0 0 10px;max-width:72ch}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--brand-ink)}
+.lede{font-size:17px;color:var(--muted);max-width:66ch}
+.small{font-size:13px;color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header.hero{padding-block:36px 10px}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.pill{background:var(--brand-soft);color:var(--brand-ink);font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px}
+
+/* status chips */
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:5px;line-height:1.5;white-space:nowrap}
+.chip::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.chip.SIGNED{background:var(--signed-bg);color:var(--signed)}
+.chip.LIVE{background:var(--live-bg);color:var(--live)}
+.chip.ASSUMED{background:var(--assumed-bg);color:var(--assumed)}
+.chip.PROPOSED{background:var(--proposed-bg);color:var(--proposed)}
+.chip.UNKNOWN{background:var(--unknown-bg);color:var(--unknown)}
+.chip .k{font-weight:600;letter-spacing:.02em;text-transform:none;opacity:.85}
+.state{display:inline-block;font-size:11px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 7px;white-space:nowrap}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:22px 0 6px}
+@media(max-width:900px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:480px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.tile .l{font-size:12px;color:var(--muted);margin-bottom:6px}
+.tile .v{font-size:30px;font-weight:600;line-height:1;letter-spacing:-.02em}
+.tile .d{font-size:12px;color:var(--muted);margin-top:6px}
+.tile.need{border-color:var(--assumed)}
+
+/* controls */
+.controls{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:12px 0 10px;border-bottom:1px solid var(--line);margin:18px -20px 0;padding-inline:20px;display:flex;flex-wrap:wrap;gap:14px 28px;align-items:end}
+.field .lbl{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:6px}
+.seg{display:inline-flex;gap:3px;padding:3px;background:var(--surface-2);border-radius:999px;flex-wrap:wrap}
+.seg button{font:600 13px var(--sans);color:var(--muted);background:transparent;border:1px solid transparent;border-radius:999px;padding:5px 13px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);border-color:var(--line);color:var(--ink)}
+.seg button.amt{font-family:var(--mono);font-weight:500}
+.slider{display:flex;align-items:center;gap:10px;margin-top:8px}
+.slider input[type=range]{width:min(360px,70vw);accent-color:var(--brand)}
+.slider .cur{font-family:var(--mono);font-weight:500;font-size:20px;min-width:6ch}
+label.chk{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer}
+label.chk input{accent-color:var(--brand);width:16px;height:16px}
+
+/* sections */
+section.money{margin-top:40px;scroll-margin-top:120px}
+.sec-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
+.sec-head .sum{font-size:13px;color:var(--muted)}
+.sec-head .sum b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-top:12px}
+table{border-collapse:collapse;width:100%;min-width:900px;font-size:13.5px}
+th{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:2px solid var(--line-soft);white-space:nowrap;background:var(--surface)}
+td{padding:9px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td.name{min-width:240px}
+td.name b{font-weight:600;display:block}
+td.name .cp{font-size:12px;color:var(--muted);display:block;margin-top:1px}
+td.name .pn{font-size:12px;color:var(--muted);display:block;margin-top:3px;max-width:42ch}
+td.pays{color:var(--muted);font-size:12.5px;white-space:nowrap}
+td.pos{color:var(--pos)} td.neg{color:var(--neg)} td.na{color:var(--muted)}
+.rate{display:block;font-size:11.5px;color:var(--muted);font-family:var(--sans);white-space:normal;max-width:22ch;text-align:right;margin-left:auto}
+.chips{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.bar{position:relative;width:120px;height:14px;display:inline-block;vertical-align:middle;margin-left:10px}
+.bar .zero{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--zero)}
+.bar i{position:absolute;top:4px;height:6px;border-radius:3px;background:var(--pos)}
+.bar i.neg{background:var(--neg)}
+tr.q td{background:color-mix(in srgb,var(--assumed-bg) 35%,var(--surface))}
+.src{font-size:12px;color:var(--muted);max-width:52ch}
+.src details summary{cursor:pointer;color:var(--brand-ink);font-weight:600;list-style:none}
+.src details summary::-webkit-details-marker{display:none}
+.src details[open] summary{margin-bottom:4px}
+.src .s{display:block;margin-top:3px}
+.src .s b{color:var(--ink);font-weight:600}
+.qcell{font-size:12.5px;max-width:40ch}
+.qcell .own{display:block;font-size:11px;color:var(--muted);margin-top:3px}
+.grid td.num{padding-inline:10px}
+.grid .pc{display:block;font-size:11px;color:var(--muted)}
+
+/* decisions */
+.decisions{margin-top:48px;background:var(--surface);border:1px solid var(--assumed);border-radius:14px;padding:22px 22px 18px}
+.decisions h2{margin-bottom:8px}
+.qlist{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:10px;counter-reset:q}
+.qlist li{counter-increment:q;position:relative;padding:12px 14px 12px 50px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:14px}
+.qlist li::before{content:counter(q);position:absolute;left:14px;top:12px;width:24px;height:24px;border-radius:50%;background:var(--brand);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.qlist .who{display:block;font-size:12px;color:var(--muted);margin-top:4px}
+.qlist .rowref{font-weight:600}
+.owners{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.note{border-left:3px solid var(--brand);background:var(--brand-soft);padding:10px 14px;border-radius:0 10px 10px 0;font-size:14px;margin:14px 0;max-width:76ch}
+.note.warn{border-color:var(--assumed);background:var(--assumed-bg)}
+.vocab{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:14px}
+@media(max-width:900px){.vocab{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.vocab div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--muted);min-width:0}
+.vocab .chip{margin-bottom:6px}
+.foot{margin-top:56px;border-top:1px solid var(--line);padding-top:16px;font-size:13px;color:var(--muted)}
+.foot ul{padding-left:18px;margin:6px 0 0} .foot li{margin:3px 0}
+.foot code{font-family:var(--mono);font-size:12px;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+@media(prefers-reduced-motion:no-preference){.bar i{transition:width .18s ease,left .18s ease}}
+</style>
+
+<div class="wrap">
+<header class="hero">
+  <div class="eyebrow">WaPay · commercials · 4 October 2026 · Money Map v1.0 · verified against build 5249fd3</div>
+  <h1>WaPay Money Map</h1>
+  <p class="lede">Every component of money in, money out, vending and getting paid: the counterparty, what it costs WaPay with the VAT it cannot recover, what the customer pays and who pays it, what is left at R50, R200, R500, R1,000 and R3,000, and whether each number is signed, live, assumed, proposed or unknown.</p>
+  <div class="meta">
+    <span class="pill">WaPay is not VAT-registered: supplier ex-VAT prices cost 1.15 times</span>
+    <span class="pill">No card surcharging: the payer always pays the displayed amount</span>
+    <span class="pill">Flat customer fees, never percentages</span>
+    <span class="pill">Text master: docs/COMMERCIALS.md</span>
+  </div>
+  <div class="tiles" id="tiles"></div>
+  <p class="small" style="margin-top:8px">Counts are of individual numbers (a cost, a price or a commission), not of rows. The fee arithmetic on this page is a mirror of <span class="mono">lib/ledger-core.js</span> and <span class="mono">lib/deposits.js</span>, held equal by <span class="mono">tests/commercials-consistency.test.mjs</span>.</p>
+</header>
+
+<div class="controls" id="controls">
+  <div class="field">
+    <span class="lbl">Reference amount</span>
+    <div class="seg" role="group" aria-label="Reference amount" id="amtSeg"></div>
+    <div class="slider"><input id="amtRange" type="range" min="0" max="4" step="1" value="2" aria-label="Reference amount slider"><span class="cur mono" id="amtCur"></span></div>
+  </div>
+  <div class="field">
+    <span class="lbl">View</span>
+    <div class="seg" role="group" aria-label="View" id="viewSeg">
+      <button type="button" data-v="one" aria-pressed="true">At this amount</button>
+      <button type="button" data-v="grid" aria-pressed="false">Margin at all five amounts</button>
+    </div>
+  </div>
+  <div class="field">
+    <span class="lbl">Filter</span>
+    <label class="chk"><input type="checkbox" id="onlyQ"> only rows that need a decision</label>
+  </div>
+</div>
+
+<div id="sections"></div>
+
+<section class="decisions" id="decisions">
+  <div class="eyebrow">Needs the founder's signature</div>
+  <h2>Every assumed, proposed or unknown number, as one question each</h2>
+  <p class="small">A number without a contract or a recorded decision is a guess the product is charging or absorbing today. Each question names the row it belongs to and who can answer it. Nothing here changes a fee in code; the answer does.</p>
+  <div class="owners" id="owners"></div>
+  <ol class="qlist" id="qlist"></ol>
+</section>
+
+<section class="money" id="vocab">
+  <h2>How to read a status</h2>
+  <div class="vocab" id="vocabGrid"></div>
+  <div class="note">Where the code and a document disagree, the code is what is charged today and the document is the proposal; the disagreement is one of the questions above. Product state (live, pilot, built, off, not built) is shown separately from the status of each number, because a live rail can carry an assumed price and a signed price can sit on a rail that is off.</div>
+</section>
+
+<footer class="foot">
+  <b>Sources on file</b>
+  <ul>
+    <li>Code: <code>lib/ledger-core.js</code> (FEES, cashoutFeeCents, cashoutRailCostCents), <code>lib/deposits.js</code> (depositFeeCents, paymentRequestFeeCents, cardRailFee), <code>lib/fee-facts.js</code>, <code>lib/payouts.js</code>, <code>lib/how-it-works.js</code> (limits).</li>
+    <li>Contracts and rate cards: OTT Payout Agreement (signed 2026-08-25) and 2026 Addendum, OTT Reseller Agreement (countersigned 13 Aug 2026), OTT Voucher Merchant Agreement (WaPay signed about 4 Sep 2026), BLD Voucher Redemption Agreement 2025, Pay@ Pay Out schedule (Nov 2025), PayFast portal rate card (2026-09-04), SHB/Adumo offer (2026-09-10), Yoyo email (September 2026), Yoyo Agreed Gift Card Rebates sheet.</li>
+    <li>Repo docs: PAYFAST_FEES, ADUMO, PAYOUTS, OTT_PAYOUT_API, HANDOVER_PAYOUTS_V1, PAYOUT_COMMERCIALS (payouts thread), UNIFUEL_INTEGRATION, WICODE_NETWORK, BLU_VAS_CATEGORY_REQUEST, CAPABILITIES, CONVERSATION_KNOWLEDGE_BASE.</li>
+    <li>Strategy: WAPAY_MONEY_ENGINE_AND_PHASE1, WAPAY_V1_AND_FORECAST, WAPAY_OTT_AGREEMENTS_REVIEW_2026-08-21, WAPAY_B2B_PAYOUTS, WAPAY_MARKETING_FEATURE_CATALOGUE, WAPAY_WALLET_DESIGN_2026-08-20, WAPAY_RETAIL_LAUNCH_PLAN; the Fee Benchmark (v1.2) and Feature Catalogue artifacts; the memory files named in docs/HANDOVER_COMMERCIALS_V1.md.</li>
+  </ul>
+  <p style="margin-top:10px">To update: edit <code>docs/commercials/rows.json</code>, run <code>node docs/commercials/sync-from-code.mjs --build &lt;hash&gt;</code>, then <code>node docs/commercials/assemble.mjs</code>, run <code>pnpm test</code>, and republish <code>money-map.html</code> to this artifact's URL. Generated 2026-10-04 08:06 UTC.</p>
+</footer>
+</div>
+
+<script>
+/**
+ * WaPay Money Map: the fee arithmetic the dashboard runs in the browser.
+ *
+ * This file is a MIRROR of the charging functions in lib/ledger-core.js and
+ * lib/deposits.js, written without imports so the same bytes can be inlined
+ * into docs/commercials/money-map.html. tests/commercials-consistency.test.mjs
+ * proves the mirror equals the real functions at every amount the product
+ * accepts, so the dashboard can never drift from what production charges.
+ *
+ * Plain script on purpose: in the browser it defines `MoneyMap`; in Node
+ * (CommonJS, since package.json has no "type") it also exports it.
+ */
+const MoneyMap = (() => {
+  const VAT_BPS = 1500;
+
+  /** lib/ledger-core.js bps(): basis points of an amount, rounded to the cent. */
+  function bps(amountCents, basisPoints) {
+    return Math.round((amountCents * basisPoints) / 10000);
+  }
+
+  /** lib/ledger-core.js inclVatCents(): gross an ex-VAT cost up, rounded UP. */
+  function inclVatCents(exVatCents) {
+    return Math.ceil((exVatCents * (10000 + VAT_BPS)) / 10000);
+  }
+
+  /** lib/deposits.js depositFeeCents(): rate + fixed, rounded UP to a whole rand. */
+  function depositFeeCents(amountCents, rail = { bps: 420, fixedCents: 230 }) {
+    const rawCents = Math.ceil((amountCents * rail.bps) / 10000) + rail.fixedCents;
+    return Math.ceil(rawCents / 100) * 100;
+  }
+
+  const CARD_RAIL = {
+    PAYFAST: { bps: 420, fixedCents: 230 },
+    ADUMO: { bps: 250, fixedCents: 100 },
+  };
+  const PAYREQ_FREE_BELOW_CENTS = 5000;
+
+  /** lib/deposits.js paymentRequestFeeCents(): free under R50, 10c rounding, taper. */
+  function paymentRequestFeeCents(amountCents, rail = 'PAYFAST', vatRegistered = false) {
+    if (amountCents < PAYREQ_FREE_BELOW_CENTS) return 0;
+    const { bps: b, fixedCents } = CARD_RAIL[rail] || CARD_RAIL.PAYFAST;
+    const exVatCents = Math.ceil((amountCents * b) / 10000) + fixedCents;
+    const rawCents = vatRegistered ? Math.ceil((exVatCents * (10000 + VAT_BPS)) / 10000) : exVatCents;
+    const fee = Math.ceil(rawCents / 10) * 10;
+    const maxFeeForMonotonicNet = Math.max(0, amountCents - (PAYREQ_FREE_BELOW_CENTS - 100));
+    return Math.min(fee, maxFeeForMonotonicNet);
+  }
+
+  /** lib/ledger-core.js cashoutFeeCents(): flat per band; null ceiling = catch-all. */
+  function bandFeeCents(bands, amountCents) {
+    for (const [maxCents, feeCents] of bands) {
+      if (maxCents === null || maxCents === undefined || amountCents <= maxCents) return feeCents;
+    }
+    throw new Error(`No fee band covers ${amountCents}`);
+  }
+
+  /** lib/ledger-core.js cashoutRailCostCents(): fixed grossed up, switching accrued per transaction. */
+  function cashoutRailCostCents(cost, amountCents) {
+    const fixed = inclVatCents(cost.fixedCents);
+    if (!cost.bps) return fixed;
+    const switching = Math.ceil((amountCents * cost.bps * (10000 + VAT_BPS)) / 100000000);
+    return fixed + switching;
+  }
+
+  /** A generic per-transaction supplier cost (card rails, Yoyo): ex and incl VAT, to the cent. */
+  function railCostCents(cost, amountCents) {
+    if (cost == null || cost.fixedCents == null || cost.bps == null) return null;
+    const ex = cost.fixedCents + (amountCents * cost.bps) / 10000;
+    const incl = cost.exVat ? (ex * (10000 + VAT_BPS)) / 10000 : ex;
+    return { exCents: Math.round(ex), inclCents: Math.round(incl) };
+  }
+
+  function withinLimits(row, amountCents) {
+    const lim = row.limits;
+    if (!lim) return { ok: false, reason: 'not per transaction' };
+    if (lim.minCents != null && amountCents < lim.minCents) return { ok: false, reason: 'below the minimum' };
+    if (lim.maxCents != null && amountCents > lim.maxCents) return { ok: false, reason: 'above the maximum' };
+    return { ok: true };
+  }
+
+  /**
+   * Everything the map shows for one row at one amount, in integer cents.
+   * marginCents uses the contract (or assumed) commission; marginBookedCents
+   * uses what the ledger books today, so a signed-but-unbooked rate shows both.
+   */
+  function compute(row, amountCents) {
+    const out = {
+      amountCents,
+      applicable: true,
+      reason: null,
+      priceCents: null,
+      creditedCents: null,
+      receivedCents: null,
+      costExCents: null,
+      costInclCents: null,
+      commissionCents: null,
+      commissionBookedCents: null,
+      marginCents: null,
+      marginBookedCents: null,
+      costUnknown: false,
+    };
+    const lim = withinLimits(row, amountCents);
+    if (!lim.ok) {
+      out.applicable = false;
+      out.reason = lim.reason;
+      return out;
+    }
+    const price = row.price || {};
+    const cost = row.cost || {};
+    const com = row.commission || null;
+
+    // Commission the supplier pays us (vending rows).
+    if (com && com.bps != null) {
+      out.commissionCents = bps(amountCents, com.bps);
+      out.commissionBookedCents = bps(amountCents, com.bookedBps == null ? com.bps : com.bookedBps);
+    }
+
+    // What the customer pays WaPay.
+    switch (price.kind) {
+      case 'depositFee':
+        out.priceCents = depositFeeCents(amountCents);
+        break;
+      case 'payreq':
+        out.priceCents = paymentRequestFeeCents(amountCents, price.rail || 'PAYFAST');
+        break;
+      case 'bands':
+        out.priceCents = bandFeeCents(price.bands, amountCents);
+        break;
+      case 'flat':
+        out.priceCents = price.flatCents;
+        break;
+      case 'pct':
+        out.priceCents = bps(amountCents, price.pctBps);
+        break;
+      case 'faceDiscount': {
+        const discount = bps(amountCents, price.discountBps);
+        out.priceCents = discount;
+        out.creditedCents = amountCents - discount;
+        break;
+      }
+      case 'face':
+        out.priceCents = 0;
+        break;
+      default:
+        out.priceCents = null;
+    }
+
+    // What the counterparty charges us.
+    if (cost.kind === 'supplierNet') {
+      // Face less commission: the supplier's price for the product itself.
+      if (out.commissionCents == null) {
+        out.costUnknown = true;
+      } else {
+        out.costExCents = amountCents - out.commissionCents;
+        out.costInclCents = out.costExCents;
+      }
+    } else if (price.kind === 'bands') {
+      if (cost.fixedCents == null) {
+        out.costUnknown = true;
+      } else {
+        const ex = cost.fixedCents + Math.round((amountCents * (cost.bps || 0)) / 10000);
+        out.costExCents = ex;
+        out.costInclCents = cashoutRailCostCents(cost, amountCents);
+      }
+    } else if (price.kind === 'faceDiscount') {
+      if (cost.bps == null) {
+        out.costUnknown = true;
+      } else {
+        const ex = bps(amountCents, cost.bps) + (cost.fixedCents || 0);
+        out.costExCents = ex;
+        out.costInclCents = cost.exVat ? Math.round((ex * (10000 + VAT_BPS)) / 10000) : ex;
+        out.receivedCents = amountCents - out.costInclCents;
+      }
+    } else {
+      const rc = railCostCents(cost, amountCents);
+      if (rc == null) {
+        out.costUnknown = cost.status === 'UNKNOWN' || (cost.fixedCents == null && cost.bps == null && cost.monthlyCents == null && cost.perMessageUsd == null);
+      } else {
+        out.costExCents = rc.exCents;
+        out.costInclCents = rc.inclCents;
+      }
+    }
+
+    // Margin.
+    if (out.costUnknown) {
+      out.marginCents = null;
+      out.marginBookedCents = null;
+    } else if (cost.kind === 'supplierNet') {
+      const fee = out.priceCents || 0;
+      out.marginCents = fee + out.commissionCents;
+      out.marginBookedCents = fee + out.commissionBookedCents;
+    } else if (price.kind === 'faceDiscount') {
+      out.marginCents = out.receivedCents - out.creditedCents;
+      out.marginBookedCents = out.marginCents;
+    } else if (out.priceCents == null && out.commissionCents == null) {
+      out.marginCents = null;
+      out.marginBookedCents = null;
+    } else {
+      const fee = out.priceCents || 0;
+      const c = out.costInclCents || 0;
+      out.marginCents = fee + (out.commissionCents || 0) - c;
+      out.marginBookedCents = fee + (out.commissionBookedCents || 0) - c;
+    }
+    return out;
+  }
+
+  /** The five reference amounts for every row: the grid the founder asked for. */
+  function grid(rows, amounts) {
+    const result = {};
+    for (const row of rows) {
+      result[row.id] = {};
+      for (const a of amounts) result[row.id][String(a)] = compute(row, a);
+    }
+    return result;
+  }
+
+  /** R12.34 with a thin-space thousands separator; negatives carry a leading minus. */
+  function rand(cents, { sign = false } = {}) {
+    if (cents == null || Number.isNaN(cents)) return '';
+    const neg = cents < 0;
+    const v = Math.abs(Math.round(cents));
+    const whole = String(Math.floor(v / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const frac = String(v % 100).padStart(2, '0');
+    const body = `R${whole}.${frac}`;
+    if (neg) return `-${body}`;
+    return sign && cents > 0 ? `+${body}` : body;
+  }
+
+  /** "R2.30 + 3.20%" style description of a cost or price parameter set. */
+  function describeRate(p) {
+    if (!p) return '';
+    if (p.monthlyCents != null) return `${rand(p.monthlyCents)} a month`;
+    if (p.perMessageUsd != null) return `${p.perMessageUsd} a message`;
+    if (p.kind === 'supplierNet') return 'face less commission';
+    if (p.fixedCents == null && p.bps == null) return 'not on file';
+    const parts = [];
+    if (p.fixedCents) parts.push(rand(p.fixedCents));
+    if (p.bps) parts.push(`${(p.bps / 100).toFixed(2).replace(/\.?0+$/, '')}%`);
+    if (!parts.length) return 'R0';
+    return parts.join(' + ') + (p.exVat ? ' ex VAT' : '');
+  }
+
+  function describePrice(p) {
+    if (!p) return '';
+    switch (p.kind) {
+      case 'depositFee': return '4.20% + R2.30 on top, rounded up to the next rand';
+      case 'payreq': return p.rail === 'ADUMO' ? 'R1 + 2.5% off the receiver, 10c rounding, free under R50' : 'R2.30 + 4.20% off the receiver, 10c rounding, free under R50';
+      case 'bands':
+        if (p.bands.length === 1) return `${rand(p.bands[0][1])} flat`.replace(/\.00/g, '');
+        return p.bands.map(([max, fee]) => (max == null ? `${rand(fee)} above` : `${rand(fee)} up to ${rand(max)}`)).join(', ').replace(/\.00/g, '');
+      case 'flat': return p.flatCents ? `${rand(p.flatCents)} flat` : 'free';
+      case 'pct': return `${(p.pctBps / 100).toFixed(1).replace(/\.0$/, '')}% of face`;
+      case 'faceDiscount': return `face less ${(p.discountBps / 100).toFixed(0)}% credited`;
+      case 'face': return 'face value, no WaPay fee';
+      case 'none': return 'no price set';
+      default: return '';
+    }
+  }
+
+  const PAYER_LABEL = {
+    customer: 'the customer, on top',
+    receiver: 'the receiver, off the credit',
+    sender: 'the sender',
+    business: 'the business',
+    nobody: 'nobody (free or face value)',
+    wapay: 'WaPay',
+  };
+
+  return {
+    VAT_BPS,
+    CARD_RAIL,
+    PAYREQ_FREE_BELOW_CENTS,
+    PAYER_LABEL,
+    bps,
+    inclVatCents,
+    depositFeeCents,
+    paymentRequestFeeCents,
+    bandFeeCents,
+    cashoutRailCostCents,
+    railCostCents,
+    compute,
+    grid,
+    rand,
+    describeRate,
+    describePrice,
+  };
+})();
+
+
+</script>
+<script id="rows-data" type="application/json">{"title":"WaPay Money Map","version":"1.0","date":"2026-10-04","referenceAmountsCents":[5000,20000,50000,100000,300000],"vatBps":1500,"vatNote":"WaPay is not VAT-registered (switch: WAPAY_VAT_REGISTERED). Every supplier price quoted excluding VAT costs WaPay 1.15 times the quoted number and the VAT cannot be recovered. WaPay charges no VAT on its own fees today.","statusVocabulary":{"SIGNED":"In an executed contract, or on a supplier rate card WaPay is actually charged against.","LIVE":"In code and charged to customers today, on a rail that is on in production.","ASSUMED":"Used in code or in a guide without a contract or a recorded founder decision.","PROPOSED":"A recommendation, a supplier offer, or a recorded decision not yet charged (rail off) or not yet agreed by the counterparty.","UNKNOWN":"Asked of the supplier or never asked; no answer on file."},"sections":{"in":{"title":"Money in","blurb":"How value enters a wallet: card and EFT deposits, voucher loads, and the rails not yet built."},"out":{"title":"Money out","blurb":"Withdrawals on OTT's pay-out rail and Pay@: what OTT charges, what the customer pays, what is left."},"vend":{"title":"Vending","blurb":"Products bought from the balance: the customer pays face, WaPay earns a commission or pays a fee to the issuer."},"paid":{"title":"Getting paid","blurb":"Please Pay Me links: the payer always pays the displayed amount; the receiver carries the card fee."},"send":{"title":"Sending","blurb":"Person to person: free inside WaPay, a R3 service fee on a voucher to a non-member."},"biz":{"title":"Business","blurb":"WaPay for Business: the same rails under a business account, plus the pay-out and disbursement ideas on file."},"fixed":{"title":"Costs that are not per transaction","blurb":"Retainers and per-message costs that sit under every row above."}},"rows":[{"id":"in.payfast.instant_eft","section":"in","name":"Deposit by Instant EFT","counterparty":"PayFast","productState":"LIVE","productNote":"4 real deposits settled on PayFast (any method). The deposit fee is one number for every PayFast method; the margin differs by method because PayFast's cost does.","payer":"customer","limits":{"minCents":1000,"maxCents":300000},"cost":{"fixedCents":0,"bps":200,"exVat":true,"status":"SIGNED","source":"PayFast portal rate card, captured 2026-09-04 (docs/PAYFAST_FEES.md); card rate verified against a real ITN (R3.18 on R24, memory wapay-fee-model 2026-08-26)"},"price":{"kind":"depositFee","status":"LIVE","source":"lib/deposits.js depositFeeCents: 4.20% + R2.30 rounded up to the next rand, on top (WAPAY_DEPOSIT_FEE_BPS 420, WAPAY_DEPOSIT_FEE_FIXED_CENTS 230; founder decision 2026-08-20)"},"codeRef":{"fn":"depositFeeCents"},"notes":"Our best deposit rail by a wide margin: no fixed fee, 2.30% all in. Nothing in the checkout steers customers to it (docs/PAYFAST_FEES.md finding 3).","question":"Deposit fee: keep 4.20% + R2.30 or move to 4.50% + R2.30 to protect the 17c debit-card margin (docs/PAYFAST_FEES.md finding 2, open since 2026-09-04)?","owner":"Founder"},{"id":"in.payfast.mobicred","section":"in","name":"Deposit by Mobicred","counterparty":"PayFast","productState":"LIVE","payer":"customer","limits":{"minCents":1000,"maxCents":300000},"cost":{"fixedCents":0,"bps":320,"exVat":true,"status":"SIGNED","source":"PayFast portal rate card 2026-09-04 (docs/PAYFAST_FEES.md)"},"price":{"kind":"depositFee","status":"LIVE","source":"lib/deposits.js depositFeeCents"},"codeRef":{"fn":"depositFeeCents"},"notes":"Credit product; PayFast minimum R1, maximum R50,000.","owner":"Founder"},{"id":"in.payfast.credit_card","section":"in","name":"Deposit by credit card","counterparty":"PayFast","productState":"LIVE","payer":"customer","limits":{"minCents":1000,"maxCents":300000},"cost":{"fixedCents":200,"bps":320,"exVat":true,"status":"SIGNED","source":"PayFast portal rate card 2026-09-04 (docs/PAYFAST_FEES.md); verified by the real ITN of 2026-08-26"},"price":{"kind":"depositFee","status":"LIVE","source":"lib/deposits.js depositFeeCents"},"codeRef":{"fn":"depositFeeCents"},"owner":"Founder"},{"id":"in.payfast.wallet_pay","section":"in","name":"Deposit by Apple Pay, Google Pay or Samsung Pay","counterparty":"PayFast","productState":"LIVE","payer":"customer","limits":{"minCents":1000,"maxCents":300000},"cost":{"fixedCents":200,"bps":320,"exVat":true,"status":"SIGNED","source":"PayFast portal rate card 2026-09-04 (docs/PAYFAST_FEES.md)"},"price":{"kind":"depositFee","status":"LIVE","source":"lib/deposits.js depositFeeCents"},"codeRef":{"fn":"depositFeeCents"},"notes":"Priced as a credit card by PayFast. American Express and Store Card (RCS) carry the same R2.00 + 3.20%.","owner":"Founder"},{"id":"in.payfast.zapper","section":"in","name":"Deposit by Zapper","counterparty":"PayFast","productState":"LIVE","payer":"customer","limits":{"minCents":1000,"maxCents":300000},"cost":{"fixedCents":200,"bps":325,"exVat":true,"status":"SIGNED","source":"PayFast portal rate card 2026-09-04 (docs/PAYFAST_FEES.md)"},"price":{"kind":"depositFee","status":"LIVE","source":"lib/deposits.js depositFeeCents"},"codeRef":{"fn":"depositFeeCents"},"owner":"Founder"},{"id":"in.payfast.debit_card","section":"in","name":"Deposit by debit card","counterparty":"PayFast","productState":"LIVE","payer":"customer","limits":{"minCents":1000,"maxCents":300000},"cost":{"fixedCents":200,"bps":350,"exVat":true,"status":"SIGNED","source":"PayFast portal rate card 2026-09-04 (docs/PAYFAST_FEES.md)"},"price":{"kind":"depositFee","status":"LIVE","source":"lib/deposits.js depositFeeCents"},"codeRef":{"fn":"depositFeeCents"},"notes":"The mass-market instrument and probably our highest-volume deposit method. SnapScan and QR Code Apps carry the same R2.00 + 3.50%. Margin at R100 is 17 cents (docs/PAYFAST_FEES.md finding 2).","owner":"Founder"},{"id":"in.payfast.mukuru_cash","section":"in","name":"Deposit by Mukuru Cash","counterparty":"PayFast","productState":"LIVE","productNote":"Enabled in the PayFast portal on 2026-09-04 and loss-making at every amount under about R2,850.","payer":"customer","limits":{"minCents":20000,"maxCents":300000},"cost":{"fixedCents":600,"bps":350,"exVat":true,"status":"SIGNED","source":"PayFast portal rate card 2026-09-04 (docs/PAYFAST_FEES.md finding 1); PayFast minimum R200, maximum R20,000"},"price":{"kind":"depositFee","status":"LIVE","source":"lib/deposits.js depositFeeCents (the same fee as every other method)"},"codeRef":{"fn":"depositFeeCents"},"notes":"A R200 deposit (Mukuru's own minimum) costs us R14.95 and earns R10.70. SCode (R5 + 4.50%) and MoreTyme (R2 + 5.50%) are also loss-making and are correctly switched off.","question":"Mukuru Cash is enabled on PayFast and loses money on every realistic deposit: disable it in the PayFast portal (one toggle, no code), or keep it as a stated cash-in subsidy?","owner":"Founder"},{"id":"in.payfast.capitec_pay","section":"in","name":"Deposit by Capitec Pay","counterparty":"PayFast","productState":"LIVE","payer":"customer","limits":{"minCents":1000,"maxCents":300000},"cost":{"fixedCents":null,"bps":null,"exVat":true,"status":"UNKNOWN","source":"Not a line on the 2026-09-04 portal capture (docs/PAYFAST_FEES.md); the chat copy and the tracker name Capitec Pay as a PayFast method"},"price":{"kind":"depositFee","status":"LIVE","source":"lib/deposits.js depositFeeCents"},"codeRef":{"fn":"depositFeeCents"},"question":"What does PayFast charge for Capitec Pay? It is offered in the checkout but is not on the rate card we captured on 2026-09-04.","owner":"Founder (read it off the PayFast portal, Payment Methods)"},{"id":"in.adumo.debit_card","section":"in","name":"Card payment by debit card on Adumo (Nedbank via SHB)","counterparty":"Adumo Online / SHB Financial Services","productState":"OFF","productNote":"Built to the edge of our credentials and proven on Adumo's staging (docs/ADUMO.md section 6). Carries pay links, not the deposit command. Off until WAPAY_ADUMO_ENABLED and SHB's written acceptance of third-party processing.","payer":"receiver","limits":{"minCents":500,"maxCents":300000},"cost":{"fixedCents":80,"bps":145,"exVat":true,"status":"PROPOSED","source":"SHB offer email 2026-09-10 (memory adumo-shb-card-offer): debit 1.35% + Adumo gateway R0.80 + 0.10%, ex VAT; application form signed by WaPay, no written acceptance from SHB"},"price":{"kind":"payreq","rail":"ADUMO","status":"PROPOSED","source":"lib/deposits.js cardRailFee('ADUMO'): R1 + 2.5% rounded up to 10c, free under R50 with the taper (founder decision 2026-09-10 evening); not charged while the rail is off"},"codeRef":{"fn":"paymentRequestFeeCents","rail":"ADUMO"},"notes":"Healthy on debit and Instant EFT; the blended margin at a 60/40 debit/credit mix is about 0.45%.","question":"Adumo receiver fee: confirm R1 + 2.5% (the lowest headline in the market, a bounded loss on pure credit-card tickets) rather than the earlier R1.50 + 3.0% recommendation, and decide whether to steer payers to Instant EFT and Capitec Pay on the pay page.","owner":"Founder"},{"id":"in.adumo.credit_card","section":"in","name":"Card payment by credit card on Adumo (Nedbank via SHB)","counterparty":"Adumo Online / SHB Financial Services","productState":"OFF","payer":"receiver","limits":{"minCents":500,"maxCents":300000},"cost":{"fixedCents":80,"bps":245,"exVat":true,"status":"PROPOSED","source":"SHB offer 2026-09-10: credit 2.35% + gateway R0.80 + 0.10%, ex VAT (memory adumo-shb-card-offer; docs/ADUMO.md section 3)"},"price":{"kind":"payreq","rail":"ADUMO","status":"PROPOSED","source":"lib/deposits.js cardRailFee('ADUMO'): R1 + 2.5%"},"codeRef":{"fn":"paymentRequestFeeCents","rail":"ADUMO"},"notes":"A pure credit-card ticket loses a bounded few rand at R1 + 2.5%: this is the floor for a single blended fee (docs/ADUMO.md section 3). Apple Pay and Google Pay are charged at the card's rate (Tiisetso, 2026-09-10). Foreign cards 2.80%.","owner":"Founder","questionRef":"in.adumo.debit_card"},{"id":"in.adumo.instant_eft","section":"in","name":"Instant EFT (Ozow) or Capitec Pay on Adumo","counterparty":"Adumo Online / SHB Financial Services","productState":"OFF","payer":"receiver","limits":{"minCents":500,"maxCents":300000},"cost":{"fixedCents":null,"bps":null,"exVat":true,"status":"UNKNOWN","source":"Tiisetso (SHB) 2026-09-10: Instant EFT is Ozow plus Capitec Pay; no rate given (memory adumo-shb-card-offer, open asks)"},"price":{"kind":"payreq","rail":"ADUMO","status":"PROPOSED","source":"lib/deposits.js cardRailFee('ADUMO'): R1 + 2.5%, the same receiver fee for every Adumo method"},"codeRef":{"fn":"paymentRequestFeeCents","rail":"ADUMO"},"question":"What do Ozow Instant EFT and Capitec Pay cost through Adumo? Asked of SHB on 2026-09-10, no rate on file.","owner":"SHB (Tiisetso)"},{"id":"in.ott.voucher_load","section":"in","name":"Load an OTT voucher into the wallet (redemption)","counterparty":"OTT Mobile Technologies","productState":"BUILT","productNote":"Built and probed on the test host; never redeemed in production.","payer":"customer","limits":{"minCents":1000,"maxCents":100000},"cost":{"fixedCents":0,"bps":600,"exVat":true,"status":"SIGNED","source":"OTT Voucher Merchant Agreement (Redemption), Annexure A: 6% of each redeemed voucher plus VAT; OTT signed 14 Aug 2026, WaPay returned its signed page about 2026-09-04 (EMAIL_TO_KEAMO_8_LIVE_CREDENTIALS); a fully executed copy is not on file. Settlement weekly in arrears to Capitec 1054369941."},"price":{"kind":"faceDiscount","discountBps":600,"status":"LIVE","source":"lib/ledger-core.js FEES.load.OTT: discountBps 600, creditPolicy NET (R100 credits R94)"},"codeRef":{"fn":"loadDiscount","rail":"OTT"},"notes":"The code credits face less 6%; the contract charges 6% plus VAT, so OTT remits R93.10 on a R100 voucher while we credit R94.00. The 90 cents per R100 is a loss WaPay carries on every load, plus a week of float. The 2026-08-21 review asked for 2.5% to 3.5%; nothing on file says that was achieved.","question":"OTT and Blu voucher loads: credit face less 6.9% (R93.10 on R100, the true cost including the VAT we cannot recover) or keep face less 6% (R94) and absorb 90 cents per R100 as acquisition cost?","owner":"Founder"},{"id":"in.blu.voucher_load","section":"in","name":"Load a Blu voucher into the wallet (redemption)","counterparty":"Blue Label (BLD)","productState":"BUILT","productNote":"8 real redemptions in the journal (BLU_DEPOSIT, first in Nov 2025); the account is on Blu's QA credentials today.","payer":"customer","limits":{"minCents":0,"maxCents":null},"cost":{"fixedCents":0,"bps":600,"exVat":true,"status":"SIGNED","source":"BLD Voucher Redemption Agreement 2025 (WaPay /BluVoucher/, signed copy), Annexure A clause 2: Blu Voucher commission 6% (excluding VAT) on face value, retained by BLD; payment within 7 days of the end of each calendar week"},"price":{"kind":"faceDiscount","discountBps":600,"status":"LIVE","source":"lib/ledger-core.js FEES.load.BLU: discountBps 600, creditPolicy NET (R100 credits R94; what the bot quotes in lib/fee-facts.js)"},"codeRef":{"fn":"loadDiscount","rail":"BLU"},"notes":"Same 90 cents per R100 gap as the OTT load: the agreement's 6% excludes VAT. The till sometimes charges its own fee on the voucher sale (not ours).","owner":"Founder","questionRef":"in.ott.voucher_load"},{"id":"in.onevoucher.load","section":"in","name":"Load a 1Voucher (not built)","counterparty":"1Voucher (Flash)","productState":"NOT_BUILT","payer":"customer","limits":{"minCents":0,"maxCents":null},"cost":{"fixedCents":0,"bps":600,"exVat":true,"status":"ASSUMED","source":"WAPAY_MONEY_ENGINE_AND_PHASE1.md section 1: '1Voucher (future) similar, about 6%'; no agreement, no contact on file"},"price":{"kind":"faceDiscount","discountBps":600,"status":"ASSUMED","source":"lib/ledger-core.js FEES.load.ONEVOUCHER: discountBps 600 NET, no client, no flow"},"codeRef":{"fn":"loadDiscount","rail":"ONEVOUCHER"},"question":"1Voucher: pursue it as a third cash-in network (no agreement, no contact on file) or remove the placeholder from the fee table?","owner":"Founder"},{"id":"in.payat.till_deposit","section":"in","name":"Cash deposit at a Pick n Pay or Boxer till (Pay@ Biller, not built)","counterparty":"Pay@","productState":"NOT_BUILT","payer":"nobody","limits":{"minCents":0,"maxCents":null},"cost":{"fixedCents":770,"bps":25,"exVat":true,"status":"PROPOSED","source":"Pay@ Commercial Biller Service Schedule, standard (WaPay /Pay@/, unsigned): R7.70 per transaction + 0.25% cash handling at Pick n Pay and Boxer, ex VAT; other retailers 0.35% to 1.50%"},"price":{"kind":"none","status":"UNKNOWN","source":"No price decided; the customer guides say 'at cost, set by retailer' (marketing/guides/wapay_content.py, marked ASSUMED)"},"notes":"Only the pay-out side of Pay@ is signed. A till deposit through Pay@ costs more than a Blu voucher at every amount under about R800.","question":"Pay@ till deposits (R7.70 + 0.25% ex VAT at Pick n Pay and Boxer, unsigned standard schedule): pursue as a cash-in rail or drop it from the guides?","owner":"Founder"},{"id":"out.payshap","section":"out","name":"Withdraw by PayShap to own bank account","counterparty":"OTT Payout (PayShap Account, provider 127)","productState":"PILOT","productNote":"On in production for the five allowlisted numbers on OTT's sandbox. Sandbox PayShap is created then pends or fails at the provider (R50 pending since 2026-10-04 08:55).","payer":"customer","limits":{"minCents":5000,"maxCents":300000},"cost":{"fixedCents":250,"bps":0,"exVat":true,"status":"SIGNED","source":"OTT Payout Agreement signed 2026-08-25 + 2026 Addendum, Annexure A clause 3.3: R2.50 per transaction ex VAT, no percentage on Bank EFT products (WaPay /OTT Onboarding /); applied rate unverified: R12.69 of sandbox float deductions on 2026-10-04 do not yet reconcile to the addendum (payouts thread)"},"price":{"kind":"bands","method":"PAYSHAP","bands":[[null,800]],"status":"LIVE","source":"lib/ledger-core.js FEES.cashout.PAYSHAP: R8 flat (founder +R2 on 2026-09-11 over the R6 of 2026-08-10); quoted by lib/fee-facts.js and lib/how-it-works.js"},"codeRef":{"fn":"cashout","method":"PAYSHAP"},"competitors":[{"name":"Capitec PayShap to another bank","price":"R2"},{"name":"Standard Bank PayShap to a ShapID","price":"R2"},{"name":"Nedbank PayShap via ShapID","price":"R0"},{"name":"TymeBank PayShap","price":"R0 (verify)"}],"notes":"The margin rail: a constant R5.12 at every amount. Dearer than every bank's own PayShap (R0 to R2), so the story is reach, never price (benchmark 2026-09-11).","question":"Pay-out fees: keep the +R2 of 2026-09-11 (PayShap R8, bank transfer R10, cash R18/R23/R30) or return to R6/R8/R16 so CashSend sits under Absa's R16 and FNB's R11? docs/PAYOUT_COMMERCIALS.md (payouts thread) carries the recommendation.","owner":"Founder"},{"id":"out.rtc","section":"out","name":"Withdraw by bank transfer (RTC)","counterparty":"OTT Payout (no RTC provider on the test merchant)","productState":"PILOT","productNote":"Built; no RTC provider is active on OTT's test merchant, so the chat does not offer it. Production availability asked in EMAIL_TO_KEAMO_9_COMMERCIALS (unsent as far as the repo knows).","payer":"customer","limits":{"minCents":2000,"maxCents":300000},"cost":{"fixedCents":450,"bps":0,"exVat":true,"status":"SIGNED","source":"OTT Payout Addendum 2026, Annexure A clause 3.3: R4.50 per transaction ex VAT"},"price":{"kind":"bands","method":"RTC","bands":[[null,1000]],"status":"LIVE","source":"lib/ledger-core.js FEES.cashout.RTC: R10 flat (+R2 decision 2026-09-11)"},"codeRef":{"fn":"cashout","method":"RTC"},"competitors":[{"name":"Hyphen benchmark, RTC payout for businesses","price":"about R40 (WAPAY_B2B_PAYOUTS.md section 8.4)"}],"question":"Can OTT enable RTC for WaPay in production, and at what price? There is no RTC provider on the sandbox merchant.","owner":"OTT (Keamo)"},{"id":"out.cashsend","section":"out","name":"Withdraw as cash at an Absa ATM or a Pick n Pay or Boxer till (ABSA CashSend)","counterparty":"OTT Payout (ABSA CashSend, provider 112)","productState":"PILOT","productNote":"Sandbox: failed at the provider (status 97) on 2026-10-04 09:01; OTT emailed a failure notice carrying the customer's full PII.","payer":"customer","limits":{"minCents":5000,"maxCents":300000},"cost":{"fixedCents":996,"bps":30,"exVat":true,"status":"SIGNED","source":"OTT Payout Addendum 2026, Annexure A clause 3.2: R9.96 per ABSA Cash Send + OTT switching fee 0.3% of the total value of payments completed per month, ex VAT; reversals R10 ex VAT"},"price":{"kind":"bands","method":"CASHSEND","bands":[[70000,1800],[150000,2300],[null,3000]],"status":"LIVE","source":"lib/ledger-core.js FEES.cashout.CASHSEND: R18 up to R700, R23 up to R1,500, R30 above (+R2 decision 2026-09-11); bands exist because a flat R14 went underwater above about R738 face"},"codeRef":{"fn":"cashout","method":"CASHSEND"},"competitors":[{"name":"Absa CashSend","price":"R16 up to R1,000, R32 up to R2,000"},{"name":"FNB eWallet (sender)","price":"R11 up to R500, R30 above; R10 on Easy"},{"name":"Capitec Send Cash","price":"R10 per R1,000"},{"name":"Standard Bank Instant Money","price":"R10 / R20 / R30 by band"},{"name":"Nedbank Send-iMali","price":"R12 per R1,000"},{"name":"Shoprite Money Transfer","price":"R9.99 (unverified)"}],"notes":"Dearer than Absa's own R16 and FNB's R11 at the first band. The 0.3% is levied on monthly aggregate value; the map accrues it per transaction as the code does.","owner":"Founder"},{"id":"out.nedcash","section":"out","name":"Withdraw as cash at a Nedbank ATM (cardless)","counterparty":"OTT Payout (Nedbank Cardless Withdrawal, provider 4)","productState":"PILOT","productNote":"The first customer withdrawal ever to complete: R20 + R18 on 2026-10-04 08:39 (OTT reference 126382, sandbox).","payer":"customer","limits":{"minCents":2000,"maxCents":300000},"cost":{"fixedCents":996,"bps":30,"exVat":true,"status":"SIGNED","source":"OTT Payout Addendum 2026, Annexure A clause 3.2: R9.96 per Cardless Cash Send + 0.3% switching per month, ex VAT (priced like ABSA CashSend)"},"price":{"kind":"bands","method":"NEDCASH","bands":[[70000,1800],[150000,2300],[null,3000]],"status":"LIVE","source":"lib/ledger-core.js FEES.cashout.NEDCASH: the CashSend bands"},"codeRef":{"fn":"cashout","method":"NEDCASH"},"competitors":[{"name":"Nedbank Send-iMali","price":"R12 per R1,000"}],"owner":"Founder"},{"id":"out.ewallet","section":"out","name":"Withdraw as an FNB eWallet","counterparty":"OTT Payout (FNB e-wallet, provider 1)","productState":"PILOT","productNote":"Mapped in code; not yet available on OTT's side ('it will eventually come online', 2026-09-23).","payer":"customer","limits":{"minCents":2000,"maxCents":300000},"cost":{"fixedCents":996,"bps":30,"exVat":true,"status":"UNKNOWN","source":"Not in the Addendum. The code ASSUMES the CashSend price (lib/ledger-core.js FEES.cashout.EWALLET comment, asked of OTT 2026-09-15 and in EMAIL_TO_KEAMO_9_COMMERCIALS; no answer)"},"price":{"kind":"bands","method":"EWALLET","bands":[[70000,1800],[150000,2300],[null,3000]],"status":"ASSUMED","source":"lib/ledger-core.js FEES.cashout.EWALLET mirrors CashSend so the margin test holds"},"codeRef":{"fn":"cashout","method":"EWALLET"},"competitors":[{"name":"FNB eWallet sent from an FNB account","price":"R11 up to R500, R30 above (sender pays; recipient collects free)"}],"question":"What does OTT charge for an FNB e-wallet pay-out, and does it carry the 0.3% switching fee? Asked 2026-09-15 and in the commercials email; no answer. The customer fee is assumed equal to CashSend until then.","owner":"OTT (Keamo)"},{"id":"out.payat","section":"out","name":"Withdraw as cash at a Pick n Pay till (Pay@, not integrated)","counterparty":"Pay@","productState":"NOT_BUILT","productNote":"Signed in November 2025 (Pay Out Customer Terms, BRS, debit order mandate, in WaPay /Pay@/Signed Docs); no client built; CLEARING:PAYAT exists in the ledger.","payer":"customer","limits":{"minCents":0,"maxCents":500000},"cost":{"fixedCents":865,"bps":0,"exVat":true,"status":"SIGNED","source":"Pay Out Customer Service Schedule, Pick n Pay: R8.65 per transaction ex VAT, escalating annually on 1 March with CPI (iCloud root, Nov 2025); the 1 March 2026 escalation is not on file, so the current figure may be higher"},"price":{"kind":"bands","method":"PAYAT","bands":[[null,1400]],"status":"LIVE","source":"lib/ledger-core.js FEES.cashout.PAYAT: R14 flat (+R2 decision 2026-09-11 over R12); no customer path reaches it"},"codeRef":{"fn":"cashout","method":"PAYAT"},"competitors":[{"name":"Shoprite Money Market till withdrawal","price":"R5"}],"question":"Pay@: has the R8.65 Pick n Pay fee escalated on 1 March 2026 as the schedule allows, and do we still intend to integrate Pay@ when OTT's CashSend reaches the same tills?","owner":"Founder / Pay@"},{"id":"out.ott_voucher_exit","section":"out","name":"Take a withdrawal as an OTT voucher (exit option, not built)","counterparty":"OTT (Reseller agreement)","productState":"NOT_BUILT","payer":"nobody","limits":{"minCents":1000,"maxCents":100000},"cost":{"fixedCents":0,"bps":0,"exVat":false,"status":"SIGNED","source":"Issuing a voucher costs WaPay nothing beyond float; OTT pays 4% of face as commission (Reseller agreement, countersigned 13 Aug 2026)"},"price":{"kind":"none","status":"PROPOSED","source":"memory voucher-as-balance-rejected: offer the voucher as an opt-in exit at withdrawal, never defaulted, exact amount, disclosed as not swappable for cash; a bonus funded only from the commission"},"commission":{"bps":400,"bookedBps":0,"status":"SIGNED","source":"Reseller agreement Annexure A 20.3.5: 4% on reconciled sales (plus VAT only for a VAT-registered reseller)"},"codeRef":null,"notes":"Earns about R4 per R100 instead of paying R2.88 to PayShap: a swing of roughly R7 per exit, and the one exit that keeps the no-cash-out defence.","question":"Build the voucher-as-exit option at withdrawal (earn 4% instead of paying a pay-out fee; preserves the no-cash-out posture)?","owner":"Founder"},{"id":"vend.airtime","section":"vend","name":"Airtime (any network, own or other number)","counterparty":"Blue Label (Blu Telecoms Trade API)","productState":"BUILT","productNote":"Flow proven; vends only to Blu's four QA test numbers until the production cutover (BUGLOG #78).","payer":"nobody","limits":{"minCents":500,"maxCents":100000},"cost":{"kind":"supplierNet","status":"ASSUMED","source":"Supplier bills face less commission (lib/ledger-core.js buildSpend); no Blu rate card on file"},"price":{"kind":"face","status":"LIVE","source":"No WaPay fee; the customer pays the product price (lib/fee-facts.js, lib/how-it-works.js VAS_LIMITS)"},"commission":{"bps":400,"bookedBps":400,"status":"ASSUMED","source":"lib/ledger-core.js FEES.commissionBps.AIRTIME 400: 'planning estimates until each supplier rate card is confirmed in writing'"},"codeRef":{"fn":"commission","category":"AIRTIME"},"question":"Blu VAS commission: what does Blu actually pay WaPay on airtime, data and electricity, as a percentage or per unit, excluding or including VAT? The code books 4%, 5% and 1.5% as planning estimates; no rate card exists anywhere on file (the Blu thread searched every folder on 2026-10-04 and has added the ask to the Phuti email).","owner":"Blu (Phuti) / Founder"},{"id":"vend.data","section":"vend","name":"Data bundles (any network)","counterparty":"Blue Label","productState":"BUILT","productNote":"Zero data vends ever; catalogue last synced 2026-08-18.","payer":"nobody","limits":{"minCents":100,"maxCents":100000},"cost":{"kind":"supplierNet","status":"ASSUMED","source":"Face less commission; no Blu rate card on file"},"price":{"kind":"face","status":"LIVE","source":"No WaPay fee; the customer pays the bundle price"},"commission":{"bps":500,"bookedBps":500,"status":"ASSUMED","source":"lib/ledger-core.js FEES.commissionBps.DATA 500 (planning estimate)"},"codeRef":{"fn":"commission","category":"DATA"},"owner":"Blu (Phuti) / Founder","questionRef":"vend.airtime"},{"id":"vend.electricity","section":"vend","name":"Prepaid electricity (any meter)","counterparty":"Blue Label","productState":"BUILT","productNote":"Allowlist-gated; QA vend confirmed on the compliance meter; zero production vends.","payer":"nobody","limits":{"minCents":1000,"maxCents":500000},"cost":{"kind":"supplierNet","status":"ASSUMED","source":"Face less commission; no Blu rate card on file"},"price":{"kind":"face","status":"LIVE","source":"No WaPay fee; the customer pays face (lib/how-it-works.js VAS_LIMITS.ELECTRICITY R10 to R5,000)"},"commission":{"bps":150,"bookedBps":150,"status":"ASSUMED","source":"lib/ledger-core.js FEES.commissionBps.ELECTRICITY 150 (planning estimate; WAPAY_V1_AND_FORECAST.md 'about 1.5%')"},"codeRef":{"fn":"commission","category":"ELECTRICITY"},"owner":"Blu (Phuti) / Founder","notes":"Blu's own product sheet (BLU VAS/Top 10 Pinned, Pinless, Elec, Bill, Lifestyle.xlsx, sheet 'API & prod exposure') gives the commission TYPE per product with no figure: a percentage for most municipalities but a per-UNIT fee for Eskom and Breede Valley, so a flat 1.5% is the wrong shape for Eskom meters (Blu thread, 2026-10-04).","questionRef":"vend.airtime"},{"id":"vend.ott_voucher_self","section":"vend","name":"Buy an OTT voucher for yourself","counterparty":"OTT (Reseller agreement, issuing)","productState":"BUILT","productNote":"3 issued on the test host; live credentials received, not applied.","payer":"nobody","limits":{"minCents":1000,"maxCents":100000},"cost":{"kind":"supplierNet","status":"SIGNED","source":"WaPay pre-funds OTT's prepaid wallet at face; commission is reconciled monthly into the wallet (Reseller agreement 20.3)"},"price":{"kind":"face","status":"LIVE","source":"Fee-free self-purchase (founder decision, BUGLOG #20; lib/fee-facts.js 'Buying an OTT voucher for yourself is free')"},"commission":{"bps":400,"bookedBps":0,"status":"SIGNED","source":"OTT Reseller Agreement Annexure A 20.3.5: the Reseller retains 4% on all reconciled sales (plus VAT for a VAT-registered reseller); OTT countersigned 13 Aug 2026, effective 11 Aug 2026 (tracker 2026-08-19). lib/ledger-core.js FEES.voucherGift.commissionBps is still 0."},"codeRef":{"fn":"voucherGift"},"notes":"The contract is signed but the ledger books no commission, so REVENUE:COMMISSION:VOUCHER is zero and the margin on every voucher is understated by 4% of face. Resale never above face: the R3 gift fee is an itemised service fee, never a voucher markup.","question":"OTT issuing commission is signed at 4% of face but the ledger books 0: book the 4% now, or wait for OTT's first monthly reconciliation statement to confirm the rate as applied?","owner":"Founder"},{"id":"vend.ott_voucher_gift","section":"vend","name":"Send an OTT voucher to any SA number (gift)","counterparty":"OTT (Reseller agreement, issuing)","productState":"BUILT","productNote":"4 gifts on the test host.","payer":"sender","limits":{"minCents":1000,"maxCents":100000},"cost":{"kind":"supplierNet","status":"SIGNED","source":"As the self-purchase: pre-funded float, 4% commission reconciled monthly"},"price":{"kind":"flat","flatCents":300,"status":"LIVE","source":"lib/ledger-core.js FEES.voucherGift.flatFeeCents 300: R3 flat service fee (locked fee model 2026-08-10)"},"commission":{"bps":400,"bookedBps":0,"status":"SIGNED","source":"Reseller agreement 20.3.5 (4%); 0 bps in code"},"codeRef":{"fn":"voucherGift"},"owner":"Founder","questionRef":"vend.ott_voucher_self"},{"id":"vend.fuel_wicode","section":"vend","name":"Fuel voucher (wiCode via UniFuel on Yoyo): Shell and Engen","counterparty":"Yoyo (WiGroup) through UniFuel","productState":"PILOT","productNote":"Founder-only pilot on Yoyo TEST (1 purchase, 2026-08-31, no pump). Production needs campaign IDs and the signed retainer.","payer":"nobody","limits":{"minCents":5000,"maxCents":50000},"cost":{"fixedCents":20,"bps":250,"exVat":false,"status":"PROPOSED","source":"Yoyo (Siphosihle Xongwana) email, September 2026, recorded in the Fee Benchmark v1.2: 2.5% on every voucher issued, R0.20 per SMS, R15,000 monthly retainer from production start, float prepaid, no pre-launch window; VAT treatment not stated and taken as quoted. Nothing signed (WICODE_NETWORK.md: no WiGroup contract on file)."},"price":{"kind":"face","status":"LIVE","source":"No WaPay fee today (lib/capabilities.js fuel R50 to R500). A 5% convenience fee is the Fee Benchmark v1.2 default."},"commission":{"bps":0,"bookedBps":0,"status":"PROPOSED","source":"lib/ledger-core.js FEES.commissionBps.FUEL 0 until a rate is signed; Yoyo says no fuel rebate"},"proposedPrice":{"kind":"pct","pctBps":500,"status":"PROPOSED","source":"Fee Benchmark v1.2 (2026-09-11), the 5% convenience fee discussed; break-even about 1,220 vouchers of R500 a month before profit"},"codeRef":{"fn":"commission","category":"FUEL"},"notes":"At today's R0 fee every fuel voucher loses 2.5% plus R0.20 before the retainer. The SMS is avoidable if Yoyo sends nothing and WaPay delivers the code on WhatsApp, which it already does.","question":"Yoyo wiCodes: accept 2.5% on issue + R0.20 per SMS + a R15,000 monthly retainer, and charge the customer a 5% convenience fee (break-even about 1,220 vouchers of R500 a month), or hold fuel and retail until a rebate exists?","owner":"Founder / Yoyo (Sipho)"},{"id":"vend.retail_wicode","section":"vend","name":"Retail wiCode at a till (Checkers, Shoprite, Pick n Pay, KFC)","counterparty":"Yoyo (WiGroup) through UniFuel","productState":"NOT_BUILT","productNote":"Pipeline accepts RETAIL but no campaign products exist (NO_PRODUCT); nothing advertised until Yoyo confirms the redeemable catalogue.","payer":"nobody","limits":{"minCents":0,"maxCents":null},"cost":{"fixedCents":20,"bps":250,"exVat":false,"status":"PROPOSED","source":"Same Yoyo terms as fuel (September 2026 email): 2.5% on issue, R0.20 SMS, the shared R15,000 retainer"},"price":{"kind":"face","status":"PROPOSED","source":"No fee decided; the designed UX is an exact-amount code for the basket (WICODE_NETWORK.md)"},"commission":{"bps":0,"bookedBps":300,"status":"UNKNOWN","source":"Yoyo (Sipho, September 2026): no rebate on grocery or fuel, KFC possibly; so 0% is the supplier's position today. lib/ledger-core.js FEES.commissionBps.RETAIL 300 is a planning estimate the ledger would book unless WAPAY_WICODE_COMMISSION_BPS overrides it (UNIFUEL_INTEGRATION.md). Yoyo's Agreed Gift Card Rebates sheet (WiGroup folder, Jan 2026) lists no grocery retailer and no KFC; 5% at Debonairs, Steers, Wimpy and others; 3% Dis-Chem."},"codeRef":{"fn":"commission","category":"RETAIL"},"notes":"Grocery is the marketing story and the worst margin: zero rebate agreed anywhere. Partial redemption kills the code, so issue for the exact basket amount.","question":"Retail rebates: what does WaPay earn per brand on redeemed value (asked in EMAIL_TO_SIPHO_YOYO, unsent)? Without a rebate a grocery wiCode costs 2.5% plus R0.20 and earns nothing.","owner":"Yoyo (Sipho)"},{"id":"vend.blu_lifestyle","section":"vend","name":"Lifestyle vouchers (Netflix, Uber, PlayStation, Google Play) via Blu","counterparty":"Blue Label","productState":"OFF","productNote":"Gated off (VAS_LIVE_LIFESTYLE); endpoints guessed; asked of Blu 18 and 28 Aug 2026, no answer (docs/BLU_VAS_CATEGORY_REQUEST.md).","payer":"nobody","limits":{"minCents":0,"maxCents":null},"cost":{"kind":"supplierNet","status":"UNKNOWN","source":"No Blu documentation for this category"},"price":{"kind":"face","status":"ASSUMED","source":"Guides assume R0 WaPay fee (marketing/guides, marked ASSUMED)"},"commission":{"bps":500,"bookedBps":500,"status":"UNKNOWN","source":"lib/ledger-core.js FEES.commissionBps.LIFESTYLE 500 (planning estimate); Blu entitlement and rate unknown"},"codeRef":{"fn":"commission","category":"LIFESTYLE"},"question":"Blu lifestyle vouchers: is our trade account entitled to the category, and at what commission? Asked 18 and 28 August 2026, no answer.","owner":"Blu (Phuti)"},{"id":"vend.blu_billpay","section":"vend","name":"Bill payments (DStv) via Blu","counterparty":"Blue Label","productState":"OFF","payer":"nobody","limits":{"minCents":0,"maxCents":null},"cost":{"kind":"supplierNet","status":"UNKNOWN","source":"No Blu documentation for this category"},"price":{"kind":"face","status":"ASSUMED","source":"Guides assume R0 WaPay fee (ASSUMED)"},"commission":{"bps":100,"bookedBps":100,"status":"UNKNOWN","source":"lib/ledger-core.js FEES.commissionBps.BILLPAY 100 (planning estimate); WAPAY_MONEY_ENGINE: 'flat fee' in the market"},"codeRef":{"fn":"commission","category":"BILLPAY"},"question":"Blu bill payments (DStv): entitlement and commission? No answer from Blu since 18 August 2026. (OTT vouchers already pay DStv through Pay@ and Xash.)","owner":"Blu (Phuti)"},{"id":"vend.blu_gaming","section":"vend","name":"Gaming and betting top-ups via Blu (web only, never on WhatsApp)","counterparty":"Blue Label","productState":"OFF","productNote":"Meta policy forbids any betting surface on the WhatsApp number; this category can only ever live on the web (memory meta-gambling-policy).","payer":"nobody","limits":{"minCents":0,"maxCents":null},"cost":{"kind":"supplierNet","status":"UNKNOWN","source":"No Blu documentation; Blu carries about 28 betting brands (WAPAY_RETAIL_LAUNCH_PLAN.md)"},"price":{"kind":"face","status":"ASSUMED","source":"Free deposit as the hook (WAPAY_MONEY_ENGINE section 3)"},"commission":{"bps":1000,"bookedBps":1000,"status":"UNKNOWN","source":"lib/ledger-core.js FEES.commissionBps.BETTING 1000; WAPAY_MONEY_ENGINE: 'often 8 to 15%+' (planning estimate)"},"codeRef":{"fn":"commission","category":"BETTING"},"question":"Betting top-ups via Blu: entitlement and commission (the code plans 10%)? Web-only by Meta policy; ships after the everyday utilities per the locked category order.","owner":"Blu (Phuti) / Founder"},{"id":"vend.blu_remittance","section":"vend","name":"Remittance (Mukuru, Hello Paisa, Mama Money) via Blu","counterparty":"Blue Label","productState":"OFF","productNote":"Nothing exists in code beyond seed rows; regulatory-sensitive, counsel before enabling.","payer":"nobody","limits":{"minCents":0,"maxCents":null},"cost":{"kind":"supplierNet","status":"UNKNOWN","source":"No Blu documentation; no endpoint"},"price":{"kind":"none","status":"UNKNOWN","source":"No fee decided"},"commission":{"bps":null,"bookedBps":null,"status":"UNKNOWN","source":"No rate anywhere, not even a planning estimate in FEES.commissionBps"},"codeRef":null,"question":"Remittance via Blu: entitlement, commission and counsel's view, before anything is built.","owner":"Blu (Phuti) / Counsel"},{"id":"paid.payfast.instant_eft","section":"paid","name":"Please Pay Me link paid by Instant EFT (PayFast)","counterparty":"PayFast","productState":"LIVE","productNote":"3 links paid in production. The payer pays exactly the displayed amount; the receiver's fee comes off the credit.","payer":"receiver","limits":{"minCents":500,"maxCents":300000},"cost":{"fixedCents":0,"bps":200,"exVat":true,"status":"SIGNED","source":"PayFast portal rate card 2026-09-04"},"price":{"kind":"payreq","rail":"PAYFAST","status":"LIVE","source":"lib/deposits.js paymentRequestFeeCents: free under R50, then 4.20% + R2.30 rounded up to 10c, capped so the net never falls (taper to about R56); founder decisions 2026-08-26 (10c rounding) and 2026-08-27 (free under R50)"},"codeRef":{"fn":"paymentRequestFeeCents","rail":"PAYFAST"},"notes":"Requests under R50 are a bounded acquisition subsidy: each absorbed card payment costs PayFast's fee (about R2.50 to R4.10) and buys a payer whose number we capture. The taper zone R50 to about R56 is also loss-making by design.","owner":"Founder"},{"id":"paid.payfast.credit_card","section":"paid","name":"Please Pay Me link paid by credit card, Apple Pay or Google Pay (PayFast)","counterparty":"PayFast","productState":"LIVE","payer":"receiver","limits":{"minCents":500,"maxCents":300000},"cost":{"fixedCents":200,"bps":320,"exVat":true,"status":"SIGNED","source":"PayFast portal rate card 2026-09-04; verified by the real ITN of 2026-08-26 (R3.18 on R24)"},"price":{"kind":"payreq","rail":"PAYFAST","status":"LIVE","source":"lib/deposits.js paymentRequestFeeCents (PayFast rail)"},"codeRef":{"fn":"paymentRequestFeeCents","rail":"PAYFAST"},"owner":"Founder"},{"id":"paid.payfast.debit_card","section":"paid","name":"Please Pay Me link paid by debit card (PayFast)","counterparty":"PayFast","productState":"LIVE","payer":"receiver","limits":{"minCents":500,"maxCents":300000},"cost":{"fixedCents":200,"bps":350,"exVat":true,"status":"SIGNED","source":"PayFast portal rate card 2026-09-04"},"price":{"kind":"payreq","rail":"PAYFAST","status":"LIVE","source":"lib/deposits.js paymentRequestFeeCents (PayFast rail)"},"codeRef":{"fn":"paymentRequestFeeCents","rail":"PAYFAST"},"notes":"The thinnest margin of the three PayFast cases; still positive above the taper.","owner":"Founder"},{"id":"paid.wapay_balance","section":"paid","name":"Please Pay Me link paid from a WaPay balance","counterparty":"none (ledger move)","productState":"LIVE","payer":"nobody","limits":{"minCents":500,"maxCents":300000},"cost":{"fixedCents":0,"bps":0,"exVat":false,"status":"LIVE","source":"A spend-to-spend ledger move (buildSend) with no rail cost"},"price":{"kind":"flat","flatCents":0,"status":"LIVE","source":"lib/ledger-core.js FEES.send.freeForSpendBalance: free for both sides at any amount; the request code is the idemKey across both rails (BUGLOG #18)"},"codeRef":{"fn":"sendSpend"},"owner":"Founder"},{"id":"paid.directed_request","section":"paid","name":"Directed request to someone you have paid before (informational nudge)","counterparty":"none","productState":"LIVE","payer":"nobody","limits":{"minCents":500,"maxCents":300000},"cost":{"fixedCents":0,"bps":0,"exVat":false,"status":"LIVE","source":"One WhatsApp message inside a conversation window"},"price":{"kind":"flat","flatCents":0,"status":"LIVE","source":"Free; relationship-gated (memory cross-user-actions-need-consent-gate)"},"codeRef":null,"owner":"Founder"},{"id":"send.wapay_to_wapay","section":"send","name":"Send to another WaPay user from the spend balance","counterparty":"none (ledger move)","productState":"LIVE","productNote":"1 real P2P send (2026-08-26).","payer":"nobody","limits":{"minCents":1000,"maxCents":100000},"cost":{"fixedCents":0,"bps":0,"exVat":false,"status":"LIVE","source":"Internal double entry, no rail"},"price":{"kind":"flat","flatCents":0,"status":"LIVE","source":"lib/ledger-core.js FEES.send.freeForSpendBalance true (locked 2026-08-10: free spend-to-spend is the growth loop)"},"codeRef":{"fn":"sendSpend"},"owner":"Founder"},{"id":"send.cash_balance","section":"send","name":"Send from a cash balance (in code, no customer path)","counterparty":"none (ledger move)","productState":"NOT_BUILT","productNote":"The CASH balance exists only as the withdrawal path (SPEND to CASH upgrade at withdrawal); no flow sends CASH to CASH today.","payer":"sender","limits":{"minCents":1000,"maxCents":100000},"cost":{"fixedCents":0,"bps":0,"exVat":false,"status":"LIVE","source":"Internal double entry"},"price":{"kind":"flat","flatCents":250,"status":"ASSUMED","source":"lib/ledger-core.js FEES.send.flatCents 250 (locked 2026-08-10: R2.50 when the cash balance is involved); unreachable by any customer flow"},"codeRef":{"fn":"sendCash"},"question":"Keep the R2.50 fee on cash-balance sends in the fee table (no customer path reaches it today) or retire it until withdrawable P2P exists?","owner":"Founder"},{"id":"send.airtime_gift","section":"send","name":"Send airtime or data to another number (gift)","counterparty":"Blue Label","productState":"BUILT","productNote":"Same Blu cutover as airtime; recipient notified by template.","payer":"nobody","limits":{"minCents":500,"maxCents":100000},"cost":{"kind":"supplierNet","status":"ASSUMED","source":"Face less the Blu commission (as the airtime row)"},"price":{"kind":"face","status":"LIVE","source":"No WaPay fee; the sender pays the product price"},"commission":{"bps":400,"bookedBps":400,"status":"ASSUMED","source":"FEES.commissionBps.AIRTIME 400 (planning estimate); data 500"},"codeRef":{"fn":"commission","category":"AIRTIME"},"owner":"Blu (Phuti) / Founder","questionRef":"vend.airtime"},{"id":"send.referral_in_kind","section":"send","name":"Referral reward: R5 airtime to both sides on a referred friend's first funded action (idea)","counterparty":"Blue Label (the airtime)","productState":"NOT_BUILT","payer":"wapay","limits":{"minCents":500,"maxCents":500},"cost":{"fixedCents":960,"bps":0,"exVat":false,"status":"PROPOSED","source":"WAPAY_WALLET_DESIGN_2026-08-20.md: R5 airtime both sides, paid in product at about R4.80 each after the assumed 4% commission; funded-only so it cannot be farmed"},"price":{"kind":"none","status":"PROPOSED","source":"An acquisition cost, not a fee"},"codeRef":null,"question":"Referral in kind (R5 airtime to both sides on the first funded action, about R9.60 per referral): build it, and from which budget?","owner":"Founder"},{"id":"biz.account","section":"biz","name":"WaPay for Business account and portal","counterparty":"none","productState":"LIVE","productNote":"Registration closed by default (WAPAY_BUSINESS_MSISDNS invites); one business registered (2026-09-07).","payer":"nobody","limits":{"minCents":0,"maxCents":null},"cost":{"fixedCents":0,"bps":0,"exVat":false,"status":"LIVE","source":"No per-transaction cost: Vercel and Supabase hosting and the WhatsApp message cost (fixed section) carry it"},"price":{"kind":"flat","flatCents":0,"status":"LIVE","source":"Free to open, R0 a month, the same link fees (WAPAY_MARKETING_FEATURE_CATALOGUE.md section 3; docs/BUSINESS_PORTAL.md)"},"codeRef":null,"question":"Business pricing: confirm that there is no subscription or per-link fee (R0 a month, 'you only pay when you get paid' is the approved claim), and whether the suggested 'first R5,000 of card sales free' onboarding promo (about R143 per business) is wanted.","owner":"Founder"},{"id":"biz.pay_links","section":"biz","name":"Business pay links (itemised, QR, up to 30 days)","counterparty":"PayFast today; Adumo when enabled","productState":"LIVE","payer":"receiver","limits":{"minCents":500,"maxCents":300000},"cost":{"fixedCents":200,"bps":320,"exVat":true,"status":"SIGNED","source":"PayFast credit-card rate shown; the cost follows the payer's method exactly as in Getting paid"},"price":{"kind":"payreq","rail":"PAYFAST","status":"LIVE","source":"lib/deposits.js paymentRequestFeeCents on the primary card rail; the portal quotes fee and net live (docs/BUSINESS_PORTAL.md)"},"codeRef":{"fn":"paymentRequestFeeCents","rail":"PAYFAST"},"notes":"Same money as a consumer link. Against a card machine WaPay is the most expensive per transaction (4.2% + R2.30 vs POS about 2.95% + rental); the win is no monthly rental (break-even about 71 sales a month at R100).","owner":"Founder"},{"id":"biz.payouts_tab","section":"biz","name":"Business Payouts tab (same methods and fees as withdrawals)","counterparty":"OTT Payout","productState":"PILOT","payer":"business","limits":{"minCents":5000,"maxCents":300000},"cost":{"fixedCents":250,"bps":0,"exVat":true,"status":"SIGNED","source":"PayShap R2.50 ex VAT (Addendum); the other methods as in Money out"},"price":{"kind":"bands","method":"PAYSHAP","bands":[[null,800]],"status":"LIVE","source":"lib/payouts.js quotePayout uses cashoutFeeCents: PayShap R8 shown; RTC R10, cash R18/R23/R30"},"codeRef":{"fn":"cashout","method":"PAYSHAP"},"owner":"Founder"},{"id":"biz.bulk_disbursement","section":"biz","name":"B2B bulk pay-outs: the business pays a flat fee per successful pay-out (sketch)","counterparty":"OTT Payout","productState":"NOT_BUILT","payer":"business","limits":{"minCents":2000,"maxCents":300000},"cost":{"fixedCents":250,"bps":0,"exVat":true,"status":"SIGNED","source":"PayShap R2.50 ex VAT for the bank exit; cash exits cost R9.96 + 0.3% (Addendum)"},"price":{"kind":"flat","flatCents":800,"status":"PROPOSED","source":"WAPAY_B2B_PAYOUTS.md section 5 (2026-08-10): R8 per successful pay-out charged to the business, tiered by volume (R8 to R6 to R4); recipient pays nothing; failed pay-outs free. Market: Ozow publishes R3, Instant Money Bulk R20 (section 8)."},"codeRef":null,"notes":"Keep-it-in-WaPay exits cost nothing and keep the whole R8; a cash exit at R9.96 + 0.3% loses money at R8 and must be priced or steered.","question":"B2B disbursement: is R8 per successful pay-out to the business (tiered R8/R6/R4, recipient free) still the intended price, given Ozow publishes R3 and cash exits cost R11.45 plus 0.35% after VAT?","owner":"Founder"},{"id":"fixed.yoyo_retainer","section":"fixed","name":"Yoyo monthly retainer (campaign setup for gift cards)","counterparty":"Yoyo (WiGroup)","productState":"OFF","payer":"wapay","limits":null,"cost":{"monthlyCents":1500000,"exVat":false,"status":"PROPOSED","source":"Yoyo email September 2026 (Fee Benchmark v1.2): R15,000 a month from the month production starts; no pre-launch window offered; VAT treatment not stated"},"price":{"kind":"none","status":"PROPOSED","source":"Recovered only through the fuel and retail convenience fee"},"codeRef":null,"notes":"At a 5% convenience fee and R500 vouchers the retainer needs about 1,220 vouchers a month before a rand of profit.","owner":"Founder","questionRef":"vend.fuel_wicode"},{"id":"fixed.meta_messages","section":"fixed","name":"WhatsApp messages (Meta) from 1 October 2026","counterparty":"Meta","productState":"LIVE","payer":"wapay","limits":null,"cost":{"perMessageUsd":0.0076,"exVat":false,"status":"SIGNED","source":"Meta pricing page (memory growth-benchmarks-valuation-2026): utility $0.0076 (about R0.13), marketing $0.0379, authentication $0.014 per message; from 1 Oct 2026 service replies inside the 24-hour window are billed at the utility rate after 1,000 free a month per number"},"price":{"kind":"none","status":"LIVE","source":"Not passed on; a chatty active user (50 to 80 replies a month) costs R6 to R10 a month"},"codeRef":null,"owner":"Founder"},{"id":"fixed.reversals","section":"fixed","name":"Pay-out reversals (Nedbank and ABSA cash)","counterparty":"OTT Payout","productState":"PILOT","payer":"wapay","limits":null,"cost":{"fixedCents":1000,"bps":0,"exVat":true,"status":"SIGNED","source":"OTT Payout Addendum 2026 clause 1.6: reversals R10.00 ex VAT (Nedbank, ABSA); whether a failed pay-out is charged is asked in EMAIL_TO_KEAMO_9_COMMERCIALS"},"price":{"kind":"none","status":"LIVE","source":"Not charged to the customer: a failed withdrawal returns amount plus fee (payoutOutcomeMessage)"},"codeRef":null,"question":"Does OTT charge for a failed pay-out (R50 CashSend failed at the provider on 2026-10-04), and are reversals the only R10 line? Asked in the commercials email, unanswered.","owner":"OTT (Keamo)"}],"crossCuttingQuestions":[{"id":"q.vat_registration","question":"VAT registration day: when WAPAY_VAT_REGISTERED is switched on, receiver fees gross up by 15% and PayFast and Adumo input VAT becomes recoverable; the tracker's recommendation is then 2.75% flat plus VAT on Adumo rails (Delta 21, 2026-09-11). Confirm the plan before registration.","owner":"Founder","source":"lib/deposits.js vatRegistered(); WAPAY_BUILD_TRACKER.md Delta 21"},{"id":"q.guides_stale","question":"The customer Pricing Guide PDF (marketing/guides, 2026-08-19) still prints the pre-decision pay-out fees (R6/R8/R12/R14), 'EFT and Capitec Pay load free' and 'R6 per R100' on OTT loads: rebuild from this map or withdraw it?","owner":"Founder","source":"marketing/guides/wapay_content.py; memory wapay-customer-guides"},{"id":"q.deposit_env_override","question":"Operational check, not a decision: confirm that the Vercel environment carries no WAPAY_DEPOSIT_FEE_BPS, WAPAY_DEPOSIT_FEE_FIXED_CENTS, WAPAY_ADUMO_FEE_* or WAPAY_PAYREQ_FREE_BELOW_CENTS override, since this map and the consistency test use the code defaults.","owner":"Founder (Vercel env)","source":"lib/deposits.js reads these from process.env"}]}</script>
+<script id="facts-data" type="application/json">{"build":"5249fd3","generatedAt":"2026-10-04T08:06:11.182Z","rowsVersion":"1.0"}</script>
+<script>
+(function(){
+  const MM = MoneyMap;
+  const DATA = JSON.parse(document.getElementById('rows-data').textContent);
+  const FACTS = JSON.parse(document.getElementById('facts-data').textContent);
+  const AMOUNTS = DATA.referenceAmountsCents;
+  const ORDER = ['in','out','vend','paid','send','biz','fixed'];
+  const STATUSES = ['SIGNED','LIVE','ASSUMED','PROPOSED','UNKNOWN'];
+  const STATE_LABEL = { LIVE:'live', PILOT:'pilot', BUILT:'built', OFF:'rail off', NOT_BUILT:'not built' };
+  const state = { idx: 2, view: 'one', onlyQ: false };
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const R = MM.rand;
+  const amtLabel = (c) => 'R' + String(c / 100).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  function needsDecision(row){
+    return [row.cost,row.price,row.commission,row.proposedPrice].filter(Boolean).some(n => n.status !== 'SIGNED' && n.status !== 'LIVE');
+  }
+  function questionCell(row){
+    if(row.question) return esc(row.question) + `<span class="own">${esc(row.owner)}</span>`;
+    if(row.questionRef){ const ref = DATA.rows.find(x => x.id === row.questionRef); if(ref) return `<span class="small">same question as <b>${esc(ref.name)}</b></span>`; }
+    return needsDecision(row) ? '<span class="small">see the decisions panel</span>' : '<span class="small">no open question</span>';
+  }
+  function chip(label, n){
+    if(!n) return '';
+    return `<span class="chip ${esc(n.status)}" title="${esc(n.source)}"><span class="k">${esc(label)}</span>${esc(n.status)}</span>`;
+  }
+  function marginCell(r){
+    if(!r.applicable) return `<td class="num na">n/a<span class="rate">${esc(r.reason)}</span></td>`;
+    if(r.marginCents == null) return `<td class="num na">?<span class="rate">cost not on file</span></td>`;
+    const cls = r.marginCents > 0 ? 'pos' : r.marginCents < 0 ? 'neg' : 'na';
+    const booked = r.marginBookedCents != null && r.marginBookedCents !== r.marginCents ? `<span class="rate">ledger books ${esc(R(r.marginBookedCents))}</span>` : '';
+    return `<td class="num ${cls}" data-m="${r.marginCents}">${esc(R(r.marginCents, {sign:true}))}${booked}</td>`;
+  }
+  function costCells(row, r){
+    if(!r.applicable) return `<td class="num na">n/a</td><td class="num na">n/a</td>`;
+    if(r.costUnknown || (r.costExCents == null && r.costInclCents == null)){
+      const d = MM.describeRate(row.cost);
+      return `<td class="num na" colspan="2">not on file<span class="rate">${esc(d)}</span></td>`;
+    }
+    const rate = row.cost && row.cost.kind !== 'supplierNet' ? MM.describeRate(row.cost) : (row.commission && row.commission.bps != null ? `face less ${(row.commission.bps/100).toFixed(2).replace(/\.?0+$/,'')}% commission` : 'face less commission');
+    const ex = r.costExCents == null ? '' : R(r.costExCents);
+    const incl = r.costInclCents == null ? '' : R(r.costInclCents);
+    return `<td class="num">${esc(ex)}<span class="rate">${esc(rate)}</span></td><td class="num">${esc(incl)}</td>`;
+  }
+  function priceCell(row, r){
+    if(!r.applicable) return `<td class="num na">n/a</td>`;
+    const p = row.price || {};
+    let main = '';
+    if(p.kind === 'faceDiscount') main = `${R(r.creditedCents)} credited`;
+    else if(p.kind === 'face') main = 'face';
+    else if(p.kind === 'none' || r.priceCents == null) main = 'no price set';
+    else main = R(r.priceCents);
+    let extra = MM.describePrice(p);
+    if(row.proposedPrice && r.applicable){
+      const pp = MM.bps(r.amountCents, row.proposedPrice.pctBps || 0);
+      extra += `; proposed ${MM.describePrice(row.proposedPrice)} = ${R(pp)}`;
+    }
+    const com = row.commission && row.commission.bps != null && r.commissionCents != null
+      ? `<span class="rate">supplier pays us ${esc(R(r.commissionCents))}${row.commission.bookedBps !== row.commission.bps ? ` (books ${esc(R(r.commissionBookedCents))})` : ''}</span>` : '';
+    return `<td class="num">${esc(main)}<span class="rate">${esc(extra)}</span>${com}</td>`;
+  }
+  function sourceCell(row){
+    const parts = [];
+    if(row.cost) parts.push(`<span class="s"><b>cost:</b> ${esc(row.cost.source)}</span>`);
+    if(row.price) parts.push(`<span class="s"><b>price:</b> ${esc(row.price.source)}</span>`);
+    if(row.commission) parts.push(`<span class="s"><b>commission:</b> ${esc(row.commission.source)}</span>`);
+    if(row.proposedPrice) parts.push(`<span class="s"><b>proposed:</b> ${esc(row.proposedPrice.source)}</span>`);
+    if(row.notes) parts.push(`<span class="s"><b>note:</b> ${esc(row.notes)}</span>`);
+    if(row.competitors && row.competitors.length) parts.push(`<span class="s"><b>market:</b> ${row.competitors.map(c => esc(c.name + ' ' + c.price)).join('; ')}</span>`);
+    return `<td class="src"><details><summary>sources</summary>${parts.join('')}</details></td>`;
+  }
+  function barCell(m, max){
+    if(m == null || !max) return '';
+    const w = Math.max(2, Math.min(50, Math.abs(m) / max * 50));
+    const left = m >= 0 ? 50 : 50 - w;
+    return `<span class="bar" aria-hidden="true"><span class="zero"></span><i class="${m < 0 ? 'neg' : ''}" style="left:${left}%;width:${w}%"></i></span>`;
+  }
+
+  function renderOne(rows, amount){
+    const results = rows.map(row => ({ row, r: MM.compute(row, amount) }));
+    const max = Math.max(1, ...results.map(x => x.r.applicable && x.r.marginCents != null ? Math.abs(x.r.marginCents) : 0));
+    const body = results.map(({row, r}) => {
+      const q = needsDecision(row);
+      return `<tr class="${q ? 'q' : ''}" id="row-${esc(row.id)}">
+        <td class="name"><b>${esc(row.name)}</b><span class="cp">${esc(row.counterparty)} · <span class="state">${esc(STATE_LABEL[row.productState] || row.productState)}</span></span>${row.productNote ? `<span class="pn">${esc(row.productNote)}</span>` : ''}</td>
+        <td class="pays">${esc(MM.PAYER_LABEL[row.payer] || row.payer)}</td>
+        ${costCells(row, r)}
+        ${priceCell(row, r)}
+        ${marginCell(r).replace('</td>', (r.applicable && r.marginCents != null ? barCell(r.marginCents, max) : '') + '</td>')}
+        <td><div class="chips">${chip('cost', row.cost)}${chip('price', row.price)}${chip('commission', row.commission)}${chip('proposed', row.proposedPrice)}</div></td>
+        ${sourceCell(row)}
+        <td class="qcell">${questionCell(row)}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="tbl"><table><thead><tr>
+      <th>Component</th><th>Who pays WaPay</th><th class="num">Our cost ex VAT</th><th class="num">incl VAT</th><th class="num">Customer pays</th><th class="num">Margin at ${esc(amtLabel(amount))}</th><th>Status</th><th>Source</th><th>Open question</th>
+    </tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+
+  function renderGrid(rows){
+    const body = rows.map(row => {
+      const cells = AMOUNTS.map(a => {
+        const r = MM.compute(row, a);
+        if(!r.applicable) return `<td class="num na" title="${esc(r.reason)}">n/a</td>`;
+        if(r.marginCents == null) return `<td class="num na" title="cost not on file">?</td>`;
+        const cls = r.marginCents > 0 ? 'pos' : r.marginCents < 0 ? 'neg' : 'na';
+        const pc = r.priceCents == null ? '' : `<span class="pc">${esc(R(r.priceCents))} / ${r.costInclCents == null ? '?' : esc(R(r.costInclCents))}</span>`;
+        return `<td class="num ${cls}" title="price / cost incl VAT / margin">${esc(R(r.marginCents, {sign:true}))}${pc}</td>`;
+      }).join('');
+      return `<tr class="${needsDecision(row) ? 'q' : ''}"><td class="name"><b>${esc(row.name)}</b><span class="cp">${esc(row.counterparty)} · <span class="state">${esc(STATE_LABEL[row.productState] || row.productState)}</span></span></td>${cells}<td><div class="chips">${chip('cost', row.cost)}${chip('price', row.price)}${chip('commission', row.commission)}</div></td></tr>`;
+    }).join('');
+    return `<div class="tbl grid"><table><thead><tr><th>Component</th>${AMOUNTS.map(a => `<th class="num">${esc(amtLabel(a))}</th>`).join('')}<th>Status</th></tr></thead><tbody>${body}</tbody></table><p class="small" style="padding:8px 12px 10px;margin:0">Each cell: margin, then customer price / our cost including VAT. Green is money kept, red is money WaPay loses on that transaction.</p></div>`;
+  }
+
+  function renderSections(){
+    const amount = AMOUNTS[state.idx];
+    const host = document.getElementById('sections');
+    host.innerHTML = ORDER.map(key => {
+      const sec = DATA.sections[key];
+      let rows = DATA.rows.filter(r => r.section === key);
+      if(state.onlyQ) rows = rows.filter(needsDecision);
+      if(!rows.length) return '';
+      const live = rows.filter(r => r.productState === 'LIVE' || r.productState === 'PILOT').length;
+      const q = rows.filter(needsDecision).length;
+      const table = key === 'fixed'
+        ? renderFixed(rows)
+        : (state.view === 'grid' ? renderGrid(rows) : renderOne(rows, amount));
+      return `<section class="money" id="sec-${key}"><div class="sec-head"><div><h2>${esc(sec.title)}</h2><p class="small">${esc(sec.blurb)}</p></div><div class="sum"><b>${rows.length}</b> rows · <b>${live}</b> live or pilot · <b>${q}</b> need a decision</div></div>${table}</section>`;
+    }).join('');
+  }
+
+  function renderFixed(rows){
+    const body = rows.map(row => `<tr class="${needsDecision(row) ? 'q' : ''}"><td class="name"><b>${esc(row.name)}</b><span class="cp">${esc(row.counterparty)} · <span class="state">${esc(STATE_LABEL[row.productState] || row.productState)}</span></span>${row.productNote ? `<span class="pn">${esc(row.productNote)}</span>` : ''}</td><td class="pays">${esc(MM.PAYER_LABEL[row.payer] || row.payer)}</td><td class="num">${esc(MM.describeRate(row.cost))}</td><td class="num">${esc(MM.describePrice(row.price))}</td><td><div class="chips">${chip('cost', row.cost)}${chip('price', row.price)}</div></td>${sourceCell(row)}<td class="qcell">${questionCell(row)}</td></tr>`).join('');
+    return `<div class="tbl"><table><thead><tr><th>Cost line</th><th>Who pays</th><th class="num">Cost</th><th class="num">Recovered by</th><th>Status</th><th>Source</th><th>Open question</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+
+  function renderTiles(){
+    const counts = Object.fromEntries(STATUSES.map(s => [s, 0]));
+    for(const row of DATA.rows) for(const n of [row.cost,row.price,row.commission,row.proposedPrice].filter(Boolean)) counts[n.status] = (counts[n.status]||0) + 1;
+    const questions = DATA.rows.filter(r => r.question).length + (DATA.crossCuttingQuestions || []).length;
+    const tiles = STATUSES.map(s => `<div class="tile"><div class="l"><span class="chip ${s}">${s}</span></div><div class="v">${counts[s]}</div><div class="d">${esc(DATA.statusVocabulary[s].split('.')[0].toLowerCase())}</div></div>`).join('');
+    document.getElementById('tiles').innerHTML = tiles + `<div class="tile need"><div class="l">Questions for the founder</div><div class="v">${questions}</div><div class="d">one per assumed, proposed or unknown number</div></div>`;
+  }
+
+  function renderDecisions(){
+    const rows = DATA.rows.filter(r => r.question);
+    const items = rows.map(r => `<li><span class="rowref">${esc(r.name)}.</span> ${esc(r.question)}<span class="who">${esc(r.owner)} · ${[r.cost,r.price,r.commission,r.proposedPrice].filter(Boolean).map(n => chip('', n)).join(' ')}</span></li>`);
+    for(const q of (DATA.crossCuttingQuestions || [])) items.push(`<li><span class="rowref">Across the map.</span> ${esc(q.question)}<span class="who">${esc(q.owner)} · ${esc(q.source)}</span></li>`);
+    document.getElementById('qlist').innerHTML = items.join('');
+    const owners = {};
+    for(const r of rows) owners[r.owner] = (owners[r.owner]||0) + 1;
+    for(const q of (DATA.crossCuttingQuestions || [])) owners[q.owner] = (owners[q.owner]||0) + 1;
+    document.getElementById('owners').innerHTML = Object.entries(owners).sort((a,b) => b[1]-a[1]).map(([o,n]) => `<span class="pill">${esc(o)}: ${n}</span>`).join('');
+  }
+
+  function renderVocab(){
+    document.getElementById('vocabGrid').innerHTML = STATUSES.map(s => `<div><span class="chip ${s}">${s}</span><br>${esc(DATA.statusVocabulary[s])}</div>`).join('');
+  }
+
+  function renderControls(){
+    document.getElementById('amtSeg').innerHTML = AMOUNTS.map((a,i) => `<button type="button" class="amt" data-i="${i}" aria-pressed="${i === state.idx}">${esc(amtLabel(a))}</button>`).join('');
+    document.getElementById('amtRange').value = String(state.idx);
+    document.getElementById('amtCur').textContent = amtLabel(AMOUNTS[state.idx]);
+    for(const b of document.querySelectorAll('#viewSeg button')) b.setAttribute('aria-pressed', String(b.dataset.v === state.view));
+  }
+
+  function setIdx(i){ state.idx = Math.max(0, Math.min(AMOUNTS.length - 1, Number(i) || 0)); renderControls(); renderSections(); }
+  document.getElementById('amtSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if(b) setIdx(b.dataset.i); });
+  document.getElementById('amtRange').addEventListener('input', (e) => setIdx(e.target.value));
+  document.getElementById('viewSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if(!b) return; state.view = b.dataset.v; renderControls(); renderSections(); });
+  document.getElementById('onlyQ').addEventListener('change', (e) => { state.onlyQ = e.target.checked; renderSections(); });
+
+  renderTiles(); renderControls(); renderSections(); renderDecisions(); renderVocab();
+})();
+</script>

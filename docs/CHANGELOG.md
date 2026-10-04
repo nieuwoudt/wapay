@@ -4,6 +4,108 @@
 
 ---
 
+## 2026-10-04 (64) — Withdrawals after the first completed customer pay-out: compound answers confirmed in one line, the name asked once, collection instructions in the chat, remembered destinations with consent, the commercial model written down
+
+The founder ran three withdrawals on the sandbox this morning (Nedbank
+cardless R20 paid, PayShap R50 pending at OTT, ABSA CashSend R50 failed at
+the provider) and sent seven asks. Shipped against them, all in
+`lib/payout-chat.js` unless noted: `parseCompoundWithdraw` (pure, exported
+with `METHOD_SYNONYMS` and `methodFromWords` so the agent's clarify step uses
+the same words) reads "50 and 2", "50 at ABSA", "the Nedbank one" and "150"
+as amount + method and the flow confirms in one line ("Got it: R50 by cash
+at an Absa ATM. Is that right?") before carrying on; the menu says "Minimum
+withdrawals from R50" and promises no times; after "Done" the chat says where
+the code arrives (masked) and how to collect, from the new
+`lib/payout-collection.js`, which `payoutOutcomeMessage` and the knowledge
+base also read; PayShap and pending pay-outs name the bank's own
+notification; the full name is asked once, as on the bank account, when KYC
+has none (`PAYOUT_NAME`), so the rail never again receives a display name
+twice. Remembered pay-out details: two new tables (`payout_identities`,
+`payout_destinations`, migration `20261004_payout_beneficiaries`, cascade on
+the account), `lib/pii-vault.js` (AES-256-GCM under `WAPAY_PII_KEY`, key
+version per row), `lib/payout-beneficiaries.js` (labels and last-3 masks out,
+secrets only into the rail request, five destinations per account, one row
+per number); the chat offers saved destinations by number or name, skips the
+name and ID steps when they are on file, asks "Save these details for next
+time?" only after a pay-out the rail accepted and writes only on YES
+(`PAYOUT_SAVE`; anything else is answered as a new message); "forget my bank
+details" and "forget me" delete both tables; "what do you know about me"
+discloses them. The operator reconcile route now tells the customer through
+`notifyCustomer` (template outside the 24 h window). `docs/PAYOUT_COMMERCIALS.md`:
+OTT's cost per method from the addendum times 1.15, what we charge, margin at
+R50 to R3,000, the competitor benchmark, where we lose, and the +R2 as the
+founder's open decision. Evidence: `docs/testing/payouts-e2e-2026-10-04.md`.
+BUGLOG #84 to #87 (and the state-machine half of #83). Tests 20 new in
+`tests/payout-chat.test.mjs` and `tests/payout-beneficiaries.test.mjs`; harness
+scenario 6c. Feature dormant until `WAPAY_PII_KEY` is set in Vercel.
+
+## 2026-10-04 (63) — The pack reads saved pay-out details, Mission Control reconciles the pay-out books, and a clarify answer with an amount in it never needs the model
+
+Main-session build on the morning the first customer withdrawal completed
+(Nedbank cardless R20, OTT 126382) and the pilot week restarted. Three items,
+all behind the money boundary, none of them a new regex hook.
+
+**The customer record knows where they withdraw to.** `lib/context-pack.js`
+reads the payouts thread's `listPayoutDestinations` and `getPayoutIdentity`
+(`lib/payout-beneficiaries.js`) in the same batch as everything else and
+renders "Saved pay-out destinations: FNB account •••394 (last used …);
+Nedbank cash to •••175 (…)" and "Pay-out identity on file: yes (name, ID
+ending 083); they need not type it again", or one line "Saved pay-out
+details: none." The module masks before it returns, so the model can offer
+"your FNB account ending 394" and nothing fuller, because nothing fuller is
+in the prompt. Until the migration is applied the two reads return [] / null
+and the pack does not even warn.
+
+**Mission Control: Pay-out reconciliation.** `lib/payout-books.js` is a pure
+judge over four sources read in one batch by `/api/admin/payout-reconciliation`:
+every `ott-payout` provider row, every pay-out hold, every `CASHOUT_*` journal
+entry, and the wallets summed by type. The card shows what WaPay owes its
+customers, what is held for pay-outs against what the open rows say, what the
+journal says was paid out, fee revenue, the rail cost per our table (not OTT's
+invoice), the live OTT pay-out float from the floats route with the implied
+funding (float + paid out + rail cost) and drift against
+`WAPAY_OTT_PAYOUT_FUNDED_CENTS` when the founder records it. Seven checks must
+hold: every SUCCESS has one journal entry and a settled hold, every FAILED
+released its hold and booked nothing, every open pay-out is holding its money,
+no active hold is without an open row, the held total and the journal total
+match their rows, one entry per SUCCESS. Anomalies name reference, method and
+amount only. Console copy policy kept (no betting or cash-out words on the page).
+
+**Clarify-step slot rescue (BUGLOG #83).** `lib/agent/slot-rescue.js` reads a
+`WITHDRAW` pending intent's answer with the payouts thread's
+`parseCompoundWithdraw` / `methodFromWords` before any model call and
+dispatches straight into the withdraw flow when the answer carries an amount or
+a method named in words; menu numbers are left for the flow's own menu, and
+negations go to the model. One parser for the state machine and the agent.
+
+Files: `lib/context-pack.js`, `lib/payout-books.js`, `lib/agent/slot-rescue.js`,
+`pages/api/admin/payout-reconciliation.js`, `pages/admin/index.js`,
+`pages/api/webhooks/message-processor-v2.js` (one import, one block in
+`handleAgentTurn`), tests `context-pack`, `payout-books`, `agent-slot-rescue`,
+`phase2` (ledger path count 5 → 6). Design record section 13 updated; the map
+follows as Version 14.
+
+## 2026-10-04 (63) — The WaPay Money Map: commercials text master, data, dashboard and consistency test
+
+`docs/COMMERCIALS.md` is the text master for every component of money in,
+money out, vending, getting paid, sending and business: counterparty, our
+cost excluding and including the VAT WaPay cannot recover, what the customer
+pays and who pays it, the margin at R50, R200, R500, R1,000 and R3,000, and a
+status per number (SIGNED, LIVE, ASSUMED, PROPOSED, UNKNOWN) with its source.
+`docs/commercials/` holds the sources the way `docs/architecture/` does:
+`rows.json` (the data), `model.js` (the fee arithmetic mirrored from
+`lib/ledger-core.js` and `lib/deposits.js`), `sync-from-code.mjs`
+(snapshots the code into `code-facts.json`), `assemble.mjs` (writes
+`money-map.html` and the generated block in COMMERCIALS.md). The dashboard is
+published as the WaPay Money Map artifact (URL in
+`docs/HANDOVER_COMMERCIALS_V1.md`). `tests/commercials-consistency.test.mjs`
+proves the data equals the charging functions at every amount the product
+accepts, so the map cannot drift from production; a fee change without a
+re-sync fails the suite. No fee changed. Findings recorded: Mukuru Cash on and
+loss-making; both voucher load rails lose 90c per R100 because the contracts'
+6% excludes VAT; OTT's signed 4% issuing commission is booked at 0; the Blu
+VAS commissions have no written source. Suite 964/964.
+
 ## 2026-09-29 (62) — Adumo finished to the edge of our credentials: webhook per transaction, outcome on the intent, Enterprise reporting and reconcile, proven on staging
 
 From the Virtual spec and the public Postman workspace (Enterprise REST API,

@@ -1,0 +1,392 @@
+<title>WaPay Money Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column of money components, a sticky amount control above them, a decisions panel at the end. Brand green from the WaPay kit, Inter as the kit's face, Plex Mono for every rand figure. */
+:root{
+  --bg:#F4F7F5; --surface:#FFFFFF; --surface-2:#EDF3EF; --ink:#1D2026; --muted:#4E5C54; --line:#D9E3DD; --line-soft:#E8EFEA;
+  --brand:#359853; --brand-ink:#155F30; --brand-soft:#E6F2EA;
+  --signed:#1F6F3A; --signed-bg:#DFF2E5;
+  --live:#2F5C93; --live-bg:#E1EBF7;
+  --assumed:#8A5A00; --assumed-bg:#FBEFCF;
+  --proposed:#5B3FA6; --proposed-bg:#ECE6F8;
+  --unknown:#9E2F24; --unknown-bg:#F8E3E0;
+  --pos:#1F6F3A; --neg:#B3321F; --zero:#9AA69F;
+  --focus:#1F6F3A;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --bg:#0F1512; --surface:#161C18; --surface-2:#1C2420; --ink:#EAF1EC; --muted:#A9B5AD; --line:#27312B; --line-soft:#1F2823;
+  --brand:#5FC084; --brand-ink:#A9E3BF; --brand-soft:#17281D;
+  --signed:#8FD3AC; --signed-bg:#17301F;
+  --live:#8FB4E6; --live-bg:#162230;
+  --assumed:#F3C453; --assumed-bg:#2E2612;
+  --proposed:#C3B1F0; --proposed-bg:#241C33;
+  --unknown:#F08B7C; --unknown-bg:#2E1815;
+  --pos:#8FD3AC; --neg:#F08B7C; --zero:#56635B;
+  --focus:#8FD3AC;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F1512; --surface:#161C18; --surface-2:#1C2420; --ink:#EAF1EC; --muted:#A9B5AD; --line:#27312B; --line-soft:#1F2823;
+  --brand:#5FC084; --brand-ink:#A9E3BF; --brand-soft:#17281D;
+  --signed:#8FD3AC; --signed-bg:#17301F;
+  --live:#8FB4E6; --live-bg:#162230;
+  --assumed:#F3C453; --assumed-bg:#2E2612;
+  --proposed:#C3B1F0; --proposed-bg:#241C33;
+  --unknown:#F08B7C; --unknown-bg:#2E1815;
+  --pos:#8FD3AC; --neg:#F08B7C; --zero:#56635B;
+  --focus:#8FD3AC;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--brand-ink)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:0 96px}
+h1{font-size:clamp(28px,4vw,40px);font-weight:700;letter-spacing:-.025em;line-height:1.08;margin:.2em 0 .3em;text-wrap:balance}
+h2{font-size:22px;font-weight:700;letter-spacing:-.015em;margin:0 0 4px;text-wrap:balance}
+h3{font-size:15px;font-weight:700;margin:0 0 6px}
+p{margin:0 0 10px;max-width:72ch}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--brand-ink)}
+.lede{font-size:17px;color:var(--muted);max-width:66ch}
+.small{font-size:13px;color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header.hero{padding-block:36px 10px}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.pill{background:var(--brand-soft);color:var(--brand-ink);font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px}
+
+/* status chips */
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:5px;line-height:1.5;white-space:nowrap}
+.chip::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.chip.SIGNED{background:var(--signed-bg);color:var(--signed)}
+.chip.LIVE{background:var(--live-bg);color:var(--live)}
+.chip.ASSUMED{background:var(--assumed-bg);color:var(--assumed)}
+.chip.PROPOSED{background:var(--proposed-bg);color:var(--proposed)}
+.chip.UNKNOWN{background:var(--unknown-bg);color:var(--unknown)}
+.chip .k{font-weight:600;letter-spacing:.02em;text-transform:none;opacity:.85}
+.state{display:inline-block;font-size:11px;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 7px;white-space:nowrap}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:22px 0 6px}
+@media(max-width:900px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:480px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.tile .l{font-size:12px;color:var(--muted);margin-bottom:6px}
+.tile .v{font-size:30px;font-weight:600;line-height:1;letter-spacing:-.02em}
+.tile .d{font-size:12px;color:var(--muted);margin-top:6px}
+.tile.need{border-color:var(--assumed)}
+
+/* controls */
+.controls{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:12px 0 10px;border-bottom:1px solid var(--line);margin:18px -20px 0;padding-inline:20px;display:flex;flex-wrap:wrap;gap:14px 28px;align-items:end}
+.field .lbl{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:6px}
+.seg{display:inline-flex;gap:3px;padding:3px;background:var(--surface-2);border-radius:999px;flex-wrap:wrap}
+.seg button{font:600 13px var(--sans);color:var(--muted);background:transparent;border:1px solid transparent;border-radius:999px;padding:5px 13px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);border-color:var(--line);color:var(--ink)}
+.seg button.amt{font-family:var(--mono);font-weight:500}
+.slider{display:flex;align-items:center;gap:10px;margin-top:8px}
+.slider input[type=range]{width:min(360px,70vw);accent-color:var(--brand)}
+.slider .cur{font-family:var(--mono);font-weight:500;font-size:20px;min-width:6ch}
+label.chk{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer}
+label.chk input{accent-color:var(--brand);width:16px;height:16px}
+
+/* sections */
+section.money{margin-top:40px;scroll-margin-top:120px}
+.sec-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
+.sec-head .sum{font-size:13px;color:var(--muted)}
+.sec-head .sum b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-top:12px}
+table{border-collapse:collapse;width:100%;min-width:900px;font-size:13.5px}
+th{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:2px solid var(--line-soft);white-space:nowrap;background:var(--surface)}
+td{padding:9px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td.name{min-width:240px}
+td.name b{font-weight:600;display:block}
+td.name .cp{font-size:12px;color:var(--muted);display:block;margin-top:1px}
+td.name .pn{font-size:12px;color:var(--muted);display:block;margin-top:3px;max-width:42ch}
+td.pays{color:var(--muted);font-size:12.5px;white-space:nowrap}
+td.pos{color:var(--pos)} td.neg{color:var(--neg)} td.na{color:var(--muted)}
+.rate{display:block;font-size:11.5px;color:var(--muted);font-family:var(--sans);white-space:normal;max-width:22ch;text-align:right;margin-left:auto}
+.chips{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.bar{position:relative;width:120px;height:14px;display:inline-block;vertical-align:middle;margin-left:10px}
+.bar .zero{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--zero)}
+.bar i{position:absolute;top:4px;height:6px;border-radius:3px;background:var(--pos)}
+.bar i.neg{background:var(--neg)}
+tr.q td{background:color-mix(in srgb,var(--assumed-bg) 35%,var(--surface))}
+.src{font-size:12px;color:var(--muted);max-width:52ch}
+.src details summary{cursor:pointer;color:var(--brand-ink);font-weight:600;list-style:none}
+.src details summary::-webkit-details-marker{display:none}
+.src details[open] summary{margin-bottom:4px}
+.src .s{display:block;margin-top:3px}
+.src .s b{color:var(--ink);font-weight:600}
+.qcell{font-size:12.5px;max-width:40ch}
+.qcell .own{display:block;font-size:11px;color:var(--muted);margin-top:3px}
+.grid td.num{padding-inline:10px}
+.grid .pc{display:block;font-size:11px;color:var(--muted)}
+
+/* decisions */
+.decisions{margin-top:48px;background:var(--surface);border:1px solid var(--assumed);border-radius:14px;padding:22px 22px 18px}
+.decisions h2{margin-bottom:8px}
+.qlist{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:10px;counter-reset:q}
+.qlist li{counter-increment:q;position:relative;padding:12px 14px 12px 50px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font-size:14px}
+.qlist li::before{content:counter(q);position:absolute;left:14px;top:12px;width:24px;height:24px;border-radius:50%;background:var(--brand);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.qlist .who{display:block;font-size:12px;color:var(--muted);margin-top:4px}
+.qlist .rowref{font-weight:600}
+.owners{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.note{border-left:3px solid var(--brand);background:var(--brand-soft);padding:10px 14px;border-radius:0 10px 10px 0;font-size:14px;margin:14px 0;max-width:76ch}
+.note.warn{border-color:var(--assumed);background:var(--assumed-bg)}
+.vocab{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:14px}
+@media(max-width:900px){.vocab{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.vocab div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--muted);min-width:0}
+.vocab .chip{margin-bottom:6px}
+.foot{margin-top:56px;border-top:1px solid var(--line);padding-top:16px;font-size:13px;color:var(--muted)}
+.foot ul{padding-left:18px;margin:6px 0 0} .foot li{margin:3px 0}
+.foot code{font-family:var(--mono);font-size:12px;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+@media(prefers-reduced-motion:no-preference){.bar i{transition:width .18s ease,left .18s ease}}
+</style>
+
+<div class="wrap">
+<header class="hero">
+  <div class="eyebrow">WaPay · commercials · <!--DATE--> · Money Map v<!--VERSION--> · verified against build <!--BUILD--></div>
+  <h1>WaPay Money Map</h1>
+  <p class="lede">Every component of money in, money out, vending and getting paid: the counterparty, what it costs WaPay with the VAT it cannot recover, what the customer pays and who pays it, what is left at R50, R200, R500, R1,000 and R3,000, and whether each number is signed, live, assumed, proposed or unknown.</p>
+  <div class="meta">
+    <span class="pill">WaPay is not VAT-registered: supplier ex-VAT prices cost 1.15 times</span>
+    <span class="pill">No card surcharging: the payer always pays the displayed amount</span>
+    <span class="pill">Flat customer fees, never percentages</span>
+    <span class="pill">Text master: docs/COMMERCIALS.md</span>
+  </div>
+  <div class="tiles" id="tiles"></div>
+  <p class="small" style="margin-top:8px">Counts are of individual numbers (a cost, a price or a commission), not of rows. The fee arithmetic on this page is a mirror of <span class="mono">lib/ledger-core.js</span> and <span class="mono">lib/deposits.js</span>, held equal by <span class="mono">tests/commercials-consistency.test.mjs</span>.</p>
+</header>
+
+<div class="controls" id="controls">
+  <div class="field">
+    <span class="lbl">Reference amount</span>
+    <div class="seg" role="group" aria-label="Reference amount" id="amtSeg"></div>
+    <div class="slider"><input id="amtRange" type="range" min="0" max="4" step="1" value="2" aria-label="Reference amount slider"><span class="cur mono" id="amtCur"></span></div>
+  </div>
+  <div class="field">
+    <span class="lbl">View</span>
+    <div class="seg" role="group" aria-label="View" id="viewSeg">
+      <button type="button" data-v="one" aria-pressed="true">At this amount</button>
+      <button type="button" data-v="grid" aria-pressed="false">Margin at all five amounts</button>
+    </div>
+  </div>
+  <div class="field">
+    <span class="lbl">Filter</span>
+    <label class="chk"><input type="checkbox" id="onlyQ"> only rows that need a decision</label>
+  </div>
+</div>
+
+<div id="sections"></div>
+
+<section class="decisions" id="decisions">
+  <div class="eyebrow">Needs the founder's signature</div>
+  <h2>Every assumed, proposed or unknown number, as one question each</h2>
+  <p class="small">A number without a contract or a recorded decision is a guess the product is charging or absorbing today. Each question names the row it belongs to and who can answer it. Nothing here changes a fee in code; the answer does.</p>
+  <div class="owners" id="owners"></div>
+  <ol class="qlist" id="qlist"></ol>
+</section>
+
+<section class="money" id="vocab">
+  <h2>How to read a status</h2>
+  <div class="vocab" id="vocabGrid"></div>
+  <div class="note">Where the code and a document disagree, the code is what is charged today and the document is the proposal; the disagreement is one of the questions above. Product state (live, pilot, built, off, not built) is shown separately from the status of each number, because a live rail can carry an assumed price and a signed price can sit on a rail that is off.</div>
+</section>
+
+<footer class="foot">
+  <b>Sources on file</b>
+  <ul>
+    <li>Code: <code>lib/ledger-core.js</code> (FEES, cashoutFeeCents, cashoutRailCostCents), <code>lib/deposits.js</code> (depositFeeCents, paymentRequestFeeCents, cardRailFee), <code>lib/fee-facts.js</code>, <code>lib/payouts.js</code>, <code>lib/how-it-works.js</code> (limits).</li>
+    <li>Contracts and rate cards: OTT Payout Agreement (signed 2026-08-25) and 2026 Addendum, OTT Reseller Agreement (countersigned 13 Aug 2026), OTT Voucher Merchant Agreement (WaPay signed about 4 Sep 2026), BLD Voucher Redemption Agreement 2025, Pay@ Pay Out schedule (Nov 2025), PayFast portal rate card (2026-09-04), SHB/Adumo offer (2026-09-10), Yoyo email (September 2026), Yoyo Agreed Gift Card Rebates sheet.</li>
+    <li>Repo docs: PAYFAST_FEES, ADUMO, PAYOUTS, OTT_PAYOUT_API, HANDOVER_PAYOUTS_V1, PAYOUT_COMMERCIALS (payouts thread), UNIFUEL_INTEGRATION, WICODE_NETWORK, BLU_VAS_CATEGORY_REQUEST, CAPABILITIES, CONVERSATION_KNOWLEDGE_BASE.</li>
+    <li>Strategy: WAPAY_MONEY_ENGINE_AND_PHASE1, WAPAY_V1_AND_FORECAST, WAPAY_OTT_AGREEMENTS_REVIEW_2026-08-21, WAPAY_B2B_PAYOUTS, WAPAY_MARKETING_FEATURE_CATALOGUE, WAPAY_WALLET_DESIGN_2026-08-20, WAPAY_RETAIL_LAUNCH_PLAN; the Fee Benchmark (v1.2) and Feature Catalogue artifacts; the memory files named in docs/HANDOVER_COMMERCIALS_V1.md.</li>
+  </ul>
+  <p style="margin-top:10px">To update: edit <code>docs/commercials/rows.json</code>, run <code>node docs/commercials/sync-from-code.mjs --build &lt;hash&gt;</code>, then <code>node docs/commercials/assemble.mjs</code>, run <code>pnpm test</code>, and republish <code>money-map.html</code> to this artifact's URL. Generated <!--GENERATED-->.</p>
+</footer>
+</div>
+
+<script>
+<!--MODEL_JS-->
+</script>
+<script id="rows-data" type="application/json"><!--ROWS_JSON--></script>
+<script id="facts-data" type="application/json"><!--FACTS_JSON--></script>
+<script>
+(function(){
+  const MM = MoneyMap;
+  const DATA = JSON.parse(document.getElementById('rows-data').textContent);
+  const FACTS = JSON.parse(document.getElementById('facts-data').textContent);
+  const AMOUNTS = DATA.referenceAmountsCents;
+  const ORDER = ['in','out','vend','paid','send','biz','fixed'];
+  const STATUSES = ['SIGNED','LIVE','ASSUMED','PROPOSED','UNKNOWN'];
+  const STATE_LABEL = { LIVE:'live', PILOT:'pilot', BUILT:'built', OFF:'rail off', NOT_BUILT:'not built' };
+  const state = { idx: 2, view: 'one', onlyQ: false };
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const R = MM.rand;
+  const amtLabel = (c) => 'R' + String(c / 100).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  function needsDecision(row){
+    return [row.cost,row.price,row.commission,row.proposedPrice].filter(Boolean).some(n => n.status !== 'SIGNED' && n.status !== 'LIVE');
+  }
+  function questionCell(row){
+    if(row.question) return esc(row.question) + `<span class="own">${esc(row.owner)}</span>`;
+    if(row.questionRef){ const ref = DATA.rows.find(x => x.id === row.questionRef); if(ref) return `<span class="small">same question as <b>${esc(ref.name)}</b></span>`; }
+    return needsDecision(row) ? '<span class="small">see the decisions panel</span>' : '<span class="small">no open question</span>';
+  }
+  function chip(label, n){
+    if(!n) return '';
+    return `<span class="chip ${esc(n.status)}" title="${esc(n.source)}"><span class="k">${esc(label)}</span>${esc(n.status)}</span>`;
+  }
+  function marginCell(r){
+    if(!r.applicable) return `<td class="num na">n/a<span class="rate">${esc(r.reason)}</span></td>`;
+    if(r.marginCents == null) return `<td class="num na">?<span class="rate">cost not on file</span></td>`;
+    const cls = r.marginCents > 0 ? 'pos' : r.marginCents < 0 ? 'neg' : 'na';
+    const booked = r.marginBookedCents != null && r.marginBookedCents !== r.marginCents ? `<span class="rate">ledger books ${esc(R(r.marginBookedCents))}</span>` : '';
+    return `<td class="num ${cls}" data-m="${r.marginCents}">${esc(R(r.marginCents, {sign:true}))}${booked}</td>`;
+  }
+  function costCells(row, r){
+    if(!r.applicable) return `<td class="num na">n/a</td><td class="num na">n/a</td>`;
+    if(r.costUnknown || (r.costExCents == null && r.costInclCents == null)){
+      const d = MM.describeRate(row.cost);
+      return `<td class="num na" colspan="2">not on file<span class="rate">${esc(d)}</span></td>`;
+    }
+    const rate = row.cost && row.cost.kind !== 'supplierNet' ? MM.describeRate(row.cost) : (row.commission && row.commission.bps != null ? `face less ${(row.commission.bps/100).toFixed(2).replace(/\.?0+$/,'')}% commission` : 'face less commission');
+    const ex = r.costExCents == null ? '' : R(r.costExCents);
+    const incl = r.costInclCents == null ? '' : R(r.costInclCents);
+    return `<td class="num">${esc(ex)}<span class="rate">${esc(rate)}</span></td><td class="num">${esc(incl)}</td>`;
+  }
+  function priceCell(row, r){
+    if(!r.applicable) return `<td class="num na">n/a</td>`;
+    const p = row.price || {};
+    let main = '';
+    if(p.kind === 'faceDiscount') main = `${R(r.creditedCents)} credited`;
+    else if(p.kind === 'face') main = 'face';
+    else if(p.kind === 'none' || r.priceCents == null) main = 'no price set';
+    else main = R(r.priceCents);
+    let extra = MM.describePrice(p);
+    if(row.proposedPrice && r.applicable){
+      const pp = MM.bps(r.amountCents, row.proposedPrice.pctBps || 0);
+      extra += `; proposed ${MM.describePrice(row.proposedPrice)} = ${R(pp)}`;
+    }
+    const com = row.commission && row.commission.bps != null && r.commissionCents != null
+      ? `<span class="rate">supplier pays us ${esc(R(r.commissionCents))}${row.commission.bookedBps !== row.commission.bps ? ` (books ${esc(R(r.commissionBookedCents))})` : ''}</span>` : '';
+    return `<td class="num">${esc(main)}<span class="rate">${esc(extra)}</span>${com}</td>`;
+  }
+  function sourceCell(row){
+    const parts = [];
+    if(row.cost) parts.push(`<span class="s"><b>cost:</b> ${esc(row.cost.source)}</span>`);
+    if(row.price) parts.push(`<span class="s"><b>price:</b> ${esc(row.price.source)}</span>`);
+    if(row.commission) parts.push(`<span class="s"><b>commission:</b> ${esc(row.commission.source)}</span>`);
+    if(row.proposedPrice) parts.push(`<span class="s"><b>proposed:</b> ${esc(row.proposedPrice.source)}</span>`);
+    if(row.notes) parts.push(`<span class="s"><b>note:</b> ${esc(row.notes)}</span>`);
+    if(row.competitors && row.competitors.length) parts.push(`<span class="s"><b>market:</b> ${row.competitors.map(c => esc(c.name + ' ' + c.price)).join('; ')}</span>`);
+    return `<td class="src"><details><summary>sources</summary>${parts.join('')}</details></td>`;
+  }
+  function barCell(m, max){
+    if(m == null || !max) return '';
+    const w = Math.max(2, Math.min(50, Math.abs(m) / max * 50));
+    const left = m >= 0 ? 50 : 50 - w;
+    return `<span class="bar" aria-hidden="true"><span class="zero"></span><i class="${m < 0 ? 'neg' : ''}" style="left:${left}%;width:${w}%"></i></span>`;
+  }
+
+  function renderOne(rows, amount){
+    const results = rows.map(row => ({ row, r: MM.compute(row, amount) }));
+    const max = Math.max(1, ...results.map(x => x.r.applicable && x.r.marginCents != null ? Math.abs(x.r.marginCents) : 0));
+    const body = results.map(({row, r}) => {
+      const q = needsDecision(row);
+      return `<tr class="${q ? 'q' : ''}" id="row-${esc(row.id)}">
+        <td class="name"><b>${esc(row.name)}</b><span class="cp">${esc(row.counterparty)} · <span class="state">${esc(STATE_LABEL[row.productState] || row.productState)}</span></span>${row.productNote ? `<span class="pn">${esc(row.productNote)}</span>` : ''}</td>
+        <td class="pays">${esc(MM.PAYER_LABEL[row.payer] || row.payer)}</td>
+        ${costCells(row, r)}
+        ${priceCell(row, r)}
+        ${marginCell(r).replace('</td>', (r.applicable && r.marginCents != null ? barCell(r.marginCents, max) : '') + '</td>')}
+        <td><div class="chips">${chip('cost', row.cost)}${chip('price', row.price)}${chip('commission', row.commission)}${chip('proposed', row.proposedPrice)}</div></td>
+        ${sourceCell(row)}
+        <td class="qcell">${questionCell(row)}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="tbl"><table><thead><tr>
+      <th>Component</th><th>Who pays WaPay</th><th class="num">Our cost ex VAT</th><th class="num">incl VAT</th><th class="num">Customer pays</th><th class="num">Margin at ${esc(amtLabel(amount))}</th><th>Status</th><th>Source</th><th>Open question</th>
+    </tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+
+  function renderGrid(rows){
+    const body = rows.map(row => {
+      const cells = AMOUNTS.map(a => {
+        const r = MM.compute(row, a);
+        if(!r.applicable) return `<td class="num na" title="${esc(r.reason)}">n/a</td>`;
+        if(r.marginCents == null) return `<td class="num na" title="cost not on file">?</td>`;
+        const cls = r.marginCents > 0 ? 'pos' : r.marginCents < 0 ? 'neg' : 'na';
+        const pc = r.priceCents == null ? '' : `<span class="pc">${esc(R(r.priceCents))} / ${r.costInclCents == null ? '?' : esc(R(r.costInclCents))}</span>`;
+        return `<td class="num ${cls}" title="price / cost incl VAT / margin">${esc(R(r.marginCents, {sign:true}))}${pc}</td>`;
+      }).join('');
+      return `<tr class="${needsDecision(row) ? 'q' : ''}"><td class="name"><b>${esc(row.name)}</b><span class="cp">${esc(row.counterparty)} · <span class="state">${esc(STATE_LABEL[row.productState] || row.productState)}</span></span></td>${cells}<td><div class="chips">${chip('cost', row.cost)}${chip('price', row.price)}${chip('commission', row.commission)}</div></td></tr>`;
+    }).join('');
+    return `<div class="tbl grid"><table><thead><tr><th>Component</th>${AMOUNTS.map(a => `<th class="num">${esc(amtLabel(a))}</th>`).join('')}<th>Status</th></tr></thead><tbody>${body}</tbody></table><p class="small" style="padding:8px 12px 10px;margin:0">Each cell: margin, then customer price / our cost including VAT. Green is money kept, red is money WaPay loses on that transaction.</p></div>`;
+  }
+
+  function renderSections(){
+    const amount = AMOUNTS[state.idx];
+    const host = document.getElementById('sections');
+    host.innerHTML = ORDER.map(key => {
+      const sec = DATA.sections[key];
+      let rows = DATA.rows.filter(r => r.section === key);
+      if(state.onlyQ) rows = rows.filter(needsDecision);
+      if(!rows.length) return '';
+      const live = rows.filter(r => r.productState === 'LIVE' || r.productState === 'PILOT').length;
+      const q = rows.filter(needsDecision).length;
+      const table = key === 'fixed'
+        ? renderFixed(rows)
+        : (state.view === 'grid' ? renderGrid(rows) : renderOne(rows, amount));
+      return `<section class="money" id="sec-${key}"><div class="sec-head"><div><h2>${esc(sec.title)}</h2><p class="small">${esc(sec.blurb)}</p></div><div class="sum"><b>${rows.length}</b> rows · <b>${live}</b> live or pilot · <b>${q}</b> need a decision</div></div>${table}</section>`;
+    }).join('');
+  }
+
+  function renderFixed(rows){
+    const body = rows.map(row => `<tr class="${needsDecision(row) ? 'q' : ''}"><td class="name"><b>${esc(row.name)}</b><span class="cp">${esc(row.counterparty)} · <span class="state">${esc(STATE_LABEL[row.productState] || row.productState)}</span></span>${row.productNote ? `<span class="pn">${esc(row.productNote)}</span>` : ''}</td><td class="pays">${esc(MM.PAYER_LABEL[row.payer] || row.payer)}</td><td class="num">${esc(MM.describeRate(row.cost))}</td><td class="num">${esc(MM.describePrice(row.price))}</td><td><div class="chips">${chip('cost', row.cost)}${chip('price', row.price)}</div></td>${sourceCell(row)}<td class="qcell">${questionCell(row)}</td></tr>`).join('');
+    return `<div class="tbl"><table><thead><tr><th>Cost line</th><th>Who pays</th><th class="num">Cost</th><th class="num">Recovered by</th><th>Status</th><th>Source</th><th>Open question</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+
+  function renderTiles(){
+    const counts = Object.fromEntries(STATUSES.map(s => [s, 0]));
+    for(const row of DATA.rows) for(const n of [row.cost,row.price,row.commission,row.proposedPrice].filter(Boolean)) counts[n.status] = (counts[n.status]||0) + 1;
+    const questions = DATA.rows.filter(r => r.question).length + (DATA.crossCuttingQuestions || []).length;
+    const tiles = STATUSES.map(s => `<div class="tile"><div class="l"><span class="chip ${s}">${s}</span></div><div class="v">${counts[s]}</div><div class="d">${esc(DATA.statusVocabulary[s].split('.')[0].toLowerCase())}</div></div>`).join('');
+    document.getElementById('tiles').innerHTML = tiles + `<div class="tile need"><div class="l">Questions for the founder</div><div class="v">${questions}</div><div class="d">one per assumed, proposed or unknown number</div></div>`;
+  }
+
+  function renderDecisions(){
+    const rows = DATA.rows.filter(r => r.question);
+    const items = rows.map(r => `<li><span class="rowref">${esc(r.name)}.</span> ${esc(r.question)}<span class="who">${esc(r.owner)} · ${[r.cost,r.price,r.commission,r.proposedPrice].filter(Boolean).map(n => chip('', n)).join(' ')}</span></li>`);
+    for(const q of (DATA.crossCuttingQuestions || [])) items.push(`<li><span class="rowref">Across the map.</span> ${esc(q.question)}<span class="who">${esc(q.owner)} · ${esc(q.source)}</span></li>`);
+    document.getElementById('qlist').innerHTML = items.join('');
+    const owners = {};
+    for(const r of rows) owners[r.owner] = (owners[r.owner]||0) + 1;
+    for(const q of (DATA.crossCuttingQuestions || [])) owners[q.owner] = (owners[q.owner]||0) + 1;
+    document.getElementById('owners').innerHTML = Object.entries(owners).sort((a,b) => b[1]-a[1]).map(([o,n]) => `<span class="pill">${esc(o)}: ${n}</span>`).join('');
+  }
+
+  function renderVocab(){
+    document.getElementById('vocabGrid').innerHTML = STATUSES.map(s => `<div><span class="chip ${s}">${s}</span><br>${esc(DATA.statusVocabulary[s])}</div>`).join('');
+  }
+
+  function renderControls(){
+    document.getElementById('amtSeg').innerHTML = AMOUNTS.map((a,i) => `<button type="button" class="amt" data-i="${i}" aria-pressed="${i === state.idx}">${esc(amtLabel(a))}</button>`).join('');
+    document.getElementById('amtRange').value = String(state.idx);
+    document.getElementById('amtCur').textContent = amtLabel(AMOUNTS[state.idx]);
+    for(const b of document.querySelectorAll('#viewSeg button')) b.setAttribute('aria-pressed', String(b.dataset.v === state.view));
+  }
+
+  function setIdx(i){ state.idx = Math.max(0, Math.min(AMOUNTS.length - 1, Number(i) || 0)); renderControls(); renderSections(); }
+  document.getElementById('amtSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if(b) setIdx(b.dataset.i); });
+  document.getElementById('amtRange').addEventListener('input', (e) => setIdx(e.target.value));
+  document.getElementById('viewSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if(!b) return; state.view = b.dataset.v; renderControls(); renderSections(); });
+  document.getElementById('onlyQ').addEventListener('change', (e) => { state.onlyQ = e.target.checked; renderSections(); });
+
+  renderTiles(); renderControls(); renderSections(); renderDecisions(); renderVocab();
+})();
+</script>
