@@ -25,6 +25,17 @@ money-safety mapping, the open questions, and the launch gates — not a re-past
 **Nothing customer-facing ships until counsel clears cash-out.** Building and sandbox-testing the
 rail in parallel is fine and expected.
 
+**Live run 2026-10-04 (founder's phone, sandbox):** the first customer withdrawal completed (Nedbank
+cardless R20, status 100, paymentReference 126382, SMS received); PayShap R50 sits at status 99
+"Payment loaded pending finalisation" (126383) for hours with no webhook from the sandbox; ABSA
+CashSend R50 answered HTTP 400 / status 97 "Fail at Provider: Internal Server Error" (126384 on
+GetPaymentStatus). Sandbox facts for the client: a 97 arrives with HTTP 400 and no paymentReference
+in the PerformPayout body; GetPaymentStatus answers `message: "Success"` for every status, so the
+payout state is `status`, never `message`; OTT fills `country_of_issue: "ZA"` and `nationality: "ZA"`
+in its echo when we send none. The SMS is OTT's (sender "OTT", help number 0843255632) and carried an
+empty voucher code and PIN; the failure e-mail carries the recipient's PII in clear. Both raised in
+`EMAIL_TO_OTT_11_FIRST_LIVE_WITHDRAWALS.txt`. Evidence: `docs/testing/payouts-e2e-2026-10-04.md`.
+
 ---
 
 ## 2. Base URLs & environments

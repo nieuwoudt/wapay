@@ -274,6 +274,7 @@ async function run() {
       const g = await s.say('back');
       const h = await s.say('4');
       const i = await s.say('mine');
+      const i2 = await s.say('Thandi Nkosi');   // 2026-10-04: the full name is asked once when KYC has none (never the display name twice)
       const j = await s.say('9001015009087');
       const k = await s.say('yes');
       const l = await s.say(QA_PIN);
@@ -283,13 +284,52 @@ async function run() {
         { level: 'FAIL', ok: has(f.replyText, /R30 is below the R50 minimum for cash at an Absa ATM, but /) && has(f.replyText, /Reply \*YES\* to switch to that/), what: 'Absa at R30: the one method that carries R30 is offered as a yes or no, no menu bounce (founder review 2026-09-18)' },
         { level: 'FAIL', ok: has(g.replyText, /Withdraw from WaPay/), what: '"back" returns to the method menu ("menu" goes home, like a banking app)' },
         { level: 'FAIL', ok: has(h.replyText, /FNB eWallet/) && has(h.replyText, /cellphone number/i), what: 'FNB eWallet keeps the R30 and asks for the cellphone number' },
-        { level: 'FAIL', ok: has(i.replyText, /13-digit/), what: 'the ID number is asked because the provider requires it' },
+        { level: 'FAIL', ok: has(i.replyText, /full name, exactly as it appears on your ID/), what: 'the full name is asked once, as on the ID, because KYC has none (founder 2026-10-04)' },
+        { level: 'FAIL', ok: has(i2.replyText, /13-digit/), what: 'the ID number is asked because the provider requires it' },
         { level: 'FAIL', ok: has(j.replyText, /Withdraw \*R30\* to an FNB eWallet/) && has(j.replyText, /Fee: R18/), what: 'confirmation names the eWallet, the amount and the fee' },
         { level: 'FAIL', ok: has(k.replyText, /PIN/), what: 'YES asks for the PIN' },
         { level: 'FAIL', ok: has(l.replyText, /Done\./) && has(l.replyText, /WP[A-Z0-9]{14}/), what: 'the PIN executes exactly one pay-out and returns a reference' },
+        { level: 'FAIL', ok: has(l.replyText, /eWallet code is sent by SMS to •••\d{3}/) && has(l.replyText, /Cardless services\* then \*eWallet\*/), what: 'after Done the chat itself says where the code arrives and how to collect (founder 2026-10-04)' },
+        { level: 'FAIL', ok: has(j.replyText, /Name on the account: Thandi Nkosi/) && has(j.replyText, /ID number: •••087/), what: 'the confirmation shows the name as given and the ID number masked' },
         { level: 'FAIL', ok: ottCalls.length === 1 && ottCalls[0].providerCode === '1' && ottCalls[0].amountCents === 3000, what: 'exactly one PerformPayout to FNB e-wallet (code 1) for R30' },
         { level: 'FAIL', ok: has(m.replyText, /R\s?52[.,]00/), what: 'balance is R100 - R30 - R18 = R52' },
         { level: 'FAIL', ok: has(j.replyText, /Total leaving your balance: \*R48\*/) && has(j.replyText, /Balance after: \*R52\*/), what: 'the confirmation shows what leaves and what remains' },
+      ], s);
+    } finally {
+      if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;
+      if (prevKyc === undefined) delete process.env.WAPAY_PAYOUT_KYC; else process.env.WAPAY_PAYOUT_KYC = prevKyc;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 6c. Founder review 2026-10-04: compound answers ("50 and 2", "50 at ABSA",
+  // "the Nedbank one") are read as amount + method and confirmed in ONE line.
+  // ------------------------------------------------------------------
+  {
+    const prevOn = process.env.WAPAY_PAYOUT_ENABLED; const prevKyc = process.env.WAPAY_PAYOUT_KYC;
+    process.env.WAPAY_PAYOUT_ENABLED = 'true'; process.env.WAPAY_PAYOUT_KYC = 'off';
+    try {
+      await fundQaAccount({ cents: 20000, key: 'compound' });   // the balance after 6b is R52; R252 lets every compound answer be affordable
+      const a = await s.say('Can I withdraw 20');
+      const b = await s.say('50 and 2');
+      const c = await s.say('yes');
+      await s.say('cancel');
+      const d = await s.say('withdraw');
+      const e = await s.say('1');
+      const f = await s.say('50 at ABSA');
+      const g = await s.say('No can you help me withdraw 50 at ABSA?');
+      const h = await s.say('the Nedbank one');
+      const i = await s.say('20');
+      await s.say('cancel');
+      verdict('Compound answers: "50 and 2", "50 at ABSA", "the Nedbank one" are read as amount + method and confirmed in one line (founder 2026-10-04)', [
+        { level: 'FAIL', ok: has(a.replyText, /Withdraw from WaPay/) && has(a.replyText, /Minimum withdrawals from R/), what: '"Can I withdraw 20" opens the menu (amount kept) and the menu says "Minimum withdrawals from"' },
+        { level: 'FAIL', ok: has(b.replyText, /Got it: R50 by cash at an Absa ATM\. Is that right\? Reply \*YES\*/), what: '"50 and 2" is confirmed in one line, not "Reply 1, 2, 3 or 4"' },
+        { level: 'FAIL', ok: has(c.replyText, /cellphone number will collect the cash at the Absa ATM/i), what: 'YES carries on to the cellphone step with R50 and Absa set' },
+        { level: 'FAIL', ok: has(d.replyText, /Withdraw from WaPay/) && has(e.replyText, /How much would you like to withdraw by PayShap/), what: 'a fresh withdrawal: PayShap asks for the amount' },
+        { level: 'FAIL', ok: has(f.replyText, /Got it: R50 by cash at an Absa ATM/), what: '"50 at ABSA" at the amount step switches method and amount with one confirming line, not "Just the amount"' },
+        { level: 'FAIL', ok: has(g.replyText, /Got it: R50 by cash at an Absa ATM/) && !has(g.replyText, /Here is how it works/), what: 'the founder\'s exact sentence gets the confirmation, never the four-step explainer' },
+        { level: 'FAIL', ok: has(h.replyText, /withdraw by Cash at a Nedbank ATM/), what: '"the Nedbank one" switches the method and asks the amount' },
+        { level: 'FAIL', ok: has(i.replyText, /Nedbank ATM/) && has(i.replyText, /cellphone number/i), what: 'R20 by Nedbank goes to the cellphone step' },
       ], s);
     } finally {
       if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;

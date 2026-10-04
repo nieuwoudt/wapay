@@ -29,6 +29,53 @@ model Account {
   consents           Consent[]
   auditLogs          AuditLog[]
   turns              ConversationTurn[]
+  payoutIdentity     PayoutIdentity?
+  payoutDestinations PayoutDestination[]
+}
+
+// Remembered pay-out details (founder ask 2026-10-04: "we only have to ask
+// them once"). Written only on an explicit YES after a pay-out the rail
+// accepted; the account number and the ID number are encrypted at the field
+// level (lib/pii-vault.js, key version per row so the key can rotate); only
+// labels and last-3 masks ever leave lib/payout-beneficiaries.js except into
+// the rail request itself. Both tables follow the account (POPIA erasure) and
+// "forget my bank details" / "forget me" delete them outright.
+model PayoutIdentity {
+  accountId  String   @id
+  account    Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  fullName   String // exactly as on the bank account
+  idType     String   @default("RSAID") // RSAID now, PASSPORT later
+  idEnc      String
+  idLast3    String
+  keyVersion Int      @default(1)
+  consentAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("payout_identities")
+}
+
+model PayoutDestination {
+  id           String   @id @default(cuid())
+  accountId    String
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  method       String // PAYSHAP | RTC | CASHSEND | NEDCASH | EWALLET (the method it was saved with)
+  label        String // "FNB account •••394", "Nedbank cash to •••175": the only thing the chat and the pack ever show
+  bankName     String?
+  branchCode   String?
+  accountEnc   String?
+  accountLast3 String?
+  mobileEnc    String?
+  mobileLast3  String?
+  keyVersion   Int      @default(1)
+  fingerprint  String // sha256(accountId | family | number): one row per account number or cellphone
+  consentAt    DateTime @default(now())
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime @default(now())
+  timesUsed    Int      @default(1)
+
+  @@unique([accountId, fingerprint])
+  @@index([accountId, lastUsedAt])
+  @@map("payout_destinations")
 }
 
 // A customer holds one wallet PER balance type:

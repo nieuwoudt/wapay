@@ -1,0 +1,35 @@
+To: Yaku <[OTT technical contact email]>
+Cc: Keamogetsoe Modikwe <keamo@ott-mobile.com>
+Subject: Re: OTT Payout sandbox: first customer withdrawals completed, five questions
+
+Hi Yaku, hi Keamo,
+
+Good news first: our WhatsApp withdrawal journey now completes end to end on the payout test environment. This morning (4 October) a customer withdrawal by Nedbank Cardless Withdrawal (R20.00, our reference WPB4D27FAF672A7E, your paymentReference 126382) answered status 100 and the SMS arrived on the customer's phone. Two more were sent in the same session: a PayShap Account payout (R50.00, WP88A417B750FC36, paymentReference 126383) which has been at status 99 "Payment loaded pending finalisation" since 08:55 SAST, and an ABSA CashSend (R50.00, WP4D1AD70A6B28B6) which answered status 97 "Fail at Provider: Internal Server Error" within seconds.
+
+Five things we would like to confirm before we move to production.
+
+1. THE SMS TO THE CUSTOMER
+The Nedbank SMS read: "OTT: Nedbank Cardless Withdrawal sent from Payout. Amount: R20.00. Voucher Code: . PIN: . Need help? WhatsApp: 0843255632."
+(a) Is the sender name and the text configurable per merchant, so that it reads as WaPay, carries our WhatsApp number for help, and does not name OTT? Our customers only ever deal with WaPay, and a message from a name they do not know, with a help number they do not know, will be read as a scam.
+(b) The voucher code and PIN were empty. Is that expected on the test environment (no live Nedbank behind it), or should the test SMS carry test codes? What does the production SMS carry for Nedbank cardless and for ABSA CashSend: a withdrawal code, a PIN, or both?
+(c) Is the SMS text per provider available to us in writing, so we can mirror the collection steps in the chat exactly?
+
+2. PAYSHAP PENDING FINALISATION
+WP88A417B750FC36 has been at status 99 for several hours. Is that the expected end state on the test environment (no live bank), does it eventually move to 100 or 97, and does the test environment send the status webhook when it does? We did not receive a webhook at https://pleasepayme.co.za/api/webhooks/ott-payout for 126382, 126383 or 126384. In production, how long can a PayShap stay at 99 before we should treat it as failed, and does your side reverse it automatically?
+
+3. ABSA CASHSEND ON THE TEST ENVIRONMENT
+WP4D1AD70A6B28B6 answered 97 "Internal Server Error" at the provider. Is ABSA CashSend expected to fail on the test environment, or did this fail for a reason we should fix? If it is expected, which providers can we rely on to complete on the test environment so that we can test the cash collection path properly?
+
+4. THE FAILURE E-MAIL
+After the CashSend failure a "Payout Failure on OTT-Payout for <name>" e-mail arrived from "Noreply Payout" with the customer's full names, ID type and ID number, nationality, date of birth, gender and mobile number in clear text in the body. Under POPIA we would rather this did not travel by e-mail at all. Can the failure notice be suppressed for our merchant, or sent to a restricted operations address with the personal fields masked (last three digits) and our reference instead?
+
+5. THE FLOAT AND THE FEES
+The test float moved from R99,939.96 to R99,857.27 over these three attempts (R82.69 for R70.00 of payouts, of which R50.00 is still pending and R50.00 failed). Could you send the fee lines per transaction for 4 October so we can reconcile them to the addendum rates (R9.96 plus 0.3% for Nedbank and ABSA, R2.50 for PayShap, all excluding VAT)? In particular: is a failed payout charged, is a pending PayShap debited at creation or at finalisation, and is VAT deducted from the float or invoiced separately?
+
+Still open from our earlier mail (email of 23 September to Keamo): the production price per provider, the FNB e-wallet price, and whether RTC can be enabled for us.
+
+Thank you both. Once we have 1 and 2 we can set the date for the first production payout.
+
+Regards
+Niev
+WaPay

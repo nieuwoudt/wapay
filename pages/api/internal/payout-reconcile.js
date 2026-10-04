@@ -13,9 +13,9 @@
  * customer is told, with the same words the webhook uses.
  */
 import crypto from 'node:crypto';
-import { sendWhatsAppText } from '../../../lib/say.js';
+import { notifyCustomer } from '../../../lib/notify.js';
 import prisma from '../../../lib/prisma.js';
-import { reconcilePayout, reconcilePendingPayouts, payoutOutcomeMessage, payoutConfigured } from '../../../lib/payouts.js';
+import { reconcilePayout, reconcilePendingPayouts, payoutOutcomeMessage, payoutOutcomeParams, payoutConfigured } from '../../../lib/payouts.js';
 
 export const config = { maxDuration: 25 };
 
@@ -56,15 +56,19 @@ export default async function handler(req, res) {
   const limit = Number(req.query.limit) || 20;
   const results = reference ? [await reconcilePayout({ reference })] : await reconcilePendingPayouts({ olderThanMs, limit });
 
+  // Told once, by the rail that crosses: the operator may run this hours after
+  // the customer's last message, outside the 24 h window, where a plain text is
+  // accepted by Meta and dropped. notifyCustomer picks text, direct or template.
   const notified = [];
+  const notifyFailed = [];
   for (const r of results) {
     if (r.accountId && (r.status === 'SETTLED' || r.status === 'FAILED') && !r.noop) {
       const account = await prisma.account.findUnique({ where: { id: r.accountId }, select: { waId: true } }).catch(() => null);
-      if (account?.waId) {
-        await sendWhatsAppText({ to: account.waId, text: payoutOutcomeMessage(r) }).catch(() => null);
-        notified.push(r.reference);
-      }
+      if (!account?.waId) { notifyFailed.push(r.reference); continue; }
+      const p = payoutOutcomeParams(r);
+      const sent = await notifyCustomer({ to: account.waId, accountId: r.accountId, text: payoutOutcomeMessage(r), kind: 'receipt', templateEnv: 'WAPAY_TEMPLATE_PAYOUT_OUTCOME', templateParams: [p.amount, p.method, p.reference] }).catch(() => ({ ok: false }));
+      if (sent?.ok) notified.push(r.reference); else notifyFailed.push(r.reference);
     }
   }
-  return res.status(200).json({ ...out, count: results.length, results: results.map(publicRow), notified });
+  return res.status(200).json({ ...out, count: results.length, results: results.map(publicRow), notified, notifyFailed });
 }

@@ -4,6 +4,31 @@
 
 ---
 
+## 87. The operator's reconcile route told the customer with a plain text that Meta drops outside the 24-hour window
+
+- **Symptom (review of the "told once" path, 2026-10-04):** `GET /api/internal/payout-reconcile` finalised a pay-out and sent `payoutOutcomeMessage` with `sendWhatsAppText`. An operator runs that route hours after the customer's last message, exactly where Meta accepts a free-form text and never delivers it; the route then reported the reference under `notified` and nobody looked again. The sweep (`sweepPayoutsAndNotify`) had already been moved to `notifyCustomer` (C21); the operator route had not.
+- **Fix:** the route tells the customer through `notifyCustomer` (text inside the window, the direct utility rail or the `WAPAY_TEMPLATE_PAYOUT_OUTCOME` template outside it) with the same `payoutOutcomeParams`, and reports `notifyFailed` separately from `notified`.
+- **Guard:** `tests/payout-chat.test.mjs` (static: the route calls `notifyCustomer` with the template env and carries `notifyFailed`).
+
+## 86. "(from R50)" on the method menu did not read as a minimum, and the menu promised times
+
+- **Symptom (founder, 2026-10-04):** "Please change this to 'minimum withdrawals from'." The method lines said "R8 fee, arrives in minutes (from R50)", and "arrives in minutes" / "usually within the hour" are time promises the money rules forbid (BUGLOG #82).
+- **Fix:** every method line ends "Minimum withdrawals from R50." (`methodLine` in `lib/payout-chat.js`); no time is named anywhere in the menu.
+- **Guard:** `tests/payout-chat.test.mjs` (the menu carries "Minimum withdrawals from", never "(from R" or "arrives in minutes").
+
+## 85. After "Done" the only instruction the customer had was the rail's own SMS, which carried an empty code on the sandbox
+
+- **Symptom (founder's first completed withdrawal, Nedbank cardless R20, 2026-10-04 08:39 SAST):** the chat said "Done. R20 is on its way to you by Cash at a Nedbank ATM" and stopped. The SMS that followed was from "OTT", carried OTT's own help number, and read "Voucher Code: . PIN: ." The customer had no idea where the code would arrive or what to do at the ATM; the per-bank steps existed in `lib/how-it-works.js` but only a question reached them.
+- **Fix:** one source of collection copy, `lib/payout-collection.js` (`arrivalLine`, `collectionSteps`, `collectionInstructions`), used by the chat right after "Done" (where the code arrives, masked to the last three digits; the steps at the ATM; what to do if the SMS does not come), by `payoutOutcomeMessage` for a pay-out that settles later (webhook, sweep, operator route) and by the knowledge base. PayShap says the bank's own app or SMS will show the credit; a pending pay-out says the same for when it lands. The SMS sender and text are OTT's: asked whether they are configurable per merchant and why the code was empty (email 11).
+- **Guard:** `tests/payout-chat.test.mjs` (the Done text, the pending text and `payoutOutcomeMessage` SETTLED carry the arrival line and the steps; FAILED does not); the harness end-to-end scenario checks the eWallet steps after Done.
+
+## 84. The bank rail received "Nieuwoudt Nieuwoudt" as the recipient: the display name used twice
+
+- **Symptom (all three live withdrawals of 2026-10-04, `ProviderRequest.metadata.recipient.name`):** with `WAPAY_PAYOUT_KYC=off` there is no verified name, so `recipientName` fell back to `displayName`, split it on spaces, and used the single word as both first name and surname. A real PayShap or cash send carries that name to the bank.
+- **Root cause:** the fallback was written for the KYC-on launch shape, where `profile.kyc.fullName` always exists; the pilot runs with KYC off.
+- **Fix:** the flow asks once for the full name exactly as on the bank account or ID (`PAYOUT_NAME`, two or more words, letters only) when there is no KYC name and no saved identity, shows it on the confirmation ("Name on the account: …") with the ID number masked, and sends first name + surname to the rail; `recipientName` never doubles a display name again. With consent (BUGLOG #83 companion, the beneficiaries feature) the name and the ID number are remembered encrypted so they are asked once.
+- **Guard:** `tests/payout-chat.test.mjs` (the name step, the one-word rejection, the confirmation text, the recipient the stub rail received; static: `recipientName` never uses `displayName` as a surname); the harness end-to-end scenario types the name.
+
 ## 82. A pay-out nobody had confirmed was announced as "Sent … usually within minutes"
 
 - **Symptom (peer review of the timeout path, 2026-09-23):** the single PENDING reply in `executeWithdraw` said "⏳ Sent. R50 has been handed to the bank rail … I'll message you the moment the bank confirms it, usually within minutes" for every PENDING outcome, including `TRANSPORT_INDETERMINATE` (the request may never have arrived) and an unreadable answer. On the sandbox PayShap took over 20 s and then failed at the provider, so the customer's lived sequence was "Sent, usually within minutes" followed by "it failed, your money is back": the founder's own first PayShap on 15 September read exactly like that.

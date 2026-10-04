@@ -148,11 +148,12 @@ export async function seedQaAccount() {
  * entry, and an argon2id PIN factor with the same recipe verifyPIN expects (setPIN's
  * argon2 interop breaks in plain-node ESM; see tests/e2e/fuel-e2e.mjs).
  */
-export async function fundQaAccount({ cents = 10000 } = {}) {
+/** `key` makes a second load land (the idemKey is otherwise fixed, so a repeat call is a no-op by design). */
+export async function fundQaAccount({ cents = 10000, key = '' } = {}) {
   const account = await prisma.account.findFirst({ where: { waId: QA_WA_ID } });
   if (!account || account.displayName !== QA_MARKER) throw new Error('fundQaAccount: no harness account');
   await ensureWallet({ accountId: account.id, balanceType: BALANCE.SPEND });
-  await postEntry(buildLoad({ accountId: account.id, rail: RAIL.PAYFAST, faceCents: cents, idemKey: `chatqa-load-${account.id}` }));
+  await postEntry(buildLoad({ accountId: account.id, rail: RAIL.PAYFAST, faceCents: cents, idemKey: `chatqa-load-${account.id}${key ? `-${key}` : ''}` }));
   const pepper = process.env.PIN_PEPPER || 'wapay_pin_pepper_2025_change_in_production';
   const secretHash = await argon2.hash(QA_PIN + pepper, { type: argon2.argon2id, memoryCost: 65536, timeCost: 3, parallelism: 1 });
   await prisma.authFactor.deleteMany({ where: { accountId: account.id, type: 'PIN' } }).catch(() => {});

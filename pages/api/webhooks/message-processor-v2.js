@@ -88,6 +88,7 @@ import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEn
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
 import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders, getLatestPayout, reconcilePayout, reconcileInitPayout, payoutOutcomeMessage, PAYOUT_METHODS } from '../../../lib/payouts.js';
+import { forgetPayoutDetails } from '../../../lib/payout-beneficiaries.js';
 import { OttPayoutClient } from '../../../lib/ott-payout.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
 import { searchProducts } from '../../../lib/vas-search.js';
@@ -1495,6 +1496,11 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   if (matchForgetMe(text)) {
     return await handleForgetMe({ from, account });
   }
+  // "forget my bank details": the saved pay-out destinations and ID number go,
+  // for anyone, allowlisted or not (an erasure must never depend on a pilot gate).
+  if (matchForgetBankDetails(text)) {
+    return await handleForgetBankDetails({ from, account });
+  }
   if (matchMemoryOff(text)) return await handleMemorySwitch({ from, account, on: false });
   if (matchMemoryOn(text)) return await handleMemorySwitch({ from, account, on: true });
   // The same asks phrased as a sentence; BOTH halves get one combined answer.
@@ -2597,6 +2603,12 @@ async function handleWithdrawStart({ from, account, ask, text }) {
 async function handleWithdrawState({ from, account, state, data, text }) {
   const { handleWithdrawReply } = await import('../../../lib/payout-chat.js');
   const step = await handleWithdrawReply({ account, state, data, text });
+  // "Save these details for next time?" answered with something else: nothing
+  // is kept, the question is dropped, and the message is answered as new.
+  if (step?.passthrough) {
+    await updateConversationState(from, null);
+    return await handlePostOnboarding({ account, from, text });
+  }
   return await deliverPayoutStep({ from, account, step });
 }
 async function handleBusinessLoginAsk({ from, account }) {
@@ -3465,6 +3477,18 @@ async function handleMemoryAndHistory({ from, account }) {
 }
 const FORGET_ME = /^\W*(?:forget (?:me|that|everything|our chats?|my (?:data|history|info))|delete my (?:data|history|memory|chats?)|erase (?:me|my (?:data|history|memory)))\W*$/i;
 function matchForgetMe(text = '') { return FORGET_ME.test(String(text || '').trim()); }
+// Saved pay-out details only (lib/payout-beneficiaries.js): "forget my bank details",
+// "delete my saved account", "forget my ID number". The global "forget me" erases these too.
+const FORGET_BANK = /^\W*(?:forget|delete|erase|remove|clear|wipe)\s+(?:my\s+|the\s+|all\s+)?(?:saved\s+)?(?:bank(?:ing)?\s+(?:details?|account(?:s)?|info(?:rmation)?)|account\s+(?:details?|numbers?)|payout\s+(?:details?|beneficiar(?:y|ies))|withdrawal\s+details?|beneficiar(?:y|ies)|id\s*number|cellphone\s+numbers?|saved\s+details?)\W*$/i;
+function matchForgetBankDetails(text = '') { return FORGET_BANK.test(String(text || '').trim()); }
+async function handleForgetBankDetails({ from, account }) {
+  const gone = await forgetPayoutDetails({ prisma, accountId: account.id });
+  logStructured('forget_bank_details', { from, accountId: account.id, destinations: gone.destinations, identities: gone.identities });
+  const text = gone.destinations + gone.identities > 0
+    ? '🧹 Done. Your saved bank details, cellphone numbers and ID number for withdrawals are erased. I will ask you to type them next time. Your balance and your transactions are untouched.'
+    : '🧹 There were no saved withdrawal details on your account, so nothing needed erasing. Your balance and your transactions are untouched.';
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(text, await userLang(account)), kind: 'flow' });
+}
 
 /**
  * Does this look like someone shopping? Hoisted out of detectExplicitIntent
@@ -3521,6 +3545,16 @@ async function handleMemorySwitch({ from, account, on }) {
 }
 
 /** The customer's record, in their own words: what WaPay knows and uses. */
+/** "Saved withdrawal details: FNB account •••394, plus your name and ID number ending 083 (say "forget my bank details" to erase them)" or null. */
+function savedPayoutLine(pack) {
+  const labels = Array.isArray(pack?.payoutDestinations) ? pack.payoutDestinations.map((d) => (typeof d === 'string' ? d : d?.label)).filter(Boolean).slice(0, 5) : [];
+  const identity = pack?.payoutIdentity && typeof pack.payoutIdentity === 'object' ? pack.payoutIdentity : null;
+  if (!labels.length && !identity) return null;
+  const parts = [];
+  if (labels.length) parts.push(labels.join(', '));
+  if (identity) parts.push('your name and ID number ending ' + String(identity.idLast3 || '').replace(/\D/g, '').slice(-3));
+  return '• Saved withdrawal details (encrypted): ' + parts.join(', plus ') + ' (say "forget my bank details" to erase them)';
+}
 async function handleAboutMe({ from, account }) {
   const pack = await loadContextPack({ prisma, account, movementLimit: 10 });
   const profile = await getProfile({ accountId: account.id }).catch(() => ({}));
@@ -3535,6 +3569,9 @@ async function handleAboutMe({ from, account }) {
     people.length ? '• People you send to: ' + [...new Set(people)].slice(0, 5).join(', ') : '• People you send to: none saved yet',
     pack.habits?.summary ? '• Habits: ' + pack.habits.summary : null,
     notes.length ? '• Things you told me: ' + notes.slice(0, 5).join('; ') : null,
+    // Saved pay-out details (labels and masks only, from the pack): POPIA
+    // transparency covers them, and the words that erase them sit beside them.
+    savedPayoutLine(pack),
     '• Our last 30 days of chat, so I can follow the conversation',
     '',
     'I never store your PIN, voucher PINs or card details. Reply "forget me" and I erase our chat memory and the things you told me; your transactions stay on record.',
@@ -3553,7 +3590,9 @@ async function handleForgetMe({ from, account }) {
   await prisma
     .$executeRaw`UPDATE "Account" SET "conversationData" = "conversationData" - 'history' WHERE id = ${account.id} AND "conversationData" ? 'history'`
     .catch(() => {});
-  logStructured('forget_me', { from, accountId: account.id, turnsErased: erased?.count ?? null });
+  // Saved pay-out destinations and the ID number go with everything else: one command, complete erasure.
+  const payoutGone = await forgetPayoutDetails({ prisma, accountId: account.id });
+  logStructured('forget_me', { from, accountId: account.id, turnsErased: erased?.count ?? null, payoutDestinations: payoutGone.destinations, payoutIdentities: payoutGone.identities });
   return await sendWhatsAppText({
     to: from,
     text: await localizeOutbound('🧹 Done. I have erased our chat memory and the things you told me. Your transactions stay on record, as the law requires. Your balance and your account are untouched.', await userLang(account)),
@@ -3738,8 +3777,10 @@ async function handleConversationState({ from, text, state, data, account }) {
     case 'PAYOUT_ACCOUNT':
     case 'PAYOUT_BRANCH':
     case 'PAYOUT_MOBILE':
+    case 'PAYOUT_NAME':
     case 'PAYOUT_ID':
     case 'PAYOUT_CONFIRM':
+    case 'PAYOUT_SAVE':
       return await handleWithdrawState({ from, account, state, data, text });
 
     case 'HOWTO_OFFER': {
