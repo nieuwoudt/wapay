@@ -65,7 +65,7 @@
 </style>
 
 <div class="wrap">
-  <div class="eyebrow">WaPay · engineering decision · 16 September 2026 · Version 13, redrawn 4 October at build 5249fd3</div>
+  <div class="eyebrow">WaPay · engineering decision · 16 September 2026 · Version 14, redrawn 4 October at build a2c3912</div>
   <h1>Pay Agent Architecture</h1>
   <p class="stand">The chat feels like a menu because the customer is talking to the pre-agent runtime: 29 deterministic intercepts, two serial classifier calls, and a model that has never been shown a single fact about the customer. The agent described in the recon was never built. This page shows what runs today, the target that six read-only readers, four independent designers, three judges and two refuters per claim converged on, and the order to build it in.</p>
 
@@ -107,7 +107,7 @@
       <ul>
         <li>Promotion beyond the shadow list (Phase 3 gate: the full eval per language at or above the two-tier engine's pass rate, and a week of shadow turns with no gate firing on money copy).</li>
         <li>Deleting the regex hooks and retiring the two-tier classifier (Phase 3, two batches).</li>
-        <li>Mission Control cards for conversations, gates fired, cost and pay-out drift (Phase 3).</li>
+        <li>Mission Control: model cost per turn stays “not priced” until the two price envs are set; the pay-out drift half landed 4 October as the reconciliation card.</li>
         <li>The jobs table, notifyCustomer, journal index columns, a second model provider, the first partner module (Phase 4).</li>
         <li>A Vercel schedule for the 10-minute pay-out sweep (needs the plan decision).</li>
       </ul>
