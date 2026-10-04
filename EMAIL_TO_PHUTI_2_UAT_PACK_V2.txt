@@ -1,0 +1,65 @@
+Subject: RE: WaPay production enablement request (fresh UAT evidence pack attached)
+
+Hi Phuti
+
+Thank you. The testing logs are attached as "WaPay: Blue Label Trade API UAT test evidence, v2"
+(PDF plus a CSV with the same rows for your reconciliation).
+
+This is a fresh round, run on {{ROUND_DATE}} against the Trade QA environment with your four test
+MSISDNs and your compliance meter, through our live WhatsApp service, so every line carries:
+
+* your reference as returned by the API, next to our requestId (so you can match each one in
+  your own log);
+* the timestamp (UTC and SAST), the amount and the target number or meter;
+* the customer-visible WhatsApp receipt exactly as it was sent;
+* the double-entry ledger postings behind it, and the funds hold (reserved, then settled or
+  released).
+
+In short:
+
+* Airtime: {{AIRTIME_OK}} confirmed vends across Vodacom, MTN, Cell C and Telkom
+  (references {{AIRTIME_REFS}}), plus the refusal path for a number outside the QA whitelist.
+* Data bundles: {{DATA_OK}} confirmed vends across the four networks (references {{DATA_REFS}}),
+  using product codes from your bundle catalogue.
+* Electricity: {{ELEC_OK}} confirmed vend(s) on compliance meter 000001020001 (references
+  {{ELEC_REFS}}, token delivered to the customer and shown masked in the pack), plus an invalid
+  meter number.
+* Voucher redemption: {{VOUCHER_OK}} of the 14 September test vouchers redeemed (references
+  {{VOUCHER_REFS}}), plus a repeat of a redeemed PIN, which is refused and never credited twice.
+* Failure paths: declines, an abandoned preview and a timeout are all in section 6, each with
+  the hold released and the customer told that no money moved.
+
+The pack also carries the historical transactions from the integration period (the eight voucher
+redemptions and six airtime vends you have seen before) so the whole record is in one place.
+
+Seven things would let us complete the move to production:
+
+1. Production credentials and the production base URL, in writing: Trade API basic auth plus
+   the API keys for voucher redemption and VAS vending, and your go-live checklist. Our notes
+   carry three different hosts, so we would rather not guess.
+2. IP whitelisting: does production require caller IP whitelisting, and if so is a shared static
+   egress IP from a managed cloud pool acceptable, or must it be dedicated to us? Either answer
+   is fine, we just need it definitively so we can finalise our network route.
+3. Which categories our trade account is enabled for in production. Airtime, data and
+   electricity we take as confirmed. For lifestyle and entertainment vouchers, bill payments,
+   gaming top-ups and remittance (the short document from 18 August), please tell us which are
+   available to us and whether any need a separate agreement or approval step.
+4. The OpenAPI or Swagger JSON for both QA and production. We have been working from notes
+   taken off the Swagger UI, and the JSON would remove the guesswork.
+5. The 14 September voucher batch (reference Wa_pay): the six vouchers with supplier code 13 and
+   16-digit PINs redeem on the Blu Voucher endpoints as expected. The six with supplier code 41
+   and 12-digit PINs do not look like Blu Voucher PINs to us. Could you confirm what supplier
+   code 41 is and which endpoint redeems them? We have not attempted them.
+6. Production UAT: is there a production test allowance or test-vend budget we should use for
+   the first live vends, and any production test numbers or meters?
+7. Rotation of the QA credentials we hold, at the same time as the production issue, since they
+   have been in use across our integration for close to a year.
+
+Two smaller questions while you are in there: are there published rate limits, and do you
+provide webhooks or a reconciliation file for settlement? Both affect how we build.
+
+Happy to jump on a call if that is quicker for any of this.
+
+Regards
+Nieuwoudt Gresse
+WaPay
