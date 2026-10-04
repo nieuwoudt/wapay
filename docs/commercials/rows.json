@@ -1,6 +1,6 @@
 {
   "title": "WaPay Money Map",
-  "version": "1.1",
+  "version": "1.2",
   "date": "2026-10-04",
   "referenceAmountsCents": [
     5000,
@@ -25,7 +25,7 @@
     },
     "out": {
       "title": "Money out",
-      "blurb": "Withdrawals on OTT's pay-out rail and Pay@: what OTT charges, what the customer pays, what is left."
+      "blurb": "Withdrawals on OTT's pay-out rail and Pay@: what OTT charges, what the customer pays, what is left. The rail in depth, the benchmark and the +R2 options are in docs/PAYOUT_COMMERCIALS.md (payouts thread, commit 24d07f8, 2026-10-04)."
     },
     "vend": {
       "title": "Vending",
@@ -520,7 +520,7 @@
         "bps": 0,
         "exVat": true,
         "status": "SIGNED",
-        "source": "OTT Payout Agreement signed 2026-08-25 + 2026 Addendum, Annexure A clause 3.3: R2.50 per transaction ex VAT, no percentage on Bank EFT products (WaPay /OTT Onboarding /); applied rate unverified: R12.69 of sandbox float deductions on 2026-10-04 do not yet reconcile to the addendum (payouts thread)"
+        "source": "OTT Payout Agreement signed by WaPay 2026-08-25, co-signed by OTT 2026-09-10, Annexure A (the 2026 Addendum repeats the same prices): R2.50 per transaction ex VAT, no percentage on Bank EFT products (WaPay /OTT Onboarding /). Applied rate unverified: R12.69 of sandbox float deductions on 2026-10-04 do not reconcile to the addendum (docs/PAYOUT_COMMERCIALS.md section 2; OTT asked in emails 9 and 11). PAYOUT_COMMERCIALS.md words this as ASSUMED until OTT's statement; this map keeps SIGNED for the contract rate and flags the applied rate."
       },
       "price": {
         "kind": "bands",
@@ -557,7 +557,7 @@
         }
       ],
       "notes": "The margin rail: a constant R5.12 at every amount. Dearer than every bank's own PayShap (R0 to R2), so the story is reach, never price (benchmark 2026-09-11).",
-      "question": "Pay-out fees: keep the +R2 of 2026-09-11 (PayShap R8, bank transfer R10, cash R18/R23/R30) or return to R6/R8/R16 so CashSend sits under Absa's R16 and FNB's R11? docs/PAYOUT_COMMERCIALS.md (payouts thread) sets out options A, B and C and recommends C: drop the +R2 on the cash methods only and keep PayShap at R8.",
+      "question": "Pay-out fees: keep the +R2 of 2026-09-11 (PayShap R8, bank transfer R10, cash R18/R23/R30) or return to R6/R8/R16 so CashSend sits under Absa's R16 and FNB's R11? docs/PAYOUT_COMMERCIALS.md section 7 (commit 24d07f8) sets out options A, B and C and recommends C: keep PayShap at R8, drop the +R2 on the cash methods only (R16 / R21 / R28), which leaves R2.12 at the R700 band top and matches Absa's own R16.",
       "owner": "Founder"
     },
     {
@@ -776,7 +776,7 @@
           "price": "R11 up to R500, R30 above (sender pays; recipient collects free)"
         }
       ],
-      "question": "What does OTT charge for an FNB e-wallet pay-out, and does it carry the 0.3% switching fee? Asked 2026-09-15 and in the commercials email; no answer. The customer fee is assumed equal to CashSend until then.",
+      "question": "What does OTT charge for an FNB e-wallet pay-out, and does it carry the 0.3% switching fee? Asked 2026-09-15 and in emails 9 and 11 to OTT; no answer. The customer fee is assumed equal to CashSend until then; PAYOUT_COMMERCIALS.md section 6 says do not advertise FNB eWallet before the price is in writing.",
       "owner": "OTT (Keamo)"
     },
     {
@@ -1715,8 +1715,9 @@
         "source": "Not charged to the customer: a failed withdrawal returns amount plus fee (payoutOutcomeMessage)"
       },
       "codeRef": null,
-      "question": "Does OTT charge for a failed pay-out (R50 CashSend failed at the provider on 2026-10-04), and are reversals the only R10 line? Asked in the commercials email, unanswered.",
-      "owner": "OTT (Keamo)"
+      "question": "Does OTT charge for a failed pay-out (R50 CashSend failed at the provider on 2026-10-04), when is the float debited for a pending PayShap, and are reversals the only R10 line? Asked in emails 9 and 11 to OTT, unanswered; the 2026-10-04 float moved R82.69 for R70 of pay-outs.",
+      "owner": "OTT (Keamo)",
+      "notes": "A Nedbank or ABSA cash send that is never collected is reversed at R10 ex VAT (R11.50) and the ledger books nothing on reversal, so an uncollected R50 cash send that earned R6.36 ends R5.14 down. PAYOUT_COMMERCIALS.md section 6 assumes 5% uncollected until the first month of real cash sends, which takes the average cash margin at R50 from R6.36 to about R5.78."
     }
   ],
   "crossCuttingQuestions": [
