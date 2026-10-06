@@ -45,6 +45,13 @@ test('the VAS function cap matches the webhook and the electricity waits fit ins
     assert.ok(!body.includes('90000') && !body.includes('30000'), `${name} must take its wait from the ELEC_*_TIMEOUT_MS constants`);
   }
   assert.match(client, /error\.message === 'TIMEOUT'\)\s*\{\s*throw error;/, 'callWithRetry must never retry a TIMEOUT');
+  // Blu's gateway answered a bare "error code: 520" page on 2026-10-06: the body is read as text and
+  // a non-JSON answer becomes the supplier's message, never a JSON parse error.
+  for (const [name, body] of [['getElectricityInfo', infoBody], ['purchaseElectricity', saleBody]]) {
+    assert.ok(body.includes('await readBody(res)'), `${name} must read the body defensively`);
+    assert.ok(!body.includes('res.body.json()'), `${name} must not parse the body as JSON directly`);
+  }
+  assert.match(client, /Non-JSON answer from the supplier/);
 });
 
 test('the internal preview says what the supplier answered on an upstream failure, and the chat shows only the message', async () => {

@@ -63,12 +63,14 @@ exposure sheet marks Eskom as per unit) and whether it is quoted excluding or in
 Two smaller questions while you are in there: are there published rate limits, and do you
 provide webhooks or a reconciliation file for settlement? Both affect how we build.
 
-One QA observation that may need your side: on 6 October the electricity meter lookup on Trade QA
-(GET /electricity/info for compliance meter 000001020001, R20) answered once with an error after
-about 13 seconds and once not at all within 40 seconds, while the airtime and voucher endpoints
-answered within seconds. Could you check that the electricity service and our entitlement on QA
-are healthy, and confirm that /electricity/sales is idempotent on requestId for a sale that timed
-out on our side, so a retry with the same requestId never vends twice?
+One QA observation that needs your side: on 6 October between 12:30 and 12:50 SAST the electricity
+meter lookup on Trade QA (GET /electricity/info?amount=2000&free-basic-electricity=false&meter-number=000001020001)
+answered, after 11 to 18 seconds each time, with HTTP 500 "Unexpected exception encountered during
+request/response transformation. Status is unknown. Reason: null" twice, a bare "error code: 520"
+page once, and once not at all within 40 seconds. The airtime and voucher endpoints answered within
+seconds throughout. Could you check the electricity service and our entitlement on QA, and confirm
+that /electricity/sales is idempotent on requestId for a sale that timed out on our side, so a retry
+with the same requestId never vends twice?
 
 Happy to jump on a call if that is quicker for any of this.
 

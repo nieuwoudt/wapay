@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-10-06 (68) — The internal electricity preview says what Blu answered; Blu's body is read defensively
+
+Blu thread. With BUGLOG #88 live the compliance-meter lookup stopped dying at the
+platform cap, but the refusal it got back was reported only as "Electricity
+service unavailable" while the reason sat in platform logs.
+
+- `pages/api/vas/electricity/preview.js` (c9bc2c8): on `UPSTREAM_FAILURE` the
+  internal-only answer carries `detail { statusCode, kind, reason }`, runs of six
+  or more digits masked and the reason capped; the chat renders `message` alone.
+- `packages/providers/blu/src/vas-extended.ts`: both electricity calls read the
+  body as text and turn a non-JSON page ("error code: 520", seen 2026-10-06) into
+  the supplier's message instead of a JSON parse error.
+- What Blu answered on 2026-10-06 12:46 to 12:48 SAST, three probes: HTTP 500
+  "Unexpected exception encountered during request/response transformation.
+  Status is unknown. Reason: null" twice, "error code: 520" once. Recorded in the
+  tracker (Delta 38) and asked of Phuti in `EMAIL_TO_PHUTI_2_UAT_PACK_V2.txt`.
+- Tests: `tests/electricity-timeout.test.mjs` extended (detail present on the
+  catch path only, chat never shows it; defensive body read in both calls).
+
 ## 2026-10-06 (67) — Parked electricity sales join the Pay-out reconciliation card
 
 Follow-up to entry 66 (BUGLOG #88): a slow Blu vend now keeps its hold and is

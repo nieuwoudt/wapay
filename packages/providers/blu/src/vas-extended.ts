@@ -81,6 +81,16 @@ function isTransportTimeout(error: any): boolean {
   return /UND_ERR_(HEADERS|BODY|CONNECT)_TIMEOUT/.test(code) || /TimeoutError$/.test(name) || code === 'ETIMEDOUT';
 }
 
+/** Blu's gateway sometimes answers with a bare text page ("error code: 520"); never let a JSON parse error stand in for the supplier's answer. */
+async function readBody(res: { body: { text: () => Promise<string> } }): Promise<any> {
+  const text = await res.body.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: `Non-JSON answer from the supplier: ${String(text || '').replace(/\s+/g, ' ').trim().slice(0, 120)}` };
+  }
+}
+
 function asTimeout(error: any, what: string): Error {
   const err = new Error('TIMEOUT');
   (err as any).reason = `${what} did not answer within the time allowed`;
@@ -370,7 +380,7 @@ export class BluVasExtendedClient {
           bodyTimeout: ELEC_INFO_TIMEOUT_MS,
           headersTimeout: ELEC_INFO_TIMEOUT_MS,
         });
-        data = (await res.body.json()) as any;
+        data = await readBody(res);
       } catch (error: any) {
         if (isTransportTimeout(error)) throw asTimeout(error, 'The meter lookup');
         throw error;
@@ -431,7 +441,7 @@ export class BluVasExtendedClient {
           bodyTimeout: saleTimeoutMs,
           headersTimeout: saleTimeoutMs,
         });
-        data = (await res.body.json()) as any;
+        data = await readBody(res);
       } catch (error: any) {
         if (isTransportTimeout(error)) throw asTimeout(error, 'The electricity sale');
         throw error;
