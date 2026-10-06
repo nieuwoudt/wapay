@@ -254,3 +254,14 @@ test('a clean reply passes with rule null and the same text; odd input never thr
   assert.deepEqual(outputGate(undefined), { ok: true, rule: null, text: '' });
   assert.deepEqual(outputGate(null, {}), { ok: true, rule: null, text: '' });
 });
+
+test('a bare 12-digit answer is a METER, not a voucher PIN, when the agent asked for one (review 2026-10-06)', () => {
+  const meterAsk = { pendingIntent: { action: 'BUY_ELECTRICITY', slots: { amountCents: 2000, meterNumber: null } } };
+  assert.equal(agentGuard('000001020001', meterAsk), null, 'twelve digits go to the flow as the meter');
+  assert.equal(agentGuard('0000 0102 0001', meterAsk), null);
+  assert.deepEqual(agentGuard('0000 0102 0001'), { kind: 'VOUCHER_PIN', pin: '000001020001' }, 'without the ask it is still a PIN');
+  assert.deepEqual(agentGuard('000001020001', { pendingIntent: { action: 'WITHDRAW', slots: {} } }), { kind: 'VOUCHER_PIN', pin: '000001020001' }, 'only an electricity ask changes the reading');
+  // The 16-digit rule never bends: a 16-digit run is a voucher PIN whatever was asked.
+  assert.deepEqual(agentGuard('1234567890123456', meterAsk), { kind: 'VOUCHER_PIN', pin: '1234567890123456' });
+  assert.equal(agentGuard('', meterAsk), null);
+});

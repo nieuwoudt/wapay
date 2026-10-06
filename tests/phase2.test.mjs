@@ -36,7 +36,7 @@ test('the shadow gate: a listed number reaches the agent after the guard hooks a
 });
 
 test('inside the turn: guards run before any model call, the budget before the context load, the ledger records every path', () => {
-  const guardAt = turn.indexOf('const guard = agentGuard(text);');
+  const guardAt = turn.indexOf('const guard = agentGuard(text, { pendingIntent });');
   const budgetAt = turn.indexOf('agentTurnsInLastHour({ prisma, accountId: account.id })');
   const loadAt = turn.indexOf('loadContextPack({ prisma, account })');
   const modelAt = turn.indexOf('await runAgentTurn({');
@@ -50,7 +50,7 @@ test('inside the turn: guards run before any model call, the budget before the c
   assert.match(turn, /timeoutMs: 6000/);
   // a failed transport throws so the webhook releases the claim
   assert.match(turn, /if \(sent && sent\.ok === false\) throw Object\.assign\(new Error\('AGENT_SEND_FAILED'\)/);
-  assert.doesNotMatch(turn.slice(turn.indexOf('const guard = agentGuard(text);')), /await sendWhatsAppText\(/, 'every send goes through deliver()');
+  assert.doesNotMatch(turn.slice(turn.indexOf('const guard = agentGuard(text, { pendingIntent });')), /await sendWhatsAppText\(/, 'every send goes through deliver()');
   assert.match(turn, /WAPAY_AGENT_TURNS_PER_HOUR \|\| 60/);
   // ledger rows on: guard, budget, slot rescue (2026-10-04), error, proposal, reply/clarify
   assert.equal((turn.match(/await ledger\(/g) || []).length, 6);

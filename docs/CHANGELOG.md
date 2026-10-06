@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-10-06 (72) — Two review follow-ups on the agent side: a meter answer is not a voucher PIN, and the deposit receipt keeps the parked-purchase promise
+
+From the read-only review of the VAS fixes (the Blu thread's Opus pass): (c) the
+PayFast receipt said only "Deposit received" to a customer whose purchase was
+parked for exactly that top-up; `pages/api/payfast/itn.js` now reads the
+account's conversation state and, in any `RESUME_*` state, adds "Message me
+anything and I will finish your parked purchase." (a failed state read never
+blocks the receipt). (d) the agent's pre-model guard read a bare 12-digit
+answer as a voucher PIN even when the agent had just asked "which meter?";
+`lib/agent/guards.js agentGuard(text, { pendingIntent })` skips the 12-digit
+rule when the parked intent is `BUY_ELECTRICITY` (SA meters are 11 to 13
+digits), the 16-digit rule never bends, and `handleAgentTurn` passes the
+pending intent. Tests: `tests/agent-guards.test.mjs` (meter ask), the
+2026-10-06 review file (receipt and guard locks), `tests/phase2.test.mjs`
+(the guard call site).
+
 ## 2026-10-06 (71) — The founder's own path reaches the purchases; the electricity fee is visible; the last silent R50 is gone; shortfalls at the PIN park too
 
 Blu thread, after a read-only review of (70). BUGLOG #92. Agent dispatcher

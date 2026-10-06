@@ -115,3 +115,15 @@ test('runtime locks: a question never becomes the Add Money card or the PIN step
   assert.equal(looksLikeQuestion('deposit R100'), false);
   assert.equal(looksLikeQuestion('redeem voucher'), false);
 });
+
+test('the PayFast receipt names a parked purchase when the account sits in a RESUME_* state, and the guard reads the pending intent', () => {
+  const itn = read('../pages/api/payfast/itn.js');
+  const block = itn.slice(itn.indexOf('const lines = [`✅ Deposit received'), itn.indexOf('const confirmSent = await sendWhatsAppText'));
+  assert.match(block, /select: \{ conversationState: true \}/);
+  assert.match(block, /\/\^RESUME_\/\.test\(String\(a\?\.conversationState \|\| ''\)\)/);
+  assert.match(block, /\.catch\(\(\) => false\)/, 'a state read failure never blocks the receipt');
+  assert.match(block, /Message me anything and I will finish your parked purchase\./);
+  const guards = read('../lib/agent/guards.js');
+  assert.match(guards, /export function agentGuard\(text, \{ pendingIntent = null \} = \{\}\)/);
+  assert.match(guards, /awaitingMeter = String\(pendingIntent\?\.action \|\| ''\)\.toUpperCase\(\) === 'BUY_ELECTRICITY'/);
+});

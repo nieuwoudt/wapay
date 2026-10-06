@@ -6445,7 +6445,9 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   };
 
   // Bearer inputs and codes never reach the model: the existing flows take them.
-  const guard = agentGuard(text);
+  // The parked clarify intent tells the guard what a bare number means: a
+  // 12-digit answer to "which meter?" is the meter, not a voucher PIN (2026-10-06).
+  const guard = agentGuard(text, { pendingIntent });
   if (guard) {
     logStructured('agent_guard', { from, accountId: account.id, kind: guard.kind });
     let handled;

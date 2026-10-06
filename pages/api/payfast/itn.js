@@ -259,6 +259,14 @@ export default async function handler(req, res) {
       if (wallet) {
         lines.push(`New balance: R${centsToRandString(wallet.availableCents)}`);
       }
+      // A purchase parked for this top-up (RESUME_* state, review 2026-10-06):
+      // the promise was "the moment it lands I finish it", so the receipt says
+      // how. Any next message resumes; the state machine does the rest.
+      const parked = await prisma.account
+        .findUnique({ where: { id: accountId }, select: { conversationState: true } })
+        .then((a) => /^RESUME_/.test(String(a?.conversationState || '')))
+        .catch(() => false);
+      if (parked) lines.push('Message me anything and I will finish your parked purchase.');
       const confirmSent = await sendWhatsAppText({ to: waId, text: lines.join('\n') });
       if (!confirmSent?.ok) {
         console.error(
