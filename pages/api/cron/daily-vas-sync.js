@@ -109,6 +109,7 @@ export default async function handler(req, res) {
     try {
       const { drainJobs } = await import('../../../lib/jobs.js');
       const { reconcileFuelPurchases } = await import('../../../lib/fuel-settlement.js');
+      const { reconcileElectricityPurchases } = await import('../../../lib/electricity-settlement.js');
       const { notifyCustomer } = await import('../../../lib/notify.js');
       jobs = await drainJobs({
         prisma,
@@ -130,6 +131,35 @@ export default async function handler(req, res) {
               });
             }
             return { settled: recon.settled ?? null, failed: recon.failed ?? null };
+          },
+          // An electricity sale that timed out at our end (2026-10-06): the
+          // same requestId is sent again; a replayed vend delivers the token
+          // here, a refusal puts the money back, anything else stays queued.
+          'electricity-reconcile': async (job) => {
+            const account = await prisma.account.findUnique({ where: { id: job.accountId } });
+            if (!account) return { skipped: 'NO_ACCOUNT' };
+            const recon = await reconcileElectricityPurchases({ account });
+            if (account.waId) {
+              for (const d of recon.delivered) {
+                const formattedToken = String(d.token || '').replace(/(.{4})/g, '$1 ').trim();
+                await notifyCustomer({
+                  to: account.waId,
+                  accountId: account.id,
+                  text: `✅ Electricity purchase successful!\n\n📟 Meter: ${d.meterNumber}\n💰 Amount: R${(Number(d.amountCents || 0) / 100).toFixed(2)}\n⚡ Token: *${formattedToken}*\n🔋 Units: ${d.units || 'N/A'} kWh\n🧾 Reference: ${d.providerRef}\n\n💳 New balance: R${(Number(d.newBalanceCents || 0) / 100).toFixed(2)}`,
+                  kind: 'receipt',
+                });
+              }
+              if (recon.failed > 0) {
+                await notifyCustomer({
+                  to: account.waId,
+                  accountId: account.id,
+                  text: '💚 Quick update: an electricity purchase from earlier could not be completed, so nothing was charged. Your money is back in your balance.',
+                  kind: 'receipt',
+                });
+              }
+            }
+            if (recon.pending > 0) throw new Error('ELECTRICITY_STILL_PENDING');
+            return { settled: recon.settled, failed: recon.failed };
           },
         },
       });

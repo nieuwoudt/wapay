@@ -198,6 +198,15 @@ export default async function handler(req, res) {
         reason,
         statusCode: e?.statusCode,
       });
+      if (e?.message === 'TIMEOUT') {
+        // The lookup ran out of time at our end (single bounded attempt, see
+        // the Blu client). No preview row and no hold exist yet, so nothing
+        // was charged; the chat says so and invites a retry (2026-10-06).
+        return res.status(504).json({
+          error: 'TIMEOUT',
+          message: 'The meter lookup is taking too long on the supplier side right now. Nothing was charged. Please try again in a few minutes.',
+        });
+      }
       // Blu sometimes returns AUTH with message like "Invalid transaction type" for disabled flows.
       const friendly =
         String(reason || '').toLowerCase().includes('invalid transaction type')

@@ -16,7 +16,9 @@ async function fileText(relPath) {
 const ROUTES = [
   ['airtime', 'pages/api/vas/airtime/execute.js', 'wapay-air-exec-${previewId}', 'wapay-air-spend-${previewId}'],
   ['data', 'pages/api/vas/data/execute.js', 'wapay-data-exec-${previewId}', 'wapay-data-spend-${previewId}'],
-  ['electricity', 'pages/api/vas/electricity/execute.js', 'wapay-elec-exec-${previewId}', 'wapay-elec-spend-${previewId}'],
+  // Electricity's settle/build calls live in lib/electricity-settlement.js
+  // (shared with the reconciler for sales that timed out, 2026-10-06).
+  ['electricity', ['pages/api/vas/electricity/execute.js', 'lib/electricity-settlement.js'], 'wapay-elec-exec-${previewId}', 'wapay-elec-spend-${previewId}'],
   ['voucher', 'pages/api/vas/voucher/execute.js', 'wapay-vgift-exec-${previewId}', 'wapay-vgift-spend-${previewId}', 'buildVoucherGift'],
   // Fuel's settle/build calls live in lib/fuel-settlement.js (shared with
   // the reconciler); the route + module are checked as one unit.
@@ -61,7 +63,8 @@ test('VAS execute routes never put Date.now() in idempotency material', async ()
 
 test('VAS execute routes are internal-only, verify ownership before the PIN, and release the hold on a crash before delivery', async () => {
   for (const [name, relPath] of ROUTES.filter(([n]) => ['airtime', 'data', 'electricity', 'voucher'].includes(n))) {
-    const text = await fileText(relPath);
+    // The route itself (first path) carries the auth, ownership and crash markers.
+    const text = await fileText(Array.isArray(relPath) ? relPath[0] : relPath);
 
     // Internal-only: without the guard any caller could burn PIN attempts
     // against someone else's account and read wallet balances.

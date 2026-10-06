@@ -16,8 +16,9 @@ import { BluVasExtendedClient } from '@wapay/providers-blu';
 import { verifyPIN } from '@wapay/auth';
 import { isCategoryEnabledForWaId } from '../../../../lib/vas-config.js';
 import { buildElectricitySalePayload } from '../../../../lib/electricity-utils.js';
-import { BALANCE, RAIL, buildSpend } from '../../../../lib/ledger-core.js';
-import { reserveHold, settleHold, releaseHold, ensureWallet } from '../../../../lib/ledger-post.js';
+import { BALANCE } from '../../../../lib/ledger-core.js';
+import { reserveHold, releaseHold, ensureWallet } from '../../../../lib/ledger-post.js';
+import { settleVendedElectricity } from '../../../../lib/electricity-settlement.js';
 import { requireInternalAuth } from '../../../../lib/internal-auth.js';
 
 /**
@@ -212,7 +213,17 @@ export default async function handler(req, res) {
 
     logStructured('vas_electricity_hold_reserved', { idemKey, amountCents: totalCents });
 
-    // Call Blu to purchase electricity (client enforces the 90s vend timeout)
+    // From here the sale may be in flight. Stamp the row EXECUTING so that if
+    // this invocation is killed by the platform cap before it can say either
+    // way, lib/electricity-settlement.js takes the row over once it is stale
+    // instead of leaving the hold parked forever (2026-10-06).
+    await prisma.providerRequest.update({
+      where: { id: previewId },
+      data: { status: 'EXECUTING', metadata: { ...metadata, executingAt: new Date().toISOString() } },
+    });
+
+    // Call Blu to purchase electricity (single attempt, bounded inside the
+    // function cap; a timeout is thrown as 'TIMEOUT' and is indeterminate)
     const bluClient = new BluVasExtendedClient();
     let bluResult;
 
@@ -263,7 +274,28 @@ export default async function handler(req, res) {
     } catch (error) {
       console.error('Blu electricity purchase failed:', error);
 
-      // Provider failed: give the money back and record nothing on the books.
+      if (error?.message === 'TIMEOUT') {
+        // INDETERMINATE: Blu may have vended after we stopped waiting. Giving
+        // the money back now could pay for a token the customer then
+        // receives. Keep the hold, mark the row for reconciliation (the next
+        // message from this customer and the nightly cron re-send the same
+        // requestId), and tell the customer both truths.
+        await prisma.providerRequest.update({
+          where: { id: previewId },
+          data: { status: 'RECONCILE', metadata: { ...metadata, indeterminateAt: new Date().toISOString(), timeoutReason: error?.reason || null } },
+        });
+        logStructured('vas_electricity_execute_result', { previewId, accountId, success: false, error: 'TIMEOUT', pending: true, reason: error?.reason });
+        return res.status(202).json({
+          ok: false,
+          pending: true,
+          error: 'TIMEOUT',
+          message: 'The electricity supplier has not confirmed the token yet. Your money is held, not spent.',
+          reference: idemKey,
+          heldCents: totalCents,
+        });
+      }
+
+      // Provider refused: give the money back and record nothing on the books.
       await releaseHold({ idemKey, reason: `blu_failed:${error?.reason || error?.message || 'unknown'}` });
 
       // Update preview as failed
@@ -298,29 +330,12 @@ export default async function handler(req, res) {
     // buildSpend books: Dr WALLET:{acct}:SPEND, Cr CLEARING:BLU (supplier cost),
     // Cr REVENUE:COMMISSION:ELECTRICITY (our margin). settleHold clears the hold
     // and posts the entry in one transaction, so the customer is debited exactly once.
-    const spendEntry = buildSpend({
-      accountId,
-      category: 'ELECTRICITY',
-      saleCents: totalCents,
-      idemKey: `wapay-elec-spend-${previewId}`,
-      rail: RAIL.BLU,
-      balanceType: BALANCE.SPEND,
-    });
-    await settleHold({ idemKey, entry: spendEntry });
-
-    // Update preview as completed (token kept in responseJson for receipt recovery)
-    await prisma.providerRequest.update({
-      where: { id: previewId },
-      data: {
-        status: 'SUCCESS',
-        providerRef: bluResult.providerRef,
-        responseJson: JSON.stringify(bluResult),
-        metadata: {
-          ...metadata,
-          providerRef: bluResult.providerRef,
-        },
-      }
-    });
+    // settleVendedElectricity (lib/electricity-settlement.js) books the spend
+    // (Dr WALLET:{acct}:SPEND, Cr CLEARING:BLU, Cr REVENUE:COMMISSION:ELECTRICITY)
+    // under `wapay-elec-spend-${previewId}`, settles the hold in the same
+    // transaction, and records the token on the row for receipt recovery. The
+    // reconciler uses the same function, so a replay can never settle twice.
+    await settleVendedElectricity({ previewId, accountId, metadata, bluResult });
 
     // Get new balance
     const updatedWallet = await prisma.wallet.findFirst({
@@ -369,6 +384,9 @@ export default async function handler(req, res) {
           idemKey: holdIdemKey,
           reason: `execute_crashed:${String(error?.message || error).slice(0, 80)}`,
         });
+        // The row may already be stamped EXECUTING: close it, or the
+        // reconciler would later re-send a sale whose hold is gone.
+        await prisma.providerRequest.update({ where: { id: previewId }, data: { status: 'FAILED' } }).catch(() => {});
       } catch (releaseError) {
         logStructured('vas_electricity_crash_release_failed', {
           previewId,

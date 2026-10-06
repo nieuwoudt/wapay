@@ -81,6 +81,7 @@ import {
 import { matchFeeAsk, feeAnswer, feeAskAmountCents, feeFacts } from '../../../lib/fee-facts.js';
 import { matchHowItWorksAsk, howItWorksAnswer, howItWorksBrief, wantsSteps, detectMethod, TOPICS as HOWTO_TOPICS } from '../../../lib/how-it-works.js';
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
+import { reconcileElectricityPurchases } from '../../../lib/electricity-settlement.js';
 import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
 import { isValidSaMsisdn, normaliseMsisdn, bluCanVendTo } from '../../../lib/msisdn.js';
 import { agentV3For } from '../../../lib/shadow-list.js';
@@ -1206,6 +1207,54 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     }
   } catch (reconError) {
     logStructured('fuel_reconcile_hook_failed', { from, error: reconError?.message });
+  }
+
+  // Opportunistic electricity reconciliation (2026-10-06): a sale that ran
+  // out of time at our end sits as RECONCILE (or a dead invocation's
+  // EXECUTING) with its hold kept. On this customer's next message the same
+  // requestId is sent again: a vended sale replays and the token is delivered
+  // here, a definitive refusal puts the money back, anything else stays
+  // parked and a job is queued so the nightly cron keeps trying.
+  try {
+    const stuckElectricity = await prisma.providerRequest.findFirst({
+      where: { accountId: account.id, route: 'electricity-preview', status: { in: ['RECONCILE', 'EXECUTING'] } },
+      select: { id: true },
+    });
+    if (stuckElectricity) {
+      // One short-bounded attempt per row, at most every two minutes: this
+      // runs inside the webhook turn, so it must never blow Meta's window.
+      const recon = await reconcileElectricityPurchases({ account, opportunistic: true });
+      for (const d of recon.delivered) {
+        const formattedToken = String(d.token || '').replace(/(.{4})/g, '$1 ').trim();
+        await sendReceipt({
+          to: from,
+          productLabel: 'Electricity',
+          targetLabel: '📟 Meter',
+          targetValue: d.meterNumber,
+          network: 'Electricity',
+          amountCents: d.amountCents,
+          reference: d.providerRef,
+          newBalanceCents: d.newBalanceCents || 0,
+          dateTime: d.dateTime || new Date(),
+          extraLines: [`⚡ Token: *${formattedToken}*`, `🔋 Units: ${d.units || 'N/A'} kWh`],
+        });
+      }
+      if (recon.failed > 0) {
+        await sendWhatsAppText({
+          to: from,
+          text: await localizeOutbound(
+            `💚 Quick update: an electricity purchase from earlier could not be completed, so nothing was charged. Your money is back in your balance.`,
+            await userLang(account)
+          ),
+        });
+      }
+      if (recon.pending > 0) {
+        const { enqueueJob } = await import('../../../lib/jobs.js');
+        await enqueueJob({ prisma, kind: 'electricity-reconcile', key: `acct:${account.id}`, accountId: account.id, payload: { waId: from } });
+      }
+    }
+  } catch (reconError) {
+    logStructured('electricity_reconcile_hook_failed', { from, error: reconError?.message });
   }
 
   // Opportunistic pay-out reconciliation (2026-09-16): a pay-out parked as
@@ -4936,6 +4985,18 @@ async function handleConversationState({ from, text, state, data, account }) {
           ? await previewRes.json()
           : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
 
+        if (!previewData.ok && previewData.error === 'TIMEOUT') {
+          // The supplier's meter lookup ran out of time at our end. No hold
+          // exists before the PIN step, so nothing was charged: say so, no
+          // date, no supplier name (2026-10-06).
+          await updateConversationState(from, null);
+          return await sendWhatsAppErrorOnce({
+            to: from,
+            errorKey: `elec_preview:TIMEOUT:${meterNumber}`,
+            text: `⏳ The meter lookup is taking too long on the supplier side right now. Nothing was charged. Please try again in a few minutes.`,
+          });
+        }
+
         if (!previewData.ok) {
           await updateConversationState(from, null);
           return await sendWhatsAppErrorOnce({
@@ -5128,7 +5189,25 @@ async function handleConversationState({ from, text, state, data, account }) {
           
           // Clear state
           await updateConversationState(from, null);
-          
+
+          if (!executeData.ok && (executeData.pending || executeData.error === 'NON_JSON')) {
+            // INDETERMINATE: the sale ran out of time at our end (or the
+            // platform cut the call before it could answer) and the
+            // supplier may still have vended. The route kept the hold and
+            // marked the row RECONCILE; this customer's next message (and the
+            // nightly cron) re-sends the same requestId and either delivers
+            // the token or puts the money back. Two truths, no date promised.
+            logStructured('vas_electricity_execute_pending', { from, accountId: account.id, previewId });
+            return await sendWhatsAppText({
+              to: from,
+              text: await localizeOutbound(
+                `⏳ The electricity supplier has not confirmed your token yet.\n\nYour ${randsShort(executeData.heldCents || amountCents)} is held, not spent. Send me any message in a few minutes and I will deliver the token, or put the money back if the purchase did not go through.`,
+                await userLang(account)
+              ),
+              kind: 'flow',
+            });
+          }
+
           if (!executeData.ok) {
             logStructured('vas_electricity_execute_failed', {
               from,

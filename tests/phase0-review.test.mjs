@@ -191,14 +191,17 @@ test('the Transactions matcher answers list asks and never swallows a money comm
 
 // ---------------------------------------------------------------- execute routes: ordered, not marker presence
 test('execute routes: hold key set after reserve, delivery flag set after the provider and before settle, release only before delivery', () => {
-  const ROUTES = [['airtime', 'purchaseAirtime('], ['data', 'purchaseDataBundle('], ['electricity', 'purchaseElectricity(']];
-  for (const [name, providerCall] of ROUTES) {
+  // Electricity settles through lib/electricity-settlement.js (shared with the
+  // reconciler for sales that timed out, 2026-10-06), so its settle marker is
+  // that call; the module itself is locked by tests/vas-execute-ledger-pattern.
+  const ROUTES = [['airtime', 'purchaseAirtime('], ['data', 'purchaseDataBundle('], ['electricity', 'purchaseElectricity(', 'settleVendedElectricity(']];
+  for (const [name, providerCall, settleCall = 'settleHold('] of ROUTES) {
     const src = read(`../pages/api/vas/${name}/execute.js`);
     const reserve = src.indexOf('reserveHold(');
     const holdSet = src.indexOf('holdIdemKey = idemKey');
     const provider = src.indexOf(providerCall);
     const delivered = src.indexOf('providerDelivered = true');
-    const settle = src.indexOf('settleHold(');
+    const settle = src.indexOf(settleCall);
     assert.ok(reserve > -1 && holdSet > -1 && provider > -1 && delivered > -1 && settle > -1, `${name}: all markers present`);
     assert.ok(reserve < holdSet && holdSet < provider && provider < delivered && delivered < settle, `${name}: reserve < holdIdemKey = idemKey < provider call < providerDelivered = true < settleHold`);
     const outerCatch = src.slice(src.lastIndexOf('} catch (error) {'));

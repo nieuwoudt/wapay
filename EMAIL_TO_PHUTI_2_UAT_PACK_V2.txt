@@ -55,6 +55,11 @@ Seven things would let us complete the move to production:
 7. Rotation of the QA credentials we hold, at the same time as the production issue, since they
    have been in use across our integration for close to a year.
 
+One commercial item alongside those: our signed redemption agreement fixes the Blu Voucher
+commission (Annexure A), but we hold no written rate card for airtime, data and electricity. Could
+you send the commission per product, stating whether it is a percentage or a per-unit amount (your
+exposure sheet marks Eskom as per unit) and whether it is quoted excluding or including VAT?
+
 Two smaller questions while you are in there: are there published rate limits, and do you
 provide webhooks or a reconciliation file for settlement? Both affect how we build.
 

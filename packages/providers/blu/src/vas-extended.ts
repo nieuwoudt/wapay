@@ -61,6 +61,34 @@ import type {
 export * from './vas-types.js';
 
 // ============================================================================
+// Electricity timing (2026-10-06)
+// ============================================================================
+// Blu answers electricity slowly (QA took more than 30 s on a meter lookup;
+// the sale is documented at up to ~90 s) while the Vercel function waiting
+// for it is capped (vercel.json: 60 s for pages/api/vas/**). A retry after a
+// timeout can never fit that cap, so both electricity calls are single
+// attempt and bounded well inside it, and a transport timeout is surfaced as
+// its own error, 'TIMEOUT'. For the SALE that outcome is indeterminate (Blu
+// may have vended): the execute route keeps the hold and marks the row
+// RECONCILE, and lib/electricity-settlement.js re-sends the same requestId
+// later (Blu caches by requestId, so a vended sale replays its result).
+const ELEC_INFO_TIMEOUT_MS = Number(process.env.BLU_ELEC_INFO_TIMEOUT_MS) || 40000;
+const ELEC_SALE_TIMEOUT_MS = Number(process.env.BLU_ELEC_SALE_TIMEOUT_MS) || 50000;
+
+function isTransportTimeout(error: any): boolean {
+  const code = String(error?.code || '');
+  const name = String(error?.name || '');
+  return /UND_ERR_(HEADERS|BODY|CONNECT)_TIMEOUT/.test(code) || /TimeoutError$/.test(name) || code === 'ETIMEDOUT';
+}
+
+function asTimeout(error: any, what: string): Error {
+  const err = new Error('TIMEOUT');
+  (err as any).reason = `${what} did not answer within the time allowed`;
+  (err as any).cause = error;
+  return err;
+}
+
+// ============================================================================
 // Extended VAS Client
 // ============================================================================
 
@@ -149,7 +177,7 @@ export class BluVasExtendedClient {
       } catch (error: any) {
         // Electricity/info and sales calls often fail due to provider config/enablement
         // or user input; never retry these.
-        if (error.message === 'USER_INPUT' || error.message === 'AUTH' || error.message === 'INVALID_PHONE_NUMBER') {
+        if (error.message === 'USER_INPUT' || error.message === 'AUTH' || error.message === 'INVALID_PHONE_NUMBER' || error.message === 'TIMEOUT') {
           throw error;
         }
         if (attempt === maxAttempts) {
@@ -331,16 +359,24 @@ export class BluVasExtendedClient {
       `&free-basic-electricity=${encodeURIComponent(freeBasic)}` +
       `&meter-number=${encodeURIComponent(params.meterNumber)}`;
 
+    // Single attempt, bounded: see "Electricity timing" above.
     return this.callWithRetry(async () => {
-      const res = await request(url, {
-        method: 'GET',
-        headers: this.headers(),
-        bodyTimeout: 30000,
-        headersTimeout: 30000,
-      });
+      let res: Awaited<ReturnType<typeof request>>;
+      let data: any;
+      try {
+        res = await request(url, {
+          method: 'GET',
+          headers: this.headers(),
+          bodyTimeout: ELEC_INFO_TIMEOUT_MS,
+          headersTimeout: ELEC_INFO_TIMEOUT_MS,
+        });
+        data = (await res.body.json()) as any;
+      } catch (error: any) {
+        if (isTransportTimeout(error)) throw asTimeout(error, 'The meter lookup');
+        throw error;
+      }
 
       if (res.statusCode === 200 || res.statusCode === 201) {
-        const data = (await res.body.json()) as any;
         const reference = data.reference || data.vendorReference || data.ref || data.transactionReference;
         return {
           reference: String(reference || ''),
@@ -356,9 +392,8 @@ export class BluVasExtendedClient {
         };
       }
 
-      const errorData = (await res.body.json()) as any;
-      this.handleError(res.statusCode, errorData);
-    });
+      this.handleError(res.statusCode, data);
+    }, 1);
   }
 
   /**
@@ -366,8 +401,13 @@ export class BluVasExtendedClient {
    *
    * Blu Endpoint: POST /electricity/sales
    */
-  async purchaseElectricity(params: ElectricitySaleParams): Promise<ElectricityPurchaseResult> {
+  async purchaseElectricity(params: ElectricitySaleParams, opts: { timeoutMs?: number } = {}): Promise<ElectricityPurchaseResult> {
     const url = `${this.base}/electricity/sales`;
+    // The route waits the full budget; a re-send on the customer's own turn
+    // (lib/electricity-settlement.js, opportunistic) passes a short one so the
+    // webhook turn never blows its window. Blu caches by requestId, so a
+    // re-send that times out at our end is harmless and the cron finishes it.
+    const saleTimeoutMs = Number(opts.timeoutMs) > 0 ? Number(opts.timeoutMs) : ELEC_SALE_TIMEOUT_MS;
     
     const body = {
       requestId: params.idemKey,
@@ -378,17 +418,26 @@ export class BluVasExtendedClient {
       }),
     };
 
+    // Single attempt, bounded; a timeout here is INDETERMINATE (Blu may have
+    // vended) and is thrown as 'TIMEOUT' for the route to keep the hold.
     return this.callWithRetry(async () => {
-      const res = await request(url, {
-        method: 'POST',
-        headers: this.headers(),
-        body: JSON.stringify(body),
-        bodyTimeout: 90000, // Longer timeout for electricity
-        headersTimeout: 90000,
-      });
+      let res: Awaited<ReturnType<typeof request>>;
+      let data: any;
+      try {
+        res = await request(url, {
+          method: 'POST',
+          headers: this.headers(),
+          body: JSON.stringify(body),
+          bodyTimeout: saleTimeoutMs,
+          headersTimeout: saleTimeoutMs,
+        });
+        data = (await res.body.json()) as any;
+      } catch (error: any) {
+        if (isTransportTimeout(error)) throw asTimeout(error, 'The electricity sale');
+        throw error;
+      }
 
       if (res.statusCode === 200 || res.statusCode === 201) {
-        const data = (await res.body.json()) as any;
         return {
           providerRef: String(data.reference),
           amountCents: data.amount,
@@ -408,9 +457,8 @@ export class BluVasExtendedClient {
         };
       }
 
-      const errorData = (await res.body.json()) as any;
-      this.handleError(res.statusCode, errorData);
-    });
+      this.handleError(res.statusCode, data);
+    }, 1);
   }
 
   // ==========================================================================

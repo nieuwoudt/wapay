@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-10-06 (66) — Electricity survives a slow supplier: bounded calls, an honest timeout, and a reconciler that re-sends the same requestId
+
+Blu UAT thread. Probing the production electricity preview for Blu's
+compliance meter hit Vercel's 30 s cap three times out of three, which
+exposed the shape behind it: a 30 s function waiting on a 90 s client with
+retries, and a timeout treated as a refusal (hold released) although a
+timed-out sale may have vended. BUGLOG #88.
+
+- `vercel.json`: `pages/api/vas/**` gets the webhook's 60 s.
+- `packages/providers/blu/src/vas-extended.ts`: electricity lookup and sale are
+  single attempt, bounded (`BLU_ELEC_INFO_TIMEOUT_MS` 40 s, `BLU_ELEC_SALE_TIMEOUT_MS`
+  50 s), and a transport timeout is thrown as `TIMEOUT`, never retried.
+- `pages/api/vas/electricity/preview.js`: `TIMEOUT` is its own error code; the
+  chat says nothing was charged.
+- `pages/api/vas/electricity/execute.js`: the row is stamped `EXECUTING` before
+  the sale; a `TIMEOUT` keeps the hold, marks `RECONCILE` and answers `pending`
+  with `heldCents`; a crash release also closes the row; settlement goes
+  through the shared module.
+- `lib/electricity-settlement.js` (new): `settleVendedElectricity` and
+  `reconcileElectricityPurchases` (same requestId and reference re-sent; replay
+  settles and hands back the token, refusal releases, otherwise parked; refuses
+  any row whose hold is not ACTIVE).
+- `message-processor-v2.js`: both truths on a pending sale (no date, no
+  supplier); an opportunistic electricity reconcile on the next inbound
+  message delivers the token or the refund and queues `electricity-reconcile`
+  for the cron; `daily-vas-sync.js` drains that job through `notifyCustomer`.
+- Also in this push: `scripts/blu-uat-evidence.mjs` knows `EXECUTING`;
+  `docs/BLU_PRODUCTION_CUTOVER.md` (the cutover checklist); the Phuti reply
+  gains the written rate-card ask.
+- Tests: `tests/electricity-timeout.test.mjs` (new); `phase0-review` and
+  `vas-execute-ledger-pattern` updated for the route + module split. 969/969.
+
 ## 2026-10-04 (65) — The pack reads saved pay-out details, Mission Control reconciles the pay-out books, and a clarify answer with an amount in it never needs the model
 
 Main-session build on the morning the first customer withdrawal completed

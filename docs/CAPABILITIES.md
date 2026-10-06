@@ -63,7 +63,7 @@ Gates live in `lib/vas-config.js` (`VAS_LIVE_*` env overrides; per-user `VAS_ALL
 |---|---|---|---|---|
 | AIRTIME | Blu | on | **Live, QA-proven** | Reference implementation. Giftable. |
 | DATA | Blu | on | **Live, QA-proven** | On the hold pattern. Giftable (no recipient notification yet). |
-| ELECTRICITY | Blu | on, allowlist-gated | **Live-gated; QA vend confirmed** | Entitlement fixed; real reference returned on Blu compliance test meter (R200 generic vend). Full phone-E2E unvalidated; vends can take ~90s; pilot waId must be added to `VAS_ALLOWLIST_ELECTRICITY` in Vercel. |
+| ELECTRICITY | Blu | on, allowlist-gated | **Live-gated; QA vend confirmed; never vended in production** | Entitlement fixed; real reference returned on Blu compliance test meter (R200 generic vend). Full phone-E2E unvalidated; pilot waId must be on `VAS_ALLOWLIST_ELECTRICITY` in Vercel (the founder is). 2026-10-06: Blu's electricity calls run past 30 s, so the VAS routes now have the webhook's 60 s, the lookup/sale are single bounded attempts, a timed-out sale keeps the hold and is reconciled by re-sending the same requestId (`lib/electricity-settlement.js`, BUGLOG #88). |
 | LIFESTYLE (OTT vouchers etc.) | Blu | **off** | Not live | Needs Blu account enablement; endpoints untested. |
 | BILLPAY (DStv) | Blu | **off** | Not live | Needs Blu account enablement; endpoints untested. |
 | GAMING (betting) | Blu | **off** | Not live | Needs Blu account enablement; endpoints untested. |

@@ -222,7 +222,8 @@ function classify({ row, hold, entries, md }) {
   const status = row.status;
   const ageMs = GENERATED_AT - new Date(row.requestTs);
   if (status === 'SUCCESS') return { label: 'Vend confirmed by Blu, hold settled, journal posted', outcome: 'SUCCESS' };
-  if (status === 'RECONCILE') return { label: 'Blu delivered, ledger settle failed: operator reconcile', outcome: 'RECONCILE' };
+  if (status === 'RECONCILE') return { label: 'Sale timed out at our end (indeterminate): hold kept, same requestId re-sent by the reconciler', outcome: 'RECONCILE' };
+  if (status === 'EXECUTING') return { label: 'Sale in flight, or the invocation died before it could say: hold kept, reconciler takes it over when stale', outcome: 'EXECUTING' };
   if (status === 'FAILED') {
     const reason = hold?.reason || entries.find((e) => /FAILED/.test(e.source))?.source || '';
     if (/INVALID_PHONE_NUMBER/i.test(reason)) return { label: 'Declined by Blu QA (number not on the QA whitelist); hold released, nothing booked', outcome: 'DECLINED' };
