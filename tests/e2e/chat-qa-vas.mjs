@@ -97,7 +97,7 @@ async function run() {
     const c = await s.say('hi');
     verdict('Airtime shortfall: gap named, top-up link in the same turn, parked, then resumed', [
       { level: 'FAIL', ok: !has(a.replyText, /Please try again later/i), what: 'no dead-end "try again later"' },
-      { level: 'FAIL', ok: has(a.replyText, /You have R40(\.00)? available/i) && has(a.replyText, /needs R100/i), what: 'the two figures are stated' },
+      { level: 'FAIL', ok: has(a.replyText, /You have R40(\.00)? available/i) && has(a.replyText, /R100 airtime for 0830012300 needs R60(\.00)? more/i), what: 'the balance, the purchase with its number, and the gap are stated' },
       { level: 'FAIL', ok: has(a.replyText, /Top up R60(\.00)?/i), what: 'the top-up asked for is exactly the difference' },
       { level: 'FAIL', ok: has(a.replyText, /payfast|pay\.|https?:\/\//i) || has(a.replyText, /payment fee/i), what: 'a deposit link (with its fee) is in the same turn' },
       // The deposit-status hook may answer this one first ("still confirming your R60"): also true, also keeps the park.
@@ -109,18 +109,67 @@ async function run() {
 
   // 4. Data shortfall resumes into the confirm
   {
-    previewStub.data = 'insufficient'; previewStub.availableCents = 14000; previewStub.requiredCents = 20000;
+    // The harness account holds R140 after scenario 3; the stub says the bundle needs R143,
+    // so the gap is R3, the smallest card top-up (R10) is asked for and said, and the R10
+    // funding below (R150) covers the R143 the park re-checks against.
+    previewStub.data = 'insufficient'; previewStub.availableCents = 14000; previewStub.requiredCents = 14300;
     const a = await s.say('buy 50MB Vodacom data for 0720012345');
     const b = await s.say('yes');
-    await fundQaAccount({ cents: 6000, key: 'topup2' });
+    await fundQaAccount({ cents: 1000, key: 'topup2' });
     previewStub.data = 'ok';
     const c = await s.say('thanks');
     verdict('Data shortfall: parked at the confirm, resumed into the confirm once funded', [
-      { level: 'FAIL', ok: has(a.replyText, /YES/i), what: 'the data confirm is shown first' },
-      { level: 'FAIL', ok: has(b.replyText, /available/i) && has(b.replyText, /Top up R60(\.00)?/i), what: '"yes" at a shortfall names the gap and asks for exactly the difference' },
+      { level: 'FAIL', ok: has(a.replyText, /YES/i) && has(a.replyText, /Bundle: /), what: 'the data confirm is shown first and names the bundle' },
+      { level: 'FAIL', ok: has(b.replyText, /You have R140(\.00)? available/i), what: 'the available balance stated is the one the route reported' },
+      { level: 'FAIL', ok: !has(a.replyText, /WhatsApp/i), what: 'a plain "50MB" ask is not silently a WhatsApp-only bundle' },
+      { level: 'FAIL', ok: has(b.replyText, /needs R3(\.00)? more/i) && has(b.replyText, /Top up R10(\.00)?/i) && has(b.replyText, /smallest card top-up/i), what: '"yes" at a shortfall states the R3 gap and the R10 minimum' },
       { level: 'FAIL', ok: has(c.replyText, /top-up landed/i) && has(c.replyText, /YES/i), what: 'once funded, the confirm is re-offered' },
     ], s);
     await s.say('no');
+  }
+
+  // 5. A bare amount inside a park restarts the same purchase at that amount
+  {
+    previewStub.airtime = 'insufficient'; previewStub.availableCents = 4000; previewStub.requiredCents = 10000;
+    const a = await s.say('buy R100 airtime for 0830012300');
+    previewStub.airtime = 'ok';
+    const b = await s.say('R40');
+    verdict('A smaller amount while parked re-runs the airtime at that amount', [
+      { level: 'FAIL', ok: has(a.replyText, /send a smaller amount/i), what: 'the offer invites a smaller amount' },
+      { level: 'FAIL', ok: has(b.replyText, /Confirm Airtime Purchase/i) && has(b.replyText, /R40/) && has(b.replyText, /0830012300/), what: '"R40" restarts the purchase for the same number at R40' },
+    ], s);
+    await s.say('no');
+  }
+
+  // 6. The electricity fee is visible at the confirm
+  {
+    previewStub.electricity = 'ok';
+    const a = await s.say('buy R20 electricity for meter 000001020001');
+    verdict('Electricity confirm shows the fee and the total', [
+      { level: 'FAIL', ok: has(a.replyText, /R20\.00 \+ R1\.00 fee = R21\.00/), what: 'amount + fee = total is on the confirm' },
+    ], s);
+    await s.say('no');
+  }
+
+  // 7. The founder's path: the agent dispatcher (pilot list) must reach the same confirms
+  {
+    const saved = process.env.WAPAY_AGENT_V3_MSISDNS;
+    process.env.WAPAY_AGENT_V3_MSISDNS = QA_WA_ID;
+    try {
+      previewStub.electricity = 'ok'; previewStub.data = 'ok';
+      const a = await s.say('buy 50MB Vodacom data for 0720012345');
+      await s.say('no');
+      const b = await s.say('buy R20 electricity for meter 000001020001');
+      await s.say('no');
+      verdict('Pilot path (agent dispatcher): purchase sentences reach the confirms, no list, no second meter ask', [
+        { level: 'FAIL', ok: !has(a.replyText, /show a few great options|Data Bundles\*/i), what: 'agent path: data purchase is not answered with the bundle list' },
+        { level: 'FAIL', ok: has(a.replyText, /Confirm Data Purchase|YES/i), what: 'agent path: data reaches the confirm' },
+        { level: 'FAIL', ok: !has(b.replyText, /enter your meter number/i), what: 'agent path: the meter is not asked for again' },
+        { level: 'FAIL', ok: has(b.replyText, /Confirm Electricity/i), what: 'agent path: electricity reaches the confirm' },
+      ], s);
+    } finally {
+      if (saved === undefined) delete process.env.WAPAY_AGENT_V3_MSISDNS; else process.env.WAPAY_AGENT_V3_MSISDNS = saved;
+    }
   }
 
   await teardownQaAccount();

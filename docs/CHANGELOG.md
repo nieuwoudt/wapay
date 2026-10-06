@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-10-06 (71) — The founder's own path reaches the purchases; the electricity fee is visible; the last silent R50 is gone; shortfalls at the PIN park too
+
+Blu thread, after a read-only review of (70). BUGLOG #92. Agent dispatcher
+`BUY_DATA` / `BUY_ELECTRICITY` hand off to the VAS flow helpers under the
+architecture rules (first step only, every slot re-validated, the flow's own
+asks as fallback; `lib/agent/tools/proposals.js` comment updated); fee shown at
+confirm, PIN and shortfall; `ELECTRICITY_CONFIRM` expiry refreshes the quote;
+`ELECTRICITY_AMOUNT` honours a known meter; `lib/slot-parser.js` never reads a
+run of 8+ digits as an amount (two pinned parses updated); data matcher prefers
+general bundles, names the product, offers the nearest size; execute routes
+carry `INSUFFICIENT_BALANCE` and the PIN states park; shortfall copy reworded
+with the target named; a bare amount in a park restarts at that amount; a
+greeting keeps the park while a deposit is pending; electricity preview checks
+the meter before the balance. Harness 7/7 including the pilot-path pass.
+
 ## 2026-10-06 (70) — The VAS flows close the sale they were asked for: purchase sentences reach the purchase, electricity takes both slots, a shortfall tops up the difference and resumes; the Blu voucher probe; pack v2 with the 6 October airtime round
 
 Blu UAT thread, the founder's review round (thirteen screenshots, recorded in

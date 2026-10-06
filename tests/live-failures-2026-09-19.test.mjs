@@ -26,7 +26,12 @@ test('a phone number typed in the normal 0-form is read as a rand amount, so the
   // This is the parse that broke the purchase. It is not a bug in the parser:
   // a bare run of digits IS ambiguous. The flow has to prefer what it asked
   // for, which is a number, over what it already knows, which is the amount.
-  assert.equal(parseSlots('0787051175', { waId: '27787051175' }).amountCents, 78705117500);
+  // 2026-10-06 (review): a run of eight or more digits is never an amount any
+  // more ("buy electricity for meter 000001020001" had parsed as R1,020,001),
+  // so the bare number now yields NO amount; the state's own rule below
+  // (the chosen amount always wins) still holds and is still what protects
+  // the flow when both are present.
+  assert.equal(parseSlots('0787051175', { waId: '27787051175' }).amountCents, null);
   assert.equal(parseSlots('0787051175', { waId: '27787051175' }).msisdn, '0787051175');
 
   const state = processor.slice(processor.indexOf("case 'AIRTIME_MSISDN':"), processor.indexOf("case 'AIRTIME_CONFIRM'"));

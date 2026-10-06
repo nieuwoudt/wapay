@@ -77,19 +77,28 @@ test('model slots are re-validated before any flow starts', () => {
   assert.match(body, /Number\.isInteger\(result\.slots\?\.amountCents\)/, 'amount must be an integer');
 });
 
-test('the model meter slot never enters flow state — the flow collects the meter', () => {
+test('the model meter slot reaches the flow only through the preview helper, which re-validates it; never a confirm or PIN state', () => {
+  // 2026-10-06 (founder's run): "buy R20 electricity for meter 000001020001"
+  // used to be answered with "Please enter your meter number". The dispatcher
+  // now hands the meter (from the customer's own words, or the proposal's
+  // cleaned slot) to startElectricityPreviewAndConfirm, which checks its shape
+  // and runs the supplier lookup before any confirm exists; with no meter the
+  // flow's own ask still collects it, and the dispatcher never mints a confirm
+  // or a PIN state itself.
   const body = dispatchSource();
-  const electricityCase = body.slice(body.indexOf("case 'BUY_ELECTRICITY'"), body.indexOf("case 'SEND_VOUCHER'"));
+  const electricityCase = body.slice(body.indexOf("case 'BUY_ELECTRICITY'"), body.indexOf("case 'BUY_FUEL'"));
   assert.ok(electricityCase.length > 0, 'BUY_ELECTRICITY case exists');
   assert.match(
     electricityCase,
     /updateConversationState\(from, 'ELECTRICITY_METER', \{ amountCents \}\)/,
-    'meter state carries ONLY the amount'
+    'with no meter, the meter state carries ONLY the amount'
   );
-  assert.ok(
-    !/meterNumber/.test(electricityCase),
-    'the model meter slot must not appear in the electricity dispatch'
+  assert.match(
+    electricityCase,
+    /startElectricityPreviewAndConfirm\(\{ from, account, amountCents, meterNumber: meterFromText, rawText: text \}\)/,
+    'a meter goes to the preview helper, never straight into a state the customer did not type into'
   );
+  assert.ok(!/ELECTRICITY_CONFIRM|ELECTRICITY_PIN/.test(electricityCase), 'the dispatcher never mints a confirm or PIN state');
 });
 
 test('SEND_VOUCHER dispatch reuses resolveGift + the PIN-gated preview flow', () => {

@@ -34,8 +34,11 @@ const between = (a, b) => processor.slice(processor.indexOf(a), processor.indexO
 test('1. every state that holds an amount prefers it over anything parsed from the reply', () => {
   // The ambiguity is real and is not going away: prove it, then prove each
   // flow is built so it cannot matter.
-  assert.equal(parseSlots('0787051175', {}).amountCents, 78705117500);
-  assert.equal(parseSlots('0840012300', {}).amountCents, 84001230000);
+  // 2026-10-06 (review): a run of eight or more digits is never an amount any
+  // more (a meter number had parsed as R1,020,001), so a bare phone number
+  // yields NO amount; the state rule below still decides when both exist.
+  assert.equal(parseSlots('0787051175', {}).amountCents, null);
+  assert.equal(parseSlots('0840012300', {}).amountCents, null);
 
   const airtime = between("case 'AIRTIME_MSISDN':", "case 'AIRTIME_CONFIRM'");
   assert.match(airtime, /const amountCents = data\?\.amountCents \|\| filledSlots\.amountCents;/);

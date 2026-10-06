@@ -244,7 +244,7 @@ export default async function handler(req, res) {
           previewId, accountId, success: false, error: 'INSUFFICIENT_BALANCE',
           required: totalCents, available: error.availableCents,
         });
-        return res.status(400).json({ error: 'USER_INPUT', message: 'Insufficient balance' });
+        return res.status(400).json({ error: 'USER_INPUT', code: 'INSUFFICIENT_BALANCE', availableCents: error.availableCents ?? null, requiredCents: totalCents, message: 'Insufficient balance' });
       }
       throw error;
     }

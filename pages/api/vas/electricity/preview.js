@@ -147,29 +147,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Check balance (electricity amount + R1 service fee)
-    const serviceFee = 100; // R1 service fee
-    const totalCents = amountCents + serviceFee;
-    const availableBalance = wallet.availableCents;
-    
-    if (availableBalance < totalCents) {
-      logStructured('vas_electricity_preview_result', {
-        accountId,
-        amountCents,
-        totalCents,
-        availableBalance,
-        success: false,
-        error: 'INSUFFICIENT_BALANCE',
-      });
-      return res.status(400).json({
-        error: 'USER_INPUT',
-        code: 'INSUFFICIENT_BALANCE',
-        availableCents: availableBalance,
-        requiredCents: totalCents,
-        message: `Insufficient balance. You need R${(totalCents / 100).toFixed(2)} (R${(amountCents / 100).toFixed(2)} + R${(serviceFee / 100).toFixed(2)} fee). Available: R${(availableBalance / 100).toFixed(2)}`
-      });
-    }
-
     // Confirm meter / get provider reference from Blu (required for sale)
     let info;
     try {
@@ -223,6 +200,31 @@ export default async function handler(req, res) {
         error: 'UPSTREAM_FAILURE',
         message: friendly,
         detail: { statusCode: e?.statusCode ?? null, kind: e?.message || null, reason: String(reason || '').replace(/\d{6,}/g, (m) => `${'*'.repeat(m.length - 2)}${m.slice(-2)}`).slice(0, 160) },
+      });
+    }
+
+    // The meter is confirmed with the supplier first: a customer must never be
+    // sent to top up for a meter that then fails (review 2026-10-06).
+    // Check balance (electricity amount + R1 service fee)
+    const serviceFee = 100; // R1 service fee
+    const totalCents = amountCents + serviceFee;
+    const availableBalance = wallet.availableCents;
+    
+    if (availableBalance < totalCents) {
+      logStructured('vas_electricity_preview_result', {
+        accountId,
+        amountCents,
+        totalCents,
+        availableBalance,
+        success: false,
+        error: 'INSUFFICIENT_BALANCE',
+      });
+      return res.status(400).json({
+        error: 'USER_INPUT',
+        code: 'INSUFFICIENT_BALANCE',
+        availableCents: availableBalance,
+        requiredCents: totalCents,
+        message: `Insufficient balance. You need R${(totalCents / 100).toFixed(2)} (R${(amountCents / 100).toFixed(2)} + R${(serviceFee / 100).toFixed(2)} fee). Available: R${(availableBalance / 100).toFixed(2)}`
       });
     }
 
