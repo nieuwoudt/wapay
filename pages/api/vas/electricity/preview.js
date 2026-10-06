@@ -212,9 +212,14 @@ export default async function handler(req, res) {
         String(reason || '').toLowerCase().includes('invalid transaction type')
           ? 'Electricity is not enabled for this environment yet.'
           : 'Electricity service unavailable. Please try again later.';
+      // This route is internal-only (x-internal-api-key). The chat renders
+      // `message` alone; `detail` lets an operator probe see what the
+      // supplier actually answered without reading platform logs
+      // (2026-10-06: Blu QA refused the compliance meter and nothing said why).
       return res.status(502).json({
         error: 'UPSTREAM_FAILURE',
         message: friendly,
+        detail: { statusCode: e?.statusCode ?? null, kind: e?.message || null, reason: String(reason || '').replace(/\d{6,}/g, (m) => `${'*'.repeat(m.length - 2)}${m.slice(-2)}`).slice(0, 160) },
       });
     }
 

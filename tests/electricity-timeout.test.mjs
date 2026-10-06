@@ -47,6 +47,16 @@ test('the VAS function cap matches the webhook and the electricity waits fit ins
   assert.match(client, /error\.message === 'TIMEOUT'\)\s*\{\s*throw error;/, 'callWithRetry must never retry a TIMEOUT');
 });
 
+test('the internal preview says what the supplier answered on an upstream failure, and the chat shows only the message', async () => {
+  const preview = await read('pages/api/vas/electricity/preview.js');
+  const catchIdx = preview.indexOf("logStructured('vas_electricity_info_failed'");
+  const failure = preview.slice(preview.indexOf("error: 'UPSTREAM_FAILURE',", catchIdx), preview.indexOf("error: 'UPSTREAM_FAILURE',", catchIdx) + 400);
+  assert.match(failure, /detail: \{ statusCode: e\?\.statusCode/, 'the operator sees the supplier status and reason');
+  const processor = await read('pages/api/webhooks/message-processor-v2.js');
+  const meter = processor.slice(processor.indexOf("errorKey: `elec_preview:${previewData.error || 'ERROR'}`"), processor.indexOf("errorKey: `elec_preview:${previewData.error || 'ERROR'}`") + 200);
+  assert.ok(!meter.includes('previewData.detail'), 'the customer never sees the raw supplier detail');
+});
+
 test('a sale TIMEOUT keeps the hold and marks the row RECONCILE; a refusal still releases', async () => {
   const route = await read('pages/api/vas/electricity/execute.js');
   const timeoutIdx = route.indexOf("error?.message === 'TIMEOUT'");
