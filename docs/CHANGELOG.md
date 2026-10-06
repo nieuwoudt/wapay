@@ -28,6 +28,9 @@ Blu UAT thread, the founder's review round (thirteen screenshots, recorded in
   the exact QA electricity answers.
 - Tests: `tests/vas-purchase-intent.test.mjs` (new), `tests/e2e/chat-qa-vas.mjs`
   (new runner; `docs/testing/chat-qa-vas-report-2026-10-06.md`).
+- Follow-up the same evening (BUGLOG #91): the voucher probe showed Blu's supplier-41
+  test vouchers (12-digit PINs) ACTIVE on QA and the 16-digit ones UNKNOWN; the chat
+  now accepts 12 or 16-digit Blu Voucher PINs (`tests/blu-voucher-pin.test.mjs`).
 
 ## 2026-10-06 (69) — Founder review 5: every way to deposit, a question is never a card, bullets everywhere, best value with the balance in view, one shape for history
 

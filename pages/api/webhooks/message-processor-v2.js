@@ -2458,6 +2458,15 @@ function detectExplicitIntent(text = '') {
   if (/^\d{16}$/.test(digitsOnly)) {
     return { intent: 'VOUCHER_PIN', confidence: 1.0, voucherPin: digitsOnly };
   }
+  // Blu Voucher PINs come in two shapes: 16 digits (retail) and 12 digits
+  // (the variable vouchers Blu issued us for testing; ACTIVE on the QA host,
+  // probed 2026-10-06). The 12-digit shape is taken only BARE (three groups
+  // of four, space or dash optional), never embedded in a sentence (an amount
+  // plus a phone number is also twelve digits), exactly as lib/agent/guards.js
+  // agentGuard does, so the pilot path and this hook agree.
+  if (/^\d{4}[\s-]?\d{4}[\s-]?\d{4}$/.test(text.trim())) {
+    return { intent: 'VOUCHER_PIN', confidence: 1.0, voucherPin: digitsOnly };
+  }
 
   // =====================================================================
   // LIST VAS PRODUCTS - "What can I buy?", "Top 10 products", etc.
@@ -4350,7 +4359,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
           return await sendWhatsAppText({
             to: from,
-            text: await localizeOutbound(`Great! Please enter your 16-digit Blu Voucher PIN (numbers only).\nExample: 1234567890123456\n\nReply "cancel" to stop.`, await userLang(account)),
+            text: await localizeOutbound(`Great! Please enter your Blu Voucher PIN (12 or 16 digits, numbers only).\nExample: 1234567890123456\n\nReply "cancel" to stop.`, await userLang(account)),
           });
         }
 
@@ -4369,7 +4378,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
           return await sendWhatsAppText({
             to: from,
-            text: await localizeOutbound(`Great! Please enter your 16-digit Blu Voucher PIN (numbers only).\nExample: 1234567890123456\n\nReply "cancel" to stop.`, await userLang(account)),
+            text: await localizeOutbound(`Great! Please enter your Blu Voucher PIN (12 or 16 digits, numbers only).\nExample: 1234567890123456\n\nReply "cancel" to stop.`, await userLang(account)),
           });
         }
 
@@ -4386,11 +4395,11 @@ async function handleConversationState({ from, text, state, data, account }) {
         // Validate and normalize PIN
         const normalizedPin = text.replace(/[\s-]/g, '');
 
-        if (!/^\d{16}$/.test(normalizedPin)) {
+        if (!/^(\d{12}|\d{16})$/.test(normalizedPin)) {
           await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
           return await sendWhatsAppText({
             to: from,
-            text: await localizeOutbound(`❌ *Invalid Voucher PIN*\n\nPlease enter a valid 16-digit Blu Voucher PIN (numbers only).\nExample: 1234567890123456\n\nYou can reply with the PIN now, or type "cancel" to stop.`, await userLang(account)),
+            text: await localizeOutbound(`❌ *Invalid Voucher PIN*\n\nPlease enter a valid Blu Voucher PIN (12 or 16 digits, numbers only).\nExample: 1234567890123456\n\nYou can reply with the PIN now, or type "cancel" to stop.`, await userLang(account)),
           });
         }
         
@@ -5406,7 +5415,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
         return await sendWhatsAppText({
           to: from,
-          text: await localizeOutbound(`Great! Pay cash at any major till, ask for a *Blu Voucher*, then send me the 16-digit PIN.\nExample: 1234567890123456\n\nReply "cancel" to stop.`, await userLang(account)),
+          text: await localizeOutbound(`Great! Pay cash at any major till, ask for a *Blu Voucher*, then send me the PIN (12 or 16 digits).\nExample: 1234567890123456\n\nReply "cancel" to stop.`, await userLang(account)),
         });
       }
       if (isConversationalEscape(text)) {
@@ -8399,7 +8408,7 @@ async function handleVoucherRedemption({ from, pin, account }) {
     await updateConversationState(from, allowRetry ? 'AWAITING_VOUCHER_PIN' : null);
 
     const retryHint = allowRetry
-      ? `\n\nDouble-check the 16-digit PIN and enter it again when you're ready. Reply "cancel" to stop.`
+      ? `\n\nDouble-check the PIN (12 or 16 digits) and enter it again when you're ready. Reply "cancel" to stop.`
       : `\n\nNeed help? Type "help" for options or try again later.`;
 
     await sendWhatsAppText({

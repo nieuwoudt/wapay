@@ -5,7 +5,7 @@ Hi Phuti
 Thank you. The testing logs are attached as "WaPay: Blue Label Trade API UAT test evidence, v2"
 (PDF plus a CSV with the same rows for your reconciliation).
 
-This is a fresh round, run on {{ROUND_DATE}} against the Trade QA environment with your four test
+This is a fresh round, run on 6 October 2026 against the Trade QA environment with your four test
 MSISDNs and your compliance meter, through our live WhatsApp service, so every line carries:
 
 * your reference as returned by the API, next to our requestId (so you can match each one in
@@ -17,17 +17,23 @@ MSISDNs and your compliance meter, through our live WhatsApp service, so every l
 
 In short:
 
-* Airtime: {{AIRTIME_OK}} confirmed vends across Vodacom, MTN, Cell C and Telkom
-  (references {{AIRTIME_REFS}}), plus the refusal path for a number outside the QA whitelist.
-* Data bundles: {{DATA_OK}} confirmed vends across the four networks (references {{DATA_REFS}}),
-  using product codes from your bundle catalogue.
-* Electricity: {{ELEC_OK}} confirmed vend(s) on compliance meter 000001020001 (references
-  {{ELEC_REFS}}, token delivered to the customer and shown masked in the pack), plus an invalid
-  meter number.
-* Voucher redemption: on 6 October both one of the 14 September test vouchers and a real R30 Blu
-  Voucher bought on bluvoucher.co.za failed at the status check (GET /voucher/variable/vouchers)
-  on the QA host: {{VOUCHER_STATUS_FINDING}}. The eight redemptions from November to January are in
-  the pack as history. We will re-run the six test vouchers the moment the status endpoint answers.
+* Airtime: three confirmed vends on 6 October, MTN (your reference 847179337), Vodacom
+  (847190046) and Telkom (847203369), each R10 to the matching QA test number, with the
+  customer receipt and the ledger postings. The Cell C vend to 0840012300 at 13:16 SAST was
+  answered by your gateway with a bare "error code: 502" page; our hold was released and nothing
+  was booked, and the row is in the pack as a failure path. We will retry Cell C on request.
+  The refusal path for a number outside the QA whitelist is also in the pack.
+* Data bundles: no vend reached you on 6 October. The purchases were stopped on our side before
+  any request (a routing fault in our chat, since fixed and locked by tests); the next run will
+  carry one vend per network using product codes from your bundle catalogue.
+* Electricity: no vend reached you. Every meter lookup on compliance meter 000001020001 on
+  6 October was refused by your QA gateway (details below), so the electricity leg of this
+  round waits on your side.
+* Voucher redemption: on 6 October your status endpoint on QA answered ACTIVE R50 for a
+  supplier-41 test voucher and UNKNOWN for a supplier-13 one (see point 5), and a real R30 Blu
+  Voucher bought on bluvoucher.co.za could not be verified on the QA host, which we take to mean
+  retail vouchers live on production only. The eight redemptions from November to January are
+  in the pack as history; the supplier-41 redemptions follow in the next run.
 * Failure paths: declines, an abandoned preview and a timeout are all in section 6, each with
   the hold released and the customer told that no money moved.
 
@@ -59,10 +65,11 @@ Seven things would let us complete the move to production:
    specification, which the redemption API document does not cover.
 4. The OpenAPI or Swagger JSON for both QA and production. We have been working from notes
    taken off the Swagger UI, and the JSON would remove the guesswork.
-5. The 14 September voucher batch (reference Wa_pay): the six vouchers with supplier code 13 and
-   16-digit PINs redeem on the Blu Voucher endpoints as expected. The six with supplier code 41
-   and 12-digit PINs do not look like Blu Voucher PINs to us. Could you confirm what supplier
-   code 41 is and which endpoint redeems them? We have not attempted them.
+5. The 14 September voucher batch (reference Wa_pay): on the QA host your status endpoint
+   (GET /voucher/variable/vouchers) answers ACTIVE with the face value for the six vouchers with
+   supplier code 41 (12-digit PINs), and UNKNOWN with no value for the six with supplier code 13
+   (16-digit PINs). Could you confirm what supplier code 13 is and how those are meant to be
+   redeemed? We are redeeming the supplier-41 vouchers in the next run.
 6. Production UAT: is there a production test allowance or test-vend budget we should use for
    the first live vends, and any production test numbers or meters?
 7. Rotation of the QA credentials we hold, at the same time as the production issue, since they

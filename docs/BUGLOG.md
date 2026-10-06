@@ -4,6 +4,13 @@
 
 ---
 
+## 91. Blu's own test vouchers were refused before any call: the chat accepted 16-digit PINs only
+
+- **Symptom (founder, 2026-10-06 12:50):** a PIN from Blu's 14 September test batch, pasted after "redeem voucher", ended in "Status Check Failed" (that attempt was a transport failure on Blu's QA host), and the brief of 4 October assumed the 16-digit batch (supplier code 13) was the one to redeem and that the 12-digit batch (supplier code 41) was some other product. `POST /api/internal/blu-voucher-probe` against production on 6 October: supplier 41 (12 digits) → `ACTIVE`, R50; supplier 13 (16 digits) → `UNKNOWN`, no value. The chat's voucher state and bare-PIN hook only matched `\d{16}`, so the vouchers that work could never reach Blu.
+- **Root cause:** a PIN shape assumed from the retail voucher format and never checked against what the status endpoint actually recognises.
+- **Fix:** both shapes open the redemption (`/^(\d{12}|\d{16})$/` in the bare-PIN hook and the voucher state); the prompts say "12 or 16 digits". A bare 12-digit message inside the meter state is still a meter (states run before the hook); outside a flow it is a PIN, and `lib/turns.js` already redacts 12-digit runs from memory.
+- **Guard:** `tests/blu-voucher-pin.test.mjs`. Supplier code 13 and the retail voucher's environment are asked of Phuti in `EMAIL_TO_PHUTI_2_UAT_PACK_V2.txt`.
+
 ## 90. Three ways the VAS flows lost a sale the customer had already asked for (founder's live run, 6 October)
 
 - **Symptom (thirteen screenshots, 2026-10-06 12:46 to 16:06):** (a) "buy 50MB Vodacom data for 0720012345", typed right after browsing bundles, was answered with the bundle list again, on all four networks; (b) "buy R20 electricity. for the meter, 000001020001" was answered with "Please enter your meter number"; (c) "can I buy 100 airtime for that vodacom number" with R40 in the balance ended in "❌ Insufficient balance. Available: R40.00. Please try again later." The founder: "We're going to lose customers."
