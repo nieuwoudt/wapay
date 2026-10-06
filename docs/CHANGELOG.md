@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-10-06 (70) — The VAS flows close the sale they were asked for: purchase sentences reach the purchase, electricity takes both slots, a shortfall tops up the difference and resumes; the Blu voucher probe; pack v2 with the 6 October airtime round
+
+Blu UAT thread, the founder's review round (thirteen screenshots, recorded in
+`docs/testing/FOUNDER_REVIEW_2026-10-06.md` with owner, status and lock per item).
+
+- BUGLOG #90: `completePurchase` guard in the active-category block;
+  `startElectricityPreviewAndConfirm` (one entry, no second meter question);
+  `offerTopUpAndPark` + `shortfallCents` (`lib/deposits.js`) + three
+  `RESUME_*_PURCHASE` states; previews answer `code: 'INSUFFICIENT_BALANCE',
+  availableCents, requiredCents`; a greeting resumes a funded park
+  (`parkedPurchaseIsFunded`), otherwise goes home as before.
+- `pages/api/internal/blu-voucher-probe.js` (new, internal key): read-only
+  status check of a Blu Voucher PIN, answering Blu's status code and masked
+  reason, because the chat's "Status Check Failed" hid why both Blu's test
+  voucher and a real R30 voucher were refused on the QA host.
+- `docs/testing/BLU_UAT_EVIDENCE_v2.md` + `.csv` regenerated: the 6 October
+  airtime round (MTN 847179337, Vodacom 847190046, Telkom 847203369; Cell C
+  refused by Blu with a 502 page, hold released).
+- `EMAIL_TO_PHUTI_2_UAT_PACK_V2.txt`: the production-status paragraph (every
+  credential we hold is QA, issued 31 Oct 2025; daily electricity reports
+  suggest a production account), the issuing ask, the voucher status finding,
+  the exact QA electricity answers.
+- Tests: `tests/vas-purchase-intent.test.mjs` (new), `tests/e2e/chat-qa-vas.mjs`
+  (new runner; `docs/testing/chat-qa-vas-report-2026-10-06.md`).
+
 ## 2026-10-06 (69) — Founder review 5: every way to deposit, a question is never a card, bullets everywhere, best value with the balance in view, one shape for history
 
 Thirteen annotated screenshots from the founder's live chat (12:46 to 16:06),

@@ -24,13 +24,23 @@ In short:
 * Electricity: {{ELEC_OK}} confirmed vend(s) on compliance meter 000001020001 (references
   {{ELEC_REFS}}, token delivered to the customer and shown masked in the pack), plus an invalid
   meter number.
-* Voucher redemption: {{VOUCHER_OK}} of the 14 September test vouchers redeemed (references
-  {{VOUCHER_REFS}}), plus a repeat of a redeemed PIN, which is refused and never credited twice.
+* Voucher redemption: on 6 October both one of the 14 September test vouchers and a real R30 Blu
+  Voucher bought on bluvoucher.co.za failed at the status check (GET /voucher/variable/vouchers)
+  on the QA host: {{VOUCHER_STATUS_FINDING}}. The eight redemptions from November to January are in
+  the pack as history. We will re-run the six test vouchers the moment the status endpoint answers.
 * Failure paths: declines, an abandoned preview and a timeout are all in section 6, each with
   the hold released and the customer told that no money moved.
 
 The pack also carries the historical transactions from the integration period (the eight voucher
 redemptions and six airtime vends you have seen before) so the whole record is in one place.
+
+One thing to settle first, so we do not talk past each other. Every credential we hold from Blue
+Label points at the Trade QA host (api.qa.bltelecoms.net), issued on 31 October 2025, and every
+transaction in the attached pack ran against it. Our founder receives daily electricity reports
+from Blue Label, which suggests a production trade account may already exist for WaPay. If we are
+already provisioned on production, please tell us the production host and send the production
+credentials, and we will move the same day. If we are not, please treat this email as our request
+to be moved to production as soon as your sign-off allows.
 
 Seven things would let us complete the move to production:
 
@@ -40,10 +50,13 @@ Seven things would let us complete the move to production:
 2. IP whitelisting: does production require caller IP whitelisting, and if so is a shared static
    egress IP from a managed cloud pool acceptable, or must it be dedicated to us? Either answer
    is fine, we just need it definitively so we can finalise our network route.
-3. Which categories our trade account is enabled for in production. Airtime, data and
-   electricity we take as confirmed. For lifestyle and entertainment vouchers, bill payments,
-   gaming top-ups and remittance (the short document from 18 August), please tell us which are
-   available to us and whether any need a separate agreement or approval step.
+3. Which categories our trade account is enabled for in production, and the commission on each.
+   Airtime, data and electricity we take as confirmed. For lifestyle and entertainment vouchers,
+   bill payments, gaming top-ups and remittance (the short document from 18 August), please tell
+   us which are available to us and whether any need a separate agreement or approval step. We
+   would also like to sell Blu Vouchers (issue them to our customers) alongside redeeming them:
+   please confirm that issuing is enabled on our account and point us at the issuing endpoint
+   specification, which the redemption API document does not cover.
 4. The OpenAPI or Swagger JSON for both QA and production. We have been working from notes
    taken off the Swagger UI, and the JSON would remove the guesswork.
 5. The 14 September voucher batch (reference Wa_pay): the six vouchers with supplier code 13 and
@@ -68,9 +81,11 @@ meter lookup on Trade QA (GET /electricity/info?amount=2000&free-basic-electrici
 answered, after 11 to 18 seconds each time, with HTTP 500 "Unexpected exception encountered during
 request/response transformation. Status is unknown. Reason: null" twice, a bare "error code: 520"
 page once, and once not at all within 40 seconds. The airtime and voucher endpoints answered within
-seconds throughout. Could you check the electricity service and our entitlement on QA, and confirm
-that /electricity/sales is idempotent on requestId for a sale that timed out on our side, so a retry
-with the same requestId never vends twice?
+seconds throughout. Could you check the electricity service and our entitlement on QA, confirm that
+compliance meter 000001020001 is still valid on the QA host, and tell us whether the same electricity
+gateway serves production (if it does, production credentials alone would not clear this)? Please
+also confirm that /electricity/sales is idempotent on requestId for a sale that timed out on our
+side, so a retry with the same requestId never vends twice.
 
 Happy to jump on a call if that is quicker for any of this.
 

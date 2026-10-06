@@ -63,6 +63,7 @@ import {
   matchDepositStatusRequest,
   MIN_DEPOSIT_CENTS,
   MAX_DEPOSIT_CENTS,
+  shortfallCents,
 } from '../../../lib/deposits.js';
 import { orchestrate, runAgentTurn, buildAgentSystemPrompt } from '@wapay/ai';
 import { buildToolDefinitions, executeTool } from '../../../lib/agent/tools/index.js';
@@ -222,6 +223,149 @@ function detectNetworkCodeFromMsisdn(msisdn = '') {
 }
 
 /**
+ * Electricity: confirm the meter with the supplier and show the priced
+ * preview. ONE entry for the three ways a customer gets here (the meter
+ * state, "buy R20 electricity for meter 000…" in one message, and a resumed
+ * purchase after a top-up), so the meter is never asked for twice (founder's
+ * run 2026-10-06: amount and meter in one sentence were followed by "Please
+ * enter your meter number").
+ */
+async function startElectricityPreviewAndConfirm({ from, account, amountCents, meterNumber, rawText = '' }) {
+  if (!/^\d{8,14}$/.test(String(meterNumber || ''))) {
+    await updateConversationState(from, 'ELECTRICITY_METER', { amountCents });
+    return await sendWhatsAppText({
+      to: from,
+      text: await localizeOutbound(`💡 *Buy R${(amountCents / 100).toFixed(0)} Electricity*\n\nPlease enter your meter number:`, await userLang(account)),
+    });
+  }
+  try {
+    const previewUrl = apiUrl('/api/vas/electricity/preview');
+    logInternalFetchCall({ url: previewUrl, path: '/api/vas/electricity/preview' });
+    const previewRes = await fetch(previewUrl, {
+      method: 'POST',
+      headers: withInternalHeaders(),
+      body: JSON.stringify({
+        accountId: account.id,
+        meterNumber,
+        amountCents,
+      }),
+    });
+    await logInternalFetchResponse({ url: previewUrl, res: previewRes });
+    const previewData = previewRes.headers.get('content-type')?.includes('application/json')
+      ? await previewRes.json()
+      : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
+
+    if (!previewData.ok && previewData.error === 'TIMEOUT') {
+      // The supplier's meter lookup ran out of time at our end. No hold
+      // exists before the PIN step, so nothing was charged: say so, no
+      // date, no supplier name (2026-10-06).
+      await updateConversationState(from, null);
+      return await sendWhatsAppErrorOnce({
+        to: from,
+        errorKey: `elec_preview:TIMEOUT:${meterNumber}`,
+        text: `⏳ The meter lookup is taking too long on the supplier side right now. Nothing was charged. Please try again in a few minutes.`,
+      });
+    }
+
+    if (!previewData.ok && previewData.code === 'INSUFFICIENT_BALANCE') {
+      return await offerTopUpAndPark({
+        from, account,
+        availableCents: previewData.availableCents, requiredCents: previewData.requiredCents,
+        what: `${randsShort(amountCents)} electricity`,
+        resumeState: 'RESUME_ELECTRICITY_PURCHASE', resumeData: { amountCents, meterNumber }, rawText,
+      });
+    }
+    if (!previewData.ok) {
+      await updateConversationState(from, null);
+      return await sendWhatsAppErrorOnce({
+        to: from,
+        errorKey: `elec_preview:${previewData.error || 'ERROR'}`,
+        text: `❌ ${previewData.message || 'Electricity service unavailable.'}`,
+      });
+    }
+
+    const preview = previewData.preview || {};
+    const name = preview.consumer?.name || preview.customerName || 'Customer';
+    const addr = preview.consumer?.address || 'N/A';
+    const util = preview.utility || preview.municipalityName || 'Utility';
+
+    await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
+      amountCents,
+      meterNumber,
+      previewId: previewData.previewId,
+      reference: preview.reference,
+      transactionTypeId: preview.transactionTypeId,
+      utility: util,
+      consumer: { name, address: addr },
+    });
+
+    const msg = await localizeOutbound(
+      `💡 *Confirm Electricity*\n\n` +
+      `Utility: ${util}\n` +
+      `Name: ${name}\n` +
+      `Address: ${addr}\n` +
+      `Meter: ${meterNumber}\n` +
+      `Amount: R${(amountCents / 100).toFixed(2)}\n\n` +
+      `Reply *YES* to confirm or *NO* to cancel.`,
+      await userLang(account)
+    );
+
+    return await sendWhatsAppText({ to: from, text: msg });
+  } catch (e) {
+    await updateConversationState(from, null);
+    return await sendWhatsAppErrorOnce({
+      to: from,
+      errorKey: 'elec_preview:ERROR',
+      text: `❌ Electricity service unavailable. Please try again later.`,
+    });
+  }
+}
+
+
+/**
+ * A purchase the balance cannot cover is not a dead end: name the gap, send
+ * the top-up link for exactly that gap (the link quotes the payment fee), and
+ * park the purchase so the next message finishes it once the money lands.
+ * Wording agreed with the main thread 2026-10-06 (founder: "you should just
+ * need to top up with the difference, then proceed to the checkout").
+ */
+/**
+ * Has the money a parked purchase was waiting for landed? RESUME_*_PURCHASE
+ * states carry requiredCents; the voucher park carries amountCents (its own
+ * handler re-checks with the fee, so an optimistic answer here only hands the
+ * message to that handler, which says "not landed yet" if it is not).
+ */
+async function parkedPurchaseIsFunded({ from, data }) {
+  const required = Number(data?.requiredCents) || Number(data?.amountCents) || 0;
+  if (required <= 0) return false;
+  try {
+    const { balance } = await getUserBalance(from);
+    return (Math.round(parseFloat(balance) * 100) || 0) >= required;
+  } catch {
+    return false;
+  }
+}
+
+async function offerTopUpAndPark({ from, account, availableCents, requiredCents, what, resumeState, resumeData = {}, rawText = '' }) {
+  const available = Number.isInteger(availableCents) ? availableCents : 0;
+  const required = Number.isInteger(requiredCents) ? requiredCents : 0;
+  const topUp = shortfallCents({ availableCents: available, requiredCents: required });
+  await sendWhatsAppText({
+    to: from,
+    text: await localizeOutbound(
+      `You have ${randsShort(available)} available. ${what} needs ${randsShort(required)}, which is ${randsShort(Math.max(0, required - available))} more.\n\n` +
+      `Top up ${randsShort(topUp)} by card or EFT with the link below and I will finish the ${what} straight after. Or reply "cancel", or choose a smaller amount.`,
+      await userLang(account)
+    ),
+    kind: 'flow',
+  });
+  const linkResult = await handleCardDepositLink({ from, account, amountCents: topUp, rawText });
+  await updateConversationState(from, resumeState, { ...resumeData, requiredCents: required });
+  return linkResult;
+}
+
+
+/**
  * The truth about why a Blu purchase cannot complete right now. It is OUR
  * supplier account that is limited, not the customer's number, and the copy
  * says so. No date is promised (money rule) and the partner is not named.
@@ -229,6 +373,7 @@ function detectNetworkCodeFromMsisdn(msisdn = '') {
 function qaCredentialsLine(product) {
   return `⚠️ I cannot buy ${product} for that number yet.\n\nOur supplier account is still on test access, so only a few test numbers can be topped up. This is on our side, not yours. Your money has not moved.\n\nEverything else works: say "balance", "send", or "please pay me".`;
 }
+
 
 async function startAirtimePreviewAndConfirm({ from, account, amountCents, msisdn, intent = 'BUY_AIRTIME', rawText = '' }) {
   // On Blu's QA credentials only four test numbers can actually be vended to.
@@ -264,6 +409,14 @@ async function startAirtimePreviewAndConfirm({ from, account, amountCents, msisd
     ? await previewRes.json()
     : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
 
+  if (!previewData.ok && previewData.code === 'INSUFFICIENT_BALANCE') {
+    return await offerTopUpAndPark({
+      from, account,
+      availableCents: previewData.availableCents, requiredCents: previewData.requiredCents,
+      what: `${randsShort(amountCents)} airtime`,
+      resumeState: 'RESUME_AIRTIME_PURCHASE', resumeData: { amountCents, msisdn }, rawText,
+    });
+  }
   if (!previewData.ok) {
     return await sendWhatsAppText({
       to: from,
@@ -1397,9 +1550,18 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       state = null; data = null;
     } else if (isHomeTrigger(text)) {
       // hi / hello / home / menu ALWAYS go home, even mid-flow (a banking app's home button).
-      logStructured('state_home_trigger', { from, state });
-      await updateConversationState(from, null);
-      return await renderHome({ from, account });
+      // One exception that keeps a promise (2026-10-06): a purchase parked at
+      // a shortfall was told "message me anything and I'll finish it", and the
+      // first word back from the payment page is often "hi". If the top-up
+      // has landed, the parked state handles this message and resumes; if it
+      // has not, home it is, as before.
+      if (/^RESUME_/.test(state) && (await parkedPurchaseIsFunded({ from, data }))) {
+        logStructured('state_home_trigger_resumes_park', { from, state });
+      } else {
+        logStructured('state_home_trigger', { from, state });
+        await updateConversationState(from, null);
+        return await renderHome({ from, account });
+      }
     }
   }
 
@@ -1824,8 +1986,14 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     // If the user explicitly mentions a different product than the active category, do NOT hijack.
     // This is the core regression that caused airtime messages to be routed to DATA bundles.
     const categoryMismatch = slots?.productHint && slots.productHint !== category;
-    
-    if (isFollowUp && !categoryMismatch) {
+    // A complete purchase sentence ("buy 50MB Vodacom data for 072…", "buy
+    // R10 airtime for 083…") is never a browsing follow-up: it belongs to the
+    // purchase routing below, which has the slots. Founder's run 2026-10-06:
+    // four data purchases were swallowed into the bundle list by this block.
+    const completePurchase =
+      (slots?.productHint === 'DATA' && !!slots.dataMb) ||
+      (slots?.productHint === 'AIRTIME' && !!slots.amountCents && !!slots.msisdn);
+    if (isFollowUp && !categoryMismatch && !completePurchase) {
       console.log(`🎯 Context-aware: User was browsing ${category}, interpreting "${text}" in that context`);
       
       logStructured('context_aware_intent', {
@@ -1860,6 +2028,10 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
             return await replyCategoryUnavailable(from, 'ELECTRICITY');
           }
           // Electricity purchase flow - start it
+          const meterInText = text.match(/\b(\d{8,14})\b/)?.[1] || null;
+          if (amount && meterInText) {
+            return await startElectricityPreviewAndConfirm({ from, account, amountCents: amount * 100, meterNumber: meterInText, rawText: text });
+          }
           if (amount) {
             logSlotFill({
               intent: 'CONTEXT_AWARE',
@@ -4627,6 +4799,14 @@ async function handleConversationState({ from, text, state, data, account }) {
             ? await previewRes.json()
             : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
 
+          if (!previewData.ok && previewData.code === 'INSUFFICIENT_BALANCE') {
+            return await offerTopUpAndPark({
+              from, account,
+              availableCents: previewData.availableCents, requiredCents: previewData.requiredCents,
+              what: `${data?.productName ? `the ${data.productName} bundle` : 'this data bundle'}`,
+              resumeState: 'RESUME_DATA_PURCHASE', resumeData: { ...(data || {}) }, rawText: text,
+            });
+          }
           if (!previewData.ok) {
             await updateConversationState(from, null);
             return await sendWhatsAppText({ to: from, text: await localizeOutbound(`❌ ${previewData.message || 'Could not process data purchase.'}\n\nPlease try again later.`, await userLang(account)) });
@@ -4970,81 +5150,8 @@ async function handleConversationState({ from, text, state, data, account }) {
         });
       }
 
-      try {
-        const previewUrl = apiUrl('/api/vas/electricity/preview');
-        logInternalFetchCall({ url: previewUrl, path: '/api/vas/electricity/preview' });
-        const previewRes = await fetch(previewUrl, {
-          method: 'POST',
-          headers: withInternalHeaders(),
-          body: JSON.stringify({
-            accountId: account.id,
-            meterNumber,
-            amountCents,
-          }),
-        });
-        await logInternalFetchResponse({ url: previewUrl, res: previewRes });
-        const previewData = previewRes.headers.get('content-type')?.includes('application/json')
-          ? await previewRes.json()
-          : { ok: false, error: 'NON_JSON', message: 'Non-JSON response from preview' };
-
-        if (!previewData.ok && previewData.error === 'TIMEOUT') {
-          // The supplier's meter lookup ran out of time at our end. No hold
-          // exists before the PIN step, so nothing was charged: say so, no
-          // date, no supplier name (2026-10-06).
-          await updateConversationState(from, null);
-          return await sendWhatsAppErrorOnce({
-            to: from,
-            errorKey: `elec_preview:TIMEOUT:${meterNumber}`,
-            text: `⏳ The meter lookup is taking too long on the supplier side right now. Nothing was charged. Please try again in a few minutes.`,
-          });
-        }
-
-        if (!previewData.ok) {
-          await updateConversationState(from, null);
-          return await sendWhatsAppErrorOnce({
-            to: from,
-            errorKey: `elec_preview:${previewData.error || 'ERROR'}`,
-            text: `❌ ${previewData.message || 'Electricity service unavailable.'}`,
-          });
-        }
-
-        const preview = previewData.preview || {};
-        const name = preview.consumer?.name || preview.customerName || 'Customer';
-        const addr = preview.consumer?.address || 'N/A';
-        const util = preview.utility || preview.municipalityName || 'Utility';
-
-        await updateConversationState(from, 'ELECTRICITY_CONFIRM', {
-          amountCents,
-          meterNumber,
-          previewId: previewData.previewId,
-          reference: preview.reference,
-          transactionTypeId: preview.transactionTypeId,
-          utility: util,
-          consumer: { name, address: addr },
-        });
-
-        const msg = await localizeOutbound(
-          `💡 *Confirm Electricity*\n\n` +
-          `Utility: ${util}\n` +
-          `Name: ${name}\n` +
-          `Address: ${addr}\n` +
-          `Meter: ${meterNumber}\n` +
-          `Amount: R${(amountCents / 100).toFixed(2)}\n\n` +
-          `Reply *YES* to confirm or *NO* to cancel.`,
-          await userLang(account)
-        );
-
-        return await sendWhatsAppText({ to: from, text: msg });
-      } catch (e) {
-        await updateConversationState(from, null);
-        return await sendWhatsAppErrorOnce({
-          to: from,
-          errorKey: 'elec_preview:ERROR',
-          text: `❌ Electricity service unavailable. Please try again later.`,
-        });
-      }
+      return await startElectricityPreviewAndConfirm({ from, account, amountCents, meterNumber, rawText: text });
     }
-
     case 'ELECTRICITY_CONFIRM': {
       const normalized = text.trim().toLowerCase();
 
@@ -5348,6 +5455,53 @@ async function handleConversationState({ from, text, state, data, account }) {
       });
     }
 
+    case 'RESUME_AIRTIME_PURCHASE':
+    case 'RESUME_DATA_PURCHASE':
+    case 'RESUME_ELECTRICITY_PURCHASE': {
+      // Parked at a shortfall: the customer went to pay the difference. ANY
+      // next message re-checks the balance and re-runs the purchase (preview,
+      // confirm and PIN still apply) the moment the money is there.
+      const normalized = text.trim().toLowerCase();
+      if (/^(cancel|stop|no|not now|later|quit|exit)$/i.test(normalized)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 No problem. Your money stays in your WaPay balance.`, await userLang(account)) });
+      }
+      const requiredCents = Number(data?.requiredCents) || 0;
+      const { balance } = await getUserBalance(from);
+      const balanceCents = Math.round(parseFloat(balance) * 100) || 0;
+      if (requiredCents > 0 && balanceCents >= requiredCents) {
+        await updateConversationState(from, null);
+        if (state === 'RESUME_AIRTIME_PURCHASE' && data?.amountCents && data?.msisdn) {
+          return await startAirtimePreviewAndConfirm({ from, account, amountCents: data.amountCents, msisdn: data.msisdn, intent: 'RESUME_AIRTIME_PURCHASE', rawText: text });
+        }
+        if (state === 'RESUME_ELECTRICITY_PURCHASE' && data?.amountCents && data?.meterNumber) {
+          return await startElectricityPreviewAndConfirm({ from, account, amountCents: data.amountCents, meterNumber: data.meterNumber, rawText: text });
+        }
+        if (state === 'RESUME_DATA_PURCHASE' && data?.productId && data?.msisdn) {
+          await updateConversationState(from, 'DATA_CONFIRM', { ...data });
+          return await sendWhatsAppText({
+            to: from,
+            text: await localizeOutbound(`💚 Your top-up landed. Confirm the data purchase: *${data.productName || 'the bundle'}* for ${data.msisdn}, ${randsShort(data.amountCents || requiredCents)}.\n\nReply *YES* to confirm or *NO* to cancel.`, await userLang(account)),
+          });
+        }
+        return await handlePostOnboarding({ account, from, text });
+      }
+      if (isConversationalEscape(text)) {
+        // A real question is answered by the router, and the park is put
+        // back unless that answer opened a flow of its own: the promise was
+        // "message me anything and I'll finish it", and "any news?" while
+        // waiting for a top-up is exactly such a message (harness, 2026-10-06).
+        await updateConversationState(from, null);
+        const answered = await handlePostOnboarding({ account, from, text });
+        const { state: after } = await getConversationState(from);
+        if (!after) await updateConversationState(from, state, data);
+        return answered;
+      }
+      return await sendWhatsAppText({
+        to: from,
+        text: await localizeOutbound(`⏳ Your top-up hasn't landed yet. The moment it does, message me anything and I'll finish your purchase. Reply "cancel" to stop.`, await userLang(account)),
+      });
+    }
     case 'RESUME_VOUCHER_PURCHASE': {
       // Parked mid-checkout: the customer went to PayFast to top up the
       // shortfall. ANY next message re-checks the balance and finishes the
@@ -6785,11 +6939,8 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
         from,
         accountId: account.id,
       });
-      await updateConversationState(from, 'ELECTRICITY_METER', {
-        amountCents: slots.amountCents,
-      });
-      const meterMsg = await localizeOutbound(`💡 *Buy R${(slots.amountCents / 100).toFixed(0)} Electricity*\n\nPlease enter your meter number to continue.`, await userLang(account));
-      return await sendWhatsAppText({ to: from, text: meterMsg });
+      // Both slots are already here: no second question (2026-10-06).
+      return await startElectricityPreviewAndConfirm({ from, account, amountCents: slots.amountCents, meterNumber: slots.meterNumber, rawText: text });
     }
 
     // =========================================================
@@ -6813,14 +6964,8 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
         const meterNumber = meterMatch ? meterMatch[1] : null;
         
         if (amount && meterNumber) {
-          await updateConversationState(from, 'ELECTRICITY_METER', {
-            amountCents: amount * 100,
-          });
-          const meterMsg = await localizeOutbound(`💡 *Buy R${amount} Electricity*\n\nPlease enter your meter number to continue.`, await userLang(account));
-          return await sendWhatsAppText({
-            to: from,
-            text: meterMsg,
-          });
+          // Both slots in one sentence: no second question (2026-10-06).
+          return await startElectricityPreviewAndConfirm({ from, account, amountCents: amount * 100, meterNumber, rawText: text });
         } else if (amount) {
           // Have amount, need meter
           await updateConversationState(from, 'ELECTRICITY_METER', {

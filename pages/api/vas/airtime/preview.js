@@ -137,6 +137,9 @@ export default async function handler(req, res) {
       });
       return res.status(400).json({
         error: 'USER_INPUT',
+        code: 'INSUFFICIENT_BALANCE',
+        availableCents: availableBalance,
+        requiredCents: amountCents,
         message: `Insufficient balance. Available: R${(availableBalance / 100).toFixed(2)}`
       });
     }
