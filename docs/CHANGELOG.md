@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-10-06 (69) — Founder review 5: every way to deposit, a question is never a card, bullets everywhere, best value with the balance in view, one shape for history
+
+Thirteen annotated screenshots from the founder's live chat (12:46 to 16:06),
+split with the Blu thread: VAS flows there, the architecture-level items here
+(BUGLOG #89). Both brains carry the same composition rules
+(`packages/ai/src/prompt.ts` and `orchestrator.ts`): a question about the WAYS
+to do something lists every live way, cash included, one bullet each, and ends
+"To find out more, just ask"; a yes/no question is answered in the first word
+and a start tool is only for a request to do something; two or more items are
+WhatsApp bullets, steps are numbered and end with "Just come back here if you
+have any questions. If you get stuck on any step, just ask me and I will guide
+you."; deal lists say what the customer has available, mark what they can
+afford and recommend best value rather than the cheapest (the Telkom reply the
+founder called perfect is the shape); transaction history is one bullet per
+row, date and time · type · amount · masked destination · status icon, the
+reference on its own line, a pending pay-out as a separate note; every
+capability answer ends with the registry's start command ("Just say buy R10
+airtime"). The bullets are also mechanical: `lib/agent/guards.js
+normaliseLists` runs inside `outputGate` before the dash rewrite (markdown
+markers and runs of priced lines become •; prose, headers and single lines are
+untouched). `lib/how-it-works.js` deposit: every way as a bullet (the OTT
+voucher way when the load is configured), steps 1 to 5, the closing lines, no
+question back. The processor's `REDEEM_VOUCHER` and `DEPOSIT_START` dispatcher
+cases answer a question in words instead of showing the Add Money card or the
+PIN step. `lib/context-pack.js movementBullet` is the shared history shape;
+the chat's Transactions list uses it and adds the pending pay-out note. The
+two-tier engine's product truth now names three ways to add money. The
+shortfall pattern (name it, send the top-up link in the same turn, park,
+resume on the next message) is the Blu thread's for airtime, data and
+electricity, mirroring the voucher flow; recorded as the standing shape.
+Tests: `tests/review-2026-10-06.test.mjs` (six), `tests/review-2026-09-18.test.mjs`
+widened.
+
 ## 2026-10-06 (68) — The internal electricity preview says what Blu answered; Blu's body is read defensively
 
 Blu thread. With BUGLOG #88 live the compliance-meter lookup stopped dying at the

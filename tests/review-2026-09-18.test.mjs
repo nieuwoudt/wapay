@@ -140,7 +140,7 @@ test('the list, the separate blocks and the recommend-the-best-step rules reach 
   assert.match(orch, /export const REPLY_SHAPE = /);
   assert.match(orch, /\$\{REPLY_SHAPE\}/, 'wired into the per-domain prompt');
   for (const src of [orch, prompt]) {
-    assert.match(src, /Three or more items are a LIST|Three or more items are a list/);
+    assert.match(src, /Two or more items \(ways, products, deals, transactions, steps, options, people\) are a LIST|Three or more items are a list/);
     assert.match(src, /offer THAT step as one yes or no question/);
     assert.match(src, /costs them least or arrives soonest/);
   }

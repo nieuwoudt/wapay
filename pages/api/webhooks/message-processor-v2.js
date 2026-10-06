@@ -11,7 +11,7 @@ import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, outboundSendCount } from '@wa
 // side of the turn by construction (docs/AGENT_ARCHITECTURE_V2.md C2).
 import { sendWhatsAppText, recordInbound } from '../../../lib/say.js';
 import { recentTurns, renderTurns, redactForMemory } from '../../../lib/turns.js';
-import { loadContextPack, renderCustomerRecord, statusCandidates, rankCandidates, preferredKind, formatRands, formatSast } from '../../../lib/context-pack.js';
+import { loadContextPack, renderCustomerRecord, statusCandidates, rankCandidates, preferredKind, formatRands, formatSast, movementBullet } from '../../../lib/context-pack.js';
 import { rescueWithdrawSlots } from '../../../lib/agent/slot-rescue.js';
 import { evaluatePolicy, requirementMessage } from '../../../lib/policy.js';
 import { capabilityById, homeLines, helpLines, welcomeLines, promptLines, fuelLiveFor as registryFuelLiveFor } from '../../../lib/capabilities.js';
@@ -79,7 +79,7 @@ import {
   ottAcceptedFacts,
 } from '../../../lib/spend-catalogue.js';
 import { matchFeeAsk, feeAnswer, feeAskAmountCents, feeFacts } from '../../../lib/fee-facts.js';
-import { matchHowItWorksAsk, howItWorksAnswer, howItWorksBrief, wantsSteps, detectMethod, TOPICS as HOWTO_TOPICS } from '../../../lib/how-it-works.js';
+import { matchHowItWorksAsk, howItWorksAnswer, howItWorksBrief, wantsSteps, detectMethod, looksLikeQuestion, TOPICS as HOWTO_TOPICS } from '../../../lib/how-it-works.js';
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
 import { reconcileElectricityPurchases } from '../../../lib/electricity-settlement.js';
 import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
@@ -3461,10 +3461,8 @@ function matchTransactionsAsk(text = '') {
 
 const STATUS_WORDS = { SUCCESS: '✅ done', PENDING: '⏳ pending', FAILED: '❌ failed', OPEN: '🔗 open', EXPIRED: 'expired', CANCELLED: 'cancelled' };
 function transactionLine(m) {
-  const label = m.kind === 'PAYOUT' && m.method ? `Withdrawal (${PAYOUT_METHODS[m.method]?.label || m.method})` : (MOVEMENT_LABELS[m.kind] || String(m.kind).toLowerCase());
-  const who = m.counterparty && m.counterparty !== 'yourself' ? `  ${m.counterparty}` : '';
-  const cap = label.charAt(0).toUpperCase() + label.slice(1);
-  return `• ${formatSast(m.at)}  ${cap}  ${formatRands(m.amountCents)}  ${STATUS_WORDS[m.status] || String(m.status).toLowerCase()}${who}`;
+  // One bullet per transaction, the shape the founder approved on 2026-10-06 (lib/context-pack.js movementBullet).
+  return movementBullet(m, { methodLabel: m.kind === 'PAYOUT' && m.method ? (PAYOUT_METHODS[m.method]?.label || m.method) : null });
 }
 
 const ABOUT_ME_ASK = /^\W*(?:what (?:do you|do u|does wapay) (?:know|remember) about me|what (?:have you|do you have) (?:got |stored )?(?:on|about) me|my (?:data|info|information|profile|memory)|what do you know)\W*$/i;
@@ -3666,7 +3664,11 @@ async function handleTransactions({ from, account, text = '' }) {
     ? `📄 *Your last ${rows.length} movement${rows.length === 1 ? '' : 's'}${kinds ? ' of that kind' : ''}*`
     : `📄 No ${kinds ? 'movements of that kind' : 'movements'} on this account yet.`;
   const balance = `💰 Balance: ${formatRands(pack.balances?.spendCents || 0)}${held > 0 ? ` (${formatRands(held)} held for a pending withdrawal)` : ''}`;
-  const msg = [header, rows.map(transactionLine).join('\n'), balance, `Ask me about any of them, for example "did my payment go through".`].filter(Boolean).join('\n\n');
+  const pp = pack.pendingPayout;
+  const pendingPayoutLine = pp
+    ? `⏳ Pending pay-out: ${formatRands(pp.amountCents)} by ${PAYOUT_METHODS[pp.method]?.label || pp.method || 'bank'}, ref ${pp.reference || 'unknown'}; ${formatRands(pp.heldCents)} stays held until the bank rail answers.`
+    : '';
+  const msg = [header, rows.map(transactionLine).join('\n'), pendingPayoutLine, balance, `Ask me about any of them, for example "did my payment go through".`].filter(Boolean).join('\n\n');
   logStructured('transactions_list', { from, accountId: account.id, rows: rows.length, kinds });
   const localized = await localizeOutbound(msg, await userLang(account));
   return await sendWhatsAppText({ to: from, text: localized, kind: 'flow' });
@@ -6472,12 +6474,22 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
       if (amountCents) {
         return await handleCardDepositLink({ from, account, amountCents, rawText: text });
       }
+      // "How can I deposit?" with no amount is a question: every live way, as bullets, never the card.
+      if (looksLikeQuestion(text)) {
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(howItWorksBrief('deposit', await howItWorksContextLive(from, text)), await userLang(account)), kind: 'agent' });
+      }
       await updateConversationState(from, 'DEPOSIT_CARD_AMOUNT');
       const depositAskMsg = await localizeOutbound(`💳 *Card / Instant EFT*\n\nHow much would you like to deposit? Just reply with the amount.\n\nExample: R100`, await userLang(account));
       return await sendWhatsAppText({ to: from, text: depositAskMsg });
     }
 
     case 'REDEEM_VOUCHER': {
+      // A question ("can I deposit via an OTT voucher?") is answered in words
+      // (founder review 5, 2026-10-06); only a request to do it opens the PIN step.
+      if (looksLikeQuestion(text)) {
+        const yes = '✅ Yes. Send me the 16-digit PIN of your OTT voucher and I load its value into your WaPay balance. A Blu voucher from any till works the same way: send me the code. To find out more, just ask.';
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(yes, await userLang(account)), kind: 'agent' });
+      }
       await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
       const voucherMsg = await localizeOutbound(buildDepositPrompt(), await userLang(account));
       return await sendWhatsAppText({ to: from, text: voucherMsg });

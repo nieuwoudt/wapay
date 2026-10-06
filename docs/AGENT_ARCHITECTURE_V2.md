@@ -535,6 +535,32 @@ below is updated on every ship.
     withdraw question is the only clarify the founder has hit; the other flows
     get the same treatment when a real answer fails, not before.
 
+- 2026-10-06, main session (changelog entry 69, BUGLOG #89), founder review 5:
+  - **C8 prompt assembler, both brains.** The composition policy gained the
+    review's rules: a WAYS question lists every live way (cash included) as
+    bullets and ends "To find out more, just ask"; a yes/no question is answered
+    first and never started; two or more items are bullets; steps numbered with
+    the founder's closing lines; best value with the balance in view; one
+    history shape; every capability answer ends with the start command.
+    `orchestrator.ts` REPLY_SHAPE carries the same text for everyone off the
+    pilot list.
+  - **C11 output gates.** `normaliseLists` (LIST_REWRITE, before DASH_REWRITE):
+    the bullets rule is enforced mechanically, prose untouched.
+  - **C12 proposal dispatcher.** A proposal born from a question (`looksLikeQuestion`)
+    is answered in words for REDEEM_VOUCHER and DEPOSIT_START; the card and the
+    PIN step are for requests only.
+  - **C6 / C15 record and movements.** `movementBullet` is the single rendering
+    of a transaction (icons ✅ ❌ ⏳ ⌛, masked destination, reference under the
+    bullet); the chat list and the model share it; a pending pay-out is a note
+    after the list.
+  - **Shortfall pattern (standing shape, built by the Blu thread for airtime,
+    data and electricity on the voucher precedent):** name the shortfall, send
+    the top-up link in the same turn, park in a RESUME_* state, any next message
+    re-checks the balance and resumes the purchase; routes answer
+    `code: 'INSUFFICIENT_BALANCE', availableCents, requiredCents`. No parallel
+    generic helper was built; the three states are the pattern until a fourth
+    flow needs it.
+
 ## 14. Open questions for the founder
 
 1. Vercel plan (Hobby or Pro): decides whether the 10-minute reconcile cron is
