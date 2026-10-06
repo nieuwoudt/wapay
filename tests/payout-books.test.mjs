@@ -162,3 +162,61 @@ test('Mission Control renders the card from the route and compares against the s
   assert.match(page, /f\.key === 'OTT_PAYOUT'/, 'the float comes from the floats route, not a second supplier call');
   assert.match(page, /c\.id === 'held_total'|checks \|\| \[\]/);
 });
+
+// ---------------------------------------------------------------------------
+// Prepaid electricity parked at Blu (2026-10-06, BUGLOG #88 follow-up)
+// ---------------------------------------------------------------------------
+import { electricityBooks, ELECTRICITY_HOLD_PREFIX } from '../lib/payout-books.js';
+
+const erow = (id, status, meta = {}, at = ago(10 * 60000)) => ({ id, status, requestTs: at, metadata: { amountCents: 5000, ...meta } });
+const ehold = (id, status, amountCents = 5000) => ({ idemKey: `${ELECTRICITY_HOLD_PREFIX}${id}`, status, amountCents, createdAt: ago(10 * 60000) });
+
+test('electricity: a parked RECONCILE sale with its hold, a fresh EXECUTING one, and a settled SUCCESS pass every check', () => {
+  const b = electricityBooks({
+    rows: [erow('p1', 'RECONCILE', { indeterminateAt: ago(9 * 60000).toISOString(), lastReconcileAt: ago(3 * 60000).toISOString(), timeoutReason: 'SALE_TIMEOUT' }), erow('p2', 'EXECUTING', { executingAt: ago(30 * 1000).toISOString() }), erow('p3', 'SUCCESS'), erow('p4', 'FAILED')],
+    holds: [ehold('p1', 'ACTIVE'), ehold('p2', 'ACTIVE', 7000), ehold('p3', 'SETTLED'), ehold('p4', 'RELEASED')],
+    now: NOW,
+  });
+  assert.equal(b.allOk, true, JSON.stringify(b.checks.filter((c) => !c.ok)));
+  assert.deepEqual(b.anomalies, []);
+  assert.equal(b.parked, 2);
+  assert.equal(b.parkedHeldCents, 12000);
+  assert.equal(b.activeHolds, 2);
+  assert.equal(b.lastReconcileMinutesAgo, 3);
+  assert.equal(b.oldestParkedMinutes, 10);
+  assert.deepEqual(b.byStatus, { RECONCILE: 1, EXECUTING: 1, SUCCESS: 1, FAILED: 1 });
+});
+
+test('electricity: a parked sale without an active hold, a stale EXECUTING, a SUCCESS still holding, a FAILED never released and an orphan hold are all named', () => {
+  const b = electricityBooks({
+    rows: [erow('a', 'RECONCILE'), erow('b', 'EXECUTING', { executingAt: ago(5 * 60000).toISOString() }), erow('c', 'SUCCESS'), erow('d', 'FAILED')],
+    holds: [ehold('a', 'RELEASED'), ehold('b', 'ACTIVE'), ehold('c', 'ACTIVE'), ehold('d', 'SETTLED'), ehold('ghost', 'ACTIVE', 1234), { idemKey: 'payout-x-hold', status: 'ACTIVE', amountCents: 999 }],
+    now: NOW,
+  });
+  const byId = Object.fromEntries(b.checks.map((c) => [c.id, c]));
+  assert.equal(byId.elec_parked_held.ok, false);
+  assert.equal(byId.elec_no_stale.ok, false);
+  assert.equal(byId.elec_resolved_clean.ok, false);
+  assert.equal(byId.elec_resolved_clean.count, 2);
+  assert.equal(byId.elec_no_orphans.ok, false);
+  assert.equal(b.activeHolds, 3, 'the pay-out hold is not counted as electricity');
+  assert.ok(b.anomalies.some((x) => x.reference === 'ELEC-a' && /not parked/.test(x.problem)));
+  assert.ok(b.anomalies.some((x) => x.reference === 'ELEC-b' && /invocation died/.test(x.problem)));
+  assert.ok(b.anomalies.some((x) => x.reference === 'ELEC-c' && /still ACTIVE/.test(x.problem)));
+  assert.ok(b.anomalies.some((x) => x.reference === 'ELEC-d' && /did not come back/.test(x.problem)));
+  assert.ok(b.anomalies.some((x) => x.status === 'HOLD' && x.amountCents === 1234));
+  for (const a of b.anomalies) assert.deepEqual(Object.keys(a).sort(), ['ageMinutes', 'amountCents', 'feeCents', 'method', 'problem', 'reference', 'status']);
+  assert.ok(!JSON.stringify(b).includes('meter'), 'no meter field anywhere');
+});
+
+test('electricity: the route reads the Blu preview rows and the elec holds, reduces metadata to the markers, and the card renders the section', () => {
+  const src = read('../pages/api/admin/payout-reconciliation.js');
+  assert.match(src, /where: \{ provider: 'BLU', route: 'electricity-preview' \}/);
+  assert.match(src, /idemKey: \{ startsWith: ELECTRICITY_HOLD_PREFIX \}/);
+  assert.match(src, /indeterminateAt: m\.indeterminateAt \|\| null, executingAt: m\.executingAt \|\| null, lastReconcileAt: m\.lastReconcileAt \|\| null, timeoutReason: m\.timeoutReason \|\| null/);
+  assert.ok(!/meterNumber|meter:/.test(src), 'the meter never leaves the row');
+  assert.match(src, /electricity: electricityBooks\(/);
+  const page = read('../pages/admin/index.js');
+  assert.match(page, /Prepaid electricity parked at Blu/);
+  assert.match(page, /b\.electricity/);
+});

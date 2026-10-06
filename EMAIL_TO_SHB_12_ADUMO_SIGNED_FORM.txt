@@ -1,0 +1,31 @@
+To: Tiisetso Twala <tiisetso@shbfs.co.za>
+Cc: Stacey Halamandres Barbaglia <stacey@shbfs.co.za>
+Subject: Re: SHB REDUCED TRANSACTION RATES – signed Adumo application + FICA pack, and what we need to start live testing
+
+Hi Tiisetso,
+
+Thank you for the answers. Attached is the signed Adumo Online merchant application (signed 6 October 2026) and the FICA pack: CIPC CoR15.1A, SARS tax registration and tax number, Capitec business account confirmation, and proof of address for WeWork, 80 Strand Street.
+
+We have already integrated and tested end to end on Adumo's public staging environment (hosted page, signed response, per-transaction notification, Enterprise reporting), so the only thing between us and live testing is the production onboarding below.
+
+Please confirm or send the following:
+
+1. Acquiring rates in writing. The application form shows only the Adumo gateway fees (R0.80 + 0.10%) and says the acquiring fees are "provided by SHB Financial Services". Please confirm in writing, or send the SHB document that carries them: credit 2.35%, debit 1.35%, international 2.80%, all ex VAT, and the rate for American Express (not quoted anywhere yet). We do not go live on a rate we only have in an email.
+
+2. Chargeback and refund fees, and any rolling reserve or settlement hold, from SHB/Nedbank as you indicated. Settlement T+2 to our Capitec business account is understood.
+
+3. Our model, so that there is no misunderstanding on the "third party" declaration. WaPay sells digital prepaid products (airtime, data, electricity, vouchers), and it also offers "Please Pay Me": a WaPay user sends a payment link to their customer; the customer pays on the Adumo hosted page; the funds settle to WaPay's account and WaPay credits the user's WaPay wallet. Every transaction is processed on WaPay's own merchant facility and WaPay is the merchant of record and the party your customer sees; the receiver is a WaPay account holder, not a sub-merchant with their own facility. Please confirm that this is acceptable under the facility as applied for, or tell us what additional onboarding (payment facilitator / aggregator registration with Nedbank as sponsor) SHB requires. We would rather have this in writing now than discover it at a chargeback.
+
+4. Adumo production set-up:
+   a. MerchantUID, ApplicationUID and JWT secret for our live application, and access to the merchant web console (we need an OAuth client there for the reporting API).
+   b. Enable only these methods on the application: Visa, Mastercard, Apple Pay, Google Pay, Ozow Instant EFT and Capitec Pay. Leave American Express, Zapper, Mobicred and OTT off for now; we will switch them on once their pricing works for us.
+   c. Auto-settlement ON for the application (we credit the customer on the signed approval; the batch capture must follow without a separate settle call).
+   d. Notification URL: https://pleasepayme.co.za/api/webhooks/adumo (we also pass it per transaction).
+   e. No tokenisation, subscriptions or fraud module for now.
+
+5. Go-live test: once the credentials are in, we run one R5 payment per enabled method on the live application and reconcile each against the console, the reporting API and our ledger before we route any customer traffic. PayFast stays live until that is done.
+
+Kind regards,
+Nieuwoudt Gresse
+Director, WaPay (Pty) Ltd
+078 705 1175

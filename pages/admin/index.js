@@ -502,6 +502,36 @@ function PayoutBooks() {
           <span style={{ color: 'var(--crit)' }}>{a.problem}</span>
         </div>
       ))}
+      {b.electricity ? (
+        <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--grid)' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 4 }}>
+            Prepaid electricity parked at Blu: {b.electricity.parked}
+            {b.electricity.parked > 0 ? (
+              <span style={{ fontWeight: 400, color: 'var(--ink3)' }}>
+                {' · holding '}{R(b.electricity.parkedHeldCents)}
+                {b.electricity.oldestParkedMinutes != null ? ' · oldest ' + b.electricity.oldestParkedMinutes + 'm' : ''}
+                {b.electricity.lastReconcileMinutesAgo != null ? ' · last re-send ' + b.electricity.lastReconcileMinutesAgo + 'm ago' : ' · not re-sent yet'}
+                {b.electricity.stale > 0 ? ' ⚠️ ' + b.electricity.stale + ' stuck mid-sale' : ''}
+              </span>
+            ) : null}
+          </div>
+          <div className="ops" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+            {(b.electricity.checks || []).map((c) => (
+              <span key={c.id} className="pill" style={{ borderColor: c.ok === false ? 'var(--crit)' : undefined, color: c.ok === false ? 'var(--crit)' : 'var(--ink2)' }}>
+                <span className="dot" style={{ background: c.ok ? 'var(--good)' : 'var(--crit)' }} />
+                {c.label}{c.ok === false ? ` · ${c.count}` : ''}
+              </span>
+            ))}
+          </div>
+          {(b.electricity.anomalies || []).map((a, i) => (
+            <div key={a.reference + i} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 3fr', gap: 10, padding: '5px 0', borderBottom: '1px solid var(--grid)', fontSize: 12.5 }}>
+              <span style={{ color: 'var(--ink3)' }}>{a.reference}</span>
+              <span>{a.status} {a.amountCents != null ? R(a.amountCents) : ''}{a.ageMinutes != null ? ` · ${a.ageMinutes}m` : ''}</span>
+              <span style={{ color: 'var(--crit)' }}>{a.problem}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>
         Three records per pay-out must agree: the rail’s answer (provider row), the customer’s parked money (hold) and what settled (journal). “Owed to customers” is every wallet summed: the liability the floats and the bank account must cover. The rail cost is our fee table’s figure until OTT’s statement is reconciled. Set WAPAY_OTT_PAYOUT_FUNDED_CENTS to what was wired to the pay-out float to see drift.
       </p>

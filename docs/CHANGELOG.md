@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-10-06 (67) — Parked electricity sales join the Pay-out reconciliation card
+
+Follow-up to entry 66 (BUGLOG #88): a slow Blu vend now keeps its hold and is
+marked RECONCILE (or left EXECUTING when the function died), and the Blu
+thread asked for those rows to be visible where the parked pay-outs are, rather
+than editing the admin files itself. `lib/payout-books.js` gains
+`electricityBooks()`: a parked sale must be holding its money, an EXECUTING row
+older than the function lifetime is named as a dead invocation, a vended or
+failed sale must have settled or released its hold, and an active electricity
+hold without a parked sale is money nobody is chasing. The route reads the Blu
+`electricity-preview` rows and the `wapay-elec-exec-*` holds in the same batch
+and passes on only the four reconcile markers and the amount (the meter never
+leaves the row). The card shows "Prepaid electricity parked at Blu: N · holding
+R… · oldest · last re-send · stuck mid-sale", four checks and anomaly rows.
+The hold prefix and the 120 s stale constant mirror `lib/electricity-settlement.js`
+and are locked by a test that names it as the source. Files: `lib/payout-books.js`,
+`pages/api/admin/payout-reconciliation.js`, `pages/admin/index.js`,
+`tests/payout-books.test.mjs` (three new tests).
+
 ## 2026-10-06 (66) — Electricity survives a slow supplier: bounded calls, an honest timeout, and a reconciler that re-sends the same requestId
 
 Blu UAT thread. Probing the production electricity preview for Blu's

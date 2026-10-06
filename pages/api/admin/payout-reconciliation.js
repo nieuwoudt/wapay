@@ -18,7 +18,7 @@
 
 import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
-import { reconcilePayoutBooks } from '../../../lib/payout-books.js';
+import { reconcilePayoutBooks, electricityBooks, ELECTRICITY_HOLD_PREFIX } from '../../../lib/payout-books.js';
 
 export const config = { maxDuration: 25 };
 
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
   if (!requireAdmin(req).ok) return res.status(401).json({ error: 'UNAUTHORIZED' });
 
   try {
-    const [payoutRows, holds, entries, walletSums] = await Promise.all([
+    const [payoutRows, holds, entries, walletSums, elecRows, elecHolds] = await Promise.all([
       prisma.providerRequest.findMany({
         where: { route: 'ott-payout' },
         select: { idemKey: true, status: true, requestTs: true, metadata: true },
@@ -51,7 +51,28 @@ export default async function handler(req, res) {
         take: 5000,
       }),
       prisma.wallet.groupBy({ by: ['balanceType'], _sum: { availableCents: true, pendingCents: true }, _count: { _all: true } }),
+      // Prepaid electricity sales parked at Blu (2026-10-06): a slow vend keeps
+      // its hold and is marked RECONCILE or left EXECUTING; the card shows them
+      // beside the pay-outs so parked customer money has one place to be seen.
+      prisma.providerRequest.findMany({
+        where: { provider: 'BLU', route: 'electricity-preview' },
+        select: { id: true, status: true, requestTs: true, metadata: true },
+        orderBy: { requestTs: 'desc' },
+        take: 2000,
+      }),
+      prisma.hold.findMany({
+        where: { idemKey: { startsWith: ELECTRICITY_HOLD_PREFIX } },
+        select: { idemKey: true, status: true, amountCents: true, createdAt: true },
+        take: 5000,
+      }),
     ]);
+
+    // Electricity rows carry the meter number in their metadata; only the
+    // reconcile markers and the amount travel on.
+    const elec = elecRows.map((r) => {
+      const m = r.metadata && typeof r.metadata === 'object' ? r.metadata : {};
+      return { id: r.id, status: r.status, requestTs: r.requestTs, metadata: { amountCents: m.amountCents ?? m.totalCents ?? null, indeterminateAt: m.indeterminateAt || null, executingAt: m.executingAt || null, lastReconcileAt: m.lastReconcileAt || null, timeoutReason: m.timeoutReason || null } };
+    });
 
     // Only the fields the judge needs; the metadata is reduced to numbers,
     // the method and the reference before it leaves this handler.
@@ -62,7 +83,11 @@ export default async function handler(req, res) {
 
     const books = reconcilePayoutBooks({ payoutRows: rows, holds, entries, walletSums });
     res.setHeader('Cache-Control', 'private, no-store');
-    return res.status(200).json({ ...books, supplier: { fundedCents: fundedCents(), floatKey: 'OTT_PAYOUT' } });
+    return res.status(200).json({
+      ...books,
+      electricity: electricityBooks({ rows: elec, holds: elecHolds }),
+      supplier: { fundedCents: fundedCents(), floatKey: 'OTT_PAYOUT' },
+    });
   } catch (error) {
     console.log(JSON.stringify({ type: 'admin_payout_reconciliation_failed', error: String(error?.message || error).slice(0, 200), timestamp: new Date().toISOString() }));
     return res.status(500).json({ error: 'BOOKS_UNAVAILABLE' });
