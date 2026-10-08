@@ -321,6 +321,10 @@ async function run() {
       const h = await s.say('the Nedbank one');
       const i = await s.say('20');
       await s.say('cancel');
+      // Round 3 (production run 2026-10-08): "add money" inside the flow goes to the deposit flow, never the method menu.
+      await s.say('withdraw');
+      const j = await s.say('Add money');
+      await s.say('cancel');
       verdict('Compound answers: "50 and 2", "50 at ABSA", "the Nedbank one" are read as amount + method and confirmed in one line (founder 2026-10-04)', [
         { level: 'FAIL', ok: has(a.replyText, /Withdraw from WaPay/) && has(a.replyText, /Minimum withdrawals from R/), what: '"Can I withdraw 20" opens the menu (amount kept) and the menu says "Minimum withdrawals from"' },
         { level: 'FAIL', ok: has(b.replyText, /Got it: R50 by cash at an Absa ATM\. Is that right\? Reply \*YES\*/), what: '"50 and 2" is confirmed in one line, not "Reply 1, 2, 3 or 4"' },
@@ -330,6 +334,7 @@ async function run() {
         { level: 'FAIL', ok: has(g.replyText, /Got it: R50 by cash at an Absa ATM/) && !has(g.replyText, /Here is how it works/), what: 'the founder\'s exact sentence gets the confirmation, never the four-step explainer' },
         { level: 'FAIL', ok: has(h.replyText, /withdraw by Cash at a Nedbank ATM/), what: '"the Nedbank one" switches the method and asks the amount' },
         { level: 'FAIL', ok: has(i.replyText, /Nedbank ATM/) && has(i.replyText, /cellphone number/i), what: 'R20 by Nedbank goes to the cellphone step' },
+        { level: 'FAIL', ok: !has(j.replyText, /Reply \*1\* for PayShap/) && has(j.replyText, /deposit|add money|card|voucher|payment link/i), what: '"Add money" inside the withdraw flow is answered by the deposit side, never the method menu (BUGLOG #94)' },
       ], s);
     } finally {
       if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;

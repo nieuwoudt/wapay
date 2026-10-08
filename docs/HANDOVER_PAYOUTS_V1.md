@@ -156,3 +156,13 @@ failure e-mail: from "Noreply Payout", subject "Payout Failure on OTT-Payout for
 body carries Title, names, IdType RSAID, IdNumber, Nationality, DateOfBirth, Gender, Mobile,
 Amount, Error. Contacts: Keamo (commercial), Yaku (technical). Test float: R99,939.96 on
 2026-10-03 before today's three pay-outs.
+
+---
+
+## 8. Addendum 2026-10-08: production is live (for the main session at its next start)
+
+The founder switched the rail to OTT's production host on 2026-10-08 (Vercel: production base URL, WAPAYPOL, password, key, `WAPAY_PII_KEY`; portal: providers Add All, webhook URL; float R500) and ran three real withdrawals from his phone: PayShap R50 `WPC92BDD9664297F` (finalised by OTT's production webhook in 95 s), Nedbank cardless R20 `WP116F9A7A53A126` (paid at once), ABSA CashSend R50 `WPE0DCF1008AA961` (webhook in 61 s). All three paid; evidence in `docs/testing/payouts-production-test-2026-10-08.md` §D. Production provider codes: PayShap 66, CashSend 67, Nedbank 4, Standard Bank Instant Money 2 (unmapped), no FNB e-wallet. Round 3 of the founder's asks shipped the same day (BUGLOG #93 to #96, CHANGELOG 73): `parseSaveAnswer`, `wantsAnotherFlow` / `OTHER_FLOW` (exported for the agent's clarify step), saved-list answers, the shortfall hint, no repeat save offer, numbered collection steps, cash labels by cellphone, `nickname` column (migration applied).
+
+For the agent (your guard): on 2026-10-08 14:43 SAST a save-step sentence passed through and the agent answered "Done, Nieuwoudt. I have noted that these are your own bank details for withdrawals" while nothing was saved. The agent must never claim to have saved, noted or stored anything; the flow does the saving and says so itself.
+
+Open for the founder: the +R2 decision; pay-outs to other people (a product and compliance decision, parked); regenerate the production API key after the run and rotate it into Vercel; OTT's answers to email 11; the "not receiving a link" issue is his next test (pay links, outside this thread).

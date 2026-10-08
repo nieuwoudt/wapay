@@ -28,7 +28,10 @@ The test float moved from R99,939.96 to R99,857.27 over these three attempts (R8
 
 Still open from our earlier mail (email of 23 September to Keamo): the production price per provider, the FNB e-wallet price, and whether RTC can be enabled for us.
 
-Thank you both. Once we have 1 and 2 we can set the date for the first production payout.
+PRODUCTION
+We are switching our WhatsApp withdrawals to the production payout environment this week with the WAPAYPOL credentials, a funded float, the providers activated on the production merchant and the webhook URL above registered there. The first live payouts will be small amounts to our own accounts. If there is anything else on your checklist for a first production payout, or anything we should expect to differ from the test environment (status codes, webhook timing, SMS content), please tell us before we start.
+
+Thank you both.
 
 Regards
 Niev

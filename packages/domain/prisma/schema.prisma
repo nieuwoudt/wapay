@@ -59,7 +59,8 @@ model PayoutDestination {
   accountId    String
   account      Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   method       String // PAYSHAP | RTC | CASHSEND | NEDCASH | EWALLET (the method it was saved with)
-  label        String // "FNB account •••394", "Nedbank cash to •••175": the only thing the chat and the pack ever show
+  label        String // "FNB account •••394", "Cellphone •••175": the only thing the chat and the pack ever show
+  nickname     String? // the customer's own name for it ("mine", "mother"), shown as a prefix and matched on pick
   bankName     String?
   branchCode   String?
   accountEnc   String?

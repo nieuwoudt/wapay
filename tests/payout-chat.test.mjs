@@ -228,7 +228,7 @@ test('below the minimum: the message names the methods that DO allow the amount,
 // the menu wording, the full name once, collection instructions, the bank's own
 // notice, and remembered destinations with an explicit YES.
 // ---------------------------------------------------------------------------
-import { parseCompoundWithdraw, methodFromWords, METHOD_SYNONYMS, cleanFullName, pickSavedDestination } from '../lib/payout-chat.js';
+import { parseCompoundWithdraw, methodFromWords, METHOD_SYNONYMS, cleanFullName, pickSavedDestination, parseSaveAnswer, wantsAnotherFlow } from '../lib/payout-chat.js';
 import { payoutOutcomeMessage } from '../lib/payouts.js';
 
 const LIVE4 = [
@@ -342,7 +342,7 @@ test('save for next time: offered only after an accepted pay-out with typed deta
   };
   const data = { method: 'NEDCASH', amountCents: 2000, intentId: 'wa-a-b', options: OPTS4, balanceCents: 15200, recipient: { mobile: '0787051175', fullName: 'Nieuwoudt Gresse', id_number: '9001015009087' } };
   const done = await executeWithdraw({ account: founder, data, deps: d });
-  assert.equal(done.state, 'PAYOUT_SAVE'); assert.match(done.text, /Done\./); assert.match(done.text, /💾 Save these details for next time \(Nedbank cash to •••175 and your name and ID number ending 087\)\?/); assert.match(done.text, /stored encrypted/); assert.match(done.text, /"forget my bank details"/);
+  assert.equal(done.state, 'PAYOUT_SAVE'); assert.match(done.text, /Done\./); assert.match(done.text, /💾 Save these details for next time \(Cellphone •••175 and your name and ID number ending 087\)\? Reply \*YES\*, or give them a name like "mine" or "mother"/); assert.match(done.text, /stored encrypted/); assert.match(done.text, /"forget my bank details"/);
   assert.ok(!/9001015009087|0787051175/.test(done.text), 'nothing full in the offer');
   assert.equal(done.data.saveDestination, true); assert.equal(done.data.saveIdentity, true);
   const yes = await handleWithdrawReply({ account: founder, state: 'PAYOUT_SAVE', data: done.data, text: 'YES', deps: d });
@@ -411,4 +411,81 @@ test('static: the processor wires the two new states, passes a non-answer to the
   const schema = read('../packages/domain/prisma/schema.prisma');
   assert.match(schema, /model PayoutIdentity \{[\s\S]*onDelete: Cascade[\s\S]*@@map\("payout_identities"\)/); assert.match(schema, /model PayoutDestination \{[\s\S]*onDelete: Cascade[\s\S]*@@unique\(\[accountId, fingerprint\]\)[\s\S]*@@map\("payout_destinations"\)/);
   assert.ok(!/displayName/.test(read('../lib/payout-chat.js').match(/function recipientName[\s\S]*?\n\}/)[0].replace(/account\?\.displayName \|\| ''\)\.trim\(\)\.split\(\/\\s\+\/\)\[0\]/, '')), 'the display name is never used as a surname');
+});
+
+// ---------------------------------------------------------------------------
+// Round 3, from the first production run (2026-10-08): sentences at the save
+// step, nicknames, escapes to other flows, "you have it stored", the shortfall
+// hint, no second save offer, the Absa steps.
+// ---------------------------------------------------------------------------
+test('round 3: the save question reads sentences and nicknames; other-flow asks escape; names and numbers never do', () => {
+  assert.deepEqual(parseSaveAnswer('Yes please save my bank details as mine'), { kind: 'yes', nickname: 'Mine' });
+  assert.deepEqual(parseSaveAnswer('mother'), { kind: 'yes', nickname: 'Mother' });
+  assert.deepEqual(parseSaveAnswer('save it as my mom'), { kind: 'yes', nickname: 'My Mom' });
+  assert.deepEqual(parseSaveAnswer('Okay'), { kind: 'yes', nickname: null }); assert.deepEqual(parseSaveAnswer('YES'), { kind: 'yes', nickname: null });
+  assert.deepEqual(parseSaveAnswer('no thanks'), { kind: 'no', nickname: null }); assert.deepEqual(parseSaveAnswer("don't save it"), { kind: 'no', nickname: null });
+  assert.deepEqual(parseSaveAnswer('buy R20 airtime'), { kind: 'other', nickname: null }); assert.deepEqual(parseSaveAnswer('what is my balance'), { kind: 'other', nickname: null });
+  for (const t of ['Add money', 'I want to load money to WaPay', 'deposit', 'buy airtime', 'send R50 to 0831234567', 'please pay me R100', 'my balance', 'top up']) assert.ok(wantsAnotherFlow(t), t);
+  for (const t of ['FNB', '250655', '50', 'yes', 'the nedbank one', '50 at absa', 'Nieuwoudt Gresse', 'mine', '62012345678', '9001015009087']) assert.ok(!wantsAnotherFlow(t), `never: ${t}`);
+});
+
+test('round 3: "add money" inside any withdraw step passes through; "you have it stored" answers from the saved list; the menu names the shortfall', async () => {
+  envOff();
+  const d = { ...deps(4000), resolveProviders: async () => LIVE4 };
+  const menu = await startWithdraw({ account: founder, ask: { amountCents: 2000, method: null }, deps: d });
+  assert.match(menu.text, /💡 With R40 you cannot use PayShap or cash at an Absa ATM yet \(R58 and R68 with the fee\)\. Say \*add money\* to top up, or reply \*3\* or \*4\* for cash at a Nedbank ATM or an FNB eWallet\./);
+  for (const t of ['Add money', 'I want to load money to WaPay', 'buy airtime', 'my balance']) {
+    assert.deepEqual(await handleWithdrawReply({ account: founder, state: 'PAYOUT_METHOD', data: menu.data, text: t }), { state: null, passthrough: true }, t);
+  }
+  const amt = await handleWithdrawReply({ account: founder, state: 'PAYOUT_METHOD', data: menu.data, text: '3' });
+  assert.deepEqual(await handleWithdrawReply({ account: founder, state: 'PAYOUT_AMOUNT', data: amt.data, text: 'deposit' }), { state: null, passthrough: true });
+  // Nothing saved yet for a bank account: say so, mention what is saved, repeat the step.
+  const d2 = { ...deps(100000), resolveProviders: async () => LIVE4, listDestinations: async () => [{ id: 'c1', method: 'NEDCASH', family: 'CASH', label: 'Mine: Cellphone •••175', nickname: 'Mine', fingerprint: 'f'.repeat(64) }], getIdentity: async () => null };
+  const ps = await startWithdraw({ account: founder, ask: { amountCents: 5000, method: 'PAYSHAP' }, deps: d2 });
+  assert.equal(ps.state, 'PAYOUT_ACCOUNT');
+  for (const t of ['My bank account', 'You have it stored', 'Don’t you have any account info stored for payouts?']) {
+    const r = await handleWithdrawReply({ account: founder, state: ps.state, data: ps.data, text: t });
+    assert.equal(r.state, 'PAYOUT_ACCOUNT', t); assert.match(r.text, /Nothing is saved for a bank account yet\. I do have Mine: Cellphone •••175 saved for cash withdrawals\. Type the bank account number now/);
+  }
+  const typed = await handleWithdrawReply({ account: founder, state: ps.state, data: ps.data, text: 'my account number is 62012345678' });
+  assert.equal(typed.state, 'PAYOUT_BRANCH', 'a sentence carrying the number is the number');
+  // With a bank account saved, the same question lists it and "1" then works.
+  const d3 = { ...d2, listDestinations: async () => [{ id: 'b1', method: 'PAYSHAP', family: 'BANK', label: 'Mine: FNB account •••394', nickname: 'Mine', fingerprint: 'a'.repeat(64) }] };
+  const ps3 = await startWithdraw({ account: founder, ask: { amountCents: 5000, method: 'PAYSHAP' }, deps: d3 });
+  const ask3 = await handleWithdrawReply({ account: founder, state: ps3.state, data: ps3.data, text: 'you have it stored' });
+  assert.match(ask3.text, /Saved for this:\n\n1️⃣ Mine: FNB account •••394/);
+  const pick = await handleWithdrawReply({ account: founder, state: ps3.state, data: ask3.data, text: 'the mine one' });
+  assert.equal(pick.data.recipient.savedId, 'b1', 'picked by nickname');
+});
+
+test('round 3: a cellphone typed again that is already saved is a use, not a second save offer; YES with a nickname saves under it; the Absa steps name both SMSes', async () => {
+  envOff();
+  const { fingerprintOf } = await import('../lib/payout-beneficiaries.js');
+  const touched = []; const saved = [];
+  const fp = fingerprintOf('acc-f', 'NEDCASH', '0787051175');
+  const d = {
+    ...deps(15200), resolveProviders: async () => LIVE4, beneficiariesAvailable: () => true,
+    listDestinations: async () => [{ id: 'c1', method: 'NEDCASH', family: 'CASH', label: 'Cellphone •••175', nickname: null, fingerprint: fp }],
+    getIdentity: async () => ({ fullName: 'Nieuwoudt Gresse', idLast3: '083' }),
+    loadIdentity: async () => ({ fullName: 'Nieuwoudt Gresse', idNumber: '9001015009083' }),
+    touchDestination: async ({ id }) => { touched.push(id); },
+    saveDestination: async (a) => { saved.push(a); return { ok: true, label: `${a.nickname}: Cellphone •••175`, nickname: a.nickname }; },
+  };
+  const s0 = await startWithdraw({ account: founder, ask: { amountCents: 5000, method: 'CASHSEND' }, deps: d });
+  assert.equal(s0.state, 'PAYOUT_MOBILE'); assert.match(s0.text, /1️⃣ Cellphone •••175/);
+  const mine = await handleWithdrawReply({ account: founder, state: s0.state, data: s0.data, text: 'mine' });   // typed beside the list
+  assert.equal(mine.state, 'PAYOUT_CONFIRM');
+  const pin = await handleWithdrawReply({ account: founder, state: mine.state, data: mine.data, text: 'yes' });
+  const done = await executeWithdraw({ account: founder, data: pin.data, deps: d });
+  assert.equal(done.state, null, 'no second save offer for a number already saved'); assert.deepEqual(touched, ['c1'], 'counted as a use of the saved row');
+  assert.match(done.text, /two SMSes from Absa: one with a 10-digit reference and one with a 6-digit PIN/); assert.match(done.text, /1️⃣ Go to any Absa ATM/); assert.match(done.text, /4️⃣ Enter the 10-digit reference from the first SMS, then the 6-digit PIN from the second/); assert.match(done.text, /If anything is unclear, just ask and I will guide you step by step/);
+  // A new number: offered, and YES with a nickname saves under it.
+  const s1 = await startWithdraw({ account: founder, ask: { amountCents: 5000, method: 'CASHSEND' }, deps: d });
+  const other = await handleWithdrawReply({ account: founder, state: s1.state, data: s1.data, text: '083 111 2222' });
+  const pin1 = await handleWithdrawReply({ account: founder, state: other.state, data: other.data, text: 'yes' });
+  const done1 = await executeWithdraw({ account: founder, data: pin1.data, deps: d });
+  assert.equal(done1.state, 'PAYOUT_SAVE'); assert.match(done1.text, /Save these details for next time \(Cellphone •••222\)\? Reply \*YES\*, or give them a name like "mine" or "mother"/);
+  const yes = await handleWithdrawReply({ account: founder, state: 'PAYOUT_SAVE', data: done1.data, text: 'Yes please save it as my mother', deps: d });
+  assert.equal(saved.length, 1); assert.equal(saved[0].nickname, 'My Mother'); assert.equal(saved[0].recipient.mobile, '0831112222');
+  assert.match(yes.text, /✅ Saved as \*My Mother\*, encrypted: My Mother: Cellphone •••175/); assert.match(yes.text, /or say "my mother"/);
 });

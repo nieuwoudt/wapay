@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-10-08 (73) — Withdrawals live on OTT production: PayShap, Nedbank cardless and ABSA CashSend each paid with real money; round 3 of the founder's asks
+
+The founder switched the pay-out rail to OTT's production host (his Vercel
+and portal changes; `WAPAY_PII_KEY` set; float R500) and ran three
+withdrawals from his phone: PayShap R50 (finalised by OTT's production
+webhook in 95 s, the credit in his bank app), Nedbank cardless R20 (paid at
+once, SMS with the code) and ABSA CashSend R50 (webhook in 61 s, two Absa
+SMSes). Every hold settled, every journal line balanced, the float moved
+R143.02 for R120 of pay-outs. Saturday's sandbox PayShap was released against
+production ("no record"). Evidence:
+`docs/testing/payouts-production-test-2026-10-08.md`. Shipped against the
+run's transcript (BUGLOG #93 to #96): the save step reads sentences and
+nicknames (`parseSaveAnswer`; "Yes please save my bank details as mine"
+saves as *Mine*); "add money", "deposit", "buy airtime", "send …" and
+"balance" inside any withdraw step pass through to their own flows
+(`wantsAnotherFlow`); "you have it stored" / "my bank account" answer from the
+saved list; the menu names the methods the balance does not cover and that
+"add money" works; a number already saved is never offered for saving twice;
+the collection steps are numbered lists naming Absa's two SMSes and offering
+step-by-step help; cash destinations are labelled by cellphone; `nickname`
+column (migration `20261008_payout_destination_nickname`, applied). Parked
+as a product and compliance decision: pay-outs to someone other than the
+customer.
+
 ## 2026-10-06 (72) — Two review follow-ups on the agent side: a meter answer is not a voucher PIN, and the deposit receipt keeps the parked-purchase promise
 
 From the read-only review of the VAS fixes (the Blu thread's Opus pass): (c) the

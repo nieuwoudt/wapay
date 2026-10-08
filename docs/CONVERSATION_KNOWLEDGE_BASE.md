@@ -25,7 +25,11 @@ Topic id: `withdraw`. Detection: `\b(withdraw\w*|cash ?-?out|take (?:my |the )?m
 
 A once-off identity check applies before your first withdrawal. The money must go to an account or a person in your own name.
 
-Collecting cash: the SMS tells you exactly which codes to enter. At an Absa ATM choose CashSend, at a Nedbank ATM choose Cardless services, at an FNB ATM choose Cardless services then eWallet; enter the cellphone number that received the SMS and the codes, and take the cash. No card needed.
+Collecting cash: the SMS tells you exactly which codes to enter.
+1️⃣ At an Absa ATM choose *CashSend*; at a Nedbank ATM choose *Cardless services*; at an FNB ATM choose *Cardless services* then *eWallet*.
+2️⃣ Enter the cellphone number that received the SMS, then the codes from the SMS.
+3️⃣ Take your cash. No card needed.
+If anything is unclear, just ask and I will guide you step by step.
 ```
 
 When the switch is off:
@@ -99,11 +103,21 @@ Topic id: `data`. Detection: `\b(data|bundles?|gigs?|gb|mb|wifi)\b`
 Topic id: `deposit`. Detection: `\b(deposit\w*|add money|load money|top ?up (?:my )?(?:wallet|wapay|balance)|put money|fund my|how (?:do|can) i pay in)\b`
 
 ```text
-💳 Two ways to add money.
+💳 You can add money these ways:
+• *Card, Instant EFT, Apple Pay or Google Pay:* say "deposit R100" and I send a secure payment link (R10 to R3000; 4.2% + R2.30 on top, rounded up: R20 costs R24, R100 costs R107).
+• *Cash at a till:* ask any major retailer for a *Blu Voucher* for the amount, then send me the voucher code (the voucher network keeps 6%, so R100 adds R94).
+• *OTT voucher:* already have one? Send me its 16-digit PIN and I load the value into your balance.
 
-*Card, Instant EFT, Apple Pay or Google Pay:* say "deposit R100" (R10 to R3000) and I send you a secure payment link. The fee is 4.2% + R2.30 on top, rounded up to the next rand (R20 costs R24, R100 costs R107, R500 costs R524); the full amount lands in your balance the moment the payment clears and I message you.
+*By card or Instant EFT, step by step:*
+1. Say "deposit R100" (or any amount from R10 to R3000).
+2. Tap the secure payment link I send you.
+3. Pay with your card, Instant EFT, Apple Pay or Google Pay.
+4. Come back here; I message you the moment the payment clears.
+5. The full amount is in your balance, ready to use.
 
-*Cash at a till:* ask any major retailer for a Blu Voucher for the amount you want, then send me the voucher code. The voucher network keeps 6%, so a R100 voucher adds R94.
+*With cash:* buy a Blu Voucher at the till, send me the code, and the value lands in your balance.
+
+Just come back here if you have any questions. If you get stuck on any step, just ask me and I will guide you.
 ```
 
 ### Getting paid (please pay me links)

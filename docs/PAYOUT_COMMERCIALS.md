@@ -18,7 +18,9 @@ OTT quotes every rail cost **excluding VAT** and WaPay is **not VAT-registered**
 | Reversals (Nedbank, ABSA) | | 1.6 | R10.00 each | | R11.50 | not modelled in the ledger (see §7) |
 | VAS products | | 1.5 | 1% commission + 0.3% switching | | | not a pay-out |
 
-Two facts from today's live run that the addendum does not explain:
+**Production observation, 2026-10-08:** the first three live pay-outs (PayShap R50, Nedbank cardless R20, ABSA CashSend R50) moved the production float from R500.00 to R356.98: R143.02 for R120.00 of pay-outs, so OTT deducted **R23.02** in fees, against this document's R26.05 inc VAT and R22.63 ex VAT. The float is debited close to the ex-VAT rates; VAT is presumably invoiced separately, which is why the ledger must keep booking the inc-VAT cost. The per-transaction split (and the R0.39 difference to the ex-VAT sum) is a question for OTT's statement.
+
+Two facts from the sandbox run of 2026-10-04 that the addendum does not explain:
 
 - The sandbox float moved from R99,939.96 (2026-10-03) to R99,857.27 (2026-10-04 07:37 UTC) across three attempts worth R70 of pay-outs (Nedbank R20 paid, PayShap R50 still pending at OTT, CashSend R50 failed at the provider). That is R82.69 out for R70 of value: R12.69 of deductions that match no combination of the addendum rates exactly (the nearest is R9.96 + R2.50 + 0.3% of R70 = R12.67). Whether a failed CashSend is charged, whether a pending PayShap is debited at creation, and whether VAT is deducted from the float are questions for OTT's statement (email 11).
 - The "0.3% switching on the total value of payments completed per month" is a monthly aggregate, not a per-transaction line. The ledger accrues it per transaction at the same rate so every pay-out's margin is honest; the monthly invoice will match only on completed payments, so a reversed or failed pay-out that OTT still charges switching on would show up as a small difference.

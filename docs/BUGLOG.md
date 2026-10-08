@@ -4,6 +4,33 @@
 
 ---
 
+## 96. A cellphone typed beside the saved list was offered for saving again, and a cash destination carried a bank's name
+
+- **Symptom (production run, 2026-10-08 15:12 SAST):** the Absa withdrawal offered "1️⃣ Nedbank cash to •••175"; the founder typed "mine" (the same number); after the pay-out the chat asked to save it again, then upserted the same row and renamed it "Absa cash to •••175".
+- **Root cause:** the save offer tested only "was a saved row picked", not "is this number already saved"; and the cash label was built from the method, although one cellphone serves all three cash methods (one row per number by design).
+- **Fix:** `listPayoutDestinations` returns the row's fingerprint; `executeWithdraw` matches a typed number against it and counts the pay-out as a use of that row (no offer); cash labels read "Cellphone •••175"; a nickname column (`20261008_payout_destination_nickname`) carries the customer's own name as a prefix ("Mine: Cellphone •••175").
+- **Guard:** `tests/payout-chat.test.mjs` (no second offer for a saved number; the touch), `tests/payout-beneficiaries.test.mjs` (labels, nicknames).
+
+## 95. The method menu said "(needs R58 with the fee)" and nothing about what to do; the Absa steps were prose and never mentioned the second SMS
+
+- **Symptom (production run, 2026-10-08):** with R40 the menu listed two methods the balance could not cover; the founder: "personalise this based on the balance, but still give the option, and say you can add more money". Absa then sent two SMSes (a 10-digit reference and a 6-digit PIN) and the steps said "the codes".
+- **Fix:** the menu ends with one plain line naming the methods the balance does not cover, the amount each needs, "say add money", and the numbers of the methods it does cover; `lib/payout-collection.js` writes every method's steps as a numbered list, names Absa's two SMSes, and ends "If anything is unclear, just ask and I will guide you step by step".
+- **Guard:** `tests/payout-chat.test.mjs` (the hint line; the Absa steps).
+
+## 94. "Add money" inside the withdraw flow, suggested by the flow's own reply, was answered with the method menu
+
+- **Symptom (production run, 2026-10-08 14:48 SAST):** "With R40 you cannot use PayShap yet … Reply YES to use that, or say 'add money'" → "Add money" → "Reply 1 for PayShap, 2 for …" → "I want to load money to WaPay" → the same menu. The founder: "it should never get stuck".
+- **Root cause:** every reply inside a PAYOUT_* state went to the withdraw state machine; the processor's conversational escape never ran for it, and the machine had no notion of another flow.
+- **Fix:** `wantsAnotherFlow` (`OTHER_FLOW`, exported for the agent) recognises deposit, top-up, buy, send, pay-me, balance and history asks; from any withdraw step except the identity gate the reply is a passthrough: the state is cleared and the processor answers the message as new, so "add money" opens the deposit flow.
+- **Guard:** `tests/payout-chat.test.mjs` (the founder's two sentences pass through; amounts, bank names and names do not); harness scenario 6c.
+
+## 93. "Yes please save my bank details as mine" was not a yes, and the agent then claimed it had noted the details
+
+- **Symptom (production run, 2026-10-08 14:43 SAST, right after the first live PayShap):** the save question accepted a bare YES only; the founder's sentence passed through to the agent, which answered "Done, Nieuwoudt. I have noted that these are your own bank details for withdrawals" while nothing was saved. The next PayShap asked for the account number again, and "My bank account" / "You have it stored" / "Don't you have any account info stored for payouts?" got "Please type the account number only" and the generic aside.
+- **Root cause:** a yes-only matcher where a person answers in a sentence; no reading of the saved list at the destination steps; and an agent reply that asserted an action it cannot perform (reported to the main session for the agent's guard).
+- **Fix:** `parseSaveAnswer` (pure): a sentence that starts with yes or carries save/keep/remember is a yes, "as mine" / "call it mother" / a bare "mother" is a nickname, a negation is a no, anything else passes through; the saved list answers "you have it stored" and "my bank account" at the account and cellphone steps (`SAVED_ASK`, `savedAnswer`) and the same question as an aside anywhere in the flow.
+- **Guard:** `tests/payout-chat.test.mjs` (the founder's exact sentences); harness 6c.
+
 ## 92. The founder's own number never reached the VAS fixes, the electricity fee was charged unseen, and a silent R50 had survived
 
 - **Symptom (read-only review of BUGLOG #90, 2026-10-06 evening):** the founder's number is on the Pay agent pilot list, so his messages are dispatched by the agent's proposal handler, where `BUY_DATA` always listed bundles and `BUY_ELECTRICITY` discarded the meter it had been given and asked for it: the two screenshots (13 and 15) would have repeated on his next test although the regex path was fixed. Also found: the R1 electricity fee was held and charged but never shown at the confirm or the PIN; `ELECTRICITY_CONFIRM`'s expiry branch still fell back to R50 (`amountCents || 5000`, the shape BUGLOG #79 removed elsewhere); `ELECTRICITY_AMOUNT` asked for a meter it already held; "buy electricity for meter 000001020001" parsed the meter as R1,020,001; "50MB" silently chose a WhatsApp-only bundle and the confirm hid which; a shortfall at the PIN step was still a dead end; the shortfall copy was clumsy ("needs R100, which is R60 more", "finish the the"); a greeting while the top-up was still in flight dropped the park.
