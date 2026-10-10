@@ -34,38 +34,42 @@ const live = [
   { method: 'EWALLET', providerCode: '114', providerName: 'FNB eWallet', minCents: 2000, maxCents: 300000, requiredFields: ['firstname', 'surname', 'id_number', 'mobile'] },
 ];
 
-test('below the minimum: the flow offers the one method that carries this amount as a yes or no, and YES switches without a menu', async () => {
+// 2026-10-10: every cash method now starts at R50 (ATM notes, BUGLOG #98), so the
+// gap these tests were written for (R30 by Nedbank below Absa's R50) no longer exists.
+// The same offer mechanism carries a method MAXIMUM: Absa capped at R100 here.
+const capped = live.map((p) => (p.method === 'CASHSEND' ? { ...p, maxCents: 10000 } : p));
+
+test('over the maximum: the flow offers the one method that carries this amount as a yes or no, and YES switches without a menu', async () => {
   env();
-  const d = { ...deps(10000), resolveProviders: async () => live };
+  const d = { ...deps(50000), resolveProviders: async () => capped };
   const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
   const absa = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
   assert.equal(absa.state, 'PAYOUT_AMOUNT');
 
-  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '30' });
+  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '150' });
   assert.equal(low.state, 'PAYOUT_AMOUNT');
-  assert.match(low.text, /^R30 is below the R50 minimum for cash at an Absa ATM, but /);
-  assert.match(low.text, /takes R30 for an R\d+(\.\d\d)? fee, so R\d+(\.\d\d)? leaves your balance\./);
+  assert.match(low.text, /^R150 is above the R100 maximum for one withdrawal by cash at an Absa ATM, but /);
+  assert.match(low.text, /takes R150 for an R\d+(\.\d\d)? fee, so R\d+(\.\d\d)? leaves your balance\./);
   assert.doesNotMatch(low.text, /Reply \*back\*/, 'never sends the customer back to the menu');
   assert.doesNotMatch(low.text, /choose \*3\*/);
-  assert.ok(['NEDCASH', 'EWALLET'].includes(low.data.offerMethod), 'a method whose minimum allows R30');
-  assert.equal(low.data.offerAmountCents, 3000);
+  assert.ok(['NEDCASH', 'EWALLET'].includes(low.data.offerMethod), 'a cash method whose maximum allows R150');
+  assert.equal(low.data.offerAmountCents, 15000);
 
   const yes = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: low.data, text: 'YES' });
   assert.equal(yes.data.method, low.data.offerMethod, 'YES switches to the offered method');
-  assert.equal(yes.data.amountCents, 3000, 'and keeps the amount the customer typed');
+  assert.equal(yes.data.amountCents, 15000, 'and keeps the amount the customer typed');
   assert.notEqual(yes.state, 'PAYOUT_AMOUNT', 'the flow moves on to the recipient step');
   assert.equal(yes.data.offerMethod, null, 'the offer is consumed');
 });
 
 test('the offered method is the cheapest one that can carry the amount, never merely the next in the list', async () => {
   env();
-  const pricey = live.map((p) => (p.method === 'NEDCASH' ? { ...p, minCents: 2000 } : p));
-  const d = { ...deps(50000), resolveProviders: async () => pricey };
+  const d = { ...deps(50000), resolveProviders: async () => capped };
   const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
   const absa = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
-  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '25' });
+  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '150' });
   const { quotePayout } = await import('../lib/payouts.js');
-  const fees = ['NEDCASH', 'EWALLET'].map((m) => [m, quotePayout({ method: m, amountCents: 2500, minCents: 2000, maxCents: 300000 }).feeCents]);
+  const fees = ['NEDCASH', 'EWALLET'].map((m) => [m, quotePayout({ method: m, amountCents: 15000, minCents: 5000, maxCents: 300000 }).feeCents]);
   const cheapest = fees.sort((a, b) => a[1] - b[1])[0][0];
   assert.equal(low.data.offerMethod, cheapest, `offers the cheapest (${JSON.stringify(fees)})`);
 });
@@ -176,7 +180,8 @@ test('A1: the method step names one method the balance covers and offers it, and
   assert.match(absa.text, / starts at R\d+(\.\d\d)? and you can take up to R\d+(\.\d\d)? today\./);
   assert.match(absa.text, /Reply \*YES\* to use that, or say "add money"\.$/);
   assert.doesNotMatch(absa.text, /Reply \*1\*|\*3\*|\*4\*/, 'no menu numbers');
-  assert.ok(['NEDCASH', 'EWALLET'].includes(absa.data.offerMethod));
+  assert.equal(absa.data.offerMethod, 'PAYSHAP', 'with the R50 cash floor only PayShap fits R66');
+  assert.match(absa.text, /That one pays into a bank account, not cash\./, 'the crossover is said');
   const yes = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: absa.data, text: 'yes' });
   assert.equal(yes.state, 'PAYOUT_AMOUNT');
   assert.equal(yes.data.method, absa.data.offerMethod);
@@ -185,26 +190,26 @@ test('A1: the method step names one method the balance covers and offers it, and
 
 test('A2: a cash customer is offered cash, and a crossover to a bank rail says so', async () => {
   env();
-  const d = { ...deps(21000), resolveProviders: async () => live };
+  const d = { ...deps(50000), resolveProviders: async () => capped };
   const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
   const absa = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
-  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '30' });
+  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '150' });
   assert.ok(['NEDCASH', 'EWALLET'].includes(low.data.offerMethod), 'cash stays cash even when PayShap is cheaper');
   assert.doesNotMatch(low.text, /pays into a bank account/);
-  const cashOnlyGone = live.filter((p) => ['PAYSHAP', 'CASHSEND'].includes(p.method));
-  const d2 = { ...deps(21000), resolveProviders: async () => cashOnlyGone };
+  const cashOnlyGone = capped.filter((p) => ['PAYSHAP', 'CASHSEND'].includes(p.method));
+  const d2 = { ...deps(50000), resolveProviders: async () => cashOnlyGone };
   const m2 = await startWithdraw({ account: verified, ask: {}, deps: d2 });
   const absa2 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: m2.data, text: '2' });
-  const low2 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa2.data, text: '30' });
-  if (low2.data.offerMethod === 'PAYSHAP') assert.match(low2.text, /That one pays into a bank account, not cash\./);
+  const low2 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa2.data, text: '150' });
+  assert.equal(low2.data.offerMethod, 'PAYSHAP'); assert.match(low2.text, /That one pays into a bank account, not cash\./);
 });
 
 test('A3: "no" to an offer keeps the withdrawal alive; "cancel" still cancels', async () => {
   env();
-  const d = { ...deps(10000), resolveProviders: async () => live };
+  const d = { ...deps(50000), resolveProviders: async () => capped };
   const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
   const absa = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '2' });
-  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '30' });
+  const low = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: '150' });
   assert.ok(low.data.offerMethod);
   const no = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: low.data, text: 'no' });
   assert.notEqual(no.cancelled, true, 'the withdrawal survives a "no"');
@@ -221,7 +226,7 @@ test('A4: the ceiling is offered as a yes or no and priced at the ceiling, not a
   const d = { ...deps(6800), resolveProviders: async () => onlyAbsa };
   const start = await startWithdraw({ account: verified, ask: { method: 'CASHSEND' }, deps: d });
   assert.equal(start.state, 'PAYOUT_AMOUNT');
-  const over = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: start.data, text: '60' });
+  const over = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: start.data, text: '100' });
   assert.equal(over.state, 'PAYOUT_AMOUNT');
   assert.match(over.text, /^With the R\d+(\.\d\d)? fee, R\d+(\.\d\d)? is the most you can take by cash at an Absa ATM right now \(R\d+(\.\d\d)? to you, R\d+(\.\d\d)? off your balance\)\. Withdraw R\d+(\.\d\d)?\? Reply \*YES\*, or type a smaller amount\.$/);
   assert.equal(over.data.offerMethod, null);

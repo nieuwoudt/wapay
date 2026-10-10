@@ -173,7 +173,7 @@ Topic id: `business`. Detection: `\b(business account|for my (?:shop|business|sp
 
 🙏 Please-pay-me links: the person paying never pays a fee. You pay nothing on requests under R50; above that 4.2% + R2.30 comes off what you receive (a R100 request pays you R93.50).
 
-🏧 Withdrawals: R8 to your bank account by PayShap in minutes, R10 for a bank transfer, and cash at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet for R18 up to R700, R23 up to R1500, R30 above that. Say "withdraw R200" to start.
+🏧 Withdrawals: R8 to your bank account by PayShap, R10 for a bank transfer, and cash at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet for R18 up to R700, R23 up to R1500, R30 above that. Say "withdraw R200" to start.
 
 📱 Airtime, data and electricity: no WaPay fee, you pay the product price.
 

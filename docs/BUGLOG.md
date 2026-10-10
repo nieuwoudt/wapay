@@ -4,6 +4,19 @@
 
 ---
 
+## 98. A R20 cardless withdrawal could not be collected: ATMs do not hold R20 notes
+
+- **Symptom (founder's ATM test, 2026-10-09):** the R20 Nedbank cardless withdrawal of 8 October could not be dispensed at the ATM; a R100 one the next morning (`WPE54D6CADA409EC`) could, and Absa paid R50. The product minimum was R20 for Nedbank and FNB because the rails accept R20; the ATM does not.
+- **Fix:** cash methods (Nedbank cardless, ABSA CashSend, FNB eWallet) have a R50 minimum (`CASH_MIN_CENTS`, in `methodLimits` for every caller) and the chat takes multiples of R50 (`CASH_STEP_CENTS`): the amount prompt says so, a R70 gets "ATMs give R50 and R100 notes, so … multiples of R50" with the nearest valid amount offered, the affordable ceiling is the largest multiple that fits, and a non-multiple is never offered as the alternative method. PayShap takes any amount. Both are env-tunable (`WAPAY_CASH_MIN_CENTS`, `WAPAY_CASH_STEP_CENTS`).
+- **Guard:** `tests/payout-chat.test.mjs`, `tests/payout-affordability.test.mjs` (replayed with the R50 floor); harness 6b withdraws R50 by eWallet.
+
+## 97. A saved cellphone still showed "Absa cash to •••175", and "Yes" to a list of one saved number was read as a cellphone number
+
+- **Symptom (founder, 2026-10-09 07:49 SAST, on build 8fa03cf):** "Withdraw 100 Nedbank" offered "1️⃣ Absa cash to •••175" although round 3 had changed cash labels to "Cellphone •••175"; "Yes" was answered with "That does not look like a South African cellphone number".
+- **Root cause:** the label was a string stored at save time and only rewritten on the next save, so every row saved before the wording change kept the old words; and the destination steps understood a number, a nickname or "mine", not a plain yes to a single option.
+- **Fix:** `displayLabelOf` builds the label from the row's masked fields on every read (`listPayoutDestinations`, `loadPayoutDestinationSecret`), so a wording change applies to every row at once; "yes", "that one", "the saved one", "same" pick the only saved choice, "the first one" picks the first (`pickSavedDestination`).
+- **Guard:** `tests/payout-beneficiaries.test.mjs` (a row with a stale stored label lists as "Cellphone •••175"), `tests/payout-chat.test.mjs` (yes to one choice).
+
 ## 96. A cellphone typed beside the saved list was offered for saving again, and a cash destination carried a bank's name
 
 - **Symptom (production run, 2026-10-08 15:12 SAST):** the Absa withdrawal offered "1️⃣ Nedbank cash to •••175"; the founder typed "mine" (the same number); after the pay-out the chat asked to save it again, then upserted the same row and renamed it "Absa cash to •••175".

@@ -99,11 +99,11 @@ test('requestPayout on REQUEST_INVALID: released, money back, FAILED row keeps t
   const ledger = {
     async ensureWallet() {}, async postEntry(e) { calls.push(e.source); const amt = e.postings[0].debitCents; if (e.source === 'BALANCE_UPGRADE') { spend -= amt; cash += amt; } if (e.source === 'BALANCE_DOWNGRADE') { cash -= amt; spend += amt; } return {}; },
     async reserveHold({ idemKey, amountCents }) { calls.push('reserveHold'); holds.set(idemKey, 'ACTIVE'); cash -= amountCents; return {}; },
-    async settleHold() { calls.push('settleHold'); }, async releaseHold({ idemKey }) { calls.push('releaseHold'); holds.set(idemKey, 'RELEASED'); cash += 2000 + 1800; },
+    async settleHold() { calls.push('settleHold'); }, async releaseHold({ idemKey }) { calls.push('releaseHold'); holds.set(idemKey, 'RELEASED'); cash += 5000 + 1800; },
   };
   const c = { async performPayout() { return { httpStatus: 400, status: null, outcome: 'REQUEST_INVALID', settlement: 'RELEASE', retriable: false, paymentReference: null, body: problem400, errors: ['purchase', '$.recipient.bank_id'] }; } };
   const providers = [{ method: 'NEDCASH', providerCode: '4', providerName: 'Nedbank Cardless Withdrawal', requiredFields: ['firstname', 'surname', 'id_number', 'mobile'] }];
-  const r = await requestPayout({ prisma, ledger, client: c, account: { id: 'acc-1', profile: {} }, intentId: 'intent-9001', method: 'NEDCASH', amountCents: 2000, recipient: { firstname: 'A', surname: 'B', id_number: '9001185079083', mobile: '0787051175' }, providers });
+  const r = await requestPayout({ prisma, ledger, client: c, account: { id: 'acc-1', profile: {} }, intentId: 'intent-9001', method: 'NEDCASH', amountCents: 5000, recipient: { firstname: 'A', surname: 'B', id_number: '9001185079083', mobile: '0787051175' }, providers });
   assert.equal(r.ok, false); assert.equal(r.error, 'REQUEST_INVALID');
   assert.ok(calls.includes('releaseHold') && calls.includes('BALANCE_DOWNGRADE'), 'released and moved back');
   assert.equal(spend, 10000, 'the customer is whole'); assert.equal(cash, 0);

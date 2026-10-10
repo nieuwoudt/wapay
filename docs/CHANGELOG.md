@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-10-10 (74) — Cash is collected in R50 notes: R50 minimum and multiples of R50 for ATM cash; saved labels computed on read; "Yes" picks the one saved number
+
+From the founder's ATM test of 9 October (a R20 cardless withdrawal could
+not be dispensed, R100 could): cash methods now carry a R50 minimum in
+`methodLimits` and the chat takes multiples of R50, with the nearest valid
+amount offered and the affordable ceiling stepped (BUGLOG #98). Saved
+destination labels are built from the row's masked fields on every read, so
+the wording change of round 3 reaches rows saved before it (BUGLOG #97), and
+"yes" / "that one" to a list of one saved number picks it. Decision recorded
+(founder, 10 October): no pay-outs to other people; the WaPay way is to send
+them money and let them withdraw with their own ID. The founder's saved
+details were cleared at his request for a fresh memory test.
+
 ## 2026-10-08 (73) — Withdrawals live on OTT production: PayShap, Nedbank cardless and ABSA CashSend each paid with real money; round 3 of the founder's asks
 
 The founder switched the pay-out rail to OTT's production host (his Vercel

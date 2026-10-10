@@ -158,7 +158,7 @@ test('live providers drive the menu, the limits and the ID step (OTT test mercha
 
 test('a question in the middle of the withdraw flow is answered, then the step repeats (founder review 2026-09-15)', async () => {
   env();
-  const d = deps(6600); // the founder's R66
+  const d = deps(10000); // R100 (cash needs R68 since the R50 floor of 2026-10-10)
   const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
   const q1 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: 'If I send someone money, can they withdraw it?' });
   assert.equal(q1.state, 'PAYOUT_METHOD', 'the flow is parked, not advanced'); assert.match(q1.text, /instantly and it is free/); assert.match(q1.text, /Back to your withdrawal/); assert.match(q1.text, /1️⃣ \*PayShap\*/);
@@ -168,8 +168,10 @@ test('a question in the middle of the withdraw flow is answered, then the step r
   assert.equal(pick.data.method, 'CASHSEND', 'plain input still works');
   const q3 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: pick.data, text: 'what is the fee?' });
   assert.equal(q3.state, 'PAYOUT_AMOUNT'); assert.match(q3.text, /R18 up to R700/); assert.match(q3.text, /How much would you like to withdraw/);
-  const amt = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: pick.data, text: '66' });
-  assert.equal(amt.state, 'PAYOUT_AMOUNT'); assert.match(amt.text, /is the most you can take by cash at an Absa ATM right now/, 'numbers are still amounts, and the ceiling is offered');
+  const amt = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: pick.data, text: '100' });
+  assert.equal(amt.state, 'PAYOUT_AMOUNT'); assert.match(amt.text, /R50 is the most you can take by cash at an Absa ATM right now/, 'numbers are still amounts, and the ceiling is offered as a multiple of R50');
+  const odd = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: pick.data, text: '70' });
+  assert.match(odd.text, /R70 cannot be paid out as cash: ATMs give R50 and R100 notes, so cash at an Absa ATM takes multiples of R50 \(R50, R100, R150 and so on\)\. Reply \*YES\* for R50/, 'ATM notes rule (BUGLOG #98)'); assert.equal(odd.data.offerAmountCents, 5000);
 });
 
 test('FNB eWallet and Nedbank cardless are methods (founder ask 2026-09-15): menu, name matching, mobile + ID steps', async () => {
@@ -187,15 +189,15 @@ test('FNB eWallet and Nedbank cardless are methods (founder ask 2026-09-15): men
   assert.equal(parseMethodChoice('fnb ewallet', menu.data.options), 'EWALLET'); assert.equal(parseMethodChoice('nedbank', menu.data.options), 'NEDCASH'); assert.equal(parseMethodChoice('4', menu.data.options), 'EWALLET');
   assert.equal(parseMethodChoice('cash at the atm', ['PAYSHAP', 'EWALLET']), 'EWALLET', '"cash" picks the first cash method on offer');
   const ew = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '4' });
-  assert.equal(ew.state, 'PAYOUT_AMOUNT'); assert.match(ew.text, /Between R20 and R9\d\d\. You have R1000 available/, 'eWallet has no provider minimum; the ceiling is what R1000 covers after the fee');
-  const amt = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ew.data, text: '20' });
+  assert.equal(ew.state, 'PAYOUT_AMOUNT'); assert.match(ew.text, /Between R50 and R950, in multiples of R50 \(ATMs pay out R50 and R100 notes\)\. You have R1000 available/, 'cash: R50 floor and R50 steps (BUGLOG #98); the ceiling is what R1000 covers after the fee');
+  const amt = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ew.data, text: '50' });
   assert.equal(amt.state, 'PAYOUT_MOBILE'); assert.match(amt.text, /FNB eWallet/);
   const mob = await handleWithdrawReply({ account: verified, state: 'PAYOUT_MOBILE', data: amt.data, text: 'mine' });
   assert.equal(mob.state, 'PAYOUT_ID', 'the provider requires the ID number');
   const conf = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ID', data: mob.data, text: '9001015009087' });
-  assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.match(conf.text, /Withdraw \*R20\* to an FNB eWallet on 0731234567/); assert.equal(conf.data.feeCents, 1800);
+  assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.match(conf.text, /Withdraw \*R50\* to an FNB eWallet on 0731234567/); assert.equal(conf.data.feeCents, 1800);
   const ned = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '3' });
-  assert.equal(ned.data.method, 'NEDCASH'); assert.match(ned.text, /Between R20 and R9\d\d\./);
+  assert.equal(ned.data.method, 'NEDCASH'); assert.match(ned.text, /Between R50 and R950, in multiples of R50/);
 });
 
 test('below the minimum: the message names the methods that DO allow the amount, and "menu" changes method (founder 2026-09-15)', async () => {
@@ -214,13 +216,14 @@ test('below the minimum: the message names the methods that DO allow the amount,
   // 2026-09-18: the flow no longer lists menu numbers here. It names the one
   // method that carries R30 and offers it as a yes/no (founder: "it already
   // knows which option to choose"). 'back' still returns to the full menu.
-  assert.match(absa.text, /R30 is below the R50 minimum for cash at an Absa ATM, but /);
-  assert.match(absa.text, /takes R30 for an R\d+(\.\d\d)? fee, so R\d+(\.\d\d)? leaves your balance\. Reply \*YES\* to switch to that, or type another amount\.$/);
-  assert.ok(['NEDCASH', 'EWALLET'].includes(absa.data.offerMethod));
+  // Since the R50 cash floor (BUGLOG #98) no method takes R30: the minimum is named and the amount asked again.
+  assert.match(absa.text, /^R30 is below the R50 minimum for cash at an Absa ATM\. Please type an amount of R50 or more, or "cancel"\.$/);
   const back = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: absa.data, text: 'back' });
   assert.equal(back.state, 'PAYOUT_METHOD'); assert.match(back.text, /Withdraw from WaPay/);
   const ned = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: back.data, text: '3' });
-  assert.equal(ned.state, 'PAYOUT_MOBILE', 'the R30 given up front is kept and is valid for Nedbank');
+  assert.equal(ned.state, 'PAYOUT_AMOUNT', 'the R30 given up front is kept but is below every cash minimum'); assert.match(ned.text, /R30 is below the R50 minimum for cash at a Nedbank ATM/);
+  const fifty = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: ned.data, text: '50' });
+  assert.equal(fifty.state, 'PAYOUT_MOBILE');
 });
 
 // ---------------------------------------------------------------------------
@@ -292,19 +295,19 @@ test('"Can I withdraw 20" then "50 and 2": one confirming line, YES carries on; 
   const go = await handleWithdrawReply({ account: founder, state: sw.state, data: sw.data, text: 'ja' });
   assert.equal(go.state, 'PAYOUT_MOBILE'); assert.equal(go.data.method, 'CASHSEND');
   const ned = await handleWithdrawReply({ account: founder, state: 'PAYOUT_AMOUNT', data: ps.data, text: 'the Nedbank one' });
-  assert.equal(ned.state, 'PAYOUT_AMOUNT'); assert.equal(ned.data.method, 'NEDCASH'); assert.match(ned.text, /by Cash at a Nedbank ATM\? Between R20/);
+  assert.equal(ned.state, 'PAYOUT_AMOUNT'); assert.equal(ned.data.method, 'NEDCASH'); assert.match(ned.text, /by Cash at a Nedbank ATM\? Between R50 and R950, in multiples of R50/);
   const plain = await handleWithdrawReply({ account: founder, state: 'PAYOUT_AMOUNT', data: ps.data, text: '50 please' });
   assert.equal(plain.state, 'PAYOUT_ACCOUNT', 'an amount with a polite word is still the amount');
   // Below the minimum inside a compound answer: the existing offer wording, not a confirmation of something impossible.
   const low = await handleWithdrawReply({ account: founder, state: 'PAYOUT_METHOD', data: menu.data, text: '20 and 2' });
-  assert.match(low.text, /R20 is below the R50 minimum for cash at an Absa ATM, but/);
+  assert.match(low.text, /R20 is below the R50 minimum for cash at an Absa ATM\. Please type an amount of R50 or more/);
 });
 
 test('the full name is asked once as on the account when KYC has none; the confirmation shows it; the rail gets first name + surname, never the display name twice', async () => {
   envOff();
   const base = deps(15200);
   const d = { ...base, resolveProviders: async () => LIVE4 };
-  const s0 = await startWithdraw({ account: founder, ask: { amountCents: 2000, method: 'NEDCASH' }, deps: d });
+  const s0 = await startWithdraw({ account: founder, ask: { amountCents: 5000, method: 'NEDCASH' }, deps: d });
   assert.equal(s0.state, 'PAYOUT_MOBILE');
   const s1 = await handleWithdrawReply({ account: founder, state: s0.state, data: s0.data, text: 'mine' });
   assert.equal(s1.state, 'PAYOUT_NAME'); assert.match(s1.text, /full name, exactly as it appears on your ID/);
@@ -386,8 +389,10 @@ test('saved destinations are offered by number or name, skip the name and ID ste
   const done = await executeWithdraw({ account: founder, data: pin.data, deps: d });
   assert.equal(base.last.recipient.account_number, '62012345394'); assert.equal(base.last.recipient.branch_code, '250655'); assert.equal(base.last.recipient.id_number, '9001015009087'); assert.equal(base.last.recipient.firstname, 'Nieuwoudt'); assert.equal(base.last.recipient.surname, 'Gresse');
   assert.deepEqual(touched, ['d1']); assert.equal(done.state, null, 'nothing new to save'); assert.match(done.text, /Done\./);
-  const cash = await startWithdraw({ account: founder, ask: { amountCents: 2000, method: 'NEDCASH' }, deps: d });
-  assert.equal(cash.state, 'PAYOUT_MOBILE'); assert.match(cash.text, /1️⃣ Nedbank cash to •••175/); assert.match(cash.text, /\*mine\* for this WhatsApp number/);
+  const cash = await startWithdraw({ account: founder, ask: { amountCents: 5000, method: 'NEDCASH' }, deps: d });
+  assert.equal(cash.state, 'PAYOUT_MOBILE'); assert.match(cash.text, /1️⃣ Nedbank cash to •••175/);
+  const yesOne = await handleWithdrawReply({ account: founder, state: cash.state, data: cash.data, text: 'Yes' });
+  assert.equal(yesOne.state, 'PAYOUT_CONFIRM', '"Yes" to a list of one saved number picks it (BUGLOG #97)'); assert.equal(yesOne.data.recipient.savedId, 'd2'); assert.match(cash.text, /\*mine\* for this WhatsApp number/);
   const mine = await handleWithdrawReply({ account: founder, state: cash.state, data: cash.data, text: 'mine' });
   assert.equal(mine.state, 'PAYOUT_CONFIRM', '"mine" still works beside the saved list');
   const gone = await executeWithdraw({ account: founder, data: { ...pin.data, recipient: { savedId: 'd9', savedLabel: 'Gone account •••000', mobile: '0787051175' } }, deps: d });
@@ -431,13 +436,14 @@ test('round 3: the save question reads sentences and nicknames; other-flow asks 
 
 test('round 3: "add money" inside any withdraw step passes through; "you have it stored" answers from the saved list; the menu names the shortfall', async () => {
   envOff();
-  const d = { ...deps(4000), resolveProviders: async () => LIVE4 };
-  const menu = await startWithdraw({ account: founder, ask: { amountCents: 2000, method: null }, deps: d });
-  assert.match(menu.text, /💡 With R40 you cannot use PayShap or cash at an Absa ATM yet \(R58 and R68 with the fee\)\. Say \*add money\* to top up, or reply \*3\* or \*4\* for cash at a Nedbank ATM or an FNB eWallet\./);
+  const d = { ...deps(6000), resolveProviders: async () => LIVE4 };
+  const menu = await startWithdraw({ account: founder, ask: { amountCents: 5000, method: null }, deps: d });
+  assert.match(menu.text, /💡 With R60 you cannot use cash at an Absa ATM, cash at a Nedbank ATM or an FNB eWallet \(R68 with the fee\) yet\. Say \*add money\* to top up, or reply \*1\* for PayShap\./);
   for (const t of ['Add money', 'I want to load money to WaPay', 'buy airtime', 'my balance']) {
     assert.deepEqual(await handleWithdrawReply({ account: founder, state: 'PAYOUT_METHOD', data: menu.data, text: t }), { state: null, passthrough: true }, t);
   }
-  const amt = await handleWithdrawReply({ account: founder, state: 'PAYOUT_METHOD', data: menu.data, text: '3' });
+  const amt = await handleWithdrawReply({ account: founder, state: 'PAYOUT_METHOD', data: { ...menu.data, amountCents: null }, text: '1' });
+  assert.equal(amt.state, 'PAYOUT_AMOUNT');
   assert.deepEqual(await handleWithdrawReply({ account: founder, state: 'PAYOUT_AMOUNT', data: amt.data, text: 'deposit' }), { state: null, passthrough: true });
   // Nothing saved yet for a bank account: say so, mention what is saved, repeat the step.
   const d2 = { ...deps(100000), resolveProviders: async () => LIVE4, listDestinations: async () => [{ id: 'c1', method: 'NEDCASH', family: 'CASH', label: 'Mine: Cellphone •••175', nickname: 'Mine', fingerprint: 'f'.repeat(64) }], getIdentity: async () => null };

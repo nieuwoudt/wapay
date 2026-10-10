@@ -187,7 +187,7 @@ test('OTT limits shape (2026-09-15): providers map by name, required fields come
   ] }; } };
   const list = await resolveProviders({ client: c, now: 5000 });
   assert.deepEqual(list.map((p) => [p.method, p.providerCode, p.minCents]), [['PAYSHAP', '127', 5000], ['CASHSEND', '112', 5000], ['EWALLET', '1', null]], 'no RTC on the test merchant; system minimum R50 applied; FNB e-wallet maps (2026-09-15)');
-  assert.deepEqual(methodLimits('EWALLET', list), { minCents: 2000, maxCents: 300000 }, 'no provider minimum: product limits');
+  assert.deepEqual(methodLimits('EWALLET', list), { minCents: 5000, maxCents: 300000 }, 'no provider minimum: the R50 cash floor applies (BUGLOG #98)');
   assert.deepEqual(list[0].requiredFields, ['firstname', 'surname', 'id_number', 'mobile', 'account_number', 'branch_code']);
   assert.deepEqual(methodLimits('PAYSHAP', list), { minCents: 5000, maxCents: 300000 });
   assert.deepEqual(methodLimits('RTC', list), { minCents: 2000, maxCents: 300000 }, 'unknown provider keeps the product limits');

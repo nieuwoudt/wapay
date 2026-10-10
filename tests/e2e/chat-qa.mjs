@@ -205,7 +205,7 @@ async function run() {
     if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;
     if (prevKyc === undefined) delete process.env.WAPAY_PAYOUT_KYC; else process.env.WAPAY_PAYOUT_KYC = prevKyc;
     verdict('Withdraw: with payouts live the flow starts deterministically and fees are quoted', [
-      { level: 'FAIL', ok: has(a.replyText, /Withdrawals start at R20/i) && has(a.replyText, /R0/), what: '"withdraw R20" reaches the flow and reports the R20 minimum against a R0 wallet' },
+      { level: 'FAIL', ok: has(a.replyText, /Withdrawals start at R50/i) && has(a.replyText, /R0/), what: '"withdraw R20" reaches the flow and reports the R50 minimum against a R0 wallet (R50 floor since 2026-10-10)' },
       { level: 'FAIL', ok: !has(a.replyText, /coming soon/i) && !has(b.replyText, /coming soon/i) && !has(c.replyText, /coming soon/i), what: 'never "coming soon" while live' },
       { level: 'FAIL', ok: has(b.replyText, /Reply \*YES\*|withdraw R50/i) && !looksLikeMenu(b.replyText) && !has(b.replyText, /coming soon/i), what: '"can I take my money out?" is a QUESTION: a short specific answer plus the offer, no flow starts (knowledge base, 2026-09-15)' },
       { level: 'FAIL', ok: has(c.replyText, /R8/) && has(c.replyText, /R10/) && has(c.replyText, /R18/), what: 'the cash-out fee question quotes R8 / R10 / R18' },
@@ -273,6 +273,7 @@ async function run() {
       const f = await s.say('2');
       const g = await s.say('back');
       const h = await s.say('4');
+      const h2 = await s.say('50');   // 2026-10-10: cash is R50 minimum in R50 steps (ATM notes, BUGLOG #98), so the R30 is asked again
       const i = await s.say('mine');
       const i2 = await s.say('Thandi Nkosi');   // 2026-10-04: the full name is asked once when KYC has none (never the display name twice)
       const j = await s.say('9001015009087');
@@ -281,19 +282,20 @@ async function run() {
       const m = await s.say('balance');
       verdict('Withdraw end to end: minimum explained, method changed, FNB eWallet paid with PIN, balance moves', [
         { level: 'FAIL', ok: has(e.replyText, /Withdraw from WaPay/) && has(e.replyText, /FNB eWallet/), what: '"Withdraw 30" shows the live menu incl. FNB eWallet' },
-        { level: 'FAIL', ok: has(f.replyText, /R30 is below the R50 minimum for cash at an Absa ATM, but /) && has(f.replyText, /Reply \*YES\* to switch to that/), what: 'Absa at R30: the one method that carries R30 is offered as a yes or no, no menu bounce (founder review 2026-09-18)' },
+        { level: 'FAIL', ok: has(f.replyText, /R30 is below the R50 minimum for cash at an Absa ATM\. Please type an amount of R50 or more/), what: 'Absa at R30: below every cash minimum since the R50 floor (BUGLOG #98), the minimum is named and the amount asked again' },
         { level: 'FAIL', ok: has(g.replyText, /Withdraw from WaPay/), what: '"back" returns to the method menu ("menu" goes home, like a banking app)' },
-        { level: 'FAIL', ok: has(h.replyText, /FNB eWallet/) && has(h.replyText, /cellphone number/i), what: 'FNB eWallet keeps the R30 and asks for the cellphone number' },
+        { level: 'FAIL', ok: has(h.replyText, /R30 is below the R50 minimum for an FNB eWallet/), what: 'FNB eWallet: the R30 kept from the opener is below the R50 cash floor, so the amount is asked again' },
+        { level: 'FAIL', ok: has(h2.replyText, /cellphone number/i), what: 'R50 goes to the cellphone step' },
         { level: 'FAIL', ok: has(i.replyText, /full name, exactly as it appears on your ID/), what: 'the full name is asked once, as on the ID, because KYC has none (founder 2026-10-04)' },
         { level: 'FAIL', ok: has(i2.replyText, /13-digit/), what: 'the ID number is asked because the provider requires it' },
-        { level: 'FAIL', ok: has(j.replyText, /Withdraw \*R30\* to an FNB eWallet/) && has(j.replyText, /Fee: R18/), what: 'confirmation names the eWallet, the amount and the fee' },
+        { level: 'FAIL', ok: has(j.replyText, /Withdraw \*R50\* to an FNB eWallet/) && has(j.replyText, /Fee: R18/), what: 'confirmation names the eWallet, the amount and the fee' },
         { level: 'FAIL', ok: has(k.replyText, /PIN/), what: 'YES asks for the PIN' },
         { level: 'FAIL', ok: has(l.replyText, /Done\./) && has(l.replyText, /WP[A-Z0-9]{14}/), what: 'the PIN executes exactly one pay-out and returns a reference' },
         { level: 'FAIL', ok: has(l.replyText, /eWallet code is sent by SMS to •••\d{3}/) && has(l.replyText, /Cardless services\* then \*eWallet\*/), what: 'after Done the chat itself says where the code arrives and how to collect (founder 2026-10-04)' },
         { level: 'FAIL', ok: has(j.replyText, /Name on the account: Thandi Nkosi/) && has(j.replyText, /ID number: •••087/), what: 'the confirmation shows the name as given and the ID number masked' },
-        { level: 'FAIL', ok: ottCalls.length === 1 && ottCalls[0].providerCode === '1' && ottCalls[0].amountCents === 3000, what: 'exactly one PerformPayout to FNB e-wallet (code 1) for R30' },
-        { level: 'FAIL', ok: has(m.replyText, /R\s?52[.,]00/), what: 'balance is R100 - R30 - R18 = R52' },
-        { level: 'FAIL', ok: has(j.replyText, /Total leaving your balance: \*R48\*/) && has(j.replyText, /Balance after: \*R52\*/), what: 'the confirmation shows what leaves and what remains' },
+        { level: 'FAIL', ok: ottCalls.length === 1 && ottCalls[0].providerCode === '1' && ottCalls[0].amountCents === 5000, what: 'exactly one PerformPayout to FNB e-wallet (code 1) for R50' },
+        { level: 'FAIL', ok: has(m.replyText, /R\s?32[.,]00/), what: 'balance is R100 - R50 - R18 = R32' },
+        { level: 'FAIL', ok: has(j.replyText, /Total leaving your balance: \*R68\*/) && has(j.replyText, /Balance after: \*R32\*/), what: 'the confirmation shows what leaves and what remains' },
       ], s);
     } finally {
       if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;
@@ -319,7 +321,7 @@ async function run() {
       const f = await s.say('50 at ABSA');
       const g = await s.say('No can you help me withdraw 50 at ABSA?');
       const h = await s.say('the Nedbank one');
-      const i = await s.say('20');
+      const i = await s.say('50');
       await s.say('cancel');
       // Round 3 (production run 2026-10-08): "add money" inside the flow goes to the deposit flow, never the method menu.
       await s.say('withdraw');
@@ -333,7 +335,7 @@ async function run() {
         { level: 'FAIL', ok: has(f.replyText, /Got it: R50 by cash at an Absa ATM/), what: '"50 at ABSA" at the amount step switches method and amount with one confirming line, not "Just the amount"' },
         { level: 'FAIL', ok: has(g.replyText, /Got it: R50 by cash at an Absa ATM/) && !has(g.replyText, /Here is how it works/), what: 'the founder\'s exact sentence gets the confirmation, never the four-step explainer' },
         { level: 'FAIL', ok: has(h.replyText, /withdraw by Cash at a Nedbank ATM/), what: '"the Nedbank one" switches the method and asks the amount' },
-        { level: 'FAIL', ok: has(i.replyText, /Nedbank ATM/) && has(i.replyText, /cellphone number/i), what: 'R20 by Nedbank goes to the cellphone step' },
+        { level: 'FAIL', ok: has(i.replyText, /Nedbank ATM/) && has(i.replyText, /cellphone number/i), what: 'R50 by Nedbank goes to the cellphone step' },
         { level: 'FAIL', ok: !has(j.replyText, /Reply \*1\* for PayShap/) && has(j.replyText, /deposit|add money|card|voucher|payment link/i), what: '"Add money" inside the withdraw flow is answered by the deposit side, never the method menu (BUGLOG #94)' },
       ], s);
     } finally {
@@ -435,8 +437,8 @@ async function run() {
       ], s);
 
       const d = await s.say('did my payment go through');
-      // This run really does settle an R30 FNB eWallet pay-out earlier (the
-      // PerformPayout assertion above), so "the R30 withdrawal succeeded" is
+      // This run really does settle an R50 FNB eWallet pay-out earlier (the
+      // PerformPayout assertion above; R50 since the cash floor of 2026-10-10), so "the R50 withdrawal succeeded" is
       // TRUE and must be allowed. It used to be blocked by the receipt guard
       // and replaced with the fallback line, which is what the founder saw on
       // 2026-09-19. What must still never happen is a success claimed for an
@@ -445,8 +447,9 @@ async function run() {
       const figures = [...String(d.replyText || '').matchAll(/R\s?(\d+)/g)].map((m) => Number(m[1]));
       verdict('Agent: status question is answered from the record, never invented', [
         { level: 'FAIL', ok: !looksLikeMenu(d.replyText), what: 'no menu' },
-        { level: 'FAIL', ok: !successClaim || figures.includes(30) || has(d.replyText, /no (recent|pending)|nothing|don't see|can't see|haven't/i), what: 'a success is claimed only for the R30 pay-out this run settled' },
-        { level: 'FAIL', ok: !successClaim || figures.every((r) => [30, 18, 48, 52, 100].includes(r)), what: 'no figure this wallet never saw is called paid' },
+        { level: 'FAIL', ok: !successClaim || figures.includes(50) || has(d.replyText, /no (recent|pending)|nothing|don't see|can't see|haven't/i), what: 'a success is claimed only for the R50 pay-out this run settled' },
+        // 50/18/68/32/100: the pay-out, its fee, the total, the balance after, the funding; 250/20: the two open pay links this run creates.
+        { level: 'FAIL', ok: !successClaim || figures.every((r) => [50, 18, 68, 32, 100, 250, 20].includes(r)), what: 'no figure this wallet never saw is called paid' },
       ], s);
 
       const e = await s.say('Okay');

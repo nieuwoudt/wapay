@@ -70,6 +70,33 @@ Wallet: R98 → R40 (PayShap) → R140 (R100 card deposit) → R102 (Nedbank) �
 4. The Absa steps did not mention the two SMSes (reference and PIN) and were prose, not a list.
 5. "Mine" typed beside the saved list offered to save the same cellphone again.
 
+## E. Round 4 sign-off sheet (2026-10-10, after the ATM test; saved details cleared at the founder's request)
+
+Facts first: the R100 Nedbank cardless of 9 October (`WPE54D6CADA409EC`) paid; the ATM could not dispense the R20 of 8 October (no R20 notes). Rule now in the chat: cash methods R50 minimum in multiples of R50; PayShap any amount from R50. Also fixed: stale "Absa cash" labels (labels are now computed on every read) and "Yes" to a list of one saved number. Your saved details were cleared on 10 October so the memory can be tested from zero. Each line below is one check for sign-off; say exactly what is in the Say column.
+
+| # | Say | Expect | Checks |
+|---|---|---|---|
+| 1 | "withdraw 70", then "3" (Nedbank) | "R70 cannot be paid out as cash: ATMs give R50 and R100 notes, so cash at a Nedbank ATM takes multiples of R50 (R50, R100, R150 and so on). Reply *YES* for R50, or type another amount." | the ATM rule (BUGLOG #98) |
+| 2 | "yes" | the cellphone ask ("Reply *mine*…"), no saved list yet | memory starts empty |
+| 3 | "mine", then your full name, then your ID, then "yes", then your PIN | "✅ Done … R50 … Reference WP…", the SMS line, the numbered Nedbank steps ending "If anything is unclear, just ask…", then "💾 Save these details for next time (Cellphone •••175 and your name and ID number ending 083)? Reply *YES*, or give them a name like "mine" or "mother"…" | name asked once; numbered steps; the save question |
+| 4 | "Yes please save my bank details as mine" | "✅ Saved as *Mine*, encrypted: Mine: Cellphone •••175 and your name and ID number ending 083. Next time you withdraw, just pick it from the list or say "mine"…" | a sentence is a yes; the nickname (BUGLOG #93) |
+| 5 | "withdraw 50 absa" | "Got it: R50 by cash at an Absa ATM. Is that right? Reply *YES*…" | compound answer |
+| 6 | "yes" | "Which cellphone number should get the collection code by SMS? These are saved: 1️⃣ Mine: Cellphone •••175 …" | one saved row for all cash methods, labelled by cellphone (BUGLOG #97) |
+| 7 | "Yes" | straight to the confirmation: "Withdraw *R50* to Mine: Cellphone •••175", "Name on the account: …", "ID number: •••083 (saved)" | "Yes" picks the one saved number; name and ID not asked again |
+| 8 | "yes", PIN | "⏳ In progress…" then within about a minute "✅ Your withdrawal of R50 by Cash at an Absa ATM (CashSend) has been paid…" with the two-SMS line and the numbered Absa steps; NO second "save these details" question | webhook; no repeat save offer (BUGLOG #96) |
+| 9 | "withdraw 50", "1" (PayShap) | "Nothing is saved for a bank account yet. I do have Mine: Cellphone •••175 saved for cash withdrawals. Type the bank account number now and I will offer to save it for next time." only if you first say "my bank account" or "you have it stored"; otherwise the account ask | saved-list answers |
+| 10 | your account number, "FNB", "yes", PIN | "In progress" with the bank line, then "has been paid" within about a minute; then the save question for "FNB account •••394" | PayShap end to end |
+| 11 | "mother" | "✅ Saved as *Mother*, encrypted: Mother: FNB account •••394…" (your own account under a name, just to prove naming; say "forget my bank details" afterwards if you want it gone) | a bare word is a nickname |
+| 12 | "withdraw 50", "1", then "the mother one" | the confirmation with "Mother: FNB account •••394" | pick by nickname |
+| 13 | "cancel" | "Cancelled. Your money stays in your balance." | |
+| 14 | "withdraw 20" | if your balance is under R58: "Withdrawals start at R50 plus the fee, so the smallest one needs R58, and you have R… available". If above: the menu, then "20" by any method: "R20 is below the R50 minimum for …" | the R50 floor everywhere |
+| 15 | "withdraw", then "1", then "add money" | the deposit side answers (ways to add money, or the card amount ask), never "Reply 1 for PayShap…" | the escape (BUGLOG #94) |
+| 16 | "what do you know about me" | the line "Saved withdrawal details (encrypted): Mine: Cellphone •••175, Mother: FNB account •••394, plus your name and ID number ending 083 (say "forget my bank details" to erase them)" | disclosure |
+| 17 | "forget my bank details" | "🧹 Done. Your saved bank details, cellphone numbers and ID number for withdrawals are erased…" | erasure |
+| 18 | "withdraw 50", "3", "mine" | the name is asked again (memory is empty) | erasure complete |
+
+Wallet needed for the whole sheet: about R250 (two cash R50 at R68 each, one PayShap R50 at R58, plus the R2 you hold). Lines 1 to 8 need R136.
+
 ## What the thread checks after the run
 
 1. Every row's status at OTT by GetPaymentStatus, and whether the production webhook arrived for each (the sandbox sent none).
