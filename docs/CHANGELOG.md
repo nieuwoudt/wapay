@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-10-10 (75) — Growth: the Scale Model's inputs measured live; click-to-WhatsApp attribution; Meta Marketing API in, Conversions API out
+
+Mission Control gained a **Growth** tab (`/api/admin/growth`): the funnel per
+acquisition source and per ad, Meta's spend and started conversations per
+day, cost per conversation / account / funded account, the loop's three parts
+(links per active, payers per link, payer-to-account) with the ad-acquired
+trees, monthly funded cohorts, replies per active, and every Scale Model
+input with its measured value, sample size and great / plan / stop chip; one
+link opens the Scale Model artifact with the measured inputs in place
+(`lib/scale-model.js` carries the model and its `#s=` encoder). Attribution:
+Meta's `referral` on the first message after an ad click is stamped on the
+account in the same create as the row (`lib/growth-attribution.js`, via
+`getOrCreateUser`), a card payer's account remembers the requester as
+referrer, and onboarding completion is timestamped. Meta Marketing API
+(`lib/meta-ads.js`, tables `ad_insights_daily` + `ad_catalog`, migration
+`20261010_ad_insights`) snapshots the last three days nightly and on the
+tab's refresh button; Conversions API for Business Messaging
+(`lib/meta-capi.js`) sends LeadSubmitted / QualifiedLead / Purchase once
+each, from the turn and from a daily sweep. Both Meta pipes are OFF until
+their envs are set (`docs/GROWTH_DASHBOARD.md` §4 is the founder's switch-on
+list). Accounts now mean onboarding complete everywhere (BUGLOG #99).
+Tests: `tests/growth.test.mjs`, `tests/growth-route.test.mjs`.
+
 ## 2026-10-10 (74) — Cash is collected in R50 notes: R50 minimum and multiples of R50 for ATM cash; saved labels computed on read; "Yes" picks the one saved number
 
 From the founder's ATM test of 9 October (a R20 cardless withdrawal could

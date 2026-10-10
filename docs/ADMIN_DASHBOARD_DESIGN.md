@@ -36,8 +36,9 @@ any kind. It is a read-only instrument panel.
 
 | Stage | Definition (exact, from live data) | Source |
 |---|---|---|
-| **1. Contacts** | Distinct waIds ever seen inbound + payer numbers captured on pay links that never onboarded | `processed_messages` distinct sender · request metadata `payerMsisdn` |
-| **2. Accounts** | Onboarding completed (PIN set, wallet exists) | `Account` joined to `Wallet` (SPEND) |
+| **1. Contacts** | Every `Account` row (created at first inbound message) + payer numbers captured on pay links that never onboarded | `Account` count (`contactsStarted`) · request metadata `payerMsisdn` |
+| **2. Accounts** | Onboarding completed (OTP, PIN, consent): `onboardingState = S5_COMPLETED`. The row itself is created at first contact and is NOT an account (BUGLOG #99, 2026-10-10) | `Account.onboardingState`; completion time = first `consents` row |
+| **2b. Activated** (Growth tab) | Created a first payment link | `payment_requests.accountId`, min(createdAt) |
 | **3. Funded** | ≥1 credit posting into the user's SPEND wallet (deposit, voucher redemption, or request paid to them) | journal postings, account `WALLET:{id}:SPEND`, side = credit |
 | **4. Transacting** | ≥1 spend/send debit (airtime, data, electricity, voucher, request paid BY them) | journal postings, side = debit, category ≠ fee |
 | **5. Repeat (active)** | ≥2 money events in trailing 30 days | same, windowed |

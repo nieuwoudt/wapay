@@ -514,3 +514,48 @@ model AgentTurn {
   @@index([accountId, createdAt])
   @@map("agent_turns")
 }
+
+// Growth (2026-10-10): the ad account's daily numbers, snapshotted from
+// Meta's Marketing API (lib/meta-ads.js) so Mission Control's Growth tab
+// reads history without hammering Meta. One row per ad per day.
+model AdInsightDaily {
+  id            String   @id @default(cuid())
+  adId          String
+  date          DateTime @db.Date
+  adName        String?
+  adsetId       String?
+  adsetName     String?
+  campaignId    String?
+  campaignName  String?
+  spendCents    Int      @default(0)
+  impressions   Int      @default(0)
+  reach         Int      @default(0)
+  clicks        Int      @default(0)
+  linkClicks    Int      @default(0)
+  conversations Int      @default(0) // onsite_conversion.messaging_conversation_started_7d
+  connections   Int      @default(0) // onsite_conversion.total_messaging_connection
+  raw           Json?
+  fetchedAt     DateTime @default(now())
+
+  @@unique([adId, date])
+  @@index([date])
+  @@map("ad_insights_daily")
+}
+
+// The ads themselves (name, campaign, headline) so an ad id stamped on an
+// account reads as the hook that brought the person in.
+model AdCatalog {
+  adId         String   @id
+  name         String?
+  status       String?
+  adsetId      String?
+  adsetName    String?
+  campaignId   String?
+  campaignName String?
+  objective    String?
+  headline     String?
+  body         String?
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  @@map("ad_catalog")
+}

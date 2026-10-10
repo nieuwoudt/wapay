@@ -102,6 +102,24 @@ export default async function handler(req, res) {
       console.error(JSON.stringify({ type: 'cron_ledger_integrity_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
     }
 
+    // Growth (2026-10-10): the ad account's last three days from Meta's
+    // Marketing API into ad_insights_daily, and the Conversions API floor for
+    // attributed accounts whose Purchase has not been sent. Both best-effort,
+    // both no-ops until their envs are set.
+    let growth = null;
+    try {
+      const { snapshotAdInsights } = await import('../../../lib/meta-ads.js');
+      const { capiSweep } = await import('../../../lib/growth-attribution.js');
+      const ads = await snapshotAdInsights({ prisma, days: 3 });
+      const capi = await capiSweep({ prisma, limit: 50, deadlineMs: 15 * 1000 });
+      growth = { ads, capi };
+      // Logged, not returned: tests/payout-reconcile.test.mjs pins the response literal.
+      console.log(JSON.stringify({ type: 'cron_growth', ...growth, timestamp: new Date().toISOString() }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_growth_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+      growth = { error: e?.message || String(e) };
+    }
+
     // The async tier (C20): work queued off the customer's turn. Bounded by a
     // batch size and its own deadline, because this function has a budget too.
     // Best effort: a stuck worker must never fail the rest of the nightly run.

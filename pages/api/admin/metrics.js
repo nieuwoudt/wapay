@@ -57,10 +57,14 @@ export default async function handler(req, res) {
   const since = new Date(Date.now() - days * 24 * 3600 * 1000);
   const prevSince = new Date(since.getTime() - days * 24 * 3600 * 1000);
 
-  const [accounts, accountsPrev, wallets, holds, entries, revenueLines, signupWeeks] =
+  // Accounts = onboarding COMPLETE (OTP, PIN, consent). The row is created at
+  // first contact, so a bare count overstated "accounts opened" by every
+  // person who said hi and left (BUGLOG #99). Contacts keeps the old meaning.
+  const ONBOARDED = { onboardingState: 'S5_COMPLETED' };
+  const [accounts, accountsPrev, wallets, holds, entries, revenueLines, signupWeeks, contactsAll] =
     await Promise.all([
-      safe(() => prisma.account.count()),
-      safe(() => prisma.account.count({ where: { createdAt: { lt: since } } })),
+      safe(() => prisma.account.count({ where: ONBOARDED })),
+      safe(() => prisma.account.count({ where: { ...ONBOARDED, createdAt: { lt: since } } })),
       safe(() =>
         prisma.wallet.aggregate({ _sum: { availableCents: true, pendingCents: true }, _count: true })
       ),
@@ -93,8 +97,9 @@ export default async function handler(req, res) {
       ),
       safe(() =>
         prisma.$queryRaw`SELECT date_trunc('week', "createdAt") AS wk, count(*)::int AS n
-                         FROM "Account" GROUP BY 1 ORDER BY 1`
+                         FROM "Account" WHERE "onboardingState" = 'S5_COMPLETED' GROUP BY 1 ORDER BY 1`
       ),
+      safe(() => prisma.account.count()),
     ]);
 
   // Funnel stages from the journal (the contract in the design doc §2).
@@ -293,7 +298,8 @@ export default async function handler(req, res) {
       walletCount: wallets?._count ?? null,
     },
     funnel: {
-      contacts: accounts != null ? accounts + (capturedPayers || 0) : null,
+      contacts: contactsAll != null ? contactsAll + (capturedPayers || 0) : null,
+      contactsStarted: contactsAll,
       accounts,
       funded,
       transacting,

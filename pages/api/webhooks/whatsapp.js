@@ -203,7 +203,11 @@ export default async function handler(req, res) {
                       // Every send inside this turn is counted in its own scope.
                       await runWithSendScope(async () => {
                         try {
-                          await processMessage({ from, messageId, profile, ...turn });
+                          // Meta's click-to-WhatsApp referral rides on the first
+                          // message after the ad click (source_id, ctwa_clid,
+                          // headline); the processor stamps it on the account
+                          // before any reply, because it cannot be recovered later.
+                          await processMessage({ from, messageId, profile, referral: message.referral || null, ...turn });
                         } catch (error) {
                           error.sentSomething = outboundSendCount() > 0;
                           throw error;

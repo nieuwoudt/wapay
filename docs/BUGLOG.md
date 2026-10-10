@@ -4,6 +4,13 @@
 
 ---
 
+## 99. Mission Control counted every number that ever said "hi" as an account
+
+- **Symptom (growth review, 2026-09-13; built 2026-10-10):** the Dashboard's "Accounts" tile and the funnel's "Accounts" row were `prisma.account.count()`. The row is created at first contact (`getOrCreateUser` on the first inbound message, state `S0_INITIAL`), so a person who never passed the OTP counted as an opened account, and a paid campaign would have reported a conversion it never had.
+- **Root cause:** one table carries both the contact and the account; the metrics route never filtered on `onboardingState`, and nothing else distinguished the two.
+- **Fix:** accounts = `onboardingState = 'S5_COMPLETED'` everywhere Mission Control says "accounts" (`/api/admin/metrics` vitals, funnel, weekly sign-ups by source; the new `/api/admin/growth`); the old all-rows count is now `contactsStarted` and feeds the funnel's "Contacts" row. Onboarding time is the first consent row, which every completion passes through.
+- **Guard:** `tests/growth-route.test.mjs` (the metrics route filters on `S5_COMPLETED` and exposes `contactsStarted`; the growth route is admin-gated before any query).
+
 ## 98. A R20 cardless withdrawal could not be collected: ATMs do not hold R20 notes
 
 - **Symptom (founder's ATM test, 2026-10-09):** the R20 Nedbank cardless withdrawal of 8 October could not be dispensed at the ATM; a R100 one the next morning (`WPE54D6CADA409EC`) could, and Absa paid R50. The product minimum was R20 for Nedbank and FNB because the rails accept R20; the ATM does not.

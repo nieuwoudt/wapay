@@ -6,6 +6,7 @@
  */
 
 import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed, wasErrorSent, markErrorSent } from './user-manager.js';
+import { growthOnTurn, growthOnOnboarded } from '../../../lib/growth-attribution.js';
 import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, outboundSendCount } from '@wapay/whatsapp';
 // Every outbound text goes through lib/say.js, which records the assistant
 // side of the turn by construction (docs/AGENT_ARCHITECTURE_V2.md C2).
@@ -1103,7 +1104,7 @@ async function userLang(account) {
 /**
  * Process incoming WhatsApp message
  */
-export async function processMessage({ from, text, messageId, profile, sharedContact }) {
+export async function processMessage({ from, text, messageId, profile, sharedContact, referral = null }) {
   // Log incoming message
   logStructured('whatsapp_inbound', {
     from,
@@ -1116,7 +1117,7 @@ export async function processMessage({ from, text, messageId, profile, sharedCon
   console.log('🔄 Processing message:', { from, text: redactForMemory(text) });
 
   // Get or create user
-  const { account, isNewUser } = await getOrCreateUser(from, profile);
+  const { account, isNewUser } = await getOrCreateUser(from, profile, { referral });
 
   // De-duplicate inbound message IDs to prevent repeated replies if Meta retries delivery
   if (messageId && (await wasMessageProcessed(from, messageId))) {
@@ -1126,6 +1127,11 @@ export async function processMessage({ from, text, messageId, profile, sharedCon
   if (messageId) {
     await markMessageProcessed(from, messageId);
   }
+
+  // Growth (2026-10-10): a late ad referral on an unfinished account, and the
+  // Conversions API events an attributed account has earned. Bounded and
+  // best-effort; nothing here can slow or fail the turn.
+  await growthOnTurn({ account, referral }).catch(() => {});
 
   // Get onboarding state
   const onboardingState = await getOnboardingState(account.id);
@@ -1313,6 +1319,8 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
       // never undo the completed onboarding.
       if (done?.ok && (await getOnboardingState(account.id)) === 'S5_COMPLETED') {
         await askAccountType({ from, account }).catch((e) => logStructured('business_signup_ask_failed', { from, error: e?.message }));
+        // Growth: remember the moment and tell Meta (LeadSubmitted) if an ad brought them.
+        await growthOnOnboarded({ account }).catch((e) => logStructured('growth_onboarded_hook_failed', { from, error: e?.message }));
       }
       return done;
     }

@@ -5,6 +5,7 @@
  */
 
 import prisma from '../../../lib/prisma.js';
+import { newAccountProfile, findPayLinkReferrer } from '../../../lib/growth-attribution.js';
 import { mergeConversationData } from '../../../lib/conversation-data.js';
 
 export async function wasMessageProcessed(waId, messageId) {
@@ -98,7 +99,7 @@ export async function markErrorSent(waId, errorKey) {
 /**
  * Get or create user account
  */
-export async function getOrCreateUser(waId, profile = {}) {
+export async function getOrCreateUser(waId, profile = {}, { referral = null } = {}) {
   try {
     // Try to find existing user
     let account = await prisma.account.findFirst({
@@ -116,20 +117,18 @@ export async function getOrCreateUser(waId, profile = {}) {
     // Create new user
     console.log('🆕 Creating new user for:', waId);
 
-    // ACQUISITION SOURCE (Mission Control funnel, 2026-08-28): money-backed
-    // attribution at the moment of creation. If this number was already
-    // captured as a pay-link payer (PayFast intent metadata), the requester
-    // loop acquired them; otherwise organic. Evidence-based, not
-    // message-text guessing — and best-effort: attribution must never block
-    // an account creation.
-    let acquisitionSource = 'organic';
+    // ACQUISITION SOURCE (Mission Control funnel, 2026-08-28; Growth 2026-10-10):
+    // money-backed attribution at the moment of creation. An ad click's
+    // referral (source_id, ctwa_clid, headline) wins; else a number already
+    // captured as a card payer on a pay link was acquired by that requester
+    // (the loop, with the requester remembered as referrer); else organic.
+    // Evidence-based, never message-text guessing, and best-effort:
+    // attribution must never block an account creation. Written in the same
+    // upsert as the row, so it exists before the first reply.
+    let growthProfile = { acquisitionSource: 'organic' };
     try {
-      const local = waId.replace(/^27/, '0');
-      const paidBefore = await prisma.providerRequest.findFirst({
-        where: { provider: 'PAYFAST', metadata: { path: ['payerMsisdn'], equals: local } },
-        select: { id: true },
-      });
-      if (paidBefore) acquisitionSource = 'paylink';
+      const paid = await findPayLinkReferrer({ prisma, waId });
+      growthProfile = newAccountProfile({ referral, paidBefore: Boolean(paid), referrerAccountId: paid?.referrerAccountId || null });
     } catch (attribErr) {
       console.error(JSON.stringify({ type: 'acquisition_attrib_error', error: attribErr?.message }));
     }
@@ -148,7 +147,7 @@ export async function getOrCreateUser(waId, profile = {}) {
         msisdn: waId,
         displayName: profile.name || 'Friend',
         createdAt: new Date(),
-        profile: { acquisitionSource },
+        profile: growthProfile,
       },
       update: {},
     });

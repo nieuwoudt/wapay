@@ -935,6 +935,260 @@ function Dashboard() {
   );
 }
 
+
+/* ---------------- Growth: the Scale Model's inputs, measured ---------------- */
+
+const GROWTH_GROUPS = { ads: 'Paid acquisition', funnel: 'Funnel', loop: 'The loop', retention: 'Retention', econ: 'Economics', val: 'Valuation' };
+const Rc = (c) => (c == null ? '—' : R(c));
+const n0 = (v) => (v == null ? '—' : Number(v).toLocaleString('en-ZA'));
+const pc = (v) => (v == null ? '—' : `${v}%`);
+
+function StatusChip({ status }) {
+  const map = {
+    great: ['great', 'var(--good)'],
+    plan: ['on plan', 'var(--accent-ink)'],
+    stop: ['stop and fix', 'var(--crit)'],
+    unknown: ['too early', 'var(--ink3)'],
+  };
+  const [label, color] = map[status] || map.unknown;
+  return <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, border: `1px solid ${color}`, color, whiteSpace: 'nowrap' }}>{label}</span>;
+}
+function OnOff({ on, onText, offText }) {
+  const color = on ? 'var(--good)' : 'var(--ink3)';
+  return <span style={{ display: 'inline-block', fontSize: 11.5, fontWeight: 600, padding: '3px 9px', borderRadius: 999, border: `1px solid ${color}`, color }}>{on ? onText : offText}</span>;
+}
+function fmtMeasured(m) {
+  if (m.value == null) return '—';
+  if (m.unit === 'R') return m.value >= 1000 ? Rw(m.value * 100) : `R${Math.round(m.value * 100) / 100}`;
+  if (m.unit === '%' || m.unit === '% p.a.') return `${Math.round(m.value * 10) / 10}%`;
+  if (m.unit === '×') return `${Number(m.value).toFixed(1)}×`;
+  if (m.unit === 'M') return `M${m.value}`;
+  if (m.unit === 'Rm') return `R${m.value}m`;
+  return String(Math.round(m.value * 100) / 100);
+}
+
+// Bars for one rand series per day (spend), lines for people per day.
+function DailyBars({ rows, pick, fmt }) {
+  if (!rows?.length) return <div className="empty">No days in this period yet.</div>;
+  const W = 560, H = 150, L = 8, B = 20, T = 12;
+  const vals = rows.map((r) => pick(r) || 0);
+  const mx = Math.max(...vals) || 1;
+  const bw = Math.min(18, ((W - L) / rows.length) * 0.7);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img">
+      {rows.map((r, i) => {
+        const v = vals[i];
+        const x = L + ((W - L) * (i + 0.5)) / rows.length - bw / 2;
+        const h = ((H - T - B) * v) / mx;
+        return (
+          <g key={r.date}>
+            {v > 0 && <rect x={x} y={H - B - h} width={bw} height={h} rx={2} fill="var(--s1)"><title>{`${r.date}: ${fmt(v)}`}</title></rect>}
+            {(rows.length <= 10 || i % Math.ceil(rows.length / 8) === 0) && <text x={x + bw / 2} y={H - 6} textAnchor="middle">{r.date.slice(5)}</text>}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+function DailyLines({ rows, series }) {
+  if (!rows?.length) return <div className="empty">No days in this period yet.</div>;
+  const W = 560, H = 150, L = 8, Rr = 8, B = 20, T = 12;
+  const mx = Math.max(1, ...rows.flatMap((r) => series.map((s) => r[s.key] || 0)));
+  const x = (i) => L + ((W - L - Rr) * (i + 0.5)) / rows.length;
+  const y = (v) => H - B - ((H - T - B) * v) / mx;
+  return (
+    <>
+      <div className="note" style={{ display: 'flex', gap: 14 }}>
+        {series.map((s) => <span key={s.key}><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: s.color, marginRight: 5, verticalAlign: -1 }} />{s.name}</span>)}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img">
+        {series.map((s) => (
+          <g key={s.key}>
+            <path d={rows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(r[s.key] || 0).toFixed(1)}`).join('')} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" />
+            {rows.map((r, i) => <circle key={r.date} cx={x(i)} cy={y(r[s.key] || 0)} r={2.5} fill={s.color}><title>{`${r.date} · ${s.name}: ${r[s.key] || 0}`}</title></circle>)}
+          </g>
+        ))}
+        {rows.map((r, i) => ((rows.length <= 10 || i % Math.ceil(rows.length / 8) === 0) ? <text key={r.date} x={x(i)} y={H - 6} textAnchor="middle">{r.date.slice(5)}</text> : null))}
+      </svg>
+    </>
+  );
+}
+
+function Growth() {
+  const [range, setRange] = useState('30');
+  const [g, setG] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const load = useCallback((refresh) => {
+    setErr('');
+    setBusy(true);
+    return fetch(`/api/admin/growth?range=${range}${refresh ? '&refresh=1' : ''}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => setG(d))
+      .catch(() => setErr('Could not load the growth numbers.'))
+      .finally(() => setBusy(false));
+  }, [range]);
+  useEffect(() => { load(false); }, [load]);
+  if (err) return <div className="card"><div className="empty">{err}</div></div>;
+  if (!g) return <div className="card"><div className="empty">Measuring…</div></div>;
+  const k = g.kpis || {}, st = g.status || {}, lp = g.loop || {}, ms = g.messages || {};
+  const measured = Object.values(g.measured || {});
+  const grouped = Object.keys(GROWTH_GROUPS).map((grp) => [grp, measured.filter((m) => m.group === grp)]);
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+        <div className="tabs">{['7', '30', '90', 'all'].map((r) => (
+          <button key={r} className={range === r ? 'on' : ''} onClick={() => setRange(r)}>{r === 'all' ? 'All' : r + 'd'}</button>
+        ))}</div>
+        <OnOff on={st.attribution} onText="Attribution live" offText="Attribution off" />
+        <OnOff on={st.adsConfigured} onText={`Meta Ads API on · fetched ${st.adsLastFetchedAt ? dt(st.adsLastFetchedAt) : 'never'}`} offText="Meta Ads API off: set META_ADS_ACCESS_TOKEN + META_AD_ACCOUNT_ID" />
+        <OnOff on={st.capiConfigured} onText={`Conversions API on · ${st.capiLeadSent ?? 0} leads · ${st.capiPurchaseSent ?? 0} purchases sent`} offText="Conversions API off: set META_CAPI_DATASET_ID" />
+        <span className="spacer" />
+        {st.adsConfigured && <button className="linkish" disabled={busy} onClick={() => load(true)}>{busy ? 'Refreshing…' : 'Refresh ad numbers'}</button>}
+        <a className="linkish" href={g.scenarioUrl} target="_blank" rel="noreferrer">Open the Scale Model with measured inputs ↗</a>
+      </div>
+      <div className="grid kpis">
+        {[
+          ['Ad spend, period', Rc(k.spendCents), st.adsConfigured ? 'from Meta' : 'Meta Ads API not connected'],
+          ['Conversations started', n0(k.conversations), 'Meta: messaging_conversation_started_7d'],
+          ['Cost per conversation', Rc(k.costPerConversationCents), 'spend ÷ conversations'],
+          ['Accounts from ads', n0(k.adOnboarded), `${n0(k.adContacts)} ad contacts · ${pc(k.convToAccountPct)} of conversations`],
+          ['Cost per account', Rc(k.costPerAccountCents), 'onboarding complete, ad-attributed'],
+          ['Funded from ads', n0(k.adFunded), `cost per funded ${Rc(k.costPerFundedCents)}`],
+          ['Accounts, all sources', n0(k.accountsTotal), `${n0(k.contactsTotal)} contacts ever · ${n0(k.mau)} active in 30d`],
+          ['Revenue per active', g.measured?.arpu?.value != null ? `R${g.measured.arpu.value}` : '—', `per month · ${Rc(k.revenueCents)} this period`],
+        ].map(([kk, val, sub]) => (
+          <div className="card" key={kk}><div className="k">{kk}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>
+        ))}
+      </div>
+
+      <div className="grid two" style={{ marginTop: 14 }}>
+        <div className="card">
+          <h2>Ad spend per day</h2>
+          <p className="note">From ad_insights_daily, snapshotted from Meta by the daily cron or the refresh button.</p>
+          <DailyBars rows={g.daily} pick={(r) => r.spendCents} fmt={R} />
+        </div>
+        <div className="card">
+          <h2>People per day</h2>
+          <p className="note">Conversations started (Meta) against accounts completed and first funded (our ledger), all sources.</p>
+          <DailyLines rows={g.daily} series={[
+            { key: 'conversations', name: 'Conversations', color: 'var(--s4)' },
+            { key: 'onboarded', name: 'Accounts', color: 'var(--s1)' },
+            { key: 'funded', name: 'Funded', color: 'var(--s3)' },
+          ]} />
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>The funnel, by where people came from</h2>
+        <p className="note">Contacts = every number that ever messaged. Accounts = OTP, PIN and consent done. Activated = created a first payment link. Funded = first money in. Active = a money event in the last 30 days.</p>
+        <div style={{ overflowX: 'auto' }}>
+          <table>
+            <thead><tr><th>Source</th><th className="n">Contacts</th><th className="n">Accounts</th><th className="n">Activated</th><th className="n">Funded</th><th className="n">Active 30d</th><th className="n">New accounts, period</th></tr></thead>
+            <tbody>
+              {(g.funnelBySource || []).map((f) => (
+                <tr key={f.src}><td>{f.src}</td><td className="n">{n0(f.contacts)}</td><td className="n">{n0(f.onboarded)}</td><td className="n">{n0(f.activated)}</td><td className="n">{n0(f.funded)}</td><td className="n">{n0(f.active30)}</td><td className="n">{n0(f.newInWindow)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Per ad, this period</h2>
+        <p className="note">Meta's spend and conversations next to the accounts each ad actually produced (stamped from the click id on the first message).</p>
+        {!(g.ads || []).length ? <div className="empty">{st.adsConfigured ? 'No ad rows in this period yet.' : 'Connect the Meta Ads API to see spend per ad; accounts per ad already count from the click id.'}</div> : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ minWidth: 820 }}>
+              <thead><tr><th>Ad</th><th>Campaign</th><th className="n">Spend</th><th className="n">Impr.</th><th className="n">Clicks</th><th className="n">Conversations</th><th className="n">R / conv.</th><th className="n">Accounts</th><th className="n">R / account</th><th className="n">Funded</th><th className="n">R / funded</th></tr></thead>
+              <tbody>
+                {g.ads.map((a) => (
+                  <tr key={a.adId}>
+                    <td title={a.headline || ''}>{a.name}{a.headline ? <div className="note" style={{ margin: 0 }}>{a.headline}</div> : null}</td>
+                    <td>{a.campaign || '—'}</td>
+                    <td className="n">{R(a.spendCents)}</td><td className="n">{n0(a.impressions)}</td><td className="n">{n0(a.clicks)}</td>
+                    <td className="n">{n0(a.conversations)}</td><td className="n">{Rc(a.costPerConversationCents)}</td>
+                    <td className="n">{n0(a.onboarded)}</td><td className="n">{Rc(a.costPerAccountCents)}</td>
+                    <td className="n">{n0(a.funded)}</td><td className="n">{Rc(a.costPerFundedCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>The Scale Model's inputs, measured</h2>
+        <p className="note">Each input the planning model assumes, with what the data says so far. A value counts once its sample reaches {g.minSample}; until then the plan case stands and the chip reads “too early”. The link above opens the model with every measured value in place.</p>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ minWidth: 700 }}>
+            <thead><tr><th>Input</th><th className="n">Measured</th><th className="n">Sample</th><th className="n">Plan</th><th className="n">Great</th><th className="n">Stop</th><th>Status</th></tr></thead>
+            <tbody>
+              {grouped.map(([grp, items]) => items.length ? [
+                <tr key={grp + '-h'}><td colSpan={7} className="k" style={{ paddingTop: 10 }}>{GROWTH_GROUPS[grp]}</td></tr>,
+                ...items.map((m) => (
+                  <tr key={m.key}>
+                    <td>{m.label}{!m.measurable && <div className="note" style={{ margin: 0 }}>plan assumption, not measured here</div>}</td>
+                    <td className="n"><b>{fmtMeasured(m)}</b></td>
+                    <td className="n">{m.measurable ? n0(m.n) : '—'}</td>
+                    <td className="n">{fmtMeasured({ ...m, value: m.plan })}</td>
+                    <td className="n">{fmtMeasured({ ...m, value: m.great })}</td>
+                    <td className="n">{fmtMeasured({ ...m, value: m.stop })}</td>
+                    <td>{m.measurable ? <StatusChip status={m.status} /> : null}</td>
+                  </tr>
+                )),
+              ] : null)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="grid two" style={{ marginTop: 14 }}>
+        <div className="card">
+          <h2>The loop</h2>
+          <p className="note">K = links per active × payers per link × payer-to-account. Trees credit each ad-acquired account with the accounts whose first paid link was theirs.</p>
+          <table>
+            <tbody>
+              <tr><td>Links created, period</td><td className="n">{n0(lp.linksCreated)}</td></tr>
+              <tr><td>Paid links · distinct payers</td><td className="n">{n0(lp.paidLinks)} · {n0(lp.payers)}</td></tr>
+              <tr><td>Links per active per month</td><td className="n">{lp.linksPerActive != null ? lp.linksPerActive.toFixed(2) : '—'}</td></tr>
+              <tr><td>Payers per link</td><td className="n">{lp.payersPerLink != null ? lp.payersPerLink.toFixed(2) : '—'}</td></tr>
+              <tr><td>Captured payers → accounts, all time</td><td className="n">{n0(lp.capturedPayers)} → {n0(lp.paylinkAccounts)} ({pc(lp.payerToOnbPct)})</td></tr>
+              <tr><td><b>K</b></td><td className="n"><b>{lp.K != null ? lp.K.toFixed(2) : '—'}</b></td></tr>
+              <tr><td>Ad-acquired accounts · downstream level 1 · level 2</td><td className="n">{n0(lp.adAcquired)} · {n0(lp.downstream1)} · {n0(lp.downstream2)}</td></tr>
+              <tr><td>Tree factor (downstream per ad-acquired)</td><td className="n">{lp.treeFactor != null ? lp.treeFactor.toFixed(2) : '—'}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="card">
+          <h2>Messages, the cost that scales with actives</h2>
+          <p className="note">Replies WaPay sent in the period. From 1 October 2026 Meta charges service replies after 1,000 free per number per month, about R0.13 each in South Africa.</p>
+          <table>
+            <tbody>
+              <tr><td>Replies sent, period</td><td className="n">{n0(ms.assistantTurns)}</td></tr>
+              <tr><td>Replies per active per month</td><td className="n">{ms.perActive ?? '—'}</td></tr>
+              <tr><td>Replies per money event</td><td className="n">{ms.perEvent != null ? ms.perEvent.toFixed(1) : '—'}</td></tr>
+              <tr><td>Message cost per active per month</td><td className="n">{Rc(ms.costPerActiveCents)}</td></tr>
+            </tbody>
+          </table>
+          <h2 style={{ marginTop: 16 }}>Retention, monthly funded cohorts</h2>
+          <p className="note">Share of each month's newly funded accounts with a money event one, two, three and six months later.</p>
+          {!(g.cohorts || []).length ? <div className="empty">No funded cohorts yet.</div> : (
+            <table>
+              <thead><tr><th>Funded in</th><th className="n">Size</th><th className="n">+1</th><th className="n">+2</th><th className="n">+3</th><th className="n">+6</th></tr></thead>
+              <tbody>{g.cohorts.map((c) => (
+                <tr key={c.month}><td>{c.month}</td><td className="n">{c.size}</td><td className="n">{pc(c.m1)}</td><td className="n">{pc(c.m2)}</td><td className="n">{pc(c.m3)}</td><td className="n">{pc(c.m6)}</td></tr>
+              ))}</tbody>
+            </table>
+          )}
+        </div>
+      </div>
+      <p className="note" style={{ marginTop: 12 }}>generated {dt(g.generatedAt)} · aggregates only, no customer identifiers leave the server · funnel hops are judged on accounts opened 14 to 44 days ago so everyone had two weeks to act.</p>
+    </>
+  );
+}
+
 function Customer() {
   const [q, setQ] = useState('');
   const [c, setC] = useState(null);
@@ -1171,6 +1425,7 @@ export default function Admin() {
           <>
             <div className="tabs">
               <button className={tab === 'dashboard' ? 'on' : ''} onClick={() => setTab('dashboard')}>Dashboard</button>
+              <button className={tab === 'growth' ? 'on' : ''} onClick={() => setTab('growth')}>Growth</button>
               <button className={tab === 'customer' ? 'on' : ''} onClick={() => setTab('customer')}>Customers</button>
             </div>
             <button className="linkish" onClick={async () => {
@@ -1182,7 +1437,7 @@ export default function Admin() {
       </header>
       {authed === null && <div className="card"><div className="empty">…</div></div>}
       {authed === false && <Login configured={configured} passwordLogin={passwordLogin} onDone={probe} />}
-      {authed === true && (tab === 'dashboard' ? <Dashboard /> : <Customer />)}
+      {authed === true && (tab === 'dashboard' ? <Dashboard /> : tab === 'growth' ? <Growth /> : <Customer />)}
     </div>
   );
 }
