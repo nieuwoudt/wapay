@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-10-12 (78) — Pipe check findings: the Conversions API reads the WABA id production actually sets; a zero-row refresh still records the fetch
+
+The first production run of `/api/internal/ads-pipe-check` (12:27 UTC,
+token WaPay Growth, ad account WaPay ZA, insights 200 with no rows) found
+that production carries the WhatsApp account as `WHATSAPP_BUSINESS_ACCOUNT_ID`
+(647978251504290) while `lib/meta-capi.js` read only the `META_` spelling, so
+the Conversions API would have stayed "credentials missing" after the dataset
+id arrived: `capiConfig` now falls back to the production name. And the
+Refresh button, after a successful read of an account with no ads, left the
+chip at "fetched never" because only insight rows carried a `fetchedAt`: the
+snapshot now writes a reserved `ad_catalog` marker row (`__last_fetch__`,
+never listed) and `lastAdsFetchAt` reads it. Tests in `tests/growth.test.mjs`
+and `tests/growth-route.test.mjs`.
+
+---
+
 ## 2026-10-12 (77) — Withdrawals for customers without a South African ID: a passport or foreign ID at the ID step (payouts round 5, item 1)
 
 The Lisa case (a foreign national with a Capitec account and R350 she could

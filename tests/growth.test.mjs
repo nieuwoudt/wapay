@@ -177,3 +177,26 @@ test('conversions api: only production can ever send; preview reports credential
   assert.equal(r.skipped, 'NOT_PRODUCTION');
   assert.equal(fetched, 0, 'a preview build never calls Meta');
 });
+
+test('pipe check findings (2026-10-12): the WABA falls back to WHATSAPP_BUSINESS_ACCOUNT_ID, and a zero-row refresh still records the fetch', async () => {
+  const c = capiConfig({ META_CAPI_DATASET_ID: 'ds1', META_WHATSAPP_TOKEN: 'tok', WHATSAPP_BUSINESS_ACCOUNT_ID: '647978251504290', VERCEL_ENV: 'production' });
+  assert.equal(c.wabaId, '647978251504290');
+  assert.equal(c.configured, true);
+  assert.equal(capiConfig({ META_CAPI_DATASET_ID: 'ds1', META_WHATSAPP_TOKEN: 'tok', META_WHATSAPP_BUSINESS_ACCOUNT_ID: '1', WHATSAPP_BUSINESS_ACCOUNT_ID: '2' }).wabaId, '1', 'META_ spelling wins when both exist');
+  const { snapshotAdInsights, lastAdsFetchAt, LAST_FETCH_KEY } = await import('../lib/meta-ads.js');
+  const env = { META_ADS_ACCESS_TOKEN: 'tok', META_AD_ACCOUNT_ID: '1090534783572735' };
+  const catalog = new Map();
+  const prisma = {
+    adInsightDaily: { async upsert() { throw new Error('no rows expected'); }, async findFirst() { return null; } },
+    adCatalog: {
+      async upsert({ where, create }) { catalog.set(where.adId, create); return create; },
+      async findUnique({ where }) { return catalog.get(where.adId) || null; },
+    },
+  };
+  const now = new Date('2026-10-12T12:27:20Z');
+  const out = await snapshotAdInsights({ prisma, days: 3, now, env, fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ data: [] }) }) });
+  assert.deepEqual({ insights: out.insights, ads: out.ads, errors: out.errors }, { insights: 0, ads: 0, errors: [] });
+  assert.equal(out.fetchedAt, now.toISOString());
+  assert.ok(catalog.has(LAST_FETCH_KEY), 'the marker row was written');
+  assert.equal((await lastAdsFetchAt({ prisma })).toISOString(), now.toISOString());
+});

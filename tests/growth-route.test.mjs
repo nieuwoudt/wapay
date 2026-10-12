@@ -91,3 +91,8 @@ test('ads pipe check: internal-key gated before any Graph call, GET only, every 
   assert.match(src, /res\.status\(200\)\.send\(redactToken\(JSON\.stringify\(out\)\)\)/, 'the whole response passes through redaction');
   assert.doesNotMatch(src, /\btoken\b\s*:\s*token|token: ads\.token/, 'the token is never a field of the output');
 });
+
+test('the Growth route never lists the last-fetch marker as an ad', () => {
+  assert.match(route, /adCatalog\.findMany\(\{ where: \{ NOT: \{ adId: LAST_FETCH_KEY \} \}/);
+  assert.match(route, /adsLastFetchedAt: adsLastAt \|\| null/);
+});

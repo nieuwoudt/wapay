@@ -126,6 +126,18 @@ can therefore never send an event even if someone copies the envs to it;
 `META_CAPI_ALLOW_NON_PRODUCTION=true` exists only for a local run against Meta's Test
 Events tool.
 
+**First production run, 2026-10-12 12:27 UTC** (`?waba=647978251504290`): token
+WaPay Growth, type SYSTEM_USER, app 1344548310511460, never expires, scopes ads_read +
+whatsapp_business_management + whatsapp_business_manage_events + public_profile; ad
+account act_1090534783572735 "WaPay ZA", ZAR, Africa/Johannesburg, status 1; insights
+and catalogue both HTTP 200 with zero rows (no ad has run); WhatsApp account
+647978251504290 "WaPay" readable, no dataset linked yet; Conversions API
+`CREDENTIALS_MISSING` on production. Two findings fixed the same day (CHANGELOG 78):
+production names the WABA `WHATSAPP_BUSINESS_ACCOUNT_ID`, and a zero-row refresh now
+records its time. Note `/me` for a System User token returns the app-scoped id
+(122107590561498678), not the Business Manager id (61594960366800); the name and
+`debug_token` type confirm the identity.
+
 ## 5. How to read it in the first weeks
 
 - Until an ad has run, every ad KPI shows a dash and the chips read "too early". The

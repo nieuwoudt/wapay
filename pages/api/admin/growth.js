@@ -17,7 +17,7 @@
 import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
 import { INPUTS, preset, boundStatus, measuredToInputs, scenarioUrl, SCALE_MODEL_URL } from '../../../lib/scale-model.js';
-import { adsConfigured, snapshotAdInsights } from '../../../lib/meta-ads.js';
+import { adsConfigured, snapshotAdInsights, lastAdsFetchAt, LAST_FETCH_KEY } from '../../../lib/meta-ads.js';
 import { capiConfigured, capiConfig } from '../../../lib/meta-capi.js';
 
 export const config = { maxDuration: 55 };
@@ -62,8 +62,8 @@ export default async function handler(req, res) {
   // Optional refresh of the ad numbers (founder's button); at most every 10 minutes.
   let adsRefresh = null;
   if (String(req.query.refresh) === '1' && adsConfigured()) {
-    const newest = await safe(() => prisma.adInsightDaily.findFirst({ orderBy: { fetchedAt: 'desc' }, select: { fetchedAt: true } }));
-    if (!newest?.fetchedAt || now.getTime() - new Date(newest.fetchedAt).getTime() > 10 * 60 * 1000) {
+    const newest = await safe(() => lastAdsFetchAt({ prisma }));
+    if (!newest || now.getTime() - newest.getTime() > 10 * 60 * 1000) {
       adsRefresh = await safe(() => snapshotAdInsights({ prisma, days: 3, now }), { errors: ['refresh failed'] });
     } else {
       adsRefresh = { skipped: 'RECENT' };
@@ -234,8 +234,8 @@ export default async function handler(req, res) {
       FROM ad_insights_daily WHERE date >= ${day(since)}::date GROUP BY 1 ORDER BY 1`,
     []
   );
-  const adsLast = await safe(() => prisma.adInsightDaily.findFirst({ orderBy: { fetchedAt: 'desc' }, select: { fetchedAt: true } }));
-  const catalog = await safe(() => prisma.adCatalog.findMany({ take: 500 }), []);
+  const adsLastAt = await safe(() => lastAdsFetchAt({ prisma }));
+  const catalog = await safe(() => prisma.adCatalog.findMany({ where: { NOT: { adId: LAST_FETCH_KEY } }, take: 500 }), []);
   const catalogById = new Map((catalog || []).map((c) => [c.adId, c]));
   const spendCents = (adsWindow || []).reduce((s, r) => s + num(r.spend), 0);
   const conversations = (adsWindow || []).reduce((s, r) => s + num(r.conversations), 0);
@@ -379,7 +379,7 @@ export default async function handler(req, res) {
       capiConfigured: capiConfigured(),
       capiReason: capiConfig().reason,
       vercelEnv: process.env.VERCEL_ENV || null,
-      adsLastFetchedAt: adsLast?.fetchedAt || null,
+      adsLastFetchedAt: adsLastAt || null,
       adsRefresh,
       attributedAccounts: rows.filter((a) => a.attributed).length,
       capiLeadSent: rows.filter((a) => a.capiLead).length,
