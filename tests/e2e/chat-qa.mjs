@@ -221,6 +221,19 @@ async function run() {
         { level: 'FAIL', ok: has(g4.replyText, /R0/) && !has(g4.replyText, /13-digit/) && g4.replyText !== g3.replyText, what: '"How much can I withdraw" answers from her balance, not the how-it-works brief' },
         { level: 'FAIL', ok: process.env.ALERT_EMAIL || (!has(g3.replyText, /asked a person/) && !has(g4.replyText, /has been asked/)), what: 'no person is claimed when no alert could be sent (harness run 2026-10-12 caught "has been asked" with no alert)' },
       ], s);
+
+      // 4 and 5: "send money" to her own number, then "did my payment go through" with the unpaid link.
+      const own = QA_WA_ID.startsWith('27') ? `0${QA_WA_ID.slice(2)}` : QA_WA_ID;
+      await s.say('Send money');
+      await s.say('R350');
+      const s3 = await s.say(own);
+      const d1 = await s.say('Did my payment go through');
+      verdict('Lisa 4 and 5: "send money" to her own number is refused, never a voucher link; an unpaid link is "not paid", never "still confirming"', [
+        { level: 'FAIL', ok: has(s3.replyText, /That is your own number/) && has(s3.replyText, /say \*withdraw\*/), what: 'her own number after "send money" is refused and points to withdraw' },
+        { level: 'FAIL', ok: !has(s3.replyText, /Pay the R\d+ difference|button below|Confirm WaPay Voucher/), what: 'no voucher purchase and no payment link' },
+        { level: 'FAIL', ok: has(d1.replyText, /You have not paid your R367 payment link/) && has(d1.replyText, /Ignore it if you did not mean to buy/), what: '"did my payment go through" says the link was not paid' },
+        { level: 'FAIL', ok: !has(d1.replyText, /still confirming|PayFast/), what: 'never "still confirming", no partner named' },
+      ], s);
     } finally {
       await prisma.pendingGift.deleteMany({ where: { idemKey: giftKey } }).catch(() => {});
       await prisma.providerRequest.deleteMany({ where: { idemKey: `chatqa-dep-lisa-${qa.id}` } }).catch(() => {});

@@ -11,7 +11,12 @@
 | same, `deliverPayoutStep` | passes `step.refs` to `sendWhatsAppText` | 3 | the withdraw gate's id is stored on the turn so repeats are counted in any language |
 | `lib/how-it-works.js` | "13-digit ID number" → "SA ID number or passport"; `WITHDRAW_AMOUNT_ASK` leaves the how-it-works topics | 1, 3 | the Lisa case |
 
-Later items in this round add their own rows here (send-to-own-number, the unpaid-link answer, time promises, the save-as hook).
+| same, `startVoucherGiftPreviewAndConfirm` + `SEND_PATH_INTENTS` | the customer's own number from a send path is refused before any preview or link; the explicit self-purchase is marked `self: true` and keeps intent `OTT_VOUCHER_SELF` | 4 | "send money" + her own number offered Lisa a R367 voucher link |
+| same, the SEND_MONEY one-shot | a message naming a received voucher is answered (`receivedVoucherReply`), never a gift | 4 | the same case |
+| same, `handleDepositStatus` PENDING | `unpaidLinkAnswer`: "you have not paid that link" after 15 minutes, "no payment yet" before; no partner named | 5 | "still confirming" for a link nobody paid |
+| `tests/e2e/chat-qa-vas.mjs` (Blu thread) | the park check also accepts the new unpaid-link wording | 5 | keeps the VAS harness green |
+
+Later items in this round add their own rows here (time promises, the gift wording, the save-as hook).
 
 ## B. Item 6: a gift to someone not yet on WaPay becomes balance when they join
 

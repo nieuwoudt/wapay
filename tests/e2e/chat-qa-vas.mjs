@@ -101,7 +101,7 @@ async function run() {
       { level: 'FAIL', ok: has(a.replyText, /Top up R60(\.00)?/i), what: 'the top-up asked for is exactly the difference' },
       { level: 'FAIL', ok: has(a.replyText, /payfast|pay\.|https?:\/\//i) || has(a.replyText, /payment fee/i), what: 'a deposit link (with its fee) is in the same turn' },
       // The deposit-status hook may answer this one first ("still confirming your R60"): also true, also keeps the park.
-      { level: 'FAIL', ok: has(b.replyText, /hasn't landed yet|has not landed|still confirming/i), what: 'a message while parked: top-up not landed yet (or still confirming), park kept' },
+      { level: 'FAIL', ok: has(b.replyText, /hasn't landed yet|has not landed|still confirming|not received a payment|have not paid/i), what: 'a message while parked: top-up not landed yet (or still confirming), park kept' },
       { level: 'FAIL', ok: has(c.replyText, /Confirm Airtime Purchase/i) && has(c.replyText, /R100/), what: 'once the money is there, even "hi" re-runs the purchase to the confirm' },
     ], s);
     await s.say('no');

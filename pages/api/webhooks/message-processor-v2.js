@@ -519,7 +519,18 @@ function isConversationalEscape(text) {
  * the previewId in VOUCHER_GIFT_CONFIRM state, and ask for YES/NO. The PIN
  * step (VOUCHER_GIFT_PIN) executes against the same previewId.
  */
+/** The ways a gift preview is entered from "send money" (never the explicit self-purchase, which is OTT_VOUCHER_SELF). */
+const SEND_PATH_INTENTS = new Set(['STATE_VOUCHER_GIFT_RECIPIENT', 'STATE_VOUCHER_GIFT_RECIPIENT_BENEFICIARY', 'STATE_VOUCHER_GIFT_AMOUNT', 'ORCHESTRATOR', 'AI_CHAT', 'SMART_PRODUCT_QUERY']);
 async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, recipientMsisdn, intent = 'VOUCHER_GIFT', rawText = '' }) {
+  // "Send money" to your own number is not a voucher for yourself (founder 2026-10-12, the Lisa
+  // case: "send money", R350, her own number, then a R367 link). Only the explicit self-purchase
+  // ("buy an OTT voucher", intent OTT_VOUCHER_SELF) or its resume may reach here with the own number.
+  if (SEND_PATH_INTENTS.has(intent) && normaliseMsisdn(recipientMsisdn || '') === normaliseMsisdn(account.msisdn || '')) {
+    const { SEND_TO_SELF_TEXT } = await import('../../../lib/payout-gate.js');
+    await updateConversationState(from, null);
+    logStructured('send_to_self_refused', { from, accountId: account.id, intent });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(SEND_TO_SELF_TEXT, await userLang(account)) });
+  }
   const previewUrl = apiUrl('/api/vas/voucher/preview');
   logInternalFetchCall({ url: previewUrl, path: '/api/vas/voucher/preview' });
 
@@ -1978,7 +1989,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
         rawText: text,
       });
     }
-    await updateConversationState(from, 'VOUCHER_GIFT_AMOUNT', { recipientMsisdn: account.msisdn });
+    await updateConversationState(from, 'VOUCHER_GIFT_AMOUNT', { recipientMsisdn: account.msisdn, self: true });
     const askMsg = `🎟️ *OTT Voucher*\n\nHow much would you like your voucher for? (R10–R1000)\n\nFor example "R50", or reply "cancel" to stop.`;
     return await sendWhatsAppText({ to: from, text: askMsg });
   }
@@ -2168,6 +2179,15 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     slots?.productHint === 'SEND_MONEY' &&
     (detection.intent === 'AI_CHAT' || detection.intent === 'SMART_PRODUCT_QUERY')
   ) {
+    // A message that names a voucher the customer RECEIVED is about that voucher, never a purchase (2026-10-12, the Lisa case).
+    {
+      const { namesReceivedVoucher, receivedVoucherReply } = await import('../../../lib/payout-gate.js');
+      if (namesReceivedVoucher(text)) {
+        const { moneySituation } = await import('../../../lib/money-situation.js');
+        const voucherHelp = receivedVoucherReply({ situation: await moneySituation({ account }).catch(() => null) });
+        if (voucherHelp) return await sendWhatsAppText({ to: from, text: await localizeOutbound(voucherHelp, await userLang(account)) });
+      }
+    }
     const gift = resolveGift({ slots, senderMsisdn: account.msisdn });
 
     if (gift.kind === 'VOUCHER_GIFT') {
@@ -3574,9 +3594,10 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
  * the one the words point at (or the newest), and a pay-out that is still
  * PENDING is checked with the bank rail right now instead of guessed at.
  *
- * Deposits: SUCCESS -> amount + current balance. PENDING -> "PayFast is
- * still confirming" (the ITN confirmation message IS the promised
- * follow-up). FAILED -> say so plainly and invite a retry. No intent ->
+ * Deposits: SUCCESS -> amount + current balance. PENDING (no payment
+ * notification) -> "you have not paid that link" once it is older than
+ * 15 minutes, "no payment yet" before that (2026-10-12, unpaidLinkAnswer).
+ * FAILED -> say so plainly and invite a retry. No intent ->
  * explain how to deposit. Every answer carries the live balance so the user
  * never sees a stale number without context.
  */
@@ -3643,14 +3664,13 @@ async function handleDepositStatus({ from, account, rawText = '' }) {
       `💰 Balance: R${balance}\n\n` +
       `Want to try again? Reply "deposit ${Number.isInteger(amountCents) ? randsShort(amountCents) : 'R100'}".`;
   } else {
-    // PENDING (or any non-terminal state): the ITN confirmation message is
-    // the promised follow-up — it fires the moment PayFast notifies us. A
-    // payment declined ON PayFast's page never sends an ITN, so the retry
-    // line matters (observed live: FNB decline, 2026-08-19).
-    text =
-      `⏳ PayFast is still confirming your ${amount}. I'll message you here the moment it clears.\n\n` +
-      `If the payment didn't go through on PayFast's page (or your bank declined it), nothing left your account. Just reply "deposit ${Number.isInteger(amountCents) ? randsShort(amountCents) : 'R100'}" to try again.\n\n` +
-      `💰 Balance: R${balance}`;
+    // PENDING: no payment notification has arrived for this link (the ITN only ever
+    // writes SUCCESS). Founder 2026-10-12, the Lisa case: a R367 link she opened and
+    // never paid was answered "still confirming". An old unpaid link is said to be
+    // unpaid; a fresh one may still be in flight, so it is "no payment yet", never
+    // "still confirming". No partner named, no time promised.
+    const { unpaidLinkAnswer } = await import('../../../lib/money-situation.js');
+    text = `${unpaidLinkAnswer({ intent })}\n\n💰 Balance: R${balance}`;
   }
 
   const localizedStatus = await localizeOutbound(text + altLine, await userLang(account));
@@ -5704,7 +5724,8 @@ async function handleConversationState({ from, text, state, data, account }) {
             account,
             amountCents,
             recipientMsisdn: normaliseMsisdn(knownRecipient),
-            intent: 'STATE_VOUCHER_GIFT_AMOUNT',
+            // The explicit self-purchase keeps its intent; "send money" to the own number is refused (2026-10-12).
+            intent: data?.self ? 'OTT_VOUCHER_SELF' : 'STATE_VOUCHER_GIFT_AMOUNT',
             rawText: text,
           });
         }

@@ -35,7 +35,8 @@ Ten requests to move money to her bank, seven identical replies, no word about t
 |---|---|---|---|
 | 1 | Passport / foreign ID at the ID step, issuing country, wire fields; migration `20261012_payout_passport_and_last4` (applied to production 2026-10-12 14:28 SAST, before the deploy) | `d3c3cef` (live 14:37 SAST) | §C, §D.1 |
 | 2 | "To my bank account" opens PayShap with the price and the numbers (BUGLOG #101) | `11e4485` (live 15:00 SAST) | §D.2 |
-| 3 | The R0 gate reads the situation, tiers, a person on the third ask; "how much can I withdraw" (BUGLOG #102) | (this push) | §D.3 |
+| 3 | The R0 gate reads the situation, tiers, a person on the third ask; "how much can I withdraw" (BUGLOG #102) | `7dfed12` (pushed 15:18 SAST; Vercel build failed, see §D.3) | §D.3 |
+| 4, 5 | "Send money" to your own number refused, received voucher answered; an unpaid link is "not paid" (BUGLOG #103, #104) | (this push) | §D.4 |
 
 ## C. Lisa's first withdrawal (item 1): the run sheet
 
@@ -75,4 +76,9 @@ If line 8 fails at the provider for the passport: "withdraw 50 absa", "yes", "mi
 
 - Harness run 1 (real processor, QA account at R0 with a delivered R350 voucher gift and a R367 link unpaid for 20 minutes): "I want you to put in my bank account" → "💸 You have R0 to withdraw. The R350 … sent you today came as a voucher PIN, not as money in your balance, so it cannot be withdrawn. Your R367 payment link from today was not paid, so nothing came in from it and nothing was taken. A withdrawal needs at least R58 …"; "How can you transfer in my bank account" → "Let me explain where your money is …" with the bullets, what she can do and the passport line; "Put in my bank account" → "Here it is once more, step by step …" (no alert channel on the harness); "How much can I withdraw" → **"🙋 A person from the WaPay team has been asked to help you" although no alert had been sent**. Defect in the new code, fixed before any push: a person is named only when an alert really went (`refs.personAsked`), a failed alert is retried, and the harness now checks it.
 - Suite 1026/1026 after the fix; harness run 2: 33 PASS, no WARN, no FAIL (Lisa 3 now checks that no person is claimed without an alert: the fourth reply reads "💸 In short: you have R0 to withdraw, and a withdrawal needs at least R58 …").
+- **Deploy (2026-10-12 15:18 SAST):** the Vercel production build of `7dfed12` failed after about 100 s, and an empty re-trigger (`b954d88`) failed after 10 s (the sibling project `wapay-api-vcel` also failed on it). A clean clone of `b954d88` builds green on the Mac (`pnpm install --frozen-lockfile`, `pnpm build`, also with `CI=true VERCEL=1`); Vercel's status page shows no incident. The build log needs the founder's Vercel access (asked). Production stays on `11e4485`: items 1 and 2 live, item 3 not yet.
+
+### D.4 Items 4 and 5 (2026-10-12)
+
+- Suite 1029/1029; harness 34 PASS, no WARN, no FAIL. 6d part 4: "Send money" → "R350" → her own number → "📵 That is your own number, so there is nobody to send it to. To move your WaPay money into your bank account, say *withdraw*. …" (no voucher, no link). 6d part 5: "Did my payment go through" with the R367 link unpaid for 20 minutes → "You have not paid your R367 payment link from today: no payment came in for it, so nothing was taken. Ignore it if you did not mean to buy. …" Build green.
 

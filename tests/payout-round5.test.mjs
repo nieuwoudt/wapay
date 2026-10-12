@@ -336,3 +336,51 @@ test('3. "How much can I withdraw?" is answered from the balance (not the how-it
   const poor = await startWithdraw({ account: lisa, ask: matchWithdrawAsk('How much can I withdraw?'), deps: { ...deps(0), moneySituation: async () => LISA_SITUATION, gateHistory: async () => ({ count: 0, personAsked: false }) } });
   assert.match(poor.text, /^💸 You have R0 to withdraw\./);
 });
+
+// ---------------------------------------------------------------------------
+// 4. "Send money" to your own number is refused; a received voucher named in
+//    the message is answered, never sold (founder 2026-10-12: Lisa typed her
+//    own number after "send money" and was offered a R350 voucher for R367).
+// 5. "Did my payment go through?" about a link nobody paid: "you have not
+//    paid", never "still confirming".
+// ---------------------------------------------------------------------------
+import { SEND_TO_SELF_TEXT, namesReceivedVoucher, receivedVoucherReply } from '../lib/payout-gate.js';
+import { unpaidLinkAnswer } from '../lib/money-situation.js';
+
+test('4. the own-number refusal names withdraw and the self-purchase; only the send paths are refused, the explicit self-purchase is not', () => {
+  assert.equal(SEND_TO_SELF_TEXT, '📵 That is your own number, so there is nobody to send it to. To move your WaPay money into your bank account, say *withdraw*. To buy a voucher for yourself, say *buy a voucher*.');
+  const src = read('../pages/api/webhooks/message-processor-v2.js');
+  const set = src.match(/const SEND_PATH_INTENTS = new Set\(\[([^\]]*)\]\)/)?.[1] || '';
+  for (const i of ['STATE_VOUCHER_GIFT_RECIPIENT', 'STATE_VOUCHER_GIFT_RECIPIENT_BENEFICIARY', 'STATE_VOUCHER_GIFT_AMOUNT', 'ORCHESTRATOR', 'AI_CHAT', 'SMART_PRODUCT_QUERY']) assert.ok(set.includes(`'${i}'`), i);
+  for (const i of ['OTT_VOUCHER_SELF', 'RESUME_VOUCHER_PURCHASE']) assert.ok(!set.includes(`'${i}'`), `${i} may reach the preview with the own number`);
+  const fn = src.slice(src.indexOf('async function startVoucherGiftPreviewAndConfirm'));
+  assert.ok(fn.indexOf('SEND_PATH_INTENTS.has(intent)') > -1 && fn.indexOf('SEND_PATH_INTENTS.has(intent)') < fn.indexOf("apiUrl('/api/vas/voucher/preview')"), 'the refusal runs before any preview or shortfall link');
+  assert.match(src, /updateConversationState\(from, 'VOUCHER_GIFT_AMOUNT', \{ recipientMsisdn: account\.msisdn, self: true \}\)/, 'the explicit self-purchase is marked');
+  assert.match(src, /intent: data\?\.self \? 'OTT_VOUCHER_SELF' : 'STATE_VOUCHER_GIFT_AMOUNT'/);
+  const send = src.slice(src.indexOf("slots?.productHint === 'SEND_MONEY' &&"));
+  assert.ok(send.indexOf('namesReceivedVoucher(text)') > -1 && send.indexOf('namesReceivedVoucher(text)') < send.indexOf('resolveGift({ slots, senderMsisdn'), 'a received voucher is answered before the gift flow can start');
+});
+
+test('4. a received voucher in the message: recognised, answered from the record, null when the record has none', () => {
+  for (const t of ['I got a R350 voucher from Nieuwoudt', 'send the voucher Nieuwoudt sent me', 'Can I spend the voucher I received?', 'the voucher you sent me']) assert.ok(namesReceivedVoucher(t), t);
+  for (const t of ['buy a voucher', 'send money', 'send R50 voucher to 0821234567', 'I received money', 'my vouchers']) assert.ok(!namesReceivedVoucher(t), t);
+  const now = new Date('2026-10-11T07:14:00Z');
+  const v = receivedVoucherReply({ situation: LISA_SITUATION, now });
+  assert.match(v, /^🎁 The R350 Nieuwoudt sent you yesterday is a voucher PIN \(in that day's message\)\. It is spent at shops that take WaPay vouchers; it is not part of your WaPay balance, so it cannot be sent on or withdrawn\./);
+  assert.match(v, /Your WaPay balance: R0\.$/);
+  const moved = receivedVoucherReply({ situation: { ...LISA_SITUATION, availableCents: 35000, giftsReceived: [{ ...LISA_SITUATION.giftsReceived[0], inBalance: true }] }, now });
+  assert.match(moved, /is in your WaPay balance: spend it here, or say \*withdraw\* to move it to your bank\./);
+  assert.equal(receivedVoucherReply({ situation: { ...LISA_SITUATION, giftsReceived: [] } }), null);
+  assert.ok(!/OTT|PayFast|—/.test(v + moved), 'no partner named, no em dash');
+});
+
+test('5. an unpaid link: older than 15 minutes is "you have not paid", fresh is "no payment yet"; never "still confirming", no partner, no time promised', () => {
+  const now = new Date('2026-10-10T21:25:00Z');
+  const old = unpaidLinkAnswer({ intent: { requestTs: new Date('2026-10-10T20:16:54Z'), metadata: { amountCents: 35000, grossCents: 36700 } }, now });
+  assert.equal(old, 'You have not paid your R367 payment link from today: no payment came in for it, so nothing was taken. Ignore it if you did not mean to buy. If money did leave your bank for it, tell me and I will check.');
+  const fresh = unpaidLinkAnswer({ intent: { requestTs: new Date('2026-10-10T21:20:00Z'), metadata: { amountCents: 5000, grossCents: 5300 } }, now });
+  assert.equal(fresh, 'I have not received a payment for your R53 payment link yet. If you have just paid, I will message you here as soon as it lands. If you did not pay, nothing was taken.');
+  const bare = unpaidLinkAnswer({ intent: { requestTs: new Date('2026-10-08T10:00:00Z'), metadata: {} }, now });
+  assert.match(bare, /^You have not paid your payment link from on|^You have not paid your payment link from /);
+  for (const t of [old, fresh, bare]) assert.ok(!/still confirming|PayFast|minute|—/i.test(t), t);
+});

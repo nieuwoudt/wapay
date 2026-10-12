@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-12 (81) — "Send money" to your own number is refused; a received voucher is answered, not sold; an unpaid link is "not paid", never "still confirming" (payouts round 5, items 4 and 5)
+
+From the Lisa case. Item 4: `startVoucherGiftPreviewAndConfirm` refuses the
+customer's own number when the gift was entered from a send path
+(`SEND_PATH_INTENTS`), before any preview, shortfall or payment link, and
+points to *withdraw*; the explicit "buy an OTT voucher" for yourself is
+marked `self: true` and still works; in the send-money one-shot a message
+naming a received voucher gets `receivedVoucherReply` from the record.
+Item 5: `handleDepositStatus` answers a PENDING link with `unpaidLinkAnswer`
+(older than 15 minutes: "You have not paid your R367 payment link … Ignore it
+if you did not mean to buy."; fresher: "no payment yet"). Anchored edits in
+the processor (main session's file, listed in
+`docs/PAYOUTS_ROUND5_FOR_MAIN_SESSION.md` §A). BUGLOG #103, #104; tests in
+`tests/payout-round5.test.mjs` and `tests/deposit-status.test.mjs`; harness
+6d parts 4 and 5.
+
+---
+
 ## 2026-10-12 (80) — The R0 withdraw gate reads the customer's situation and never repeats itself; "How much can I withdraw?" is answered from the balance (payouts round 5, item 3)
 
 Lisa got the same "Withdrawals start at R50 plus the fee…" line seven times

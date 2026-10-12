@@ -132,7 +132,8 @@ test('static: handleDepositStatus reads the intent table, never invents status',
   assert.match(body, /getLatestDepositIntent\(\{ accountId: account\.id \}\)/);
   // All three terminal answers exist…
   assert.match(body, /deposit was received/, 'SUCCESS answer');
-  assert.match(body, /still confirming/, 'PENDING answer');
+  assert.match(body, /unpaidLinkAnswer\(\{ intent \}\)/, 'PENDING answer: not paid (old link) or no payment yet (fresh link), from lib/money-situation.js (2026-10-12)');
+  assert.ok(!/still confirming your/.test(body), 'never "still confirming" for a link nobody paid (the Lisa case)');
   assert.match(body, /didn't complete/, 'FAILED answer');
   // …and every answer shows the live balance (stale-number complaint).
   const balanceMentions = body.match(/Balance: R\$\{balance\}/g) ?? [];
