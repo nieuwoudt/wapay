@@ -1744,6 +1744,19 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     if (matchBusinessSignupAsk(text)) return await handleBusinessSignupAsk({ from, account });
   }
 
+  // "Can you save my number used above as mine?" / "call it mother": a real action on the
+  // saved pay-out destinations, before the agent and the intent hooks, so no model ever
+  // claims a save it cannot make (founder 2026-10-12, payouts round 5 item 10).
+  {
+    const { matchNicknameAsk, nicknameLastDestination } = await import('../../../lib/payout-nickname.js');
+    const nickname = matchNicknameAsk(text);
+    if (nickname) {
+      const named = await nicknameLastDestination({ account, nickname });
+      logStructured('payout_nickname_ask', { accountId: account.id, ok: named.ok });
+      return await sendWhatsAppText({ to: from, text: await localizeOutbound(named.text, await userLang(account)) });
+    }
+  }
+
   // FEES (2026-09-13): "how much does it cost to deposit money?" is a price
   // question. Answered from the fee tables BEFORE the keyword router (which
   // read it as a voucher redemption) and before the withdraw matcher.

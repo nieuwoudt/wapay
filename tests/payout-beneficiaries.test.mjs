@@ -118,7 +118,7 @@ test('destinations: masked labels, one row per number across the bank family, ca
   await withKey(async () => {
     const prisma = stubPrisma();
     assert.equal(destinationLabel('PAYSHAP', { account_number: '62012345394', branch_name: 'FNB' }), 'FNB account •••394');
-    assert.equal(destinationLabel('NEDCASH', { mobile: '0787051175' }), 'Cellphone •••175', 'a cash destination is the cellphone, whichever bank the code comes from');
+    assert.equal(destinationLabel('NEDCASH', { mobile: '0787051175' }), 'Cellphone •••1175', 'a cash destination is the cellphone, whichever bank the code comes from');
     assert.equal(destinationLabel('PAYSHAP', { account_number: '62012345394', branch_name: 'FNB' }, 'mine'), 'Mine: FNB account •••394');
     assert.equal(cleanNickname('my mom'), 'My Mom'); assert.equal(cleanNickname('buy airtime now please'), null); assert.equal(cleanNickname('me'), 'Mine'); assert.equal(cleanNickname('x'.repeat(30)), null);
     assert.equal(DESTINATION_FAMILY.RTC, 'BANK'); assert.equal(DESTINATION_FAMILY.EWALLET, 'CASH');
@@ -130,15 +130,15 @@ test('destinations: masked labels, one row per number across the bank family, ca
     const again = await savePayoutDestination({ prisma, accountId: 'a1', method: 'RTC', recipient: { account_number: '62012345394', branch_code: '250655', branch_name: 'FNB' } });
     assert.equal(again.id, one.id, 'same number, same row'); assert.equal(prisma.destinations.get(one.id).timesUsed, 2);
     const cash = await savePayoutDestination({ prisma, accountId: 'a1', method: 'NEDCASH', recipient: { mobile: '0787051175' }, nickname: 'mine' });
-    assert.equal(cash.label, 'Mine: Cellphone •••175'); assert.equal(cash.nickname, 'Mine');
+    assert.equal(cash.label, 'Mine: Cellphone •••1175'); assert.equal(cash.nickname, 'Mine');
     const absa = await savePayoutDestination({ prisma, accountId: 'a1', method: 'CASHSEND', recipient: { mobile: '078 705 1175' } });
-    assert.equal(absa.id, cash.id, 'the same cellphone via Absa is the same row'); assert.equal(absa.label, 'Mine: Cellphone •••175', 'the nickname survives a save without one');
+    assert.equal(absa.id, cash.id, 'the same cellphone via Absa is the same row'); assert.equal(absa.label, 'Mine: Cellphone •••1175', 'the nickname survives a save without one');
     const stored = prisma.destinations.get(one.id);
     assert.ok(stored.accountEnc.startsWith('enc1:') && !stored.accountEnc.includes('62012345394') && stored.accountLast3 === '394');
     assert.equal(stored.mobileEnc, null);
 
     const list = await listPayoutDestinations({ prisma, accountId: 'a1' });
-    assert.deepEqual(list.map((d) => d.label).sort(), ['FNB account •••394', 'Mine: Cellphone •••175']);
+    assert.deepEqual(list.map((d) => d.label).sort(), ['FNB account •••394', 'Mine: Cellphone •••1175']);
     assert.ok(list.every((d) => typeof d.fingerprint === 'string' && d.fingerprint.length === 64), 'the fingerprint rides along so the flow can recognise a typed number');
     for (const d of list) { assert.ok(!('accountEnc' in d) && !('mobileEnc' in d), 'no encrypted field leaves the list'); const { fingerprint, ...shown } = d; assert.ok(!JSON.stringify(shown).match(/\d{6,}/), 'no long digit run in the list (the fingerprint is a hash, not a number)'); }
     assert.deepEqual((await listPayoutDestinations({ prisma, accountId: 'a1', family: 'BANK' })).map((d) => d.label), ['FNB account •••394']);

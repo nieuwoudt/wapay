@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-10-12 (83) — Saving with a name: the save step asks what to call it, "save my number used above as mine" is a real action, cellphones show four digits (payouts round 5, items 9 to 11)
+
+From the founder's round-4 run. Item 9: a bare YES at the save step saves,
+then asks once "What should I call it? Reply *mine*, or a name like
+*mother*." (skippable; the customer's own WhatsApp number is saved as *Mine*
+without a question). Item 10: `lib/payout-nickname.js` (`matchNicknameAsk`,
+`nicknameLastDestination`) renames the saved destination the last pay-out
+used, before the agent and the intent hooks (one anchored processor block),
+and only claims what it wrote; `setPayoutDestinationNickname` in
+`lib/payout-beneficiaries.js`. Item 11: cellphone labels and messages show
+the last four digits (labels, the save offer, the SMS and pending lines, the
+pay-out record the webhook reads; old rows read their four from the vault);
+accounts and IDs keep three. BUGLOG #107; tests in
+`tests/payout-round5.test.mjs`; harness 6d part 6.
+
+---
+
 ## 2026-10-12 (82) — Gift-to-balance money side (builders), no time promises anywhere, the gift claim line (payouts round 5, items 6 to 8)
 
 Item 6: `lib/ledger-core.js` gains `buildGiftHeld`, `buildGiftClaimToBalance`

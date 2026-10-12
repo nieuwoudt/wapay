@@ -21,7 +21,7 @@
 | `lib/gifting.js` `buildVoucherClaimMessage` | last line: "This voucher is separate from your WaPay balance … Say *balance* any time …" | 8 | "reply BALANCE to open your own WaPay and use it right here" to someone already joining |
 | `lib/ledger-core.js` | `buildGiftHeld`, `buildGiftClaimToBalance`, `buildGiftExpiryToVoucher`, `GIFT_PENDING` (pure, additive, tested; not wired) | 6 | the money side of item 6 |
 
-Later items in this round add their own rows here (the save-as hook).
+| `pages/api/webhooks/message-processor-v2.js` `handlePostOnboarding` | before the agent block: `matchNicknameAsk` → `nicknameLastDestination` (lib/payout-nickname.js) | 10 | "can you save my number used above as mine?" got a false "Saved" from the agent |
 
 ## B. Item 6: a gift to someone not yet on WaPay becomes balance when they join
 

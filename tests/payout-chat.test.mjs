@@ -321,7 +321,7 @@ test('the full name is asked once as on the account when KYC has none; the confi
   assert.equal(pin.state, 'PAYOUT_PIN');
   const done = await executeWithdraw({ account: founder, data: pin.data, deps: { ...d, beneficiariesAvailable: () => false } });
   assert.equal(base.last.recipient.firstname, 'Nieuwoudt'); assert.equal(base.last.recipient.surname, 'Gresse'); assert.equal(base.last.recipient.id_number, '9001015009087');
-  assert.match(done.text, /Done\./); assert.match(done.text, /withdrawal code is sent by SMS to •••175/); assert.match(done.text, /Cardless services/); assert.match(done.text, /If the SMS does not arrive/);
+  assert.match(done.text, /Done\./); assert.match(done.text, /withdrawal code is sent by SMS to •••1175/, 'a cellphone shows four digits (2026-10-12)'); assert.match(done.text, /Cardless services/); assert.match(done.text, /If the SMS does not arrive/);
   assert.equal(done.state, null, 'no save offer while the vault is not configured');
   assert.ok(!/—/.test(done.text), 'no em dashes in customer copy');
   // A bank method says the bank's own app or SMS will show the credit.
@@ -345,11 +345,11 @@ test('save for next time: offered only after an accepted pay-out with typed deta
   };
   const data = { method: 'NEDCASH', amountCents: 2000, intentId: 'wa-a-b', options: OPTS4, balanceCents: 15200, recipient: { mobile: '0787051175', fullName: 'Nieuwoudt Gresse', id_number: '9001015009087' } };
   const done = await executeWithdraw({ account: founder, data, deps: d });
-  assert.equal(done.state, 'PAYOUT_SAVE'); assert.match(done.text, /Done\./); assert.match(done.text, /💾 Save these details for next time \(Cellphone •••175 and your name and ID number ending 087\)\? Reply \*YES\*, or give them a name like "mine" or "mother"/); assert.match(done.text, /stored encrypted/); assert.match(done.text, /"forget my bank details"/);
+  assert.equal(done.state, 'PAYOUT_SAVE'); assert.match(done.text, /Done\./); assert.match(done.text, /💾 Save these details for next time \(Cellphone •••1175 and your name and ID number ending 087\)\? Reply \*YES\*, or give them a name like "mine" or "mother"/); assert.match(done.text, /stored encrypted/); assert.match(done.text, /"forget my bank details"/);
   assert.ok(!/9001015009087|0787051175/.test(done.text), 'nothing full in the offer');
   assert.equal(done.data.saveDestination, true); assert.equal(done.data.saveIdentity, true);
   const yes = await handleWithdrawReply({ account: founder, state: 'PAYOUT_SAVE', data: done.data, text: 'YES', deps: d });
-  assert.equal(yes.state, null); assert.match(yes.text, /Saved, encrypted: Nedbank cash to •••175 and your name and ID number ending 087/);
+  assert.equal(yes.state, null); assert.match(yes.text, /Saved as \*Mine\*, encrypted: Nedbank cash to •••175 and your name and ID number ending 087/, 'their own WhatsApp number is named Mine without a question (2026-10-12)');
   assert.deepEqual(calls, [['dest', 'NEDCASH', '0787051175'], ['id', 'Nieuwoudt Gresse', '9001015009087']]);
   const no = await handleWithdrawReply({ account: founder, state: 'PAYOUT_SAVE', data: done.data, text: 'no', deps: d });
   assert.equal(no.state, null); assert.match(no.text, /Not saved/); assert.equal(calls.length, 2, 'NO writes nothing');
@@ -490,7 +490,7 @@ test('round 3: a cellphone typed again that is already saved is a use, not a sec
   const other = await handleWithdrawReply({ account: founder, state: s1.state, data: s1.data, text: '083 111 2222' });
   const pin1 = await handleWithdrawReply({ account: founder, state: other.state, data: other.data, text: 'yes' });
   const done1 = await executeWithdraw({ account: founder, data: pin1.data, deps: d });
-  assert.equal(done1.state, 'PAYOUT_SAVE'); assert.match(done1.text, /Save these details for next time \(Cellphone •••222\)\? Reply \*YES\*, or give them a name like "mine" or "mother"/);
+  assert.equal(done1.state, 'PAYOUT_SAVE'); assert.match(done1.text, /Save these details for next time \(Cellphone •••2222\)\? Reply \*YES\*, or give them a name like "mine" or "mother"/);
   const yes = await handleWithdrawReply({ account: founder, state: 'PAYOUT_SAVE', data: done1.data, text: 'Yes please save it as my mother', deps: d });
   assert.equal(saved.length, 1); assert.equal(saved[0].nickname, 'My Mother'); assert.equal(saved[0].recipient.mobile, '0831112222');
   assert.match(yes.text, /✅ Saved as \*My Mother\*, encrypted: My Mother: Cellphone •••175/); assert.match(yes.text, /or say "my mother"/);

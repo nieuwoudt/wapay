@@ -472,3 +472,98 @@ test('8. the gift claim message says the PIN is separate from the balance, never
   assert.match(msg, /This voucher is separate from your WaPay balance: it is spent at those stores and cannot be withdrawn to a bank\. Say \*balance\* any time to see your WaPay balance\./);
   assert.ok(!/reply BALANCE|open your own WaPay|use it right here|—/.test(msg));
 });
+
+// ---------------------------------------------------------------------------
+// 9. After a bare YES at the save step, one optional question: "What should I
+//    call it?" (not for the customer's own WhatsApp number, which is "Mine").
+// 10. "Can you save my number used above as mine?" / "call it mother" is a
+//    real action on the saved destination, before any model.
+// 11. Cellphone labels show four digits; accounts and IDs keep three.
+// ---------------------------------------------------------------------------
+import { matchNicknameAsk, nicknameLastDestination } from '../lib/payout-nickname.js';
+import { destinationLabel, displayLabelOf, setPayoutDestinationNickname } from '../lib/payout-beneficiaries.js';
+
+test('9. a bare YES for an account asks for a name once; a name sets it, "no" or "ok" keeps it, anything else passes through; their own number is "Mine" without a question', async () => {
+  envOff();
+  const named = [];
+  const d = {
+    ...deps(), beneficiariesAvailable: () => true,
+    saveDestination: async (a) => ({ ok: true, id: 'dest-1', label: a.nickname ? `${a.nickname === 'mine' ? 'Mine' : a.nickname}: ${a.method === 'PAYSHAP' ? 'Capitec account •••890' : 'Cellphone •••9361'}` : 'Capitec account •••890' }),
+    saveIdentity: async () => ({ ok: true, idLast3: '456' }),
+    setNickname: async (a) => { named.push(a); const n = /mother/i.test(a.nickname) ? 'Mother' : 'Mine'; return { ok: true, nickname: n, label: `${n}: Capitec account •••890` }; },
+  };
+  const saveData = { method: 'PAYSHAP', recipient: { account_number: '1234567890', branch_code: '470010', branch_name: 'Capitec', mobile: '27601879361', fullName: 'Lisa Moyo', id_number: 'FN123456', id_type: 'PASSPORT', country_of_issue: 'ZW' }, saveDestination: true, saveIdentity: true };
+  const yes = await handleWithdrawReply({ account: lisa, state: 'PAYOUT_SAVE', data: saveData, text: 'yes', deps: d });
+  assert.equal(yes.state, 'PAYOUT_SAVE'); assert.equal(yes.data.nicknameFor, 'dest-1');
+  assert.match(yes.text, /^✅ Saved, encrypted: Capitec account •••890 and your name and passport or ID number ending 456\. What should I call it\? Reply \*mine\*, or a name like \*mother\*\./);
+  const mother = await handleWithdrawReply({ account: lisa, state: yes.state, data: yes.data, text: 'mother', deps: d });
+  assert.equal(mother.state, null); assert.equal(mother.text, '✅ Called it *Mother*: Mother: Capitec account •••890. Next time you withdraw, say "mother" to use it.');
+  assert.deepEqual(named.map((x) => [x.id, x.nickname]), [['dest-1', 'Mother']]);
+  for (const t of ['no', 'ok', 'skip', 'thanks']) {
+    const r = await handleWithdrawReply({ account: lisa, state: yes.state, data: yes.data, text: t, deps: d });
+    assert.equal(r.state, null, t); assert.match(r.text, /Kept as Capitec account •••890, without a name\./, t);
+  }
+  assert.deepEqual(await handleWithdrawReply({ account: lisa, state: yes.state, data: yes.data, text: 'buy R20 airtime', deps: d }), { state: null, passthrough: true });
+  assert.equal(named.length, 1, 'only a name writes');
+  // A name given with the YES: no second question.
+  const withName = await handleWithdrawReply({ account: lisa, state: 'PAYOUT_SAVE', data: saveData, text: 'yes as mine', deps: d });
+  assert.equal(withName.state, null); assert.match(withName.text, /^✅ Saved as \*Mine\*/);
+  // Her own WhatsApp number for cash: "Mine", never asked.
+  const own = await handleWithdrawReply({ account: lisa, state: 'PAYOUT_SAVE', data: { method: 'CASHSEND', recipient: { mobile: '27601879361' }, saveDestination: true, saveIdentity: false }, text: 'yes', deps: d });
+  assert.equal(own.state, null); assert.match(own.text, /^✅ Saved as \*Mine\*, encrypted: Mine: Cellphone •••9361/);
+  // Another cellphone: asked.
+  const other = await handleWithdrawReply({ account: lisa, state: 'PAYOUT_SAVE', data: { method: 'CASHSEND', recipient: { mobile: '27820000000' }, saveDestination: true, saveIdentity: false }, text: 'yes', deps: d });
+  assert.equal(other.state, 'PAYOUT_SAVE'); assert.match(other.text, /What should I call it\?/);
+});
+
+test('10. "save my number used above as mine" and "call it mother" are read exactly; "call me Thandi" is not a destination', () => {
+  const cases = {
+    'can you save my number used abve as mine?': 'Mine', 'Can you save my number used above as mine?': 'Mine', 'call it mother': 'Mother', 'name that account mine': 'Mine',
+    'name that one mine': 'Mine', 'call my capitec account mine': 'Mine', 'save that account as Mother.': 'Mother', 'label it Ma': 'Ma', 'call the number above mother': 'Mother',
+  };
+  for (const [t, nick] of Object.entries(cases)) assert.equal(matchNicknameAsk(t), nick, t);
+  for (const t of ['call me Thandi', 'my name is Lisa', 'save me R50', 'what is my balance', 'withdraw 50', '']) assert.equal(matchNicknameAsk(t), null, t);
+});
+
+test('10. the name goes on the destination the last pay-out used; an unsaved one is said, never renamed; nothing saved is said; the reply only claims what was written', async () => {
+  const founderAcc = { id: 'acc-f', msisdn: '27787051175' };
+  const saved = [{ id: 'cash1', method: 'NEDCASH', family: 'CASH', label: 'Cellphone •••1175' }, { id: 'bank1', method: 'PAYSHAP', family: 'BANK', label: 'FNB account •••394' }];
+  const writes = [];
+  const base = { available: () => true, listDestinations: async () => saved, setNickname: async (a) => { writes.push(a); return { ok: true, nickname: 'Mine', label: `Mine: ${saved.find((x) => x.id === a.id).label}` }; } };
+  const cash = await nicknameLastDestination({ account: founderAcc, nickname: 'mine', deps: { ...base, latestPayout: async () => ({ metadata: { method: 'CASHSEND', recipient: { mobile: '•••175' } } }) } });
+  assert.equal(cash.ok, true); assert.equal(writes.at(-1).id, 'cash1'); assert.equal(cash.text, '✅ Done: it is saved as *Mine*: Mine: Cellphone •••1175. Next time you withdraw, say "mine" to use it.');
+  await nicknameLastDestination({ account: founderAcc, nickname: 'mine', deps: { ...base, latestPayout: async () => ({ metadata: { method: 'PAYSHAP', recipient: { account: '•••394' } } }) } });
+  assert.equal(writes.at(-1).id, 'bank1', 'the last pay-out went to the FNB account');
+  const unsaved = await nicknameLastDestination({ account: founderAcc, nickname: 'mine', deps: { ...base, latestPayout: async () => ({ metadata: { method: 'PAYSHAP', recipient: { account: '•••777' } } }) } });
+  assert.equal(unsaved.ok, false); assert.match(unsaved.text, /The account your last withdrawal went to is not saved, so I cannot name it/); assert.equal(writes.length, 2, 'a different row is never renamed');
+  const none = await nicknameLastDestination({ account: founderAcc, nickname: 'mine', deps: { ...base, listDestinations: async () => [] } });
+  assert.match(none.text, /^Nothing is saved for your withdrawals yet/);
+  const failed = await nicknameLastDestination({ account: founderAcc, nickname: 'mine', deps: { ...base, latestPayout: async () => null, setNickname: async () => ({ ok: false }) } });
+  assert.match(failed.text, /nothing changed/); assert.ok(!/Done|saved as/.test(failed.text), 'no save is claimed when nothing was written');
+  // The processor runs it before the agent (the founder's number is on the agent pilot).
+  const src = read('../pages/api/webhooks/message-processor-v2.js');
+  const hook = src.indexOf('matchNicknameAsk(text)'); const agent = src.indexOf('if (agentV3For(from)) {\n    return await handleAgentTurn({ from, text, account, messageId });');
+  assert.ok(hook > -1 && agent > -1 && hook < agent, 'the nickname hook runs before the agent turn');
+});
+
+test('10. setPayoutDestinationNickname writes only the owner\'s row and returns the new label', async () => {
+  const rows = { d1: { id: 'd1', accountId: 'a1', method: 'PAYSHAP', bankName: 'FNB', accountLast3: '394', nickname: null } };
+  const db = { payoutDestination: {
+    updateMany: async ({ where, data }) => { const r = rows[where.id]; if (!r || r.accountId !== where.accountId) return { count: 0 }; Object.assign(r, data); return { count: 1 }; },
+    findUnique: async ({ where }) => rows[where.id] || null,
+  } };
+  assert.deepEqual(await setPayoutDestinationNickname({ prisma: db, accountId: 'a1', id: 'd1', nickname: 'my mom' }), { ok: true, nickname: 'My Mom', label: 'My Mom: FNB account •••394' });
+  assert.equal((await setPayoutDestinationNickname({ prisma: db, accountId: 'intruder', id: 'd1', nickname: 'x' })).ok, false);
+  assert.equal((await setPayoutDestinationNickname({ prisma: db, accountId: 'a1', id: 'd1', nickname: '123' })).error, 'BAD_INPUT');
+});
+
+test('11. cellphones show four digits everywhere the customer sees them; accounts and IDs keep three; old rows read their four from the vault', () => {
+  assert.equal(destinationLabel('NEDCASH', { mobile: '0787051175' }), 'Cellphone •••1175');
+  assert.equal(destinationLabel('PAYSHAP', { account_number: '62012345394', branch_name: 'FNB' }), 'FNB account •••394');
+  assert.equal(displayLabelOf({ method: 'NEDCASH', mobileLast3: '175', mobileLast4: '1175', nickname: 'Mine' }), 'Mine: Cellphone •••1175');
+  assert.equal(displayLabelOf({ method: 'NEDCASH', mobileLast3: '175' }), 'Cellphone •••175', 'an old row with nothing to decrypt keeps its three digits');
+  const src = read('../lib/payout-beneficiaries.js');
+  assert.match(src, /mobileLast4: lastDigits\(number, 4\)/, 'new saves store the four digits');
+  assert.match(read('../lib/payout-collection.js'), /d\.slice\(-4\)/);
+  assert.match(read('../lib/payouts.js'), /mobile: recipient\.mobile \? `•••\$\{String\(recipient\.mobile\)\.slice\(-4\)\}` : null/);
+});

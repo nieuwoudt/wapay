@@ -37,7 +37,8 @@ Ten requests to move money to her bank, seven identical replies, no word about t
 | 2 | "To my bank account" opens PayShap with the price and the numbers (BUGLOG #101) | `11e4485` (live 15:00 SAST) | §D.2 |
 | 3 | The R0 gate reads the situation, tiers, a person on the third ask; "how much can I withdraw" (BUGLOG #102) | `7dfed12` (pushed 15:18 SAST; Vercel build failed, see §D.3) | §D.3 |
 | 4, 5 | "Send money" to your own number refused, received voucher answered; an unpaid link is "not paid" (BUGLOG #103, #104) | `06ac727` (live 15:44 SAST, carrying item 3 too) | §D.4 |
-| 6, 7, 8 | Gift-to-balance builders (not wired: main session); no time promises; the gift claim line (BUGLOG #105, #106) | (this push) | §D.5 |
+| 6, 7, 8 | Gift-to-balance builders (not wired: main session); no time promises; the gift claim line (BUGLOG #105, #106) | `fde1657`, live as `24f1deb` (16:08 SAST) | §D.5 |
+| 9, 10, 11 | Save step asks a name; "save my number used above as mine" is a real action; four-digit cellphones (BUGLOG #107) | (this push) | §D.6 |
 
 ## C. Lisa's first withdrawal (item 1): the run sheet
 
@@ -86,4 +87,9 @@ If line 8 fails at the provider for the passport: "withdraw 50 absa", "yes", "mi
 ### D.5 Items 6, 7 and 8 (2026-10-12)
 
 - Suite 1034/1034 (the builders net a held-then-claimed gift to zero on `LIABILITY:GIFT_PENDING` with no rail clearing; every how-it-works brief and answer, every registry line and every method hint pass the time-promise pattern; the production cash list has no FNB eWallet). Knowledge base regenerated (14 lines). Harness run 1: one FAIL, the scenario "Can I send money to someone?" pinned the removed words "instantly and it is free" (the reply itself was the new copy); check updated to the new wording plus a no-time assertion. Run 2: 33 PASS, one WARN (the agent's withdrawals-off answer ran to seven lines, a model-length check seen on earlier runs too), exit 0.
+- Production: `fde1657` failed on Vercel in 7 s on both projects (the same fast failure as `b954d88`); the empty re-trigger `24f1deb` built and is live (payout-status build `24f1deb`, webhook 403).
+
+### D.6 Items 9, 10 and 11 (2026-10-12)
+
+- Suite 1039/1039; harness 35 PASS, no WARN, no FAIL. 6d part 6 (a throwaway vault key for the run): "withdraw 50 to my bank account", Capitec, passport, Zimbabwe, PIN → "💾 Save these details for next time (Capitec account •••890 and your name and passport or ID number ending 456)?" → "yes" → "✅ Saved, encrypted: … What should I call it? Reply *mine*, or a name like *mother*." → "mother" → "✅ Called it *Mother*: Mother: Capitec account •••890" → "can you save my number used above as mine?" → "✅ Done: it is saved as *Mine*: Mine: Capitec account •••890. Next time you withdraw, say "mine" to use it." (the founder's sentence of 12:41, now a write, never a claim). Build green.
 

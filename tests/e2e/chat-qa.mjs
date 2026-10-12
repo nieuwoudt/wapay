@@ -433,6 +433,34 @@ async function run() {
         { level: 'FAIL', ok: has(b2.replyText, /cash needs no bank account/) && has(b2.replyText, /Reply \*\d\* for cash at an Absa ATM/), what: '"I don\'t have a bank account" offers the cash methods' },
         { level: 'FAIL', ok: has(b3.replyText, /account number/i), what: '"all my money to my bank account" takes the ceiling and asks for the account' },
       ], s);
+
+      // 9, 10, 11. Saving with a name: a bare YES asks what to call it; "save my number used above as mine"
+      // renames the destination the last pay-out used; labels as the customer sees them. A throwaway vault
+      // key for this run only (the QA account's rows are deleted with it at teardown).
+      const prevPii = process.env.WAPAY_PII_KEY;
+      process.env.WAPAY_PII_KEY ||= (await import('node:crypto')).randomBytes(32).toString('hex');
+      try {
+        await fundQaAccount({ cents: 10000, key: 'lisa-save' });
+        await s.say('withdraw 50 to my bank account');
+        await s.say('1234567890');
+        await s.say('Capitec');
+        await s.say('Lisa Moyo');
+        await s.say('FN123456');
+        await s.say('Zimbabwe');
+        await s.say('yes');
+        const n1 = await s.say(QA_PIN);
+        const n2 = await s.say('yes');
+        const n3 = await s.say('mother');
+        const n4 = await s.say('can you save my number used above as mine?');
+        verdict('Lisa 6: a bare YES to saving asks for a name once; "save my number used above as mine" is a real rename, never a claim', [
+          { level: 'FAIL', ok: has(n1.replyText, /Save these details for next time \(Capitec account •••890 and your name and passport or ID number ending 456\)/), what: 'the save offer names the account and the passport (masked)' },
+          { level: 'FAIL', ok: has(n2.replyText, /Saved, encrypted: Capitec account •••890/) && has(n2.replyText, /What should I call it\? Reply \*mine\*, or a name like \*mother\*/), what: 'a bare YES saves, then asks what to call it' },
+          { level: 'FAIL', ok: has(n3.replyText, /Called it \*Mother\*: Mother: Capitec account •••890/), what: '"mother" names it' },
+          { level: 'FAIL', ok: has(n4.replyText, /Done: it is saved as \*Mine\*: Mine: Capitec account •••890/) && !has(n4.replyText, /I.ll remember|I have noted/i), what: '"can you save my number used above as mine?" renames the saved account, deterministically' },
+        ], s);
+      } finally {
+        if (prevPii === undefined) delete process.env.WAPAY_PII_KEY; else process.env.WAPAY_PII_KEY = prevPii;
+      }
     } finally {
       if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;
       if (prevKyc === undefined) delete process.env.WAPAY_PAYOUT_KYC; else process.env.WAPAY_PAYOUT_KYC = prevKyc;
