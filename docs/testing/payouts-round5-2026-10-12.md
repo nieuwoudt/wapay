@@ -38,7 +38,10 @@ Ten requests to move money to her bank, seven identical replies, no word about t
 | 3 | The R0 gate reads the situation, tiers, a person on the third ask; "how much can I withdraw" (BUGLOG #102) | `7dfed12` (pushed 15:18 SAST; Vercel build failed, see §D.3) | §D.3 |
 | 4, 5 | "Send money" to your own number refused, received voucher answered; an unpaid link is "not paid" (BUGLOG #103, #104) | `06ac727` (live 15:44 SAST, carrying item 3 too) | §D.4 |
 | 6, 7, 8 | Gift-to-balance builders (not wired: main session); no time promises; the gift claim line (BUGLOG #105, #106) | `fde1657`, live as `24f1deb` (16:08 SAST) | §D.5 |
-| 9, 10, 11 | Save step asks a name; "save my number used above as mine" is a real action; four-digit cellphones (BUGLOG #107) | (this push) | §D.6 |
+| 9, 10, 11 | Save step asks a name; "save my number used above as mine" is a real action; four-digit cellphones (BUGLOG #107) | `7e314a1` (live 16:46 SAST) | §D.6 |
+| 12, 14 | Deposit cash route; the literacy mechanism outside the withdraw flow | specified for the main session: `docs/PAYOUTS_ROUND5_FOR_MAIN_SESSION.md` §F, §G | |
+| 13 | Lisa's transcript as harness scenario 6d (parts 1 to 6) | in every push above | |
+| 15 | OTT issuing to production | waits for the founder's go (handover v2 §5) | |
 
 ## C. Lisa's first withdrawal (item 1): the run sheet
 
@@ -92,4 +95,4 @@ If line 8 fails at the provider for the passport: "withdraw 50 absa", "yes", "mi
 ### D.6 Items 9, 10 and 11 (2026-10-12)
 
 - Suite 1039/1039; harness 35 PASS, no WARN, no FAIL. 6d part 6 (a throwaway vault key for the run): "withdraw 50 to my bank account", Capitec, passport, Zimbabwe, PIN → "💾 Save these details for next time (Capitec account •••890 and your name and passport or ID number ending 456)?" → "yes" → "✅ Saved, encrypted: … What should I call it? Reply *mine*, or a name like *mother*." → "mother" → "✅ Called it *Mother*: Mother: Capitec account •••890" → "can you save my number used above as mine?" → "✅ Done: it is saved as *Mine*: Mine: Capitec account •••890. Next time you withdraw, say "mine" to use it." (the founder's sentence of 12:41, now a write, never a claim). Build green.
-
+- Production: build `7e314a1`, webhook bare GET 403, `switches.alertEmail` true, float still R45.56.
