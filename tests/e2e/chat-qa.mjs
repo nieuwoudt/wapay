@@ -345,6 +345,42 @@ async function run() {
   }
 
   // ------------------------------------------------------------------
+  // 6d. The Lisa case (2026-10-10 to 10-12, round 5): a foreign national with
+  // a Capitec account and R350 to withdraw. Her own sentences, made permanent.
+  // ------------------------------------------------------------------
+  {
+    const prevOn = process.env.WAPAY_PAYOUT_ENABLED; const prevKyc = process.env.WAPAY_PAYOUT_KYC;
+    process.env.WAPAY_PAYOUT_ENABLED = 'true'; process.env.WAPAY_PAYOUT_KYC = 'off';
+    try {
+      await fundQaAccount({ cents: 10000, key: 'lisa' });
+      // 1. A passport at the ID step: the issuing country is asked, the rail gets id_type, country_of_issue and nationality.
+      const callsBefore = ottCalls.length;
+      await s.say('withdraw 50');
+      const p1 = await s.say('1');
+      const p2 = await s.say('1234567890');
+      const p3 = await s.say('Capitec');
+      const p4 = await s.say('Lisa Moyo');
+      const p5 = await s.say('FN123456');
+      const p6 = await s.say('Zimbabwe');
+      const p7 = await s.say('yes');
+      const p8 = await s.say(QA_PIN);
+      const call = ottCalls[callsBefore] || null;
+      verdict('Lisa 1: a passport or foreign ID works at the ID step (the country is asked; the rail gets the passport fields)', [
+        { level: 'FAIL', ok: has(p1.replyText, /account number/i) || has(p2.replyText, /Which bank/i), what: 'PayShap asks for the account, then the bank' },
+        { level: 'FAIL', ok: has(p4.replyText, /passport or foreign ID number/), what: 'the ID ask names a passport or foreign ID, not only a 13-digit SA ID' },
+        { level: 'FAIL', ok: has(p5.replyText, /Which country issued that passport or ID/) && !has(p5.replyText, /FN123456/), what: 'a passport number gets the country question, never echoed' },
+        { level: 'FAIL', ok: has(p6.replyText, /Passport \/ foreign ID: •••456 \(Zimbabwe\)/) && has(p6.replyText, /Name on the account: Lisa Moyo/), what: 'the confirmation shows the passport masked with its country' },
+        { level: 'FAIL', ok: has(p7.replyText, /PIN/) && has(p8.replyText, /Done\.|In progress/), what: 'YES and the PIN execute the pay-out' },
+        { level: 'FAIL', ok: !!call && call.recipient.id_type === 'PASSPORT' && call.recipient.country_of_issue === 'ZW' && call.recipient.nationality === 'ZW' && String(call.providerCode) === '127', what: 'exactly one PerformPayout to PayShap carrying id_type PASSPORT, country_of_issue ZW, nationality ZW' },
+      ], s);
+      if (/Save these details/.test(p8.replyText)) await s.say('no');
+    } finally {
+      if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;
+      if (prevKyc === undefined) delete process.env.WAPAY_PAYOUT_KYC; else process.env.WAPAY_PAYOUT_KYC = prevKyc;
+    }
+  }
+
+  // ------------------------------------------------------------------
   // 7. Languages: switch, localized replies, non-English inbound
   // ------------------------------------------------------------------
   {

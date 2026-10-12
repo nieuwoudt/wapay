@@ -4049,7 +4049,8 @@ async function startVoucherPinResend({ from, account, serialTail }) {
  * Handle conversation state (multi-turn conversations)
  */
 async function handleConversationState({ from, text, state, data, account }) {
-  console.log('💬 Handling conversation state:', { state, text, data });
+  // Withdraw answers carry account and ID numbers: never in the logs (2026-10-12).
+  console.log('💬 Handling conversation state:', { state, text: /^PAYOUT_/.test(state) ? '[withdraw input]' : text, data: /^PAYOUT_/.test(state) ? '[withdraw data]' : data });
 
   switch (state) {
     case 'BIZ_SIGNUP_TYPE':

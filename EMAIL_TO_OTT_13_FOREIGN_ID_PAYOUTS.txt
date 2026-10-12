@@ -1,0 +1,32 @@
+To: Yaku <[OTT technical contact email]>
+Cc: Keamogetsoe Modikwe <keamo@ott-mobile.com>
+Subject: OTT Payout production: paying out to customers with a passport or foreign ID
+
+Hi Yaku, hi Keamo,
+
+Withdrawals have been running on the production payout host since 8 October (PayShap Account, ABSA CashSend and Nedbank Cardless Withdrawal have all paid real money, and your production webhook finalises a pending payout within about a minute; thank you).
+
+Many of our customers are foreign nationals who live and bank in South Africa but hold a passport or a foreign ID, not a South African ID. Our founder understands from you that ABSA CashSend and Nedbank Cardless Withdrawal accept a foreign ID. We have built the passport path on our side and would like to confirm four things before a customer uses it.
+
+1. THE ID_TYPE VALUE
+For a passport or foreign ID we send PerformPayout with the recipient's passport number in id_number, and id_type, country_of_issue and nationality filled in. Your failure e-mails show an SA ID as "RSAID". What exact id_type value do you expect for a passport, and is there a separate value for a foreign national ID card or an asylum seeker or refugee permit? We currently send "PASSPORT" and can change it without a release.
+
+2. THE COUNTRY FIELDS
+We send country_of_issue and nationality as two-letter ISO codes (for example "ZW" for Zimbabwe, "MW" for Malawi), matching the "ZA" your platform fills in when we send nothing. Is two-letter ISO correct, or should it be the three-letter code or the value from GetCountryCodes? And are both fields hashed as we send them (we hash the exact strings on the wire, absent optionals as empty strings, as documented)?
+
+3. WHICH PROVIDERS ACCEPT A PASSPORT
+Please confirm per provider on our production merchant whether a passport or foreign ID is accepted:
+  - PayShap Account (66): our first case is a payment to the customer's own Capitec account
+  - ABSA CashSend (67)
+  - Nedbank Cardless Withdrawal (4)
+  - Standard Bank Instant Money (2)
+If a provider needs more for a passport (for example date_of_birth), please say which fields.
+
+4. WHAT A REFUSAL LOOKS LIKE
+If a provider refuses a passport, what status and message does PerformPayout or the webhook return, so that we can tell the customer the right thing (for example "use cash at an Absa ATM instead")?
+
+Still open from our e-mail of 4 October: whether the payout SMS sender and text can carry our name and number, and whether the failure e-mail can stop carrying the customer's personal details in clear text.
+
+Kind regards,
+Nieuwoudt Gresse
+WaPay

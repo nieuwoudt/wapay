@@ -20,7 +20,7 @@ Topic id: `withdraw`. Detection: `\b(withdraw\w*|cash ?-?out|take (?:my |the )?m
 
 1️⃣ Say *withdraw* and the amount, for example "withdraw R200" (between R20 and R3000).
 2️⃣ Choose how: *PayShap* to your own bank account (R8 fee, arrives in minutes), or *cash* at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet collected at any FNB ATM, no bank account needed (R18 fee up to R700, R23 up to R1500, R30 above).
-3️⃣ Give the details the bank needs: your account number and bank for PayShap, or the cellphone number that will collect the cash, plus your 13-digit SA ID number.
+3️⃣ Give the details the bank needs: your account number and bank for PayShap, or the cellphone number that will collect the cash, plus your SA ID number or passport (a foreign ID works too).
 4️⃣ Confirm, then enter your WaPay PIN. The amount plus the fee leaves your balance, you get a reference straight away, and I message you the moment the bank confirms.
 
 A once-off identity check applies before your first withdrawal. The money must go to an account or a person in your own name.

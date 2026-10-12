@@ -1,7 +1,8 @@
 /**
  * Read-only OTT payout rail probe for operators (internal key). Uses the
  * deployment's OTT_PAYOUT_* credentials to call the three read endpoints
- * (GetBalance, GetActiveProviders, GetActiveProvidersLimits) and reports
+ * (GetBalance, GetActiveProviders, GetActiveProvidersLimits; GetCountryCodes
+ * with ?countries=1) and reports
  * what came back, masked. No pay-out can be started here. It answers the
  * sandbox's first questions (are the credentials right, which provider
  * codes exist, which recipient fields each needs) without secrets leaving
@@ -45,5 +46,7 @@ export default async function handler(req, res) {
   out.limits = await safe('limits', () => (typeof client.getActiveProviderLimits === 'function' ? client.getActiveProviderLimits({ yourUniqueReference: ref() }) : { skipped: true }));
   _resetProviderCache();
   out.mapped = await safe('mapped', () => resolveProviders({ client }));
+  // ?countries=1: OTT's country list (the shape a passport pay-out's country_of_issue takes, 2026-10-12). A read.
+  if (String(req.query?.countries || '') === '1') out.countries = await safe('countries', () => client.getCountryCodes({ yourUniqueReference: ref() }));
   return res.status(200).json(out);
 }

@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-10-12 (77) — Withdrawals for customers without a South African ID: a passport or foreign ID at the ID step (payouts round 5, item 1)
+
+The Lisa case (a foreign national with a Capitec account and R350 she could
+not get out) showed the withdraw flow took only a 13-digit SA ID, and the
+service stripped letters from any ID number before the rail. Now the ID step
+takes a passport or foreign ID number (6 to 12 letters and digits) and asks
+the issuing country (`parseIdDocument`, `parseCountry`, ISO alpha-2 table in
+`lib/payout-chat.js`); the confirmation reads "Passport / foreign ID: •••456
+(Zimbabwe)"; PerformPayout carries `id_type` (`WAPAY_PAYOUT_PASSPORT_ID_TYPE`,
+default `PASSPORT`), `country_of_issue` and `nationality`, while an SA ID is
+sent exactly as before. `cleanRecipient` keeps a passport's letters and
+requires its country; `payout_identities.countryOfIssue` keeps a saved
+passport's country (migration `20261012_payout_passport_and_last4`, which also
+adds `payout_destinations.mobileLast4` for the four-digit cellphone labels of
+item 11; applied to production before this deploy). Masking: the withdraw
+secret-input redaction now hides mixed letter-and-digit tokens, and the
+processor's state log no longer prints withdraw answers or data. How-it-works
+says "your SA ID number or passport". `GET /api/internal/payout-status?countries=1`
+reads OTT's country list. OTT asked in `EMAIL_TO_OTT_13_FOREIGN_ID_PAYOUTS.txt`.
+BUGLOG #100; tests `tests/payout-round5.test.mjs`; harness scenario 6d part 1;
+evidence `docs/testing/payouts-round5-2026-10-12.md`.
+
+---
+
 ## 2026-10-12 (76) — Meta ads pipe: read-only production check route; Conversions API sends from Production only; token redaction
 
 `GET /api/internal/ads-pipe-check` (internal key) verifies the ads pipe

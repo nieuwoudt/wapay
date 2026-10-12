@@ -91,17 +91,26 @@ test('identity: validated, stored encrypted with a last-3 mask, read masked, dec
     assert.equal((await savePayoutIdentity({ prisma, accountId: 'a1', fullName: 'Nieuwoudt', idNumber: '9001015009087' })).error, 'BAD_NAME', 'one word is not a full name');
     assert.equal((await savePayoutIdentity({ prisma, accountId: 'a1', fullName: 'Nieuwoudt Gresse', idNumber: '900101500908' })).error, 'BAD_ID');
     const r = await savePayoutIdentity({ prisma, accountId: 'a1', fullName: '  Nieuwoudt   Gresse ', idNumber: '900101 5009 087' });
-    assert.deepEqual(r, { ok: true, fullName: 'Nieuwoudt Gresse', idLast3: '087' });
+    assert.deepEqual(r, { ok: true, fullName: 'Nieuwoudt Gresse', idType: 'RSAID', idLast3: '087', countryOfIssue: null });
     const row = prisma.identities.get('a1');
     assert.ok(row.idEnc.startsWith('enc1:') && !row.idEnc.includes('9001015009087'), 'the ID number is never stored in clear');
     assert.equal(row.idLast3, '087'); assert.equal(row.keyVersion, 1); assert.equal(row.idType, 'RSAID');
     const masked = await getPayoutIdentity({ prisma, accountId: 'a1' });
-    assert.deepEqual(Object.keys(masked).sort(), ['consentAt', 'fullName', 'idLast3', 'idType']);
+    assert.deepEqual(Object.keys(masked).sort(), ['consentAt', 'countryOfIssue', 'fullName', 'idLast3', 'idType']);
     assert.ok(!JSON.stringify(masked).includes('9001015009087'));
     const secret = await loadPayoutIdentitySecret({ prisma, accountId: 'a1' });
     assert.equal(secret.idNumber, '9001015009087'); assert.equal(secret.fullName, 'Nieuwoudt Gresse');
     assert.equal(await getPayoutIdentity({ prisma, accountId: 'nobody' }), null);
     assert.equal(await loadPayoutIdentitySecret({ prisma, accountId: 'nobody' }), null);
+    // A passport or foreign ID (2026-10-12, the Lisa case): letters kept, the issuing country required, masked to its last three characters.
+    assert.equal((await savePayoutIdentity({ prisma, accountId: 'a2', fullName: 'Lisa Moyo', idNumber: 'FN123456', idType: 'PASSPORT' })).error, 'BAD_ID', 'a passport needs its issuing country');
+    assert.equal((await savePayoutIdentity({ prisma, accountId: 'a2', fullName: 'Lisa Moyo', idNumber: 'FN1', idType: 'PASSPORT', countryOfIssue: 'ZW' })).error, 'BAD_ID');
+    const p = await savePayoutIdentity({ prisma, accountId: 'a2', fullName: 'Lisa Moyo', idNumber: 'fn 123456', idType: 'PASSPORT', countryOfIssue: 'zw' });
+    assert.deepEqual(p, { ok: true, fullName: 'Lisa Moyo', idType: 'PASSPORT', idLast3: '456', countryOfIssue: 'ZW' });
+    assert.ok(!prisma.identities.get('a2').idEnc.includes('FN123456'));
+    assert.deepEqual({ ...(await getPayoutIdentity({ prisma, accountId: 'a2' })), consentAt: null }, { fullName: 'Lisa Moyo', idType: 'PASSPORT', idLast3: '456', countryOfIssue: 'ZW', consentAt: null });
+    const ps = await loadPayoutIdentitySecret({ prisma, accountId: 'a2' });
+    assert.equal(ps.idNumber, 'FN123456'); assert.equal(ps.idType, 'PASSPORT'); assert.equal(ps.countryOfIssue, 'ZW');
   });
 });
 

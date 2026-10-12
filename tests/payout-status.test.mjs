@@ -12,6 +12,7 @@ test('payout-status: internal-key gated (constant-time), GET only, OTT reads onl
   // Only the three read endpoints; never a pay-out.
   assert.ok(!/performPayout|requestPayout|\.payout\(/.test(src), 'the probe must not be able to move money');
   assert.match(src, /client\.getBalance\(/); assert.match(src, /client\.getActiveProviders\(/); assert.match(src, /getActiveProviderLimits\(/);
+  assert.match(src, /countries \|\| ''\) === '1'\) out\.countries = await safe\('countries', \(\) => client\.getCountryCodes\(/, 'the country list is a read, on request');
   // Credentials are reported as presence/masked only.
   assert.match(src, /password: !!process\.env\.OTT_PAYOUT_PASSWORD/);
   assert.match(src, /apiKey: mask\(process\.env\.OTT_PAYOUT_API_KEY\)/);

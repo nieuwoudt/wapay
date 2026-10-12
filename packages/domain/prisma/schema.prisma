@@ -44,9 +44,10 @@ model PayoutIdentity {
   accountId  String   @id
   account    Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   fullName   String // exactly as on the bank account
-  idType     String   @default("RSAID") // RSAID now, PASSPORT later
-  idEnc      String
-  idLast3    String
+  idType         String   @default("RSAID") // RSAID (13 digits) | PASSPORT (a passport or foreign ID, 6 to 12 letters and digits; 2026-10-12)
+  idEnc          String
+  idLast3        String
+  countryOfIssue String? // ISO alpha-2 of the passport or foreign ID's issuing country; null for an SA ID
   keyVersion Int      @default(1)
   consentAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -67,6 +68,7 @@ model PayoutDestination {
   accountLast3 String?
   mobileEnc    String?
   mobileLast3  String?
+  mobileLast4  String? // cellphone labels show four digits (2026-10-12); rows saved before then fall back to the decrypted number
   keyVersion   Int      @default(1)
   fingerprint  String // sha256(accountId | family | number): one row per account number or cellphone
   consentAt    DateTime @default(now())
