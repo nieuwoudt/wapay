@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-12 (76) — Meta ads pipe: read-only production check route; Conversions API sends from Production only; token redaction
+
+`GET /api/internal/ads-pipe-check` (internal key) verifies the ads pipe
+server-side without the token ever leaving Vercel: env presence and
+whitespace, the parsed account id, token identity and permissions
+(`/me`, `/me/permissions`, `/debug_token`), the ad account, the exact
+insights and catalogue requests the Refresh button makes, the WhatsApp
+account the Conversions API would name and whether a dataset is already
+linked (reads only), and both sending gates. `lib/meta-ads.js` now builds
+its requests through `insightsUrl` / `adsCatalogUrl` and scrubs the token
+from every error and log (`redactToken`). `lib/meta-capi.js` gains a second
+gate: events only send from the Production environment (`VERCEL_ENV`), a
+preview build reports "held"; `capiConfig().reason` names which gate holds
+and the Growth tab shows it. `docs/GROWTH_DASHBOARD.md` §4b. Tests in
+`tests/growth.test.mjs` and `tests/growth-route.test.mjs`.
+
+---
+
 ## 2026-10-10 (75) — Growth: the Scale Model's inputs measured live; click-to-WhatsApp attribution; Meta Marketing API in, Conversions API out
 
 Mission Control gained a **Growth** tab (`/api/admin/growth`): the funnel per

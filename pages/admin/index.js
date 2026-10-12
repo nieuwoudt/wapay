@@ -1041,8 +1041,8 @@ function Growth() {
           <button key={r} className={range === r ? 'on' : ''} onClick={() => setRange(r)}>{r === 'all' ? 'All' : r + 'd'}</button>
         ))}</div>
         <OnOff on={st.attribution} onText="Attribution live" offText="Attribution off" />
-        <OnOff on={st.adsConfigured} onText={`Meta Ads API on · fetched ${st.adsLastFetchedAt ? dt(st.adsLastFetchedAt) : 'never'}`} offText="Meta Ads API off: set META_ADS_ACCESS_TOKEN + META_AD_ACCOUNT_ID" />
-        <OnOff on={st.capiConfigured} onText={`Conversions API on · ${st.capiLeadSent ?? 0} leads · ${st.capiPurchaseSent ?? 0} purchases sent`} offText="Conversions API off: set META_CAPI_DATASET_ID" />
+        <OnOff on={st.adsConfigured} onText={`Meta Ads API on · fetched ${st.adsLastFetchedAt ? dt(st.adsLastFetchedAt) : 'never'}`} offText="Meta Ads API off: credentials missing (META_ADS_ACCESS_TOKEN + META_AD_ACCOUNT_ID)" />
+        <OnOff on={st.capiConfigured} onText={`Conversions API on · ${st.capiLeadSent ?? 0} leads · ${st.capiPurchaseSent ?? 0} purchases sent`} offText={st.capiReason === 'NOT_PRODUCTION' ? `Conversions API held: ${st.vercelEnv || 'non-production'} build, events only send from Production` : 'Conversions API off: credentials missing (META_CAPI_DATASET_ID)'} />
         <span className="spacer" />
         {st.adsConfigured && <button className="linkish" disabled={busy} onClick={() => load(true)}>{busy ? 'Refreshing…' : 'Refresh ad numbers'}</button>}
         <a className="linkish" href={g.scenarioUrl} target="_blank" rel="noreferrer">Open the Scale Model with measured inputs ↗</a>

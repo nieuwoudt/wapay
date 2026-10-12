@@ -73,3 +73,21 @@ test('no betting words and no cash-out promises in the new surfaces', () => {
     assert.doesNotMatch(text, /cash out|cash-out|withdraw/i, `${name} promises cash-out`);
   }
 });
+
+test('ads pipe check: internal-key gated before any Graph call, GET only, every Graph call a GET, nothing created, no token in the output', async () => {
+  const src = read('../pages/api/internal/ads-pipe-check.js');
+  delete process.env.WAPAY_INTERNAL_API_KEY;
+  const { default: handler } = await import('../pages/api/internal/ads-pipe-check.js');
+  const res = { statusCode: 0, headers: {}, setHeader(k, v) { this.headers[k] = v; }, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; }, send(b) { this.body = b; return this; } };
+  await handler({ method: 'GET', query: {}, headers: {} }, res);
+  assert.equal(res.statusCode, 401, 'fails closed without the key');
+  const r2 = { ...res, statusCode: 0 };
+  await handler({ method: 'POST', query: {}, headers: {} }, r2);
+  assert.equal(r2.statusCode, 405);
+  assert.ok(src.indexOf('keyOk(req)') < src.indexOf('await Promise.all'), 'auth before any Graph call');
+  assert.match(src, /fetch\(url, \{ method: 'GET'/, 'the only fetch is a GET');
+  assert.equal((src.match(/fetch\(/g) || []).length, 1, 'one fetch site');
+  assert.doesNotMatch(src, /method: 'POST'|\/events|\/dataset`, token, \{ [^}]*create/, 'nothing posts to Graph');
+  assert.match(src, /res\.status\(200\)\.send\(redactToken\(JSON\.stringify\(out\)\)\)/, 'the whole response passes through redaction');
+  assert.doesNotMatch(src, /\btoken\b\s*:\s*token|token: ads\.token/, 'the token is never a field of the output');
+});

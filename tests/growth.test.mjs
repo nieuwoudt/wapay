@@ -71,7 +71,7 @@ test('conversions api: off without a dataset id, and the event shape when on', a
   assert.equal(off.configured, false);
   let fetched = 0;
   const res = await sendCapiEvents([{ event_name: 'Purchase' }], { env: {}, fetchImpl: async () => { fetched += 1; return { ok: true, json: async () => ({}) }; } });
-  assert.equal(res.skipped, 'NOT_CONFIGURED');
+  assert.equal(res.skipped, 'CREDENTIALS_MISSING');
   assert.equal(fetched, 0, 'no network call without config');
 
   const ev = buildBusinessMessagingEvent({ eventName: CAPI_EVENTS.PURCHASE, eventTime: new Date('2026-10-10T10:00:00Z'), ctwaClid: 'ARAb12cd34ef', wabaId: '801970852418258', eventId: 'acc:purchase', valueCents: 5000 });
@@ -148,4 +148,32 @@ test('scale model: the scenario encoder matches the artifact and only carries no
   const res = simulate(preset('plan'), budgetFn(BUDGET_DEFAULT));
   assert.equal(res.rows.length, 36);
   assert.ok(res.rows.every((r) => Object.values(r).every((v) => typeof v !== 'number' || Number.isFinite(v))));
+});
+
+test('marketing api: the exact insights request, and the token never survives redaction', async () => {
+  const { insightsUrl, adsCatalogUrl, redactToken } = await import('../lib/meta-ads.js');
+  const env = { META_ADS_ACCESS_TOKEN: ' EAAB-secret-token ', META_AD_ACCOUNT_ID: 'act_1090534783572735' };
+  const url = insightsUrl({ since: '2026-10-10', until: '2026-10-12', env });
+  assert.match(url, /\/act_1090534783572735\/insights\?/);
+  assert.match(url, /level=ad/); assert.match(url, /time_increment=1/); assert.match(url, /fields=[^&]*actions/);
+  assert.match(url, /access_token=EAAB-secret-token/, 'trimmed, not the padded value');
+  assert.doesNotMatch(redactToken(url, env), /EAAB-secret-token/);
+  assert.match(redactToken(url, env), /access_token=\[redacted\]/);
+  assert.match(adsCatalogUrl({ env }), /\/act_1090534783572735\/ads\?/);
+  assert.equal(redactToken('Graph error EAAB-secret-token in message', env), 'Graph error [redacted] in message');
+});
+
+test('conversions api: only production can ever send; preview reports credentials missing or held', async () => {
+  const creds = { META_CAPI_DATASET_ID: 'ds1', META_WHATSAPP_TOKEN: 'tok', META_WHATSAPP_BUSINESS_ACCOUNT_ID: '647978251504290' };
+  assert.equal(capiConfig({ ...creds, VERCEL_ENV: 'production' }).configured, true);
+  assert.equal(capiConfig({ ...creds }).configured, true, 'no VERCEL_ENV (local) is allowed');
+  const preview = capiConfig({ ...creds, VERCEL_ENV: 'preview' });
+  assert.equal(preview.configured, false);
+  assert.equal(preview.reason, 'NOT_PRODUCTION');
+  assert.equal(capiConfig({ ...creds, VERCEL_ENV: 'preview', META_CAPI_ALLOW_NON_PRODUCTION: 'true' }).configured, true);
+  assert.equal(capiConfig({ VERCEL_ENV: 'preview' }).reason, 'CREDENTIALS_MISSING');
+  let fetched = 0;
+  const r = await sendCapiEvents([{ event_name: 'Purchase' }], { env: { ...creds, VERCEL_ENV: 'preview' }, fetchImpl: async () => { fetched += 1; return { ok: true, json: async () => ({}) }; } });
+  assert.equal(r.skipped, 'NOT_PRODUCTION');
+  assert.equal(fetched, 0, 'a preview build never calls Meta');
 });

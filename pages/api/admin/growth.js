@@ -18,7 +18,7 @@ import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
 import { INPUTS, preset, boundStatus, measuredToInputs, scenarioUrl, SCALE_MODEL_URL } from '../../../lib/scale-model.js';
 import { adsConfigured, snapshotAdInsights } from '../../../lib/meta-ads.js';
-import { capiConfigured } from '../../../lib/meta-capi.js';
+import { capiConfigured, capiConfig } from '../../../lib/meta-capi.js';
 
 export const config = { maxDuration: 55 };
 
@@ -377,6 +377,8 @@ export default async function handler(req, res) {
       attribution: true,
       adsConfigured: adsConfigured(),
       capiConfigured: capiConfigured(),
+      capiReason: capiConfig().reason,
+      vercelEnv: process.env.VERCEL_ENV || null,
       adsLastFetchedAt: adsLast?.fetchedAt || null,
       adsRefresh,
       attributedAccounts: rows.filter((a) => a.attributed).length,

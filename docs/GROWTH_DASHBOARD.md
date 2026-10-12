@@ -107,6 +107,25 @@ click-to-WhatsApp ad. Ads that go through the pleasepayme.co.za landing page fir
 NOT attributed (the wa.me hand-off carries no click id); use Click-to-WhatsApp as the
 primary ad set, as the campaign brief says.
 
+## 4b. Checking the pipes without touching Meta (2026-10-12)
+
+`GET /api/internal/ads-pipe-check` (internal key, GET only) runs the whole check
+server-side with the production environment, so the token never leaves Vercel: env
+presence and whitespace, the account id as parsed, `/me` + `/me/permissions` +
+`/debug_token` for the token's identity, the ad account (name, currency, timezone,
+status), the exact insights and catalogue requests the Refresh button makes (HTTP
+status and row count), the WhatsApp account the Conversions API would name (from
+`META_WHATSAPP_BUSINESS_ACCOUNT_ID`, plus any `?waba=<id>` you pass) and whether a
+dataset is already linked to it (a read, never a create), and both gates on sending.
+Every Graph call is a GET; the whole response passes through `redactToken`.
+
+**Two gates on the Conversions API** (`capiConfig().reason`): `CREDENTIALS_MISSING`
+until `META_CAPI_DATASET_ID` is set, and `NOT_PRODUCTION` on any Vercel environment
+other than production (the Growth tab shows "held: preview build"). A preview deploy
+can therefore never send an event even if someone copies the envs to it;
+`META_CAPI_ALLOW_NON_PRODUCTION=true` exists only for a local run against Meta's Test
+Events tool.
+
 ## 5. How to read it in the first weeks
 
 - Until an ad has run, every ad KPI shows a dash and the chips read "too early". The
