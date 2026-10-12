@@ -184,7 +184,7 @@ async function run() {
       { level: 'FAIL', ok: !has(a.replyText, /How much electricity would you like to buy/i) && has(a.replyText, /R10 to R5000/) && has(a.replyText, /buy R100 electricity/), what: '"Can I buy electricity?" explains and offers the words to start' },
       { level: 'FAIL', ok: !has(b.replyText, /Withdraw from WaPay|Reply 1, 2 or 3/i) && has(b.replyText, /cannot be exchanged for cash/i), what: 'an OTT cash-out question is answered, not turned into a withdrawal' },
       { level: 'FAIL', ok: has(c.replyText, /Checkers does not take OTT vouchers/i) && has(c.replyText, /Talk360|Pay@/), what: '"Is it accepted at Checkers?" gets a no by name and the places it does work' },
-      { level: 'FAIL', ok: has(d.replyText, /instantly and it is free/i) && !looksLikeMenu(d.replyText), what: '"Can I send money to someone?" explains sending' },
+      { level: 'FAIL', ok: has(d.replyText, /lands in their balance and it is free/i) && !has(d.replyText, /instantly|in minutes/i) && !looksLikeMenu(d.replyText), what: '"Can I send money to someone?" explains sending, with no time promised (2026-10-12)' },
     ], s);
   }
   {

@@ -92,7 +92,8 @@ test('claim message: contains the FULL PIN (by design), usage copy and the BALAN
   assert.match(msg, /OTT/);
   assert.ok(!/cash it out|cash out|take it to your bank/i.test(msg), 'no cash-out promise');
   // Conversion hook.
-  assert.match(msg, /reply BALANCE/i);
+  assert.match(msg, /separate from your WaPay balance/i, 'the PIN is not balance (2026-10-12)'); assert.match(msg, /Say \*balance\*/);
+  assert.ok(!/use it right here|open your own WaPay/i.test(msg), 'never "open your own WaPay" to someone already joining, never "use it right here" for a PIN');
 });
 
 test('claim message: degrades gracefully without sender name or serial', () => {

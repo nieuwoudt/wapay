@@ -16,7 +16,12 @@
 | same, `handleDepositStatus` PENDING | `unpaidLinkAnswer`: "you have not paid that link" after 15 minutes, "no payment yet" before; no partner named | 5 | "still confirming" for a link nobody paid |
 | `tests/e2e/chat-qa-vas.mjs` (Blu thread) | the park check also accepts the new unpaid-link wording | 5 | keeps the VAS harness green |
 
-Later items in this round add their own rows here (time promises, the gift wording, the save-as hook).
+| `lib/how-it-works.js` | every time phrase removed (withdraw, send, airtime, data, electricity, pay links); `cashWays` names only live cash methods; the identity-check sentence only while `kycRequired()` | 7 | no time promises; production has no FNB eWallet; identity checks are off |
+| `lib/capabilities.js` | the WITHDRAW and SEND one-liners lose "in minutes" / "instantly" | 7 | the same |
+| `lib/gifting.js` `buildVoucherClaimMessage` | last line: "This voucher is separate from your WaPay balance … Say *balance* any time …" | 8 | "reply BALANCE to open your own WaPay and use it right here" to someone already joining |
+| `lib/ledger-core.js` | `buildGiftHeld`, `buildGiftClaimToBalance`, `buildGiftExpiryToVoucher`, `GIFT_PENDING` (pure, additive, tested; not wired) | 6 | the money side of item 6 |
+
+Later items in this round add their own rows here (the save-as hook).
 
 ## B. Item 6: a gift to someone not yet on WaPay becomes balance when they join
 
@@ -28,12 +33,12 @@ Later items in this round add their own rows here (time promises, the gift wordi
 1. **At send time, recipient not on WaPay:** do NOT call OTT. Post a held gift: sender `WALLET:<sender>:SPEND` D amount + fee; `LIABILITY:GIFT_PENDING` C amount; `REVENUE:FEE:SEND` C fee. idemKey `gift-held-<giftId>`. The `pending_gifts` row is created with `rail = 'WAPAY'`, no PIN (the column is NOT NULL today: store a placeholder such as `HELD` or make it nullable in a migration), status ISSUED.
 2. **The recipient joins (onboarding completes, or their first message after the account exists):** post `LIABILITY:GIFT_PENDING` D amount; `WALLET:<recipient>:SPEND` C amount. idemKey **`gift-claim-balance-<giftId>`** (`lib/money-situation.js` already treats this prefix as "in the balance"). Mark the row DELIVERED. Tell them in one line: "🎁 Nieuwoudt sent you R350. It is in your WaPay balance: spend it here or say *withdraw* to move it to your bank."
 3. **Never joins (expiry, e.g. 30 days):** mint the voucher then (OTT issue) and post `LIABILITY:GIFT_PENDING` D amount; `CLEARING:OTT` C amount less commission; commission revenue when signed. idemKey `gift-expiry-voucher-<giftId>`. Deliver the PIN by SMS or template to the number, or refund the sender instead (`LIABILITY:GIFT_PENDING` D, sender SPEND C): the founder said voucher at expiry; the refund is the simpler fallback if the PIN cannot reach a non-member.
-4. **Recipient already on WaPay at send time:** unchanged product decision for you to make (today: a voucher; the same balance credit as step 2 would be consistent with the founder's intent).
+4. **Recipient already on WaPay at send time:** today this is ALSO a voucher (the send flow always calls the voucher rail; `buildSend` only pays payment requests), yet the how-it-works send answer and the registry's SEND one-liner tell customers "if they are on WaPay it lands in their balance and it is free". That claim is false today. Either wire the member case as a balance transfer (the same two legs as step 2 without the pending account: sender SPEND D, recipient SPEND C, `P2P_SEND` exists in `buildSend`) or change the copy; the founder's gift decision points to the transfer.
 5. **Sender's view:** the confirm says "Nieuwoudt does not have WaPay yet. The R350 waits for them and lands in their balance when they join." The pack's `giftsSent` shows HELD until claimed.
 
 **Regulatory note (said once, the founder decided):** a balance credited from another customer's balance is a wallet-to-wallet transfer; `lib/gifting.js` was written to keep gifts a SPEND for the closed-loop posture. This is the same open-pilot stance as the removed allowlist and belongs on the counsel list before a public launch.
 
-**Tests to hold it:** this thread adds the three pure builders to `lib/ledger-core.js` with balanced-entry tests (`buildGiftHeld`, `buildGiftClaimToBalance`, `buildGiftExpiryToVoucher`, item 6 of this round); the wiring test is yours: a gift to a non-member posts `gift-held-*` and calls no OTT client; the recipient's first message posts `gift-claim-balance-*` once (replay safe) and their balance rises by the face value; the PIN is never generated on that path.
+**Tests to hold it:** the three pure builders are in `lib/ledger-core.js` with balanced-entry tests in `tests/payout-round5.test.mjs` (`buildGiftHeld` → `gift-held-<giftId>`, `buildGiftClaimToBalance` → `gift-claim-balance-<giftId>`, `buildGiftExpiryToVoucher` → `gift-expiry-voucher-<giftId>`; held then claimed nets the pending account to zero and touches no rail clearing); the wiring test is yours: a gift to a non-member posts `gift-held-*` and calls no OTT client; the recipient's first message posts `gift-claim-balance-*` once (replay safe) and their balance rises by the face value; the PIN is never generated on that path.
 
 ## C. Item 8: the gift message and the home card
 

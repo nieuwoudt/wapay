@@ -45,7 +45,7 @@ test('answers carry the steps, the real limits and the words to start, and follo
   assert.match(howItWorksAnswer('ott', { ...ctx, text: 'can I use it on Talk360?' }), /Yes, Talk360 takes OTT vouchers/);
   assert.equal(matchHowItWorksAsk('Is it accepted at Checkers?'), 'ott'); assert.equal(matchHowItWorksAsk('does takealot take it?'), 'ott'); assert.equal(matchHowItWorksAsk('can I pay netflix with it'), 'ott');
   const s = howItWorksAnswer('send', ctx);
-  assert.match(s, /instantly and it is free/); assert.match(s, /withdraw it to their own bank account/);
+  assert.match(s, /lands in their WaPay balance and it is free/); assert.match(s, /withdraw it to their own bank account/); assert.ok(!/instantly|in minutes|within (?:seconds|a minute)/.test(s), "no time promised (2026-10-12)");
   assert.match(howItWorksAnswer('send', { ...ctx, withdrawLive: false }), /Cash withdrawals are coming soon/);
   assert.match(howItWorksAnswer('fuel', ctx), /coming to WaPay soon/); assert.match(howItWorksAnswer('fuel', { ...ctx, wicodeLive: true }), /Shell and Engen/);
   assert.match(howItWorksAnswer('deposit', ctx), /R20 costs R24/);

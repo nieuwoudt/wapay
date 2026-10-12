@@ -384,3 +384,91 @@ test('5. an unpaid link: older than 15 minutes is "you have not paid", fresh is 
   assert.match(bare, /^You have not paid your payment link from on|^You have not paid your payment link from /);
   for (const t of [old, fresh, bare]) assert.ok(!/still confirming|PayFast|minute|—/i.test(t), t);
 });
+
+// ---------------------------------------------------------------------------
+// 6. A gift to someone not yet on WaPay waits and becomes their BALANCE when
+//    they join; a voucher only if they never join. The money side as pure,
+//    balanced builders (the wiring is the gifting flow's:
+//    docs/PAYOUTS_ROUND5_FOR_MAIN_SESSION.md §B).
+// ---------------------------------------------------------------------------
+import { buildGiftHeld, buildGiftClaimToBalance, buildGiftExpiryToVoucher, GIFT_PENDING, FEES, validateBalanced } from '../lib/ledger-core.js';
+import { GIFT_IN_BALANCE_PREFIXES } from '../lib/money-situation.js';
+
+const net = (entries) => {
+  const out = {};
+  for (const e of entries) for (const p of e.postings) out[p.accountCode] = (out[p.accountCode] || 0) + (p.creditCents || 0) - (p.debitCents || 0);
+  return out;
+};
+
+test('6. held → claimed: the sender pays face + fee once, the recipient\'s balance gets the face value, the pending account nets to zero, no rail is touched', () => {
+  const held = buildGiftHeld({ senderAccountId: 'founder', amountCents: 35000, giftId: 'cmv2foj8f001fd6jcamn6pjld', recipientMsisdn: '27601879361' });
+  const claimed = buildGiftClaimToBalance({ recipientAccountId: 'lisa', amountCents: 35000, giftId: 'cmv2foj8f001fd6jcamn6pjld' });
+  for (const e of [held, claimed]) validateBalanced(e.postings);
+  assert.equal(held.idemKey, 'gift-held-cmv2foj8f001fd6jcamn6pjld'); assert.equal(claimed.idemKey, 'gift-claim-balance-cmv2foj8f001fd6jcamn6pjld');
+  assert.ok(GIFT_IN_BALANCE_PREFIXES.some((p) => claimed.idemKey.startsWith(p)), 'the situation reader sees a claimed gift as balance');
+  const n = net([held, claimed]);
+  const fee = FEES.voucherGift.flatFeeCents;
+  assert.equal(n['WALLET:founder:SPEND'], -(35000 + fee)); assert.equal(n['WALLET:lisa:SPEND'], 35000); assert.equal(n[GIFT_PENDING], 0);
+  assert.ok(!Object.keys(n).some((k) => k.startsWith('CLEARING:')), 'no rail clearing on the balance path: nothing minted, nothing to reverse');
+  assert.equal(held.meta.recipientMasked.includes('601879361'), false, 'the recipient number is masked');
+  // The same gift id always yields the same keys (replay-safe through postEntry).
+  assert.equal(buildGiftClaimToBalance({ recipientAccountId: 'lisa', amountCents: 35000, giftId: 'cmv2foj8f001fd6jcamn6pjld' }).idemKey, claimed.idemKey);
+});
+
+test('6. held → expired: the voucher is minted only then; the pending account nets to zero and the rail is owed the face value less commission', () => {
+  const held = buildGiftHeld({ senderAccountId: 'founder', amountCents: 5000, giftId: 'g-exp-1', recipientMsisdn: '27820000000', flatFeeCentsOverride: 0 });
+  const expired = buildGiftExpiryToVoucher({ amountCents: 5000, giftId: 'g-exp-1' });
+  validateBalanced(expired.postings);
+  assert.equal(expired.idemKey, 'gift-expiry-voucher-g-exp-1'); assert.equal(expired.source, 'GIFT_EXPIRY_VOUCHER_OTT');
+  const n = net([held, expired]);
+  assert.equal(n[GIFT_PENDING], 0);
+  assert.equal(n['CLEARING:OTT'] + (n['REVENUE:COMMISSION:VOUCHER'] || 0), 5000);
+  assert.throws(() => buildGiftClaimToBalance({ recipientAccountId: 'x', amountCents: 5000 }), /giftId/);
+  assert.throws(() => buildGiftHeld({ senderAccountId: 's', amountCents: 1.5, giftId: 'g' }));
+});
+
+// ---------------------------------------------------------------------------
+// 7. No time promises anywhere in the copy the customer reads (founder
+//    2026-10-12: "(R8, minutes)" and "arrives in minutes" reached Lisa).
+// 8. The gift claim message no longer says "reply BALANCE to open your own
+//    WaPay and use it right here" to someone already joining.
+// ---------------------------------------------------------------------------
+import { TOPICS, howItWorksBrief, howItWorksAnswer } from '../lib/how-it-works.js';
+import { buildVoucherClaimMessage } from '../lib/gifting.js';
+import { CAPABILITIES } from '../lib/capabilities.js';
+import { PAYOUT_METHODS } from '../lib/payouts.js';
+
+const TIME_PROMISE = /\binstantly\b|\bin minutes\b|\bwithin (?:seconds|a minute|about a minute|minutes|the hour|an hour)\b|\b(?:usually|takes about|up to about) (?:a |\d+ )?(?:minute|second|hour)s?\b|, minutes\)|arrives in minutes/i;
+
+test('7. no time is promised: every how-it-works brief and answer, the registry one-liners, the method hints, the identity ask', () => {
+  envOff();
+  const ctx = { withdrawLive: true, providers: LIVE, text: '' };
+  for (const id of Object.keys(TOPICS)) {
+    for (const text of ['', 'can I withdraw at an absa atm?', 'payshap?', 'nedbank cash?']) {
+      const b = howItWorksBrief(id, { ...ctx, text }); const a = howItWorksAnswer(id, { ...ctx, text });
+      for (const t of [b, a].filter(Boolean)) assert.ok(!TIME_PROMISE.test(t), `${id}: ${t.match(TIME_PROMISE)?.[0]}`);
+    }
+  }
+  for (const c of CAPABILITIES) assert.ok(!TIME_PROMISE.test(`${c.oneLiner || ''} ${c.helpLine || ''}`), c.id);
+  for (const [m, def] of Object.entries(PAYOUT_METHODS)) assert.ok(!TIME_PROMISE.test(def.hint), m);
+  assert.ok(!/two minutes/.test(read('../lib/payout-chat.js').match(/const KYC_ASK = `[^`]*`/)[0]));
+});
+
+test('7. the withdraw copy names only the cash ways on the merchant and the identity check only while it is on', () => {
+  envOff();
+  const live = { withdrawLive: true, providers: LIVE, text: 'can I withdraw?' };
+  const brief = howItWorksBrief('withdraw', live);
+  assert.match(brief, /PayShap \(R8 fee\) or collect cash at an Absa or Nedbank ATM, or a Pick n Pay \/ Boxer till \(from R18\)/);
+  assert.ok(!/FNB eWallet/.test(brief + howItWorksAnswer('withdraw', live)), 'no FNB eWallet on the production merchant');
+  assert.ok(!/identity check/.test(howItWorksAnswer('withdraw', live)), 'identity checks are off in the open pilot');
+  delete process.env.WAPAY_PAYOUT_KYC;
+  assert.match(howItWorksAnswer('withdraw', live), /A once-off identity check applies before your first withdrawal\./);
+  assert.match(howItWorksBrief('withdraw', { withdrawLive: true, providers: [], text: 'can I withdraw?' }), /FNB eWallet/, 'with no provider list every way is named');
+  envOff();
+});
+
+test('8. the gift claim message says the PIN is separate from the balance, never "open your own WaPay" or "use it right here"', () => {
+  const msg = buildVoucherClaimMessage({ senderName: 'Nieuwoudt', amountCents: 35000, pin: '1234567890123456' });
+  assert.match(msg, /This voucher is separate from your WaPay balance: it is spent at those stores and cannot be withdrawn to a bank\. Say \*balance\* any time to see your WaPay balance\./);
+  assert.ok(!/reply BALANCE|open your own WaPay|use it right here|—/.test(msg));
+});

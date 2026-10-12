@@ -19,7 +19,7 @@ Topic id: `withdraw`. Detection: `\b(withdraw\w*|cash ?-?out|take (?:my |the )?m
 🏧 Yes, you can take money out of WaPay. Here is how it works:
 
 1️⃣ Say *withdraw* and the amount, for example "withdraw R200" (between R20 and R3000).
-2️⃣ Choose how: *PayShap* to your own bank account (R8 fee, arrives in minutes), or *cash* at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet collected at any FNB ATM, no bank account needed (R18 fee up to R700, R23 up to R1500, R30 above).
+2️⃣ Choose how: *PayShap* to your own bank account (R8 fee), or *cash* at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet collected at any FNB ATM, no bank account needed (R18 fee up to R700, R23 up to R1500, R30 above).
 3️⃣ Give the details the bank needs: your account number and bank for PayShap, or the cellphone number that will collect the cash, plus your SA ID number or passport (a foreign ID works too).
 4️⃣ Confirm, then enter your WaPay PIN. The amount plus the fee leaves your balance, you get a reference straight away, and I message you the moment the bank confirms.
 
@@ -45,7 +45,7 @@ Topic id: `send`. Detection: `\b(send\w* (?:money|cash|r\d+|someone|to)|transfer
 ```text
 💸 Sending money is simple: say "send R50 to 083 123 4567", use a saved name like "send R50 to Philly", or share a contact card from your phone. Confirm, enter your PIN, done.
 
-If the person is on WaPay the money lands in their WaPay balance instantly and it is free. If they are not, they receive a WaPay voucher PIN by WhatsApp (R3 fee, R10 to R1000) which they can spend online wherever OTT vouchers are accepted, or load into WaPay by joining.
+If the person is on WaPay the money lands in their WaPay balance and it is free. If they are not, they receive a WaPay voucher PIN by WhatsApp (R3 fee, R10 to R1000) which they can spend online wherever OTT vouchers are accepted, or load into WaPay by joining.
 
 What can they do with it? Spend it on airtime, data, electricity or vouchers, send it on, or withdraw it to their own bank account (R8) or as cash at an Absa ATM (from R18) after a once-off identity check.
 ```
@@ -55,7 +55,7 @@ When the switch is off:
 ```text
 💸 Sending money is simple: say "send R50 to 083 123 4567", use a saved name like "send R50 to Philly", or share a contact card from your phone. Confirm, enter your PIN, done.
 
-If the person is on WaPay the money lands in their WaPay balance instantly and it is free. If they are not, they receive a WaPay voucher PIN by WhatsApp (R3 fee, R10 to R1000) which they can spend online wherever OTT vouchers are accepted, or load into WaPay by joining.
+If the person is on WaPay the money lands in their WaPay balance and it is free. If they are not, they receive a WaPay voucher PIN by WhatsApp (R3 fee, R10 to R1000) which they can spend online wherever OTT vouchers are accepted, or load into WaPay by joining.
 
 What can they do with it? Spend it on airtime, data, electricity or vouchers, or send it on. Cash withdrawals are coming soon.
 ```
@@ -79,7 +79,7 @@ Topic id: `electricity`. Detection: `\b(electricity|prepaid power|units|meter|es
 ```text
 💡 Yes, you can buy prepaid electricity for any meter, from R10 to R5000, with no WaPay fee.
 
-Say "buy R100 electricity", give me the meter number (11 to 13 digits, on your meter or an old slip), confirm, and enter your PIN. The 20-digit token arrives here in the chat, usually within a minute; some municipalities take up to about 90 seconds. Type the token into your meter and you are done.
+Say "buy R100 electricity", give me the meter number (11 to 13 digits, on your meter or an old slip), confirm, and enter your PIN. The 20-digit token arrives here in the chat. Type the token into your meter and you are done.
 ```
 
 ### Airtime
@@ -87,7 +87,7 @@ Say "buy R100 electricity", give me the meter number (11 to 13 digits, on your m
 Topic id: `airtime`. Detection: `\b(airtime|top ?up my (?:phone|number)|recharge)\b`
 
 ```text
-📱 Yes: airtime for your own number or any South African number, R5 to R1000, Vodacom, MTN, Cell C or Telkom, no WaPay fee. Say "buy R50 airtime" for yourself, or "send R20 airtime to 083 123 4567" for someone else. Confirm, PIN, and it lands within seconds.
+📱 Yes: airtime for your own number or any South African number, R5 to R1000, Vodacom, MTN, Cell C or Telkom, no WaPay fee. Say "buy R50 airtime" for yourself, or "send R20 airtime to 083 123 4567" for someone else. Confirm and enter your PIN, and it is loaded.
 ```
 
 ### Data bundles
@@ -95,7 +95,7 @@ Topic id: `airtime`. Detection: `\b(airtime|top ?up my (?:phone|number)|recharge
 Topic id: `data`. Detection: `\b(data|bundles?|gigs?|gb|mb|wifi)\b`
 
 ```text
-📶 Yes: daily, weekly and monthly data bundles for Vodacom, MTN, Cell C and Telkom, for your number or anyone else's, no WaPay fee. Say "show MTN bundles" to browse, or "buy 1GB data" to go straight to it. Confirm, PIN, and the bundle is loaded within seconds.
+📶 Yes: daily, weekly and monthly data bundles for Vodacom, MTN, Cell C and Telkom, for your number or anyone else's, no WaPay fee. Say "show MTN bundles" to browse, or "buy 1GB data" to go straight to it. Confirm, PIN, and the bundle is loaded.
 ```
 
 ### Adding money (deposits)
@@ -127,7 +127,7 @@ Topic id: `request`. Detection: `\b(pay ?me|payment link|pay link|request(?:ing)
 ```text
 🙏 Say "please pay me R150" and I create a link you can share anywhere (WhatsApp, SMS, email). Amounts from R5 to R3000; the link lasts 7 days and can be paid once.
 
-The person paying always pays exactly the amount, with no fee: free from their WaPay balance, or by card or Instant EFT. On requests under R50 you pay nothing either; above that 4.2% + R2.30 comes off what you receive (a R100 request pays you R93.50). The money lands in your WaPay balance instantly and both of you get a confirmation.
+The person paying always pays exactly the amount, with no fee: free from their WaPay balance, or by card or Instant EFT. On requests under R50 you pay nothing either; above that 4.2% + R2.30 comes off what you receive (a R100 request pays you R93.50). The money lands in your WaPay balance and both of you get a confirmation.
 ```
 
 ### Fuel vouchers

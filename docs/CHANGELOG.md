@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-10-12 (82) — Gift-to-balance money side (builders), no time promises anywhere, the gift claim line (payouts round 5, items 6 to 8)
+
+Item 6: `lib/ledger-core.js` gains `buildGiftHeld`, `buildGiftClaimToBalance`
+and `buildGiftExpiryToVoucher` around a `LIABILITY:GIFT_PENDING` account: a
+gift to someone not yet on WaPay waits as WaPay's liability, becomes the
+recipient's balance on join (`gift-claim-balance-<giftId>`, already read by
+`lib/money-situation.js`), and a voucher is minted only at expiry. Pure,
+balanced, tested, not wired: the gifting flow wires it
+(`docs/PAYOUTS_ROUND5_FOR_MAIN_SESSION.md` §B, which also records that a send
+to an existing member is a voucher today although the copy says balance).
+Item 7: every time phrase removed from how-it-works, the registry
+one-liners, the method hints and the identity ask; the withdraw copy names
+only the live cash ways and mentions identity checks only while they are on;
+knowledge base regenerated. Item 8: the gift claim message says the PIN is
+separate from the balance instead of "reply BALANCE to open your own WaPay
+and use it right here". BUGLOG #105, #106; tests in
+`tests/payout-round5.test.mjs`, `tests/how-it-works.test.mjs`,
+`tests/voucher-gift-routing.test.mjs`.
+
+---
+
 ## 2026-10-12 (81) — "Send money" to your own number is refused; a received voucher is answered, not sold; an unpaid link is "not paid", never "still confirming" (payouts round 5, items 4 and 5)
 
 From the Lisa case. Item 4: `startVoucherGiftPreviewAndConfirm` refuses the

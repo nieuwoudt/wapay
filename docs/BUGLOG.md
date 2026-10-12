@@ -4,6 +4,18 @@
 
 ---
 
+## 106. The gift claim message told a recipient who was already joining to "reply BALANCE to open your own WaPay and use it right here"
+
+- **Symptom (the Lisa case, 2026-10-10 18:44 SAST):** the R350 voucher PIN reached Lisa in the middle of her onboarding with "Or reply BALANCE to open your own WaPay and use it right here." She was already opening WaPay, and a voucher PIN cannot be used "right here": it is not balance, and her ten requests to move it to her bank followed.
+- **Fix:** `buildVoucherClaimMessage` (lib/gifting.js, anchored copy edit in the main session's file) ends "This voucher is separate from your WaPay balance: it is spent at those stores and cannot be withdrawn to a bank. Say *balance* any time to see your WaPay balance." The product fix is item 6 (a gift to a non-member becomes balance on join; money-side builders in `lib/ledger-core.js`, wiring specified for the gifting flow).
+- **Guard:** `tests/voucher-gift-routing.test.mjs` (the new line; never "open your own WaPay" or "use it right here"), `tests/payout-round5.test.mjs`.
+
+## 105. "(R8, minutes)", "arrives in minutes", "within seconds", "instantly": time promises in the copy
+
+- **Symptom (the Lisa case, 2026-10-10 22:42 SAST, and the founder's review):** "How much can I withdraw" got "PayShap (R8, minutes)"; the withdraw walkthrough said "arrives in minutes"; airtime and data were "loaded within seconds", electricity "usually within a minute; some municipalities take up to about 90 seconds", sends and pay links "instantly", the registry's withdraw one-liner "in minutes", the method hints "Instant" and "usually within minutes", the identity ask "about two minutes". The money rules forbid time promises (BUGLOG #82); a sandbox PayShap took over 20 s and then failed. The same answers listed "an FNB eWallet", which the production merchant does not offer, and "a once-off identity check" while identity checks are off.
+- **Fix:** every time phrase removed from `lib/how-it-works.js` (withdraw, send, airtime, data, electricity, pay links), `lib/capabilities.js` one-liners (anchored edits in the main session's registry), `lib/payouts.js` method hints and the KYC ask; the cash ways are named from the live provider list (`cashWays`); the identity-check sentence appears only while `kycRequired()`. The knowledge base was regenerated.
+- **Guard:** `tests/payout-round5.test.mjs` (every brief and answer of every topic, every registry line and every method hint against a time-promise pattern; the production cash list; the conditional identity line), `tests/how-it-works.test.mjs`, `tests/payout-chat.test.mjs`.
+
 ## 104. "Did my payment go through?" answered "still confirming" for a link nobody paid
 
 - **Symptom (the Lisa case, 2026-10-10 23:25 SAST):** an hour after a R367 link she had opened and never paid, "Did my payment go through" got "⏳ PayFast is still confirming your R350. I'll message you here the moment it clears." Nothing was being confirmed and no message would ever come; the reply also named the payment partner.
