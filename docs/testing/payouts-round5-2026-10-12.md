@@ -34,7 +34,8 @@ Ten requests to move money to her bank, seven identical replies, no word about t
 | # | Item | Commit | Evidence |
 |---|---|---|---|
 | 1 | Passport / foreign ID at the ID step, issuing country, wire fields; migration `20261012_payout_passport_and_last4` (applied to production 2026-10-12 14:28 SAST, before the deploy) | `d3c3cef` (live 14:37 SAST) | §C, §D.1 |
-| 2 | "To my bank account" opens PayShap with the price and the numbers (BUGLOG #101) | (next push) | §D.2 |
+| 2 | "To my bank account" opens PayShap with the price and the numbers (BUGLOG #101) | `11e4485` (live 15:00 SAST) | §D.2 |
+| 3 | The R0 gate reads the situation, tiers, a person on the third ask; "how much can I withdraw" (BUGLOG #102) | (this push) | §D.3 |
 
 ## C. Lisa's first withdrawal (item 1): the run sheet
 
@@ -64,3 +65,14 @@ If line 8 fails at the provider for the passport: "withdraw 50 absa", "yes", "mi
 - `?countries=1` on production: OTT's GetCountryCodes answers `{ countryName, countryCode }` with ISO alpha-2 codes ("AF", "AX", "AL", …), the same shape the chat sends.
 - **The production payout float was R45.56** at 12:37 UTC, after the founder's three pay-outs at 12:37 to 12:52 SAST (Nedbank R50 `WP1966FA7D6C7290`, Absa R50 `WP892962CD5C83ED`, PayShap R78 `WPC5A564DCADE067`, all paid). One R50 PayShap needs about R52.50 of float: the founder must top it up before Lisa's run (§C).
 - Lisa's run: waiting on the float top-up and on the founder asking her to say "withdraw 50".
+
+### D.2 Item 2 (2026-10-12)
+
+- Suite 1021/1021; harness 31 PASS including 6d part 2 ("lets do a withdrawal to my bank account" → "🏦 PayShap to your bank account: R8 fee, the cheapest way into your bank. You have R…, so up to R…. No bank account? Cash at an Absa, Nedbank or FNB ATM costs from R18. How much?"; "I don't have a bank account" → the cash methods; "all my money to my bank account" → the ceiling and the account question), the same unrelated agent-length WARN; build green.
+- Production: build `11e4485`, webhook bare GET 403, float still R45.56.
+
+### D.3 Item 3 (2026-10-12)
+
+- Harness run 1 (real processor, QA account at R0 with a delivered R350 voucher gift and a R367 link unpaid for 20 minutes): "I want you to put in my bank account" → "💸 You have R0 to withdraw. The R350 … sent you today came as a voucher PIN, not as money in your balance, so it cannot be withdrawn. Your R367 payment link from today was not paid, so nothing came in from it and nothing was taken. A withdrawal needs at least R58 …"; "How can you transfer in my bank account" → "Let me explain where your money is …" with the bullets, what she can do and the passport line; "Put in my bank account" → "Here it is once more, step by step …" (no alert channel on the harness); "How much can I withdraw" → **"🙋 A person from the WaPay team has been asked to help you" although no alert had been sent**. Defect in the new code, fixed before any push: a person is named only when an alert really went (`refs.personAsked`), a failed alert is retried, and the harness now checks it.
+- Suite 1026/1026 after the fix; harness run 2: 33 PASS, no WARN, no FAIL (Lisa 3 now checks that no person is claimed without an alert: the fourth reply reads "💸 In short: you have R0 to withdraw, and a withdrawal needs at least R58 …").
+

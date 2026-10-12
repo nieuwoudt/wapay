@@ -20,7 +20,7 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { seedQaAccount, teardownQaAccount, createSession, QA_WA_ID } from './chat-harness.mjs';
-import { fundQaAccount, parkQaState, QA_PIN, ottCalls } from './chat-harness.mjs';
+import { fundQaAccount, parkQaState, QA_PIN, ottCalls, prisma } from './chat-harness.mjs';
 
 const results = [];
 
@@ -195,6 +195,39 @@ async function run() {
       { level: 'FAIL', ok: !has(a.replyText, /WaPay VAS Products/), what: 'the old three-item dump is gone' },
     ], s);
   }
+  // ------------------------------------------------------------------
+  // 6d part 3 (round 5, item 3). Lisa at R0, her own sentences: a voucher gift
+  // delivered and an unpaid R367 link in her record. The gate leads with her
+  // money and where it is, then the fuller picture, then a person; never the
+  // same line twice. Runs here because the QA wallet is still R0.
+  // ------------------------------------------------------------------
+  {
+    const prevOn = process.env.WAPAY_PAYOUT_ENABLED; const prevKyc = process.env.WAPAY_PAYOUT_KYC;
+    process.env.WAPAY_PAYOUT_ENABLED = 'true'; process.env.WAPAY_PAYOUT_KYC = 'off';
+    const qa = await prisma.account.findFirst({ where: { waId: QA_WA_ID } });
+    const giftKey = `chatqa-gift-lisa-${qa.id}`;
+    try {
+      await prisma.pendingGift.create({ data: { senderAccountId: qa.id, recipientMsisdn: QA_WA_ID, amountCents: 35000, rail: 'OTT', voucherPin: 'QA-NOT-A-PIN', status: 'DELIVERED', idemKey: giftKey, deliveredAt: new Date(Date.now() - 60 * 1000) } });
+      await prisma.providerRequest.create({ data: { provider: 'PAYFAST', route: 'deposit', idemKey: `chatqa-dep-lisa-${qa.id}`, status: 'PENDING', accountId: qa.id, requestTs: new Date(Date.now() - 20 * 60 * 1000), metadata: { amountCents: 35000, grossCents: 36700, feeCents: 1700, waId: QA_WA_ID } } });
+      const g1 = await s.say('I want you to put in my bank account');
+      const g2 = await s.say('How can you transfer in my bank account');
+      const g3 = await s.say('Put in my bank account');
+      const g4 = await s.say('How much can I withdraw');
+      verdict('Lisa 3: the R0 gate reads her situation, explains more the second time, offers a person the third time, never the same line twice', [
+        { level: 'FAIL', ok: has(g1.replyText, /You have R0 to withdraw\. The R350 \w+ sent you today came as a voucher PIN, not as money in your balance/) && has(g1.replyText, /R367 payment link from today was not paid/), what: 'first time: her money, the voucher and the unpaid link, before any minimum' },
+        { level: 'FAIL', ok: !has(g1.replyText, /Withdrawals start at/), what: 'never the old product-fact line' },
+        { level: 'FAIL', ok: has(g2.replyText, /Let me explain where your money is/) && has(g2.replyText, /What you can do:/) && has(g2.replyText, /passport or foreign ID works too/), what: 'second time: the picture as bullets, what she can do, a passport works' },
+        { level: 'FAIL', ok: has(g3.replyText, /asked a person from the WaPay team|To talk to a person|Here it is once more/) && g3.replyText !== g2.replyText, what: 'third time: a person (or, with no alert channel here, a different wording), never the same line' },
+        { level: 'FAIL', ok: has(g4.replyText, /R0/) && !has(g4.replyText, /13-digit/) && g4.replyText !== g3.replyText, what: '"How much can I withdraw" answers from her balance, not the how-it-works brief' },
+        { level: 'FAIL', ok: process.env.ALERT_EMAIL || (!has(g3.replyText, /asked a person/) && !has(g4.replyText, /has been asked/)), what: 'no person is claimed when no alert could be sent (harness run 2026-10-12 caught "has been asked" with no alert)' },
+      ], s);
+    } finally {
+      await prisma.pendingGift.deleteMany({ where: { idemKey: giftKey } }).catch(() => {});
+      await prisma.providerRequest.deleteMany({ where: { idemKey: `chatqa-dep-lisa-${qa.id}` } }).catch(() => {});
+      if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;
+      if (prevKyc === undefined) delete process.env.WAPAY_PAYOUT_KYC; else process.env.WAPAY_PAYOUT_KYC = prevKyc;
+    }
+  }
   {
     // Withdraw flow wiring with the switch on, no money: the QA wallet holds R0.
     const prevOn = process.env.WAPAY_PAYOUT_ENABLED; const prevKyc = process.env.WAPAY_PAYOUT_KYC;
@@ -205,7 +238,7 @@ async function run() {
     if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;
     if (prevKyc === undefined) delete process.env.WAPAY_PAYOUT_KYC; else process.env.WAPAY_PAYOUT_KYC = prevKyc;
     verdict('Withdraw: with payouts live the flow starts deterministically and fees are quoted', [
-      { level: 'FAIL', ok: has(a.replyText, /Withdrawals start at R50/i) && has(a.replyText, /R0/), what: '"withdraw R20" reaches the flow and reports the R50 minimum against a R0 wallet (R50 floor since 2026-10-10)' },
+      { level: 'FAIL', ok: has(a.replyText, /R0/) && has(a.replyText, /R58/) && !has(a.replyText, /coming soon/i), what: '"withdraw R20" reaches the flow and reports the R58 needed against a R0 wallet (R50 floor since 2026-10-10; the gate leads with the money since 2026-10-12)' },
       { level: 'FAIL', ok: !has(a.replyText, /coming soon/i) && !has(b.replyText, /coming soon/i) && !has(c.replyText, /coming soon/i), what: 'never "coming soon" while live' },
       { level: 'FAIL', ok: has(b.replyText, /Reply \*YES\*|withdraw R50/i) && !looksLikeMenu(b.replyText) && !has(b.replyText, /coming soon/i), what: '"can I take my money out?" is a QUESTION: a short specific answer plus the offer, no flow starts (knowledge base, 2026-09-15)' },
       { level: 'FAIL', ok: has(c.replyText, /R8/) && has(c.replyText, /R10/) && has(c.replyText, /R18/), what: 'the cash-out fee question quotes R8 / R10 / R18' },

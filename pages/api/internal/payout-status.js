@@ -32,7 +32,8 @@ export default async function handler(req, res) {
   const out = {
     checkedAt: new Date().toISOString(),
     build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || null,
-    switches: { payoutEnabled: payoutEnabled(), payoutConfigured: payoutConfigured(), kycRequired: kycRequired(), diditConfigured: diditConfigured() },
+    // alertEmail: whether the withdraw gate's third tier can actually reach a person (lib/payout-gate.js).
+    switches: { payoutEnabled: payoutEnabled(), payoutConfigured: payoutConfigured(), kycRequired: kycRequired(), diditConfigured: diditConfigured(), alertEmail: !!process.env.ALERT_EMAIL && !!process.env.RESEND_API_KEY },
     env: { baseUrl: process.env.OTT_PAYOUT_BASE_URL || null, username: mask(process.env.OTT_PAYOUT_USERNAME), password: !!process.env.OTT_PAYOUT_PASSWORD, apiKey: mask(process.env.OTT_PAYOUT_API_KEY) },
   };
   if (!payoutConfigured()) return res.status(200).json({ ...out, error: 'OTT_PAYOUT_* incomplete in this deployment' });

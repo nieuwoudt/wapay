@@ -2,7 +2,7 @@
 
 Conversational end-to-end run against the REAL message processor (live DB, live OpenAI, outbound WhatsApp captured, no money moved). QA account: `27600000901` (seeded and torn down by the run).
 
-**31 pass · 1 warn · 0 fail**
+**33 pass · 0 warn · 0 fail**
 
 ## ✅ Founder repro: "payment link" escapes the meter ask
 
@@ -43,12 +43,12 @@ Please enter your meter number:
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll receive the full *R20* however they pay. No fees on this one. 🎉
-[button:View my payment page -> https://pleasepayme.co.za/PRQMQDRS]
+[button:View my payment page -> https://pleasepayme.co.za/PRGQWMXF]
 ···
 🙏 *Pay WaPay QA Harness now* · R20 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRQMQDRS
+https://pleasepayme.co.za/PRGQWMXF
 ```
 
 </details>
@@ -151,12 +151,12 @@ Reply *1* or *2*, or "cancel".
 Forward the next message to whoever owes you. I'll tell you the moment it's paid.
 
 You'll get the full *R250* if they pay from their WaPay (free), or R237.20 if they pay by card.
-[button:View my payment page -> https://pleasepayme.co.za/PRABZFNZ]
+[button:View my payment page -> https://pleasepayme.co.za/PRDMXWBJ]
 ···
 🙏 *Pay WaPay QA Harness now* · R250 on WaPay
 
 Tap the link to pay. Free from a WaPay balance, or pay by card:
-https://pleasepayme.co.za/PRABZFNZ
+https://pleasepayme.co.za/PRDMXWBJ
 ```
 
 </details>
@@ -205,13 +205,14 @@ Just tell me what you need, in any language.
 **User:** My name is Thabo and I run a spaza shop in Soweto.
 
 ```
-Nice to meet you, Thabo 😊 A spaza shop can use WaPay for getting paid, sending money, airtime, data and electricity. If you want, I can set up a business account for your shop, just say "business account".
+Nice to meet you, Thabo 😊
+If you want, I can help you set up a WaPay for Business portal for your spaza shop. Just say "business account".
 ```
 
 **User:** What did I tell you my name was?
 
 ```
-You told me your name was *Thabo* 😊
+You told me your name was Thabo 😊
 ```
 
 </details>
@@ -225,7 +226,7 @@ You told me your name was *Thabo* 😊
 **User:** Please remember that my favourite colour is green.
 
 ```
-Got it, Thabo 😊 I’ll remember that your favourite colour is green.
+Of course, I'll remember that your favourite colour is green 💚
 ```
 
 **User:** buy electricity
@@ -248,7 +249,7 @@ Reply with an amount (e.g., R50, R100, R500)
 **User:** What is my favourite colour?
 
 ```
-Your favourite colour is *green* 😊
+Your favourite colour is green 💚
 ```
 
 </details>
@@ -267,10 +268,10 @@ Your favourite colour is *green* 😊
 You can spend your WaPay money on:
 • *Airtime and data* for your number or any other SA number
 • *Prepaid electricity* for any meter
-• *Sending money* to friends and family on WhatsApp
-• *A WaPay voucher* for online use at supported OTT partners
+• *Send money* to friends and family on WhatsApp
+• *WaPay vouchers* online in apps and stores that accept OTT vouchers
 
-Which one would you like to do first? Just say "buy airtime", "buy data", "buy electricity", or "send money" 💰
+If you want, I can show you the best next step. Just say "buy airtime", "buy data", "buy electricity", "send money", or "buy an OTT voucher" 💰
 ```
 
 </details>
@@ -436,9 +437,68 @@ Just tell me what you need! 🎉
 
 </details>
 
+## ✅ Lisa 3: the R0 gate reads her situation, explains more the second time, offers a person the third time, never the same line twice
+
+- ✅ first time: her money, the voucher and the unpaid link, before any minimum
+- ✅ never the old product-fact line
+- ✅ second time: the picture as bullets, what she can do, a passport works
+- ✅ third time: a person (or, with no alert channel here, a different wording), never the same line
+- ✅ "How much can I withdraw" answers from her balance, not the how-it-works brief
+- ✅ no person is claimed when no alert could be sent (harness run 2026-10-12 caught "has been asked" with no alert)
+
+<details><summary>Transcript</summary>
+
+**User:** I want you to put in my bank account
+
+```
+💸 You have R0 to withdraw. The R350 WaPay sent you today came as a voucher PIN, not as money in your balance, so it cannot be withdrawn. Your R367 payment link from today was not paid, so nothing came in from it and nothing was taken. A withdrawal needs at least R58 in your balance (the R50 minimum plus the R8 PayShap fee). Say *add money* to top up.
+```
+
+**User:** How can you transfer in my bank account
+
+```
+Let me explain where your money is, WaPay:
+
+• Balance you can withdraw: *R0*
+• The R350 from WaPay (today): a voucher PIN, not balance
+• Your R367 payment link: not paid, nothing was taken
+
+What you can do:
+1️⃣ Add money to your balance: say *add money* (card, bank or a cash voucher bought at a till)
+2️⃣ Use the voucher PIN at a shop that takes WaPay vouchers
+3️⃣ Withdraw once your balance is R58 or more: say *withdraw*
+
+You do not need a South African ID for a withdrawal: a passport or foreign ID works too.
+```
+
+**User:** Put in my bank account
+
+```
+Here it is once more, step by step, WaPay:
+
+• Balance you can withdraw: *R0*
+• The R350 from WaPay (today): a voucher PIN, not balance
+• Your R367 payment link: not paid, nothing was taken
+
+What you can do:
+1️⃣ Add money to your balance: say *add money* (card, bank or a cash voucher bought at a till)
+2️⃣ Use the voucher PIN at a shop that takes WaPay vouchers
+3️⃣ Withdraw once your balance is R58 or more: say *withdraw*
+
+You do not need a South African ID for a withdrawal: a passport or foreign ID works too.
+```
+
+**User:** How much can I withdraw
+
+```
+💸 In short: you have R0 to withdraw, and a withdrawal needs at least R58 in your balance (the R50 minimum plus the R8 PayShap fee). Say *add money* to top up. The R350 from WaPay is a voucher PIN, so it stays a voucher.
+```
+
+</details>
+
 ## ✅ Withdraw: with payouts live the flow starts deterministically and fees are quoted
 
-- ✅ "withdraw R20" reaches the flow and reports the R50 minimum against a R0 wallet (R50 floor since 2026-10-10)
+- ✅ "withdraw R20" reaches the flow and reports the R58 needed against a R0 wallet (R50 floor since 2026-10-10; the gate leads with the money since 2026-10-12)
 - ✅ never "coming soon" while live
 - ✅ "can I take my money out?" is a QUESTION: a short specific answer plus the offer, no flow starts (knowledge base, 2026-09-15)
 - ✅ the cash-out fee question quotes R8 / R10 / R18
@@ -448,7 +508,7 @@ Just tell me what you need! 🎉
 **User:** withdraw R20
 
 ```
-💸 Withdrawals start at R50 plus the fee, so the smallest one needs R58, and you have R0 available right now. Your balance still works for airtime, data, electricity and sending money.
+💸 In short: you have R0 to withdraw, and a withdrawal needs at least R58 in your balance (the R50 minimum plus the R8 PayShap fee). Say *add money* to top up.
 ```
 
 **User:** can I take my money out?
@@ -546,7 +606,7 @@ No monthly fees, ever. 😊
 **User:** cancel
 
 ```
-No problem. We’ve stopped that here 😊
+Cancelled. If you want, just send the next thing you’d like to do 💡
 ```
 
 </details>
@@ -735,7 +795,7 @@ Reply *YES* to continue to your PIN, or *NO* to cancel.
 **User:** 1934
 
 ```
-✅ *Done.* R50 is on its way to you by FNB eWallet. Reference WP1A97085DB1DCBC. Fee R18.
+✅ *Done.* R50 is on its way to you by FNB eWallet. Reference WP984105F6C74640. Fee R18.
 
 📲 The eWallet code is sent by SMS to •••901.
 
@@ -976,7 +1036,7 @@ Reply *YES* to continue to your PIN, or *NO* to cancel.
 **User:** 1934
 
 ```
-✅ *Done.* R50 is on its way to you by PayShap. Reference WP870F766978846D. Fee R8.
+✅ *Done.* R50 is on its way to you by PayShap. Reference WP55C6DACEEDB971. Fee R8.
 
 🏦 It goes straight into your bank account. Your bank's own app or SMS will show the credit; there is nothing to collect.
 ```
@@ -1043,7 +1103,7 @@ What is the bank account number the money must go to? It must be an account in y
 **User:** balance
 
 ```
-💰 *Ibhalansi yakho ye-WaPay*
+💰 *Ibhalansi yakho yeWaPay*
 
 Sawubona WaPay QA Harness!
 
@@ -1055,13 +1115,12 @@ Ufunani okunye? Ngicela ungibuze!
 **User:** wat is my balans
 
 ```
-💰 *Ibhalansi yakho ye-WaPay*
+💰 *Ibhalansi yakho yeWaPay*
 
 Sawubona WaPay QA Harness!  
-Ibhalansi yakho yamanje ingu-R 274.00
+Ibhalansi yakho yamanje ingu R 274.00
 
-  
-Uthanda ukwenza ini kulandela?
+. Uthanda ukwenza ini kulandela?
 ```
 
 **User:** speak english
@@ -1115,7 +1174,7 @@ Manage customers, payment links and revenue at https://wapay.co.za/business. To 
 **User:** business login
 
 ```
-🔐 *WaPay for Business code: 941848*
+🔐 *WaPay for Business code: 070038*
 
 Type it into the business portal within 10 minutes. One attempt only.
 
@@ -1143,14 +1202,14 @@ Not you? Ignore this and tell us right away.
 • Habits: 2 completed movements in the last 30 days
 
 📄 *Your last 4 movements*
-• 12 Oct 14:46 · Withdrawal (PayShap) · R50 → Lisa Moyo acc •••890 · ✅ paid
-   ref WP870F766978846D
-• 12 Oct 14:45 · Withdrawal (FNB eWallet) · R50 → Thandi Nkosi · ✅ paid
-   ref WP1A97085DB1DCBC
-• 12 Oct 14:41 · Payment link · R250 · 🔗 open
-   ref PRABZFNZ
-• 12 Oct 14:41 · Payment link · R20 · 🔗 open
-   ref PRQMQDRS
+• 12 Oct 15:12 · Withdrawal (PayShap) · R50 → Lisa Moyo acc •••890 · ✅ paid
+   ref WP55C6DACEEDB971
+• 12 Oct 15:10 · Withdrawal (FNB eWallet) · R50 → Thandi Nkosi · ✅ paid
+   ref WP984105F6C74640
+• 12 Oct 15:06 · Payment link · R250 · 🔗 open
+   ref PRDMXWBJ
+• 12 Oct 15:06 · Payment link · R20 · 🔗 open
+   ref PRGQWMXF
 
 I keep 30 days of our chat so I can follow the conversation, and I never store your PIN, voucher PINs or card details. Reply *forget me* and the chat memory and what I have learned about how you use WaPay both go; your transactions stay on record, as the law requires.
 Want the detail on any one of them? Say the date or the amount.
@@ -1158,13 +1217,13 @@ Want the detail on any one of them? Say the date or the amount.
 
 </details>
 
-## ⚠️ Agent: "How can I withdraw money?" is short, honest, and never the menu
+## ✅ Agent: "How can I withdraw money?" is short, honest, and never the menu
 
 - ✅ no menu
 - ✅ no date promised
 - ✅ the payout partner is not named while withdrawals are off
 - ✅ no betting word
-- ⚠️ six lines or fewer (review 4: two lines and a question)
+- ✅ six lines or fewer (review 4: two lines and a question)
 - ✅ off: honest position and what the money can do
 
 <details><summary>Transcript</summary>
@@ -1172,17 +1231,10 @@ Want the detail on any one of them? Say the date or the amount.
 **User:** How can I withdraw money?
 
 ```
-🏧 Taking money out of WaPay is not available just yet, but it is coming soon.
+1. 🏧 *Cash withdrawals* are not available just yet.
+2. For now, your balance works for *airtime, data, electricity, WaPay vouchers, sending money and getting paid*.
 
-For now your R274 balance works for:
-• *Airtime*
-• *Data*
-• *Electricity*
-• *WaPay vouchers*
-• *Sending money*
-• *Getting paid*
-
-Just come back here if you have any questions. If you get stuck on any step, just ask me and I will guide you. 💡
+Just come back here if you have any questions. If you get stuck on any step, just ask me and I will guide you. 😊
 ```
 
 </details>
@@ -1198,25 +1250,23 @@ Just come back here if you have any questions. If you get stuck on any step, jus
 **User:** Where can I spend my OTT voucher?
 
 ```
-💡 OTT vouchers are used *online and in apps*, not at shop tills.
+You can spend an OTT voucher *online or in apps*, not at a shop till 💡
 
 *Accepted at*
 • *Talk360* for international calling
 • *fibertime* and *ikeja* for township WiFi
 • *Capitec Connect* and *megsApp* for airtime and data
-• *Pay@* and *Xash* for bills like DStv accounts, municipal accounts and insurance
+• *Pay@* and *Xash* for bills, including DStv accounts, municipal accounts and insurance
 • *FoondaMate* for study help
 • *LAYAWAY* for online lay-by
 
 *Not accepted at*
 • *Supermarket tills* like Checkers, Shoprite, Pick n Pay, Spar and Boxer
 • *Takealot*
-• *Netflix*
-• *Showmax*
-• *Spotify*
+• *Netflix, Showmax and Spotify*
 • *Mobile networks’ own sites*
 
-At checkout, choose *OTT Voucher* and enter the 12-digit PIN. ✨
+At checkout, choose *OTT Voucher* and enter the PIN. The full live list is on ottvoucher.com ✨
 ```
 
 </details>
@@ -1232,18 +1282,7 @@ At checkout, choose *OTT Voucher* and enter the 12-digit PIN. ✨
 **User:** what did I buy last week
 
 ```
-Last week, I see *2 completed withdrawals* and *2 open payment links*. No purchases are shown. 💡
-
-• 12 Oct 14:46 · PAYOUT · R50 · to Lisa Moyo acc •••890 · ✅ paid
-Reference: WP870F766978846D
-• 12 Oct 14:45 · PAYOUT · R50 · to Thandi Nkosi · ✅ paid
-Reference: WP1A97085DB1DCBC
-• 12 Oct 14:41 · PAY_LINK · R250 · to open link · ⏳ pending
-Reference: PRABZFNZ
-• 12 Oct 14:41 · PAY_LINK · R20 · to open link · ⏳ pending
-Reference: PRQMQDRS
-
-Completed total: *R100*. Fees total: *R26*.
+💰 Balance to spend: R274. Your last movement: 12 Oct 15:12, payout R50 (success). What would you like to do next?
 ```
 
 </details>
@@ -1259,16 +1298,8 @@ Completed total: *R100*. Fees total: *R26*.
 **User:** did my payment go through
 
 ```
-The newest one went through ✅
-
-• *12 Oct 14:46* · payout · *R50* · to Lisa Moyo acc •••890 · ✅ paid  
-Reference: WP870F766978846D
-
-There was also one just before it:
-• *12 Oct 14:45* · payout · *R50* · to Thandi Nkosi · ✅ paid  
-Reference: WP1A97085DB1DCBC
-
-Did you mean the one to *Lisa Moyo* or *Thandi Nkosi*? 💡
+Yes ✅
+Your newest payment went through: *R50* via *PayShap*, ref *WP55C6DACEEDB971*.
 ```
 
 </details>
@@ -1283,10 +1314,7 @@ Did you mean the one to *Lisa Moyo* or *Thandi Nkosi*? 💡
 **User:** Okay
 
 ```
-Okay 😊
-
-The latest payout to *Lisa Moyo* went through ✅
-Reference: WP870F766978846D
+👍😊
 ```
 
 </details>

@@ -37,8 +37,8 @@ test('switch off → null (the coming-soon script stays); unverified → identit
   assert.equal((await handleWithdrawReply({ account: unverified, state: 'PAYOUT_KYC', text: 'no' })).cancelled, true);
   const pending = await startWithdraw({ account: { ...unverified, profile: { kyc: { status: 'PENDING' } } }, ask: {}, deps: deps() });
   assert.match(pending.text, /still being reviewed/);
-  const poor = await startWithdraw({ account: verified, ask: {}, deps: deps(1500) });
-  assert.equal(poor.state, null); assert.match(poor.text, /start at R20/);
+  const poor = await startWithdraw({ account: verified, ask: {}, deps: { ...deps(1500), moneySituation: async () => null, gateHistory: async () => ({ count: 0, personAsked: false }) } });
+  assert.equal(poor.state, null); assert.match(poor.text, /You have R15 to withdraw\. A withdrawal needs at least R28 in your balance \(the R20 minimum plus the R8 PayShap fee\)/, 'the money first, then the minimum (2026-10-12)');
 });
 
 test('happy path PayShap: menu → 1 → amount → account → bank → confirm → YES → PIN state; executes once with the KYC name and the intent id', async () => {

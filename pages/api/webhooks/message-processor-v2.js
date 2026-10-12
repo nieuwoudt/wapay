@@ -2840,7 +2840,8 @@ async function deliverPayoutStep({ from, account, step }) {
   }
   await updateConversationState(from, step.state || null, step.data || null);
   const msg = step.raw ? step.text : await localizeOutbound(step.text, await userLang(account));
-  return await sendWhatsAppText({ to: from, text: msg });
+  // refs: the gate id a reply carries (lib/payout-gate.js), stored on the turn so a repeat is counted in any language.
+  return await sendWhatsAppText({ to: from, text: msg, ...(step.refs ? { refs: step.refs } : {}) });
 }
 function howItWorksContext(from) {
   return { wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), fuelPartners: advertisedFuelPartners().map((p) => p.name), ottFacts: ottAcceptedFacts() };

@@ -221,3 +221,118 @@ test('2. bank words open PayShap with the fee, the balance, the ceiling and the 
   assert.match(one.text, /How much would you like to withdraw by PayShap\? Between R50 and R78/);
   assert.ok(!/—/.test(open.text + noBank.text), 'no em dashes in customer copy');
 });
+
+// ---------------------------------------------------------------------------
+// 3. The R0 withdraw gate reads the customer's situation and never says the
+//    same thing twice: her money first and where it is, then the fuller
+//    picture and what she can do, then a person (founder 2026-10-12; Lisa got
+//    the same minimum line seven times). "How much can I withdraw?" is
+//    answered from her balance.
+// ---------------------------------------------------------------------------
+import { moneySituation, gateRepeatCount, situationSentences } from '../lib/money-situation.js';
+import { shortGateReply, stuckAlert, SHORT_GATE } from '../lib/payout-gate.js';
+import { matchHowItWorksAsk } from '../lib/how-it-works.js';
+
+const SAT = new Date('2026-10-10T16:44:33Z');   // her gift was delivered on Saturday evening
+const LISA_SITUATION = { availableCents: 0, heldCents: 0, giftsReceived: [{ id: 'g1', amountCents: 35000, fromName: 'Nieuwoudt', at: SAT, rail: 'OTT', inBalance: false }], pendingLinks: [{ amountCents: 35000, grossCents: 36700, at: new Date('2026-10-10T20:16:54Z'), ageMinutes: 300 }], pendingPayouts: [], identity: { kind: null, countryOfIssue: null }, savedDestinations: 0 };
+
+test('3. moneySituation reads the balance, the gifts (voucher or already in the balance), unpaid links, held pay-outs and the ID on file, best-effort', async () => {
+  const where = [];
+  const db = {
+    wallet: { findMany: async () => [{ balanceType: 'SPEND', availableCents: 0, pendingCents: 0 }, { balanceType: 'CASH', availableCents: 0, pendingCents: 5800 }] },
+    pendingGift: { findMany: async (q) => { where.push(q.where.recipientMsisdn); return [{ id: 'g1', senderAccountId: 'founder', amountCents: 35000, rail: 'OTT', status: 'DELIVERED', createdAt: SAT, deliveredAt: SAT }, { id: 'g2', senderAccountId: 'founder', amountCents: 2000, rail: 'OTT', status: 'DELIVERED', createdAt: SAT, deliveredAt: SAT }]; } },
+    account: { findMany: async () => [{ id: 'founder', displayName: 'Nieuwoudt Gresse' }] },
+    journalEntry: { findMany: async () => [{ idemKey: 'manual-gift-to-wallet-g2' }] },
+    providerRequest: { findMany: async (q) => (q.where.provider === 'PAYFAST' ? [{ requestTs: new Date('2026-10-10T20:16:54Z'), metadata: { amountCents: 35000, grossCents: 36700 } }] : [{ requestTs: SAT, metadata: { reference: 'WPX', amountCents: 5000, feeCents: 800, method: 'PAYSHAP' } }]) },
+    payoutIdentity: { findUnique: async () => ({ idType: 'PASSPORT', countryOfIssue: 'ZW' }) },
+    payoutDestination: { count: async () => 1 },
+  };
+  const s = await moneySituation({ prisma: db, account: { id: 'acc-lisa', msisdn: '27601879361' }, now: new Date('2026-10-11T04:23:00Z') });
+  assert.deepEqual(where[0], { endsWith: '601879361' }, 'gifts are found by the last nine digits, whatever the stored shape');
+  assert.equal(s.availableCents, 0); assert.equal(s.heldCents, 5800);
+  assert.deepEqual(s.giftsReceived.map((g) => [g.id, g.fromName, g.inBalance]), [['g1', 'Nieuwoudt', false], ['g2', 'Nieuwoudt', true]], 'the sender by first name; a gift moved into the balance is marked');
+  assert.equal(s.pendingLinks[0].grossCents, 36700); assert.ok(s.pendingLinks[0].ageMinutes > 400);
+  assert.equal(s.pendingPayouts[0].reference, 'WPX');
+  assert.deepEqual(s.identity, { kind: 'PASSPORT', countryOfIssue: 'ZW' }); assert.equal(s.savedDestinations, 1);
+  const broken = new Proxy({}, { get: () => new Proxy({}, { get: () => async () => { throw new Error('db down'); } }) });
+  const empty = await moneySituation({ prisma: broken, account: { id: 'x', msisdn: '27601879361' } });
+  assert.equal(empty.availableCents, 0); assert.deepEqual(empty.giftsReceived, []); assert.equal(empty.identity.kind, null);
+  assert.deepEqual(situationSentences(s, { now: new Date('2026-10-11T04:23:00Z') }), [
+    'The R350 Nieuwoudt sent you yesterday came as a voucher PIN, not as money in your balance, so it cannot be withdrawn.',
+    'Your R367 payment link from yesterday was not paid, so nothing came in from it and nothing was taken.',
+    'R58 is held for your R50 withdrawal (WPX) until the bank confirms it; if it does not go through, it comes back to your balance.',
+  ]);
+});
+
+test('3. gateRepeatCount counts the gate replies among the last eight assistant turns in twelve hours, by the stored gate id', async () => {
+  const turns = (refsList) => ({ conversationTurn: { findMany: async () => refsList.map((refs) => ({ refs })) } });
+  assert.equal(await gateRepeatCount({ prisma: turns([]), accountId: 'a', gate: SHORT_GATE }), 0);
+  assert.equal(await gateRepeatCount({ prisma: turns([{ gate: SHORT_GATE }, null, { gate: SHORT_GATE }]), accountId: 'a', gate: SHORT_GATE }), 2, 'another reply in between does not reset the count (Lisa met the gate between other turns)');
+  assert.equal(await gateRepeatCount({ prisma: turns([{ gate: 'OTHER' }, null]), accountId: 'a', gate: SHORT_GATE }), 0);
+  assert.equal(await gateRepeatCount({ prisma: { conversationTurn: { findMany: async () => { throw new Error('x'); } } }, accountId: 'a', gate: SHORT_GATE }), 0);
+});
+
+test('3. the gate in tiers on Lisa\'s situation: her money and where it is, then the picture and what to do, then a person; never the same line twice in a row', () => {
+  const lisaAcc = { id: 'acc-lisa', waId: '27601879361', displayName: 'Lisa' };
+  const now = new Date('2026-10-10T21:28:00Z');
+  const t = [0, 1, 2, 3].map((repeats) => shortGateReply({ account: lisaAcc, balanceCents: 0, needCents: 5800, minCents: 5000, situation: LISA_SITUATION, repeats, personAsked: repeats === 2, now }));
+  assert.equal(t[0].text, '💸 You have R0 to withdraw. The R350 Nieuwoudt sent you today came as a voucher PIN, not as money in your balance, so it cannot be withdrawn. Your R367 payment link from today was not paid, so nothing came in from it and nothing was taken. A withdrawal needs at least R58 in your balance (the R50 minimum plus the R8 PayShap fee). Say *add money* to top up.');
+  assert.ok(!/Withdrawals start at/.test(t[0].text), 'never a product fact first');
+  assert.match(t[1].text, /^Let me explain where your money is, Lisa:\n\n• Balance you can withdraw: \*R0\*\n• The R350 from Nieuwoudt \(today\): a voucher PIN, not balance\n• Your R367 payment link: not paid, nothing was taken\n\nWhat you can do:\n1️⃣ Add money/);
+  assert.match(t[1].text, /2️⃣ Use the voucher PIN at a shop that takes WaPay vouchers\n3️⃣ Withdraw once your balance is R58 or more: say \*withdraw\*/);
+  assert.match(t[1].text, /a passport or foreign ID works too/, 'no ID on file: a passport is named');
+  assert.match(t[2].text, /^🙋 I can see this is not working for you, Lisa, so I have asked a person from the WaPay team to look at your account and message you here\. Your money is safe\./);
+  assert.match(t[3].text, /^💸 In short: you have R0 to withdraw/, 'tier 3 without an alert on record claims no person');
+  assert.match(shortGateReply({ account: lisaAcc, balanceCents: 0, needCents: 5800, minCents: 5000, situation: LISA_SITUATION, repeats: 3, personAsked: true, now }).text, /^🙋 A person from the WaPay team has been asked to help you and will message you here\. Until then: you have R0 to withdraw/);
+  assert.deepEqual(t.map((x) => x.refs), [0, 1, 2, 3].map((tier) => ({ gate: SHORT_GATE, tier, ...(tier === 2 ? { personAsked: true } : {}) })));
+  for (let i = 1; i < t.length; i += 1) assert.notEqual(t[i].text, t[i - 1].text, `tier ${i} differs from tier ${i - 1}`);
+  // Tier 2 without a working alert never promises a person.
+  const noAlert = shortGateReply({ account: lisaAcc, balanceCents: 0, needCents: 5800, minCents: 5000, situation: LISA_SITUATION, repeats: 2, personAsked: false, now });
+  assert.ok(!/asked a person/.test(noAlert.text)); assert.match(noAlert.text, /^Here it is once more, step by step, Lisa:/);
+  process.env.WAPAY_SUPPORT_WHATSAPP = '060 000 0000';
+  assert.match(shortGateReply({ account: lisaAcc, balanceCents: 0, needCents: 5800, minCents: 5000, situation: LISA_SITUATION, repeats: 2, now }).text, /To talk to a person from the WaPay team, WhatsApp 060 000 0000\./);
+  delete process.env.WAPAY_SUPPORT_WHATSAPP;
+  // A small balance: the gap, then what to do.
+  assert.equal(shortGateReply({ account: lisaAcc, balanceCents: 1650, needCents: 5800, minCents: 5000, situation: { ...LISA_SITUATION, giftsReceived: [], pendingLinks: [], identity: { kind: 'RSAID' } }, repeats: 0, now }).text,
+    '💸 You have R16.50 to withdraw. A withdrawal needs at least R58 in your balance (the R50 minimum plus the R8 PayShap fee), so you need R41.50 more. Say *add money* to top up.');
+  for (const x of t) assert.ok(!/—|\bOTT\b|PayFast/.test(x.text), 'no em dash, no partner named');
+  const alert = stuckAlert({ account: lisaAcc, balanceCents: 0, needCents: 5800, situation: LISA_SITUATION, now });
+  assert.match(alert.subject, /Lisa has asked to withdraw three times/); assert.match(alert.detailsHtml, /•••9361/); assert.ok(!/27601879361|0601879361/.test(alert.detailsHtml), 'the number is masked in the e-mail');
+});
+
+test('3. startWithdraw at R0: reads the situation, counts the repeats, alerts a person exactly once (the third time), returns the gate id for the stored turn', async () => {
+  envOff();
+  const alerts = [];
+  const mk = (repeats, ok = true, askedBefore = false) => ({ ...deps(0), moneySituation: async () => LISA_SITUATION, gateHistory: async () => ({ count: repeats, personAsked: askedBefore }), sendOpsAlert: async (a) => { alerts.push(a); return { success: ok }; } });
+  const first = await startWithdraw({ account: lisa, ask: matchWithdrawAsk('I want you to put in my bank account'), deps: mk(0) });
+  assert.equal(first.state, null); assert.match(first.text, /^💸 You have R0 to withdraw\. The R350 Nieuwoudt sent you/); assert.deepEqual(first.refs, { gate: SHORT_GATE, tier: 0 });
+  const second = await startWithdraw({ account: lisa, ask: {}, deps: mk(1) });
+  assert.match(second.text, /^Let me explain where your money is, Lisa:/);
+  assert.equal(alerts.length, 0, 'no alert before the third time');
+  const third = await startWithdraw({ account: lisa, ask: {}, deps: mk(2) });
+  assert.match(third.text, /I have asked a person from the WaPay team/); assert.equal(alerts.length, 1); assert.match(alerts[0].subject, /three times/);
+  assert.deepEqual(third.refs, { gate: SHORT_GATE, tier: 2, personAsked: true }, 'the stored reply remembers that a person was asked');
+  const fourth = await startWithdraw({ account: lisa, ask: {}, deps: mk(3, true, true) });
+  assert.match(fourth.text, /has been asked to help you/); assert.equal(alerts.length, 1, 'one alert, not one per message');
+  const failedAlert = await startWithdraw({ account: lisa, ask: {}, deps: mk(2, false) });
+  assert.ok(!/asked a person/.test(failedAlert.text), 'a failed alert is never presented as a person on the way'); assert.equal(failedAlert.refs.personAsked, undefined);
+  // Harness 2026-10-12: with no alert channel the fourth reply said "has been asked". Never again: no alert, no claim; the alert is retried.
+  const fourthNoAlert = await startWithdraw({ account: lisa, ask: {}, deps: mk(3, false, false) });
+  assert.ok(!/has been asked|asked a person/.test(fourthNoAlert.text)); assert.match(fourthNoAlert.text, /^💸 In short: you have R0 to withdraw/); assert.equal(alerts.length, 3, 'a failed alert is retried on the next gate');
+  // The processor stores the gate id on the turn (refs), so the count works in every language.
+  const src = read('../pages/api/webhooks/message-processor-v2.js');
+  assert.match(src, /return await sendWhatsAppText\(\{ to: from, text: msg, \.\.\.\(step\.refs \? \{ refs: step\.refs \} : \{\}\) \}\);/);
+});
+
+test('3. "How much can I withdraw?" is answered from the balance (not the how-it-works brief); a short balance gets the gate', async () => {
+  envOff();
+  for (const q of ['How much can I withdraw', 'How much can I withdraw?', 'What can I withdraw?', 'how much money can i take out']) {
+    assert.equal(matchHowItWorksAsk(q), null, q); assert.equal(matchWithdrawAsk(q)?.howMuch, true, q);
+  }
+  assert.equal(matchHowItWorksAsk('How do I withdraw?'), 'withdraw', 'a how-to question still gets the walkthrough');
+  const ans = await startWithdraw({ account: lisa, ask: matchWithdrawAsk('How much can I withdraw?'), deps: deps(35000) });
+  assert.equal(ans.state, null);
+  assert.equal(ans.text, '💸 You have R350. The most you can withdraw right now: R342 by PayShap to your bank account (R8 fee), or R300 as cash at an Absa or Nedbank ATM (R18 fee, paid in R50 and R100 notes). Say *withdraw* and the amount, like "withdraw 342".');
+  const poor = await startWithdraw({ account: lisa, ask: matchWithdrawAsk('How much can I withdraw?'), deps: { ...deps(0), moneySituation: async () => LISA_SITUATION, gateHistory: async () => ({ count: 0, personAsked: false }) } });
+  assert.match(poor.text, /^💸 You have R0 to withdraw\./);
+});

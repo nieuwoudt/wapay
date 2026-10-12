@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-12 (80) — The R0 withdraw gate reads the customer's situation and never repeats itself; "How much can I withdraw?" is answered from the balance (payouts round 5, item 3)
+
+Lisa got the same "Withdrawals start at R50 plus the fee…" line seven times
+while her R350 sat in a voucher. New `lib/money-situation.js` (balance,
+holds, gifts received and whether each is already balance, unpaid links,
+held pay-outs, ID on file; `situationSentences`; `gateRepeatCount` by the
+gate id stored on the turn) and `lib/payout-gate.js` (tier 0: her money and
+where it is, then the minimum; tier 1: the picture as bullets and what she
+can do; tier 2: a person, by an ops e-mail that the reply only mentions when
+it went; tier 3+: a short reminder). `startWithdraw` uses both; the
+processor's `deliverPayoutStep` stores the step's `refs` on the turn (one
+anchored edit). "How much can I withdraw?" leaves the how-it-works topic
+(`WITHDRAW_AMOUNT_ASK`) and gets the per-method ceilings. The status route
+reports `switches.alertEmail`. BUGLOG #102; tests in
+`tests/payout-round5.test.mjs`; harness 6d part 3.
+
+---
+
 ## 2026-10-12 (79) — "To my bank account" opens PayShap with the price and the numbers, never the generic menu (payouts round 5, item 2)
 
 From the founder's round-4 run ("lets do a withdrawal to my bank account"

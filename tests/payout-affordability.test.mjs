@@ -74,9 +74,9 @@ test('R66 against CashSend: the menu names what it needs, the pick is refused wi
   assert.match(direct.text, /you cannot use cash at an Absa ATM yet/);
 
   // the entry gate counts the fee: R25 covers no option once the fee is added
-  const poor = await startWithdraw({ account: verified, ask: {}, deps: { ...deps(2500), resolveProviders: async () => live } });
+  const poor = await startWithdraw({ account: verified, ask: {}, deps: { ...deps(2500), resolveProviders: async () => live, moneySituation: async () => null, gateHistory: async () => ({ count: 0, personAsked: false }) } });
   assert.equal(poor.state, null);
-  assert.match(poor.text, /Withdrawals start at R50 plus the fee, so the smallest one needs R\d+(\.\d\d)?, and you have R25 available right now\./);
+  assert.match(poor.text, /You have R25 to withdraw\. A withdrawal needs at least R58 in your balance \(the R50 minimum plus the R8 PayShap fee\), so you need R33 more\./);
 });
 
 test('a bare option number typed at the amount step switches the method instead of being read as rands (founder typed "3" after "choose *3*", 2026-09-17)', async () => {
