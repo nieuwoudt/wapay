@@ -33,7 +33,8 @@ Ten requests to move money to her bank, seven identical replies, no word about t
 
 | # | Item | Commit | Evidence |
 |---|---|---|---|
-| 1 | Passport / foreign ID at the ID step, issuing country, wire fields; migration `20261012_payout_passport_and_last4` (applied to production 2026-10-12 14:28 SAST, before the deploy) | (this section is filled in at each push) | §C |
+| 1 | Passport / foreign ID at the ID step, issuing country, wire fields; migration `20261012_payout_passport_and_last4` (applied to production 2026-10-12 14:28 SAST, before the deploy) | `d3c3cef` (live 14:37 SAST) | §C, §D.1 |
+| 2 | "To my bank account" opens PayShap with the price and the numbers (BUGLOG #101) | (next push) | §D.2 |
 
 ## C. Lisa's first withdrawal (item 1): the run sheet
 
@@ -56,4 +57,10 @@ If line 8 fails at the provider for the passport: "withdraw 50 absa", "yes", "mi
 
 ## D. Results
 
-(filled in as the tests are run)
+### D.1 Item 1 (2026-10-12)
+
+- Suite 1019/1019; harness: every scenario PASS including the new 6d part 1 (a passport through the real processor: country asked, confirmation "Passport / foreign ID: •••456 (Zimbabwe)", one PerformPayout carrying `id_type` PASSPORT, `country_of_issue` ZW, `nationality` ZW); one WARN on the agent's withdrawals-off answer (six bullets, a model-length check on a path this change does not touch). Build green.
+- Production after the push: `/api/internal/payout-status` build `d3c3cef`, host `payoutapi.ott-mobile.com`, providers PayShap 66, CashSend 67, Nedbank 4; WhatsApp webhook bare GET 403.
+- `?countries=1` on production: OTT's GetCountryCodes answers `{ countryName, countryCode }` with ISO alpha-2 codes ("AF", "AX", "AL", …), the same shape the chat sends.
+- **The production payout float was R45.56** at 12:37 UTC, after the founder's three pay-outs at 12:37 to 12:52 SAST (Nedbank R50 `WP1966FA7D6C7290`, Absa R50 `WP892962CD5C83ED`, PayShap R78 `WPC5A564DCADE067`, all paid). One R50 PayShap needs about R52.50 of float: the founder must top it up before Lisa's run (§C).
+- Lisa's run: waiting on the float top-up and on the founder asking her to say "withdraw 50".

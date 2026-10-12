@@ -17,10 +17,10 @@ const deps = (totalCents = 100000, result) => { const obj = { payoutBalances: as
 
 test('matcher: withdrawal asks with amount and method hints; payment-request asks are not withdrawals', () => {
   assert.deepEqual(matchWithdrawAsk('withdraw R200'), { amountCents: 20000, method: null });
-  assert.deepEqual(matchWithdrawAsk('I want to cash out 150 to my bank'), { amountCents: 15000, method: 'RTC' });
+  assert.deepEqual(matchWithdrawAsk('I want to cash out 150 to my bank'), { amountCents: 15000, method: 'PAYSHAP' }, 'bank words are the bank family, PayShap first (2026-10-12)');
   assert.deepEqual(matchWithdrawAsk('payshap 50.50'), { amountCents: 5050, method: 'PAYSHAP' });
   assert.deepEqual(matchWithdrawAsk('cash at atm'), { amountCents: null, method: 'CASHSEND' });
-  assert.deepEqual(matchWithdrawAsk('How do I withdraw my money to my bank account?'), { amountCents: null, method: 'RTC' });
+  assert.deepEqual(matchWithdrawAsk('How do I withdraw my money to my bank account?'), { amountCents: null, method: 'PAYSHAP' });
   for (const t of ['please pay me R150', 'buy airtime', 'my balance', 'send R50 to 0731234567', '']) assert.equal(matchWithdrawAsk(t), null, t);
   assert.equal(parseMethodChoice('2'), 'RTC'); assert.equal(parseMethodChoice('PayShap please'), 'PAYSHAP'); assert.equal(parseMethodChoice('cash at the ATM'), 'CASHSEND'); assert.equal(parseMethodChoice('blue'), null);
   assert.equal(parseRandAmount('R150,50'), 15050); assert.equal(parseRandAmount('200'), 20000); assert.equal(parseRandAmount('two hundred'), null);

@@ -155,3 +155,69 @@ test('1. a passport typed at the ID step is never stored whole: the withdraw sec
   const src = read('../pages/api/webhooks/message-processor-v2.js');
   assert.match(src, /Handling conversation state:', \{ state, text: \/\^PAYOUT_\/\.test\(state\)/, 'withdraw answers (account and ID numbers) never reach the logs');
 });
+
+// ---------------------------------------------------------------------------
+// 2. "To my bank account" opens PayShap with the price and the numbers, never
+//    the generic menu (founder 2026-10-12: "lets do a withdrawal to my bank
+//    account" with R86.50 got the whole menu). Bank words are the bank family;
+//    a bank method that is not on the merchant (RTC) maps to the one that is.
+// ---------------------------------------------------------------------------
+import { matchWithdrawAsk, offeredMethodFor } from '../lib/payout-chat.js';
+
+const OPTS = ['PAYSHAP', 'CASHSEND', 'NEDCASH'];
+const founder = { id: 'acc-f', msisdn: '27787051175', waId: '27787051175', displayName: 'Nieuwoudt', profile: {} };
+
+test('2. the matcher reads bank words as the bank family, "cash out" as a withdraw word, "all my money" as all', () => {
+  const cases = {
+    'lets do a withdrawal to my bank account': { amountCents: null, method: 'PAYSHAP' },
+    'I want you to put in my bank account': { amountCents: null, method: 'PAYSHAP' },
+    'Put in my bank account': { amountCents: null, method: 'PAYSHAP' },
+    'Help me to move in my bank account': { amountCents: null, method: 'PAYSHAP' },
+    '"Withdraw "350" from waypay to my account': { amountCents: 35000, method: 'PAYSHAP' },
+    'withdraw to my nedbank account': { amountCents: null, method: 'PAYSHAP' },
+    'I want to put all my money to my bank account': { amountCents: null, method: 'PAYSHAP', all: true },
+    'withdraw 50 nedbank': { amountCents: 5000, method: 'NEDCASH' },
+    'Withdraw 50 from ABSA': { amountCents: 5000, method: 'CASHSEND' },
+    'cash at atm': { amountCents: null, method: 'CASHSEND' },
+    'get my cash out': { amountCents: null, method: null },
+    'bank transfer 100': { amountCents: 10000, method: 'RTC' },
+  };
+  for (const [t, want] of Object.entries(cases)) assert.deepEqual(matchWithdrawAsk(t), want, t);
+  assert.equal(offeredMethodFor('RTC', OPTS), 'PAYSHAP', 'a bank method not on the merchant maps to the bank method that is');
+  assert.equal(offeredMethodFor('BANK', OPTS), 'PAYSHAP');
+  assert.equal(offeredMethodFor('EWALLET', OPTS), null, 'a named bank\'s cash product that is not offered is left to the menu');
+  assert.equal(offeredMethodFor('NEDCASH', OPTS), 'NEDCASH'); assert.equal(offeredMethodFor(null, OPTS), null);
+});
+
+test('2. bank words open PayShap with the fee, the balance, the ceiling and the cash alternative in one message; the amount step carries on', async () => {
+  envOff();
+  const d = deps(8650);
+  const open = await startWithdraw({ account: founder, ask: matchWithdrawAsk('lets do a withdrawal to my bank account'), deps: d });
+  assert.equal(open.state, 'PAYOUT_AMOUNT'); assert.equal(open.data.method, 'PAYSHAP');
+  assert.equal(open.text, '🏦 PayShap to your bank account: R8 fee, the cheapest way into your bank. You have R86.50, so up to R78. No bank account? Cash at an Absa or Nedbank ATM costs from R18. How much?');
+  assert.ok(!/Withdraw from WaPay|Reply 1, 2/.test(open.text), 'never the generic menu');
+  // The agent's proposal names RTC for bank words: the same opener, never a dropped method.
+  const agent = await startWithdraw({ account: founder, ask: { amountCents: null, method: 'RTC' }, deps: d });
+  assert.equal(agent.text, open.text);
+  const amt = await handleWithdrawReply({ account: founder, state: open.state, data: open.data, text: '50' });
+  assert.equal(amt.state, 'PAYOUT_ACCOUNT'); assert.equal(amt.data.amountCents, 5000);
+  const all = await handleWithdrawReply({ account: founder, state: open.state, data: open.data, text: 'all of it' });
+  assert.equal(all.state, 'PAYOUT_ACCOUNT'); assert.equal(all.data.amountCents, 7800, 'all = the most PayShap can take with its fee');
+  const noBank = await handleWithdrawReply({ account: founder, state: open.state, data: open.data, text: "I don't have a bank account" });
+  assert.equal(noBank.state, 'PAYOUT_METHOD'); assert.match(noBank.text, /cash needs no bank account/); assert.match(noBank.text, /Reply \*2\* for cash at an Absa ATM, or \*3\* for cash at a Nedbank ATM\./);
+  const pick = await handleWithdrawReply({ account: founder, state: noBank.state, data: noBank.data, text: '3' });
+  assert.match(pick.text, /withdraw by Cash at a Nedbank ATM/);
+  // "All my money to my bank account": the ceiling is taken straight away.
+  const allAsk = await startWithdraw({ account: founder, ask: matchWithdrawAsk('I want to put all my money to my bank account'), deps: d });
+  assert.equal(allAsk.state, 'PAYOUT_ACCOUNT'); assert.equal(allAsk.data.amountCents, 7800);
+  // A large balance names the per-withdrawal maximum instead.
+  const rich = await startWithdraw({ account: founder, ask: { method: 'PAYSHAP' }, deps: deps(500000) });
+  assert.match(rich.text, /You have R5000, one withdrawal can be up to R3000\./);
+  // With an amount the flow goes straight on; a menu pick still gets the plain amount ask.
+  const withAmt = await startWithdraw({ account: founder, ask: matchWithdrawAsk('withdraw 50 to my bank account'), deps: d });
+  assert.equal(withAmt.state, 'PAYOUT_ACCOUNT');
+  const menu = await startWithdraw({ account: founder, ask: {}, deps: d });
+  const one = await handleWithdrawReply({ account: founder, state: menu.state, data: menu.data, text: '1' });
+  assert.match(one.text, /How much would you like to withdraw by PayShap\? Between R50 and R78/);
+  assert.ok(!/—/.test(open.text + noBank.text), 'no em dashes in customer copy');
+});

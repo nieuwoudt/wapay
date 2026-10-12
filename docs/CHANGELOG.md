@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-12 (79) — "To my bank account" opens PayShap with the price and the numbers, never the generic menu (payouts round 5, item 2)
+
+From the founder's round-4 run ("lets do a withdrawal to my bank account"
+with R86.50 got the whole method menu). `matchWithdrawAsk` now reads the
+method through `methodFromWords`, the table the flow and the agent's slot
+rescue already share: bank words are the bank family ("my Nedbank account"
+is no longer Nedbank cash), "cash out" is a withdraw word, "all my money"
+is flagged. `offeredMethodFor` maps RTC onto PayShap while OTT has no RTC
+provider, for the hook and the agent's proposals alike, instead of dropping
+the method to the menu. Bank words with no amount get one message: "🏦
+PayShap to your bank account: R8 fee, the cheapest way into your bank. You
+have R86.50, so up to R78. No bank account? Cash at an Absa or Nedbank ATM
+costs from R18. How much?"; "all of it" takes the ceiling; "I don't have a
+bank account" offers the cash methods. BUGLOG #101; tests in
+`tests/payout-round5.test.mjs`; harness 6d part 2.
+
+---
+
 ## 2026-10-12 (78) — Pipe check findings: the Conversions API reads the WABA id production actually sets; a zero-row refresh still records the fetch
 
 The first production run of `/api/internal/ads-pipe-check` (12:27 UTC,

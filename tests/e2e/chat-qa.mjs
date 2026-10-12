@@ -374,6 +374,19 @@ async function run() {
         { level: 'FAIL', ok: !!call && call.recipient.id_type === 'PASSPORT' && call.recipient.country_of_issue === 'ZW' && call.recipient.nationality === 'ZW' && String(call.providerCode) === '127', what: 'exactly one PerformPayout to PayShap carrying id_type PASSPORT, country_of_issue ZW, nationality ZW' },
       ], s);
       if (/Save these details/.test(p8.replyText)) await s.say('no');
+
+      // 2. "To my bank account" opens PayShap with the price and the numbers, never the generic menu (founder 2026-10-12).
+      const b1 = await s.say('lets do a withdrawal to my bank account');
+      const b2 = await s.say("I don't have a bank account");
+      await s.say('cancel');
+      const b3 = await s.say('I want to put all my money to my bank account');
+      await s.say('cancel');
+      verdict('Lisa 2: bank words open PayShap with the fee, the balance and the ceiling; no bank account means cash', [
+        { level: 'FAIL', ok: has(b1.replyText, /PayShap to your bank account: R8 fee, the cheapest way into your bank\. You have R[\d.]+, so up to R\d+\./) && !has(b1.replyText, /Withdraw from WaPay/), what: '"lets do a withdrawal to my bank account" gets the PayShap opener, not the menu' },
+        { level: 'FAIL', ok: has(b1.replyText, /No bank account\? Cash at an Absa, Nedbank or FNB ATM costs from R18\. How much\?/), what: 'the opener names the cash alternative and asks how much' },
+        { level: 'FAIL', ok: has(b2.replyText, /cash needs no bank account/) && has(b2.replyText, /Reply \*\d\* for cash at an Absa ATM/), what: '"I don\'t have a bank account" offers the cash methods' },
+        { level: 'FAIL', ok: has(b3.replyText, /account number/i), what: '"all my money to my bank account" takes the ceiling and asks for the account' },
+      ], s);
     } finally {
       if (prevOn === undefined) delete process.env.WAPAY_PAYOUT_ENABLED; else process.env.WAPAY_PAYOUT_ENABLED = prevOn;
       if (prevKyc === undefined) delete process.env.WAPAY_PAYOUT_KYC; else process.env.WAPAY_PAYOUT_KYC = prevKyc;
