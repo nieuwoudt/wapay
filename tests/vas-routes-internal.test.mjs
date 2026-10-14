@@ -25,15 +25,28 @@ function walk(dir) {
   }
   return out;
 }
-const BLU_CLIENT = /\b(BluVasClient|BluClient|BluVasExtendedClient)\b/;
+const BLU_CLIENT = /\b(BluVasClient|BluClient|BluVasExtendedClient|BLU_BASE_URL)\b/;
+// The gates a Blu-reaching route may stand behind. The WhatsApp webhook is
+// excluded from the walk: its gate is Meta's signature on the request.
+const GATES = [
+  /requireInternalAuth\(/,          // operator and chat-internal routes
+  /isCronAuthed\(/,                 // the daily catalogue sync (Vercel cron header or CRON_SECRET)
+  /ADMIN_API_KEY|x-admin-key/,      // the manual catalogue sync
+];
 
-test('every VAS or internal route that imports a Blu client requires the internal key', () => {
-  const files = [...walk(path.join(root, 'pages/api/vas')), ...walk(path.join(root, 'pages/api/internal'))];
-  const offenders = files
-    .filter((f) => BLU_CLIENT.test(readFileSync(f, 'utf8')))
-    .filter((f) => !readFileSync(f, 'utf8').includes('requireInternalAuth('))
+test('every route under pages/api that reaches Blu stands behind a gate', () => {
+  const files = walk(path.join(root, 'pages/api')).filter((f) => !f.includes(`${path.sep}webhooks${path.sep}`));
+  const reaching = files.filter((f) => BLU_CLIENT.test(readFileSync(f, 'utf8')));
+  assert.ok(reaching.length >= 7, `expected the known Blu-reaching routes to be found (got ${reaching.length})`);
+  const offenders = reaching
+    .filter((f) => !GATES.some((g) => g.test(readFileSync(f, 'utf8'))))
     .map((f) => path.relative(root, f));
-  assert.deepEqual(offenders, [], `routes reaching Blu without the internal key: ${offenders.join(', ')}`);
+  assert.deepEqual(offenders, [], `routes reaching Blu without a gate: ${offenders.join(', ')}`);
+  // The gates are real functions, not comments: each named gate exists where it is relied on.
+  const cron = readFileSync(path.join(root, 'pages/api/cron/daily-vas-sync.js'), 'utf8');
+  assert.ok(/function isCronAuthed\(/.test(cron) && /if \(!isCronAuthed\(req\)\)/.test(cron), 'the cron sync checks its gate');
+  const admin = readFileSync(path.join(root, 'pages/api/admin/sync-vas-catalog.js'), 'utf8');
+  assert.ok(/ADMIN_API_KEY/.test(admin), 'the manual sync checks the admin key');
 });
 
 test('the bundles-by-network listing reads the catalogue table and never the supplier', () => {
