@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-10-14 (84) — The PIN chain: a real "forgot PIN" from anywhere, a wrong PIN never ends a flow, and the chat can no longer send a customer round in a circle
+
+From the founder's screenshots of Lisa on 2026-10-12: one wrong PIN on her
+R342 withdrawal, then five messages asking to reset it, each answered by the
+model's invented "Type reset PIN". New `lib/pin-reset.js` (every way of
+asking, in several languages; code to WhatsApp → the whole ID number when
+one is on file → new PIN twice → a waiting withdrawal resumes; lock cleared;
+a reset without an ID check starts a 24-hour cool-off on new withdrawal
+destinations, `WAPAY_PIN_RESET_COOLOFF_HOURS`) wired before
+every escape inside a flow and before the agent outside one; `PIN_RESET` in
+the registry so both AI paths name the real command; `replyPinFailure` keeps
+any purchase at its PIN step after a wrong or locked PIN (never the once-only
+sender, never "try again later"); the withdraw and pay-link PIN steps keep
+the flow and name *forgot PIN*; `lib/loop-guard.js` blocks a model reply that
+repeats an instruction the customer just followed (both brains); PINs and
+codes no longer reach the logs; a read-only adversarial review's findings
+are listed in `docs/testing/pin-reset-2026-10-14.md` §F. The v1.3 loop gains a standing
+"never trap" rule and amendment 5 (`docs/HANDOVER_V1.3.md`). BUGLOG #108,
+#109; tests `tests/pin-reset.test.mjs`; harness scenario 6e.
+
+---
+
 ## 2026-10-12 (83) — Saving with a name: the save step asks what to call it, "save my number used above as mine" is a real action, cellphones show four digits (payouts round 5, items 9 to 11)
 
 From the founder's round-4 run. Item 9: a bare YES at the save step saves,

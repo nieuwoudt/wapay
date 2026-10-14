@@ -1589,7 +1589,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       waId: from,
       text,
       waMessageId: messageId,
-      inPinState: /_PIN$|PIN_RESEND_AUTH|AWAITING_VOUCHER_PIN/.test(String(state || '')),
+      inPinState: /_PIN$|PIN_RESEND_AUTH|AWAITING_VOUCHER_PIN|^PIN_RESET_/.test(String(state || '')),
       // A bank account number or an ID number typed bare in the withdraw
       // flow keeps no digits in memory either.
       secretInput: /^PAYOUT_(ACCOUNT|ID)$/.test(String(state || '')),
@@ -1636,6 +1636,15 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     await updateConversationState(from, null);
     if (agentV3For(from)) return await handleAgentTurn({ from, text, account, messageId, pendingIntent });
     state = null; data = null;
+  }
+
+  // Not inside the reset itself, a voucher-code step or a business name (a "New Pin Salon" is a name).
+  if (state && !/^(?:PIN_RESET_|BIZ_SIGNUP_)|^(?:VOUCHER_PIN|AWAITING_VOUCHER_PIN)$/.test(String(state))) {
+    // "Forgot my PIN" / "Reset pin" at any step, the PIN prompt included ("I forgot it" counts
+    // there): the reset starts here and a withdrawal or pay link waiting for the PIN is resumed
+    // after it (founder 2026-10-14, Lisa).
+    const { matchPinResetAsk, isWalletPinState } = await import('../../../lib/pin-reset.js');
+    if (matchPinResetAsk(text, { atPinPrompt: isWalletPinState(state) })) return await handlePinResetStart({ from, account, fromState: state, fromData: data });
   }
 
   if (state) {
@@ -1742,6 +1751,13 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   {
     const { matchBusinessSignupAsk } = await import('../../../lib/business-chat.js');
     if (matchBusinessSignupAsk(text)) return await handleBusinessSignupAsk({ from, account });
+  }
+
+  // "I forgot my PIN" / "Reset pin" / "Me for my password what to reset": the reset itself,
+  // never a model's invented command (founder 2026-10-14; Lisa was told "type reset PIN" four times).
+  {
+    const { matchPinResetAsk } = await import('../../../lib/pin-reset.js');
+    if (matchPinResetAsk(text)) return await handlePinResetStart({ from, account });
   }
 
   // "Can you save my number used above as mine?" / "call it mother": a real action on the
@@ -2917,6 +2933,33 @@ async function handleWithdrawStart({ from, account, ask, text }) {
   logStructured('withdraw_started', { accountId: account.id, state: step.state, gated: step.state === 'PAYOUT_KYC' });
   return await deliverPayoutStep({ from, account, step });
 }
+/** Start a PIN reset (lib/pin-reset.js); fromState/fromData: the PIN prompt to resume afterwards. */
+async function handlePinResetStart({ from, account, fromState = null, fromData = null }) {
+  const { startPinReset } = await import('../../../lib/pin-reset.js');
+  const step = await startPinReset({ account, fromState, fromData });
+  logStructured('pin_reset_started', { accountId: account.id, fromState, codeSent: step.state === 'PIN_RESET_CODE' });
+  await updateConversationState(from, step.state || null, step.data || null);
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(step.text, await userLang(account)) });
+}
+async function handlePinResetState({ from, account, state, data, text }) {
+  const { handlePinResetReply } = await import('../../../lib/pin-reset.js');
+  const step = await handlePinResetReply({ account, state, data, text });
+  if (step.passthrough) {
+    await updateConversationState(from, null);
+    return await handlePostOnboarding({ account, from, text });
+  }
+  if (step.resumed || (state === 'PIN_RESET_CONFIRM' && !step.state && /new PIN is set/.test(step.text))) logStructured('pin_reset_done', { accountId: account.id, resumed: step.resumed || null });
+  await updateConversationState(from, step.state || null, step.data || null);
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(step.text, await userLang(account)) });
+}
+/** A wrong or locked PIN at a purchase's PIN step: the purchase waits, the way out is named, never "try again later" and never silent. */
+async function replyPinFailure({ from, account, state, data, executeData }) {
+  const { wrongPinText, lockedPinText } = await import('../../../lib/pin-reset.js');
+  const locked = /locked/i.test(String(executeData?.message || '')) || !!executeData?.lockedUntil;
+  await updateConversationState(from, state, data || {});
+  logStructured('pin_failure', { accountId: account.id, state, locked });
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(locked ? lockedPinText({ lockedUntil: executeData?.lockedUntil }) : wrongPinText(), await userLang(account)) });
+}
 async function handleWithdrawState({ from, account, state, data, text }) {
   const { handleWithdrawReply } = await import('../../../lib/payout-chat.js');
   const step = await handleWithdrawReply({ account, state, data, text });
@@ -4084,7 +4127,8 @@ async function startVoucherPinResend({ from, account, serialTail }) {
  */
 async function handleConversationState({ from, text, state, data, account }) {
   // Withdraw answers carry account and ID numbers: never in the logs (2026-10-12).
-  console.log('💬 Handling conversation state:', { state, text: /^PAYOUT_/.test(state) ? '[withdraw input]' : text, data: /^PAYOUT_/.test(state) ? '[withdraw data]' : data });
+  // Withdraw and PIN-reset answers carry account, ID and PIN digits: never in the logs (2026-10-12, 2026-10-14).
+  console.log('💬 Handling conversation state:', { state, text: /^PAYOUT_|^PIN_RESET_|_PIN$/.test(state) ? '[hidden input]' : redactForMemory(text), data: /^PAYOUT_|^PIN_RESET_/.test(state) ? '[hidden data]' : data });
 
   switch (state) {
     case 'BIZ_SIGNUP_TYPE':
@@ -4102,6 +4146,12 @@ async function handleConversationState({ from, text, state, data, account }) {
     case 'PAYOUT_CONFIRM':
     case 'PAYOUT_SAVE':
       return await handleWithdrawState({ from, account, state, data, text });
+
+    case 'PIN_RESET_CODE':
+    case 'PIN_RESET_ID':
+    case 'PIN_RESET_NEW':
+    case 'PIN_RESET_CONFIRM':
+      return await handlePinResetState({ from, account, state, data, text });
 
     case 'HOWTO_OFFER': {
       // After a short how-it-works answer: YES starts that flow, "more" gives the walkthrough,
@@ -4140,11 +4190,13 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
       const pinResult = await verifyPIN({ accountId: account.id, pin: text.trim() });
       if (!pinResult.ok) {
-        if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
-          await updateConversationState(from, null);
-          return await sendWhatsAppText({ to: from, text: await localizeOutbound(`🔒 Too many incorrect PIN attempts. Please try again later.`, await userLang(account)) });
+        // The withdrawal waits in both cases; "forgot PIN" resumes it after a reset (2026-10-14).
+        const { wrongPinText, lockedPinText } = await import('../../../lib/pin-reset.js');
+        // The 5th wrong PIN answers INVALID_PIN with a lock time: that is a lock, not "try again".
+        if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT' || pinResult.lockedUntil) {
+          return await sendWhatsAppText({ to: from, text: await localizeOutbound(lockedPinText({ lockedUntil: pinResult.lockedUntil }), await userLang(account)) });
         }
-        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`❌ Incorrect PIN. Try again, or reply "cancel".`, await userLang(account)) });
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(wrongPinText(), await userLang(account)) });
       }
       // The one money call. State is cleared FIRST so a retry can never run it twice;
       // requestPayout is idempotent on the intent id regardless.
@@ -4249,17 +4301,12 @@ async function handleConversationState({ from, text, state, data, account }) {
 
       const pinResult = await verifyPIN({ accountId: account.id, pin: text.trim() });
       if (!pinResult.ok) {
-        if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT') {
-          await updateConversationState(from, null);
-          return await sendWhatsAppText({
-            to: from,
-            text: await localizeOutbound(`🔒 Too many incorrect PIN attempts. Please try again later.`, await userLang(account)),
-          });
+        const { wrongPinText, lockedPinText } = await import('../../../lib/pin-reset.js');
+        // The 5th wrong PIN answers INVALID_PIN with a lock time: that is a lock, not "try again".
+        if (pinResult.error === 'HARD_LOCKOUT' || pinResult.error === 'SOFT_LOCKOUT' || pinResult.lockedUntil) {
+          return await sendWhatsAppText({ to: from, text: await localizeOutbound(lockedPinText({ lockedUntil: pinResult.lockedUntil }), await userLang(account)) });
         }
-        return await sendWhatsAppText({
-          to: from,
-          text: await localizeOutbound(`❌ Incorrect PIN. Please try again, or reply "cancel" to stop.`, await userLang(account)),
-        });
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(wrongPinText(), await userLang(account)) });
       }
 
       await updateConversationState(from, null);
@@ -4940,7 +4987,7 @@ async function handleConversationState({ from, text, state, data, account }) {
             await updateConversationState(from, null);
             return await handlePostOnboarding({ account, from, text });
           }
-          return await sendWhatsAppText({ to: from, text: await localizeOutbound(`❌ Invalid PIN. Please enter your 4-6 digit WaPay PIN.\n\nReply "cancel" to stop.`, await userLang(account)) });
+          return await sendWhatsAppText({ to: from, text: await localizeOutbound(`Please enter your 4 to 6 digit WaPay PIN, or reply "cancel" to stop. Forgot it? Say *forgot PIN* and I will help you set a new one.`, await userLang(account)) });
         }
         const pin = text.trim();
         const { previewId } = data || {};
@@ -4977,6 +5024,8 @@ async function handleConversationState({ from, text, state, data, account }) {
             });
           }
           if (!executeData.ok) {
+            // A wrong or locked PIN keeps the purchase waiting at its PIN step and names the way out (2026-10-14).
+            if (executeData.error === 'AUTH' && /invalid pin|locked/i.test(String(executeData.message || ''))) return await replyPinFailure({ from, account, state: 'DATA_PIN', data, executeData });
             const errorText = `❌ ${executeData.message || 'Data purchase failed.'}\n\nPlease try again later.`;
             return await sendWhatsAppErrorOnce({
               to: from,
@@ -5037,7 +5086,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           }
           return await sendWhatsAppText({
             to: from,
-            text: await localizeOutbound(`❌ Invalid PIN. Please enter your 4-6 digit WaPay PIN.\n\nReply "cancel" to stop.`, await userLang(account)),
+            text: await localizeOutbound(`Please enter your 4 to 6 digit WaPay PIN, or reply "cancel" to stop. Forgot it? Say *forgot PIN* and I will help you set a new one.`, await userLang(account)),
           });
         }
         
@@ -5098,6 +5147,8 @@ async function handleConversationState({ from, text, state, data, account }) {
             });
           }
           if (!executeData.ok) {
+            // A wrong or locked PIN keeps the purchase waiting at its PIN step and names the way out (2026-10-14).
+            if (executeData.error === 'AUTH' && /invalid pin|locked/i.test(String(executeData.message || ''))) return await replyPinFailure({ from, account, state: 'AIRTIME_PIN', data, executeData });
             logStructured('vas_airtime_execute_failed', {
               from,
               accountId: account.id,
@@ -5456,6 +5507,8 @@ async function handleConversationState({ from, text, state, data, account }) {
             });
           }
           if (!executeData.ok) {
+            // A wrong or locked PIN keeps the purchase waiting at its PIN step and names the way out (2026-10-14).
+            if (executeData.error === 'AUTH' && /invalid pin|locked/i.test(String(executeData.message || ''))) return await replyPinFailure({ from, account, state: 'ELECTRICITY_PIN', data, executeData });
             logStructured('vas_electricity_execute_failed', {
               from,
               accountId: account.id,
@@ -5576,8 +5629,8 @@ async function handleConversationState({ from, text, state, data, account }) {
         return await sendWhatsAppText({
           to: from,
           text: await localizeOutbound(check.lockedUntil
-            ? `🔒 Too many attempts. PIN entry is locked for a while. Please try again later.`
-            : `❌ That PIN doesn't match. For safety I've cancelled. Reply "my vouchers" to start again.`, await userLang(account)),
+            ? (await import('../../../lib/pin-reset.js')).lockedPinText({ lockedUntil: check.lockedUntil })
+            : `❌ That PIN doesn't match. For safety I've cancelled. Reply "my vouchers" to start again. Forgot your PIN? Say *forgot PIN* and I will help you set a new one.`, await userLang(account)),
         });
       }
 
@@ -5930,7 +5983,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           }
           return await sendWhatsAppText({
             to: from,
-            text: await localizeOutbound(`❌ Invalid PIN. Please enter your 4-6 digit WaPay PIN.\n\nReply "cancel" to stop.`, await userLang(account)),
+            text: await localizeOutbound(`Please enter your 4 to 6 digit WaPay PIN, or reply "cancel" to stop. Forgot it? Say *forgot PIN* and I will help you set a new one.`, await userLang(account)),
           });
         }
 
@@ -5965,6 +6018,8 @@ async function handleConversationState({ from, text, state, data, account }) {
           await updateConversationState(from, null);
 
           if (!executeData.ok) {
+            // A wrong or locked PIN keeps the purchase waiting at its PIN step and names the way out (2026-10-14).
+            if (executeData.error === 'AUTH' && /invalid pin|locked/i.test(String(executeData.message || ''))) return await replyPinFailure({ from, account, state: 'FUEL_PIN', data, executeData });
             if (executeData.error === 'INSUFFICIENT_FUNDS') {
               const { balance } = await getUserBalance(from);
               const totalCents = amountCents + (feeCents || 0);
@@ -6141,7 +6196,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           }
           return await sendWhatsAppText({
             to: from,
-            text: await localizeOutbound(`❌ Invalid PIN. Please enter your 4-6 digit WaPay PIN.\n\nReply "cancel" to stop.`, await userLang(account)),
+            text: await localizeOutbound(`Please enter your 4 to 6 digit WaPay PIN, or reply "cancel" to stop. Forgot it? Say *forgot PIN* and I will help you set a new one.`, await userLang(account)),
           });
         }
 
@@ -6193,6 +6248,8 @@ async function handleConversationState({ from, text, state, data, account }) {
           await updateConversationState(from, null);
 
           if (!executeData.ok) {
+            // A wrong or locked PIN keeps the purchase waiting at its PIN step and names the way out (2026-10-14).
+            if (executeData.error === 'AUTH' && /invalid pin|locked/i.test(String(executeData.message || ''))) return await replyPinFailure({ from, account, state: 'VOUCHER_GIFT_PIN', data, executeData });
             logStructured('vas_voucher_gift_execute_failed', {
               from,
               accountId: account.id,
@@ -6616,6 +6673,8 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   }
   if (!blocked && !out.trim()) blocked = true;
   if (blocked) out = await fallback();
+  // The same loop breaker as the two-tier path (2026-10-14).
+  if (!blocked) { const broken = await breakEchoLoop({ from, account, reply: out, inbound: text, source: 'agent' }); if (broken) { out = broken; gatesFired.push('ECHO_LOOP'); } }
   const sent = await deliver({ to: from, text: out, kind: blocked ? 'fallback' : 'agent' });
   // A clarifying question is remembered only when the customer saw it.
   const parked = !blocked && result.outcome === 'clarify' && !!result.pendingIntent;
@@ -7039,7 +7098,26 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
       await userLang(account)
     );
   }
+  // A reply that asks the customer to type what they just typed, after asking it already, is a
+  // loop (Lisa, 2026-10-12: "Type reset PIN" four times). It is never sent (lib/loop-guard.js).
+  finalText = (await breakEchoLoop({ from, account, reply: finalText, inbound: text, source: result.action })) || finalText;
   return await sendWhatsAppText({ to: from, text: finalText });
+}
+
+/**
+ * The loop breaker for model text (both brains): when the previous reply told the customer
+ * to type a phrase, they typed it, and this reply tells them again, return the honest
+ * replacement (a person named only when the alert went); otherwise null.
+ */
+async function breakEchoLoop({ from, account, reply, inbound, source = null }) {
+  const { echoLoop, loopBreakText } = await import('../../../lib/loop-guard.js');
+  if (!reply || !inbound) return null;
+  const prev = await prisma.conversationTurn.findFirst({ where: { accountId: account.id, role: 'assistant' }, orderBy: { createdAt: 'desc' }, select: { text: true } }).catch(() => null);
+  if (!echoLoop(reply, inbound, prev?.text || '')) return null;
+  const { sendOpsAlert } = await import('../../../lib/email.js');
+  const sent = await sendOpsAlert({ subject: 'The chat was about to repeat an instruction the customer had just followed', detailsHtml: `<p>Account <code>${account.id}</code>, WhatsApp •••${String(from || '').slice(-4)}. The model asked the customer, twice, to type words they had just sent; the second reply was replaced. Check that the command exists and is handled before the model.</p>` }).catch(() => ({ success: false }));
+  logStructured('echo_loop_blocked', { from, accountId: account.id, source, alerted: !!sent?.success });
+  return await localizeOutbound(loopBreakText({ personAsked: !!sent?.success }), await userLang(account));
 }
 
 // ==============================================================================

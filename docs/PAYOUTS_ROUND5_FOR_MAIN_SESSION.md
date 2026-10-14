@@ -22,6 +22,9 @@
 | `lib/ledger-core.js` | `buildGiftHeld`, `buildGiftClaimToBalance`, `buildGiftExpiryToVoucher`, `GIFT_PENDING` (pure, additive, tested; not wired) | 6 | the money side of item 6 |
 
 | `pages/api/webhooks/message-processor-v2.js` `handlePostOnboarding` | before the agent block: `matchNicknameAsk` → `nicknameLastDestination` (lib/payout-nickname.js) | 10 | "can you save my number used above as mine?" got a false "Saved" from the agent |
+| processor: two `matchPinResetAsk` hooks (inside a flow before every escape; outside one before the agent), `handlePinResetStart` / `handlePinResetState`, four `PIN_RESET_*` states, `replyPinFailure` in the five purchase PIN steps, `wrongPinText` / `lockedPinText` in PAYOUT_PIN and PAYREQ_PIN, the voucher-resend lock line, the "not a PIN" hint, `inPinState` covers `PIN_RESET_*`, the loop guard before the model's reply is sent | PIN chain (2026-10-14) | Lisa froze after one wrong PIN: no reset existed, the model invented "type reset PIN" four times (BUGLOG #108, #109) |
+| `lib/capabilities.js` | `PIN_RESET` entry ("forgot PIN"), so both AI paths name the real command and the help menu lists it | PIN chain | the model invented a command |
+| `tests/phase0-review.test.mjs`, `tests/capabilities.test.mjs` | the `inPinState` lock and the registry set / help lines updated | PIN chain | deliberate changes |
 
 ## B. Item 6: a gift to someone not yet on WaPay becomes balance when they join
 

@@ -153,7 +153,7 @@ test('1. a passport typed at the ID step is never stored whole: the withdraw sec
   assert.equal(redactForMemory('my passport is FN 123456', { secretInput: true }).includes('123456'), false);
   assert.equal(redactForMemory('Zimbabwe', { secretInput: true }), 'Zimbabwe', 'the country answer stays readable');
   const src = read('../pages/api/webhooks/message-processor-v2.js');
-  assert.match(src, /Handling conversation state:', \{ state, text: \/\^PAYOUT_\/\.test\(state\)/, 'withdraw answers (account and ID numbers) never reach the logs');
+  assert.match(src, /Handling conversation state:', \{ state, text: \/\^PAYOUT_\|\^PIN_RESET_\|_PIN\$\/\.test\(state\) \? '\[hidden input\]'/, 'withdraw, PIN and reset answers never reach the logs');
 });
 
 // ---------------------------------------------------------------------------

@@ -112,7 +112,7 @@ export default async function handler(req, res) {
           lockedUntil: pinResult.lockedUntil?.toISOString(),
         });
       }
-      return res.status(401).json({ error: 'AUTH', message: 'Invalid PIN' });
+      return res.status(401).json({ error: 'AUTH', message: 'Invalid PIN', lockedUntil: pinResult.lockedUntil?.toISOString() });
     }
 
 

@@ -61,7 +61,9 @@ async function hashPIN(pin: string): Promise<string> {
   const pepperedPIN = pin + PIN_PEPPER;
   
   const hash = await argon2.hash(pepperedPIN, {
-    type: argon2.argon2id,
+    // argon2id is 2: the namespace constant is undefined when this package runs outside a bundler
+    // (plain-node ESM), which made resetPIN throw "id must be a string" there (2026-10-14).
+    type: ((argon2 as any).argon2id ?? (argon2 as any).default?.argon2id ?? 2) as any,
     memoryCost: 65536, // 64 MB
     timeCost: 3,
     parallelism: 1, // Single thread for better serverless performance
@@ -410,17 +412,22 @@ export async function resetPIN(args: {
       },
     });
     
-    // Log audit event
-    await prisma.auditLog.create({
-      data: {
-        id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        accountId,
-        event: 'PIN_RESET',
-        metadata: {
-          pinLength: newPin.length,
+    // Log audit event. The PIN is already changed: a failed audit write must never turn
+    // this into "your PIN is unchanged" for the customer (review 2026-10-14).
+    try {
+      await prisma.auditLog.create({
+        data: {
+          id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          accountId,
+          event: 'PIN_RESET',
+          metadata: {
+            pinLength: newPin.length,
+          },
         },
-      },
-    });
+      });
+    } catch (auditError) {
+      console.error('⚠️ PIN_RESET audit write failed (the PIN was changed):', auditError instanceof Error ? auditError.message : auditError);
+    }
     
     console.log(`✅ PIN reset successfully for account ${accountId}`);
     

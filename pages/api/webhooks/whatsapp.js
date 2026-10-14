@@ -127,7 +127,9 @@ export default async function handler(req, res) {
 
         // Log incoming webhook for debugging (keep it single-line for Vercel)
         // Bearer digits (voucher PINs, tokens, codes) are redacted before the log.
-        console.log('📱 Incoming WhatsApp webhook:', redactForMemory(JSON.stringify(body)));
+        // A message that is only digits (a PIN, a sign-in or reset code) is masked whole: inside the
+        // JSON the bare-PIN rule cannot see it (review 2026-10-14).
+        console.log('📱 Incoming WhatsApp webhook:', redactForMemory(JSON.stringify(body)).replace(/("body"\s*:\s*")\s*[\d\s-]{4,24}\s*(")/g, '$1[digits]$2'));
 
         // Check if this is a WhatsApp message event
         if (body?.object === 'whatsapp_business_account') {

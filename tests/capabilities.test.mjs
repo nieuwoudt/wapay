@@ -41,7 +41,7 @@ const PILOT = '27787051175';
 const OTHER = '27780000001';
 const NEUTRAL = { WAPAY_PAYOUT_ENABLED: undefined, WAPAY_PAYOUT_ALLOWLIST: undefined, WAPAY_WICODE_LIVE: undefined, VAS_ALLOWLIST_FUEL: undefined, VAS_ALLOWLIST_ELECTRICITY: undefined, OTT_MERCHANT_API_KEY: undefined, WAPAY_BUSINESS_SIGNUPS: undefined, WAPAY_BUSINESS_MSISDNS: undefined };
 
-const EXPECTED_IDS = ['BALANCE', 'AIRTIME', 'DATA', 'ELECTRICITY', 'SEND', 'OTT_SELF', 'REQUEST_MONEY', 'DEPOSIT_CARD', 'DEPOSIT_VOUCHER', 'VOUCHER_LOAD', 'WITHDRAW', 'FUEL', 'BUSINESS'];
+const EXPECTED_IDS = ['BALANCE', 'AIRTIME', 'DATA', 'ELECTRICITY', 'SEND', 'OTT_SELF', 'REQUEST_MONEY', 'DEPOSIT_CARD', 'DEPOSIT_VOUCHER', 'VOUCHER_LOAD', 'WITHDRAW', 'FUEL', 'BUSINESS', 'PIN_RESET'];
 
 test('every descriptor is complete, ids are unique and the expected set', () => {
   const ids = CAPABILITIES.map((c) => c.id);
@@ -170,19 +170,20 @@ const HELP_HEAD = [
 const HELP_WITHDRAW = `🏧 *Withdraw* - "withdraw R200" to your bank or as cash at an ATM`;
 const HELP_FUEL = `⛽ *Fuel* - "buy fuel"`;
 const HELP_TAIL = `🏪 *Business* - "business account" to get paid by your customers`;
+const HELP_PIN = `🔐 *Forgot PIN* - "forgot PIN" to set a new one`;
 
 test('helpLines equals the Help Menu lines, with withdraw and fuel only when live', () => {
   withEnv({ ...NEUTRAL }, () => {
-    assert.deepEqual(helpLines({ waId: OTHER }), [...HELP_HEAD, HELP_TAIL]);
+    assert.deepEqual(helpLines({ waId: OTHER }), [...HELP_HEAD, HELP_TAIL, HELP_PIN]);
   });
   withEnv({ ...NEUTRAL, WAPAY_PAYOUT_ENABLED: 'true', WAPAY_PAYOUT_ALLOWLIST: PILOT, WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: PILOT }, () => {
-    assert.deepEqual(helpLines({ waId: PILOT }), [...HELP_HEAD, HELP_WITHDRAW, HELP_FUEL, HELP_TAIL]);
-    assert.deepEqual(helpLines({ waId: OTHER }), [...HELP_HEAD, HELP_TAIL]);
+    assert.deepEqual(helpLines({ waId: PILOT }), [...HELP_HEAD, HELP_WITHDRAW, HELP_FUEL, HELP_TAIL, HELP_PIN]);
+    assert.deepEqual(helpLines({ waId: OTHER }), [...HELP_HEAD, HELP_TAIL, HELP_PIN]);
   });
   // Phase 1 (2026-09-16): the Help Menu prints these lines BY CALLING the registry.
   const helpSrc = processorSource.slice(processorSource.indexOf('const helpMsg = `📋 *WaPay Help Menu*'), processorSource.indexOf('const helpMsg = `📋 *WaPay Help Menu*') + 400);
   assert.ok(helpSrc.includes("${helpLines({ waId: from, account }).join('\\n')}"), 'the help menu renders helpLines');
-  for (const line of [...HELP_HEAD, HELP_WITHDRAW, HELP_FUEL, HELP_TAIL]) {
+  for (const line of [...HELP_HEAD, HELP_WITHDRAW, HELP_FUEL, HELP_TAIL, HELP_PIN]) {
     assert.ok(!helpSrc.includes(line), `no hand-written copy of: ${line}`);
   }
 });

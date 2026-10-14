@@ -48,7 +48,7 @@ test('H2/M5: raw inbound text never reaches the logs; the gift claim is remember
   assert.match(processor, /console\.log\('💬 Post-onboarding message:', redactForMemory\(text\)\)/);
   const hook = read('../pages/api/webhooks/whatsapp.js');
   assert.match(hook, /import \{ redactForMemory \} from '\.\.\/\.\.\/\.\.\/lib\/turns\.js';/);
-  assert.match(hook, /console\.log\('📱 Incoming WhatsApp webhook:', redactForMemory\(JSON\.stringify\(body\)\)\)/);
+  assert.match(hook, /console\.log\('📱 Incoming WhatsApp webhook:', redactForMemory\(JSON\.stringify\(body\)\)\.replace\(/);
   assert.match(hook, /console\.log\('💬 Text message:', redactForMemory\(text\)\)/);
   assert.doesNotMatch(hook, /console\.log\('💬 Text message:', text\)/);
   const at = processor.indexOf('const claimSend = await sendWhatsAppText({');

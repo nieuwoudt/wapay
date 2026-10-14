@@ -127,7 +127,8 @@ export async function sendOTP(args: {
       // Don't fail the whole operation if audit log fails
     }
     
-    console.log(`✅ OTP sent successfully to ${msisdn} (OTP ID: ${otpRecord.id}, Code: ${code})`);
+    // Never the code itself in a log line (review 2026-10-14).
+    console.log(`✅ OTP sent successfully to •••${String(msisdn).slice(-4)} (OTP ID: ${otpRecord.id})`);
     
     return {
       ok: true,

@@ -66,7 +66,7 @@ test('recordInbound is called once, inside handlePostOnboarding, after the state
   assert.ok(processor.indexOf('let { state, data } = await getConversationState(from)') < at, 'after the state read');
   const block = processor.slice(at - 200, at + 600);
   assert.match(block, /if \(messageId\) \{/);
-  assert.match(block, /inPinState: \/_PIN\$\|PIN_RESEND_AUTH\|AWAITING_VOUCHER_PIN\//);
+  assert.match(block, /inPinState: \/_PIN\$\|PIN_RESEND_AUTH\|AWAITING_VOUCHER_PIN\|\^PIN_RESET_\//);
   assert.match(block, /secretInput: \/\^PAYOUT_\(ACCOUNT\|ID\)\$\//);
   // onboarding never records: the call is not in processMessage or the onboarding flow
   const pm = sliceFn(processor, 'processMessage');

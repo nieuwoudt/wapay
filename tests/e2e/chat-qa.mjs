@@ -468,6 +468,68 @@ async function run() {
   }
 
   // ------------------------------------------------------------------
+  // 6e. The PIN freeze (Lisa, 2026-10-12): one wrong PIN on a withdrawal, then
+  // her own words to reset it. (A) As she is, no ID on file: the reset works and
+  // the 24-hour cool-off for new destinations is said and enforced. (B) With an
+  // ID on file: the whole number is asked, and the withdrawal that was waiting
+  // finishes with the new PIN. "Reset pin" outside a flow too.
+  // ------------------------------------------------------------------
+  {
+    const prev = { on: process.env.WAPAY_PAYOUT_ENABLED, kyc: process.env.WAPAY_PAYOUT_KYC, pii: process.env.WAPAY_PII_KEY };
+    process.env.WAPAY_PAYOUT_ENABLED = 'true'; process.env.WAPAY_PAYOUT_KYC = 'off';
+    const qa = await prisma.account.findFirst({ where: { waId: QA_WA_ID } });
+    const latestCode = async () => (await prisma.otpCode.findFirst({ where: { accountId: qa.id }, orderBy: { createdAt: 'desc' } }))?.code || '';
+    const clearPinReset = async () => { const a = await prisma.account.findUnique({ where: { id: qa.id } }); const { pinReset, ...rest } = a.profile || {}; await prisma.account.update({ where: { id: qa.id }, data: { profile: rest } }); };
+    try {
+      await prisma.payoutIdentity.deleteMany({ where: { accountId: qa.id } });
+      await prisma.payoutDestination.deleteMany({ where: { accountId: qa.id } });
+      await fundQaAccount({ cents: 20000, key: 'pin-reset' });
+      // (A) Lisa as she is: no ID on file.
+      for (const t of ['withdraw 50 to my bank account', '1234567890', 'Capitec', 'Lisa Moyo', 'FN123456', 'Zimbabwe', 'yes']) await s.say(t);
+      const w1 = await s.say('2006');
+      const w2 = await s.say('Me for my password what to reset');
+      const c1 = await s.say(await latestCode());
+      const n1 = await s.say('2580');
+      const n2 = await s.say('2580');
+      const n3 = await s.say('withdraw 50 to my bank account');
+      verdict('Lisa 7: a wrong PIN names the way out; her own words reset the PIN; with no ID on file the 24-hour cool-off is said and enforced', [
+        { level: 'FAIL', ok: has(w1.replyText, /That PIN is not right/) && has(w1.replyText, /Say \*forgot PIN\*/), what: 'the wrong PIN names "forgot PIN" and keeps the withdrawal' },
+        { level: 'FAIL', ok: has(w2.replyText, /6-digit code/) && !has(w2.replyText, /Type .?reset PIN/i), what: '"Me for my password what to reset" starts the reset (never "type reset PIN")' },
+        { level: 'FAIL', ok: has(c1.replyText, /Code confirmed\. Now type your new PIN/), what: 'the code is accepted; no ID on file, so straight to the new PIN' },
+        { level: 'FAIL', ok: has(n1.replyText, /once more to confirm/) && has(n2.replyText, /new PIN is set/) && has(n2.replyText, /for the next 24 hours a withdrawal can only go to an account or number you saved before today/), what: 'the new PIN twice; the cool-off is said' },
+        { level: 'FAIL', ok: has(n3.replyText, /withdrawals open again on/), what: 'a withdrawal to a new account waits out the cool-off' },
+      ], s);
+      // (B) An ID on file: the whole number, then the waiting withdrawal finishes.
+      process.env.WAPAY_PII_KEY = (await import('node:crypto')).randomBytes(32).toString('hex');
+      const { savePayoutIdentity } = await import('../../lib/payout-beneficiaries.js');
+      await savePayoutIdentity({ prisma, accountId: qa.id, fullName: 'Lisa Moyo', idNumber: '9001015009087' });
+      await clearPinReset();
+      await fundQaAccount({ cents: 100, key: 'pin-restore-a' });   // QA_PIN again
+      for (const t of ['withdraw 50 to my bank account', '1234567890', 'Capitec', 'yes']) await s.say(t);
+      const b1 = await s.say('2006');
+      const b2 = await s.say('I forgot it');
+      const b3 = await s.say(await latestCode());
+      const b4 = await s.say('9001015009087');
+      await s.say('2580');
+      const b5 = await s.say('2580');
+      const b6 = await s.say('2580');
+      const r1 = await s.say('Reset pin');
+      const r2 = await s.say('cancel');
+      verdict('Lisa 8: with an ID on file the whole number is asked, and the withdrawal that was waiting finishes with the new PIN; "Reset pin" outside a flow', [
+        { level: 'FAIL', ok: has(b1.replyText, /That PIN is not right/) && has(b2.replyText, /6-digit code/), what: '"I forgot it" at the PIN prompt starts the reset' },
+        { level: 'FAIL', ok: has(b3.replyText, /type the ID or passport number you gave for withdrawals \(the whole number\)/) && has(b4.replyText, /new PIN/), what: 'the whole ID number is asked and accepted' },
+        { level: 'FAIL', ok: has(b5.replyText, /new PIN is set/) && has(b5.replyText, /withdrawal of R50 is still waiting/) && !has(b5.replyText, /24 hours/), what: 'back to the R50 withdrawal, no cool-off after an ID-checked reset' },
+        { level: 'FAIL', ok: has(b6.replyText, /Done\.|In progress/), what: 'the new PIN completes the withdrawal' },
+        { level: 'FAIL', ok: has(r1.replyText, /6-digit code|A code was already sent/) && has(r2.replyText, /PIN reset cancelled\. Your PIN is unchanged/), what: '"Reset pin" outside a flow starts it; "cancel" leaves the PIN alone' },
+      ], s);
+    } finally {
+      await clearPinReset().catch(() => {});
+      await fundQaAccount({ cents: 100, key: 'pin-restore' }).catch(() => {});   // puts QA_PIN back for any later scenario
+      for (const [k, v] of [['WAPAY_PAYOUT_ENABLED', prev.on], ['WAPAY_PAYOUT_KYC', prev.kyc], ['WAPAY_PII_KEY', prev.pii]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+  }
+
+  // ------------------------------------------------------------------
   // 7. Languages: switch, localized replies, non-English inbound
   // ------------------------------------------------------------------
   {

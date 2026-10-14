@@ -134,6 +134,15 @@ credentials change, not a build.
 - Remittance needs counsel sign-off before any build.
 - Admin console lives on admin.wapay.co.za; login = WhatsApp "admin login" to the
   WaPay number; Vercel bot-challenge exemption may still be pending (BUGLOG #34).
+- **Never trap (founder, 2026-10-14, BUGLOG #108/#109):** every instruction the chat
+  gives ("say *X*", "reply *X*", "type *X*") names words a deterministic hook acts on
+  before any model; a capability the model may mention lives in the registry with
+  its real start command; a reply asking the customer to type what they just typed
+  is never sent (`lib/loop-guard.js`); a wrong or locked PIN keeps the flow waiting
+  and names *forgot PIN*; no reply says "try again later" for something the customer
+  can fix now; the same refusal is never sent three times without a person
+  (`lib/payout-gate.js` pattern). A build is not done until the harness proves it on
+  the customer's own sentences.
 
 ## v1.3.1 amendments (founder, 2026-08-29 PM)
 
@@ -168,6 +177,14 @@ These refine the tasks above and change the execution mode:
    real browser, and the Mission Control panels rendering real data. Finish with
    a single founder report: what shipped, what's gated on Yoyo production, and
    the short list of founder-only actions (Vercel/DNS/supplier emails).
+
+5. **Amendment 2026-10-14 (founder, after the PIN freeze): "tested end-to-end"
+   also means no trap.** For every flow a build touches: the customer's own words
+   for "I am stuck" (forgot, reset, help, cancel, a person) reach a deterministic
+   action from every step; the harness replays a real transcript of the failure
+   (scenario 6e for the PIN, 6d for withdrawals) and asserts the way out; a read-only
+   adversarial reviewer is asked specifically for paths with no reply or the same
+   reply twice. The loop's single report says which transcripts were replayed.
 
 ## Suggested order
 
