@@ -4,6 +4,14 @@
 
 ---
 
+## 110. A public catalogue route proxied every request to Blu, so a crawler looked like WaPay load testing
+
+- **Symptom (Blue Label, 2026-10-14 morning):** "We have observed unusually high volumes of traffic originating from your credentials" for the night of 13 October, with a request to confirm whether WaPay had run load testing. WaPay's records for the whole window: no vends, no previews, no voucher checks, no inbound chat, no jobs.
+- **Root cause:** `GET /api/vas/bundles/:network` was reachable without the internal key and called Blu's `/mobile/bundle/products` live on every request (720 products per call), writing nothing to our database. Any crawler, scanner or uptime monitor that found the URL generated supplier traffic from our credentials with no trace on our side. The route was a leftover from the first catalogue work; its only reference is the retired NLP router, and the live chat lists bundles from our own `VasProduct` table.
+- **Fix:** the route requires the internal key and serves the list from `VasProduct` (synced once a day by `/api/cron/daily-vas-sync`); it never calls the supplier. Reply to Blu drafted in `EMAIL_TO_BLU_3_TRAFFIC_REPLY.txt` (iCloud root): not a test, the cause, the closure, a request for their window and counts to match against our hosting logs, and a repeat of the 6 October request to rotate the QA credentials.
+- **Guard:** `tests/vas-routes-internal.test.mjs`: every route under `pages/api/vas` and `pages/api/internal` that imports a Blu client must call `requireInternalAuth`, and the bundles listing must read the catalogue table, never a Blu client.
+- **Still to confirm:** the hosting logs for the night (Vercel, requests to `/api/vas/bundles/`) to name the source; the QA credentials are also in the repository in clear text (memory `key-rotation-deferred`), so rotation closes the second possible source as well.
+
 ## 109. One wrong PIN in a purchase threw the purchase away with "try again later", and a second wrong PIN could get no reply at all
 
 - **Symptom (found in the PIN-chain review of 2026-10-14):** in the airtime, data, electricity, fuel and voucher-gift PIN steps, a wrong PIN came back from the execute route as `AUTH / Invalid PIN` and the chat cleared the state and answered "❌ Invalid PIN … Please try again later." through `sendWhatsAppErrorOnce`, keyed per purchase and error. The customer had to start the purchase again, and where the state survived, a second identical failure was suppressed: no reply. The withdraw and pay-link PIN steps answered a lock with "Too many incorrect PIN attempts. Please try again later." and cleared the flow, although the 10-try lock lasts a year.

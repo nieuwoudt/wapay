@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-10-14 (85) — The bundles-by-network route is internal-only and served from our catalogue, never the supplier
+
+Blu thread, after Blue Label reported unusually high traffic from our credentials on the
+night of 13 October with nothing in our own records. BUGLOG #110: `pages/api/vas/bundles/
+[network].js` required no key and proxied every request to Blu's bundle products endpoint.
+It now requires the internal key and reads `VasProduct`. Lock: `tests/vas-routes-internal.test.mjs`
+(any VAS or internal route importing a Blu client must require the internal key). Reply to
+Blu drafted (`EMAIL_TO_BLU_3_TRAFFIC_REPLY.txt`, iCloud root). Suite 1051/1051, build green.
+
 ## 2026-10-14 (84) — The PIN chain: a real "forgot PIN" from anywhere, a wrong PIN never ends a flow, and the chat can no longer send a customer round in a circle
 
 From the founder's screenshots of Lisa on 2026-10-12: one wrong PIN on her
