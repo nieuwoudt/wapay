@@ -97,11 +97,12 @@ cannot slow or fail a customer's message.
    idempotent. The response carries the dataset id.
 3. Vercel Production: `META_CAPI_DATASET_ID` = that id. Redeploy. The Growth tab's
    Conversions API chip reads "on" with nothing sent yet.
-4. Prove the pipe before any spend: set `META_CAPI_TEST_EVENT_CODE` from Events Manager →
-   Test events, redeploy, then `POST /api/internal/capi-test-send` (internal key,
-   production only). It pushes ONE synthetic LeadSubmitted through the real sender and
-   returns Meta's full response, redacted; it refuses to run without the test code and
-   never touches a customer record. Remove the test code afterwards.
+4. Prove the pipe before any spend: `POST /api/internal/capi-test-send` (internal key,
+   production only) with `{ "testEventCode": "TEST…" }` from Events Manager → Test events
+   in the body (option B, 2026-10-15: no env change, no redeploys; `META_CAPI_TEST_EVENT_CODE`
+   still works as a default). It pushes ONE synthetic LeadSubmitted through the real
+   sender with that code attached, returns Meta's full response redacted, refuses to run
+   without a code, never logs or stores the code, and never touches a customer record.
 5. In Ads Manager, set the campaign's conversion location to WhatsApp and its
    optimisation event to **Purchase** (the event the doc says delivery can optimise on
    for WhatsApp; Instagram placements stay measurement-only).

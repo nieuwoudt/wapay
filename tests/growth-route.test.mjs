@@ -123,6 +123,16 @@ test('capi dataset and test-send routes: POST only, internal key, production onl
   assert.match(dataset, /send\(redactToken\(JSON\.stringify\(out\)\)\)/);
   assert.match(testSend, /process\.env\.VERCEL_ENV !== 'production'/);
   assert.ok(testSend.indexOf('TEST_CODE_MISSING') < testSend.indexOf('sendCapiEvents('), 'the test code is checked before the sender runs');
+  assert.match(testSend, /req\.body\.testEventCode/, 'the code may arrive in the POST body');
+  assert.match(testSend, /testEventCode: code \}/, 'and is handed to the sender for this one call');
+  assert.doesNotMatch(testSend, /console\.(log|error)\([^)]*code/, 'the code is never logged');
+  assert.doesNotMatch(testSend, /testEventCode: code,/, 'the code itself is never in the response');
+  // A malformed body code is refused before the sender runs; a good one in a preview build is still 403.
+  process.env.WAPAY_INTERNAL_API_KEY = 'k-test'; process.env.VERCEL_ENV = 'production'; delete process.env.META_CAPI_TEST_EVENT_CODE;
+  const { default: sendHandler2 } = await import('../pages/api/internal/capi-test-send.js');
+  const r5 = mk(); await sendHandler2({ method: 'POST', headers: { 'x-internal-api-key': 'k-test' }, query: {}, body: { testEventCode: 'bad code!' } }, r5);
+  assert.equal(r5.statusCode, 400); assert.equal(r5.body.error, 'TEST_CODE_SHAPE');
+  delete process.env.WAPAY_INTERNAL_API_KEY; delete process.env.VERCEL_ENV;
   assert.match(testSend, /eventName: CAPI_EVENTS\.LEAD/);
   assert.doesNotMatch(testSend, /updateProfile|patchAttribution|mergeProfile|prisma/, 'never touches a customer record');
   assert.match(testSend, /send\(redactToken\(JSON\.stringify\(out\)\)\)/);

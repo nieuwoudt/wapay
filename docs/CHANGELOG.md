@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-10-15 (87) — Synthetic test send takes the test code in the POST body (option B): no env change, no redeploys, never stored
+
+Agreed with the Meta Ads agent: `POST /api/internal/capi-test-send` reads
+`{ "testEventCode": "TEST…" }` from the body behind the same gates (internal
+key, production only, Conversions API configured), hands it to the sender for
+that one call (`sendCapiEvents` gained a `testEventCode` override; the env
+code stays the default), never logs or stores it, and answers 400 to a
+malformed code. Tests in `tests/growth.test.mjs` (the override is attached
+to one call and the next call carries nothing) and
+`tests/growth-route.test.mjs` (body path, no logging, 400 on shape).
+
+---
+
 ## 2026-10-15 (86) — Conversions API: the Growth token only, the dataset created server-side, one synthetic test event before any spend
 
 Three changes from the Meta Ads agent's review of the pipe check.

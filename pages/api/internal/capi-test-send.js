@@ -6,13 +6,17 @@
  * because that tells us something too.
  *
  * Gates, all required: x-internal-api-key, POST only, Vercel production only,
- * META_CAPI_TEST_EVENT_CODE set (the sender attaches it, so the event lands
- * in Events Manager's Test Events and never in reporting), and the
- * Conversions API configured (dataset id present). Touches no customer: the
+ * a test event code, and the Conversions API configured (dataset id present).
+ * The code comes from the POST body ({ "testEventCode": "TEST…" }, option B
+ * agreed with the Meta Ads agent 2026-10-15) or, failing that, from
+ * META_CAPI_TEST_EVENT_CODE; it is used for this one send, never logged and
+ * never stored, and the sender attaches it so the event lands in Events
+ * Manager's Test Events and never in reporting. Touches no customer: the
  * event is LeadSubmitted with a synthetic click id and is never marked on a
  * profile. Meta's full response comes back, redacted.
  *
- *   curl -X POST -H "x-internal-api-key: $KEY" https://wapay-api.vercel.app/api/internal/capi-test-send
+ *   curl -X POST -H "x-internal-api-key: $KEY" -H "Content-Type: application/json" \
+ *     -d '{"testEventCode":"TEST12345"}' https://wapay-api.vercel.app/api/internal/capi-test-send
  */
 import crypto from 'node:crypto';
 import { capiConfig, buildBusinessMessagingEvent, sendCapiEvents, CAPI_EVENTS } from '../../../lib/meta-capi.js';
@@ -36,7 +40,10 @@ export default async function handler(req, res) {
   if (process.env.VERCEL_ENV !== 'production') return res.status(403).json({ error: 'NOT_PRODUCTION', vercelEnv: process.env.VERCEL_ENV || null });
 
   const cfg = capiConfig();
-  if (!cfg.testEventCode) return res.status(412).json({ error: 'TEST_CODE_MISSING', note: 'set META_CAPI_TEST_EVENT_CODE from Events Manager → Test events; this route never sends without it' });
+  const bodyCode = typeof req.body === 'object' && req.body ? String(req.body.testEventCode || '').trim() : '';
+  const code = bodyCode || cfg.testEventCode || '';
+  if (!code) return res.status(412).json({ error: 'TEST_CODE_MISSING', note: 'send { "testEventCode": "TEST…" } from Events Manager → Test events in the POST body (or set META_CAPI_TEST_EVENT_CODE); this route never sends without one' });
+  if (!/^[A-Za-z0-9_-]{4,40}$/.test(code)) return res.status(400).json({ error: 'TEST_CODE_SHAPE', note: 'a test event code is letters and digits, 4 to 40 characters' });
   if (!cfg.configured) return res.status(412).json({ error: cfg.reason, note: 'the Conversions API is not configured; nothing was sent' });
 
   const stamp = Date.now().toString(36);
@@ -47,13 +54,13 @@ export default async function handler(req, res) {
     wabaId: cfg.wabaId,
     eventId: `test:${stamp}`,
   });
-  const sent = await sendCapiEvents([event], { timeoutMs: 10000 });
+  const sent = await sendCapiEvents([event], { timeoutMs: 10000, testEventCode: code });
   const out = {
     sentAt: new Date().toISOString(),
     datasetPresent: cfg.datasetPresent,
     tokenSource: cfg.tokenSource,
     wabaId: cfg.wabaId,
-    testEventCode: true,
+    testEventCode: bodyCode ? 'body' : 'env',
     event,
     ok: Boolean(sent.ok),
     http: sent.status ?? null,

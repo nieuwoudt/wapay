@@ -237,3 +237,16 @@ test('organic accounts never produce a Conversions API event: no click id means 
   // The event builder itself refuses to build without a click id.
   assert.throws(() => buildBusinessMessagingEvent({ eventName: 'LeadSubmitted', eventTime: new Date(), wabaId: '647978251504290', eventId: 'x' }), /ctwaClid/);
 });
+
+test('synthetic test send: a caller-supplied test code is attached to that one call only', async () => {
+  const env = { META_CAPI_DATASET_ID: 'ds1', META_ADS_ACCESS_TOKEN: 'tok', WHATSAPP_BUSINESS_ACCOUNT_ID: '647978251504290', VERCEL_ENV: 'production' };
+  const bodies = [];
+  const fetchImpl = async (u, init) => { bodies.push(JSON.parse(init.body)); return { ok: true, status: 200, json: async () => ({ events_received: 1 }) }; };
+  const ev = buildBusinessMessagingEvent({ eventName: 'LeadSubmitted', eventTime: new Date(), ctwaClid: 'wapay-test-x', wabaId: '647978251504290', eventId: 'test:x' });
+  await sendCapiEvents([ev], { env, fetchImpl, testEventCode: ' TEST37891 ' });
+  assert.equal(bodies[0].test_event_code, 'TEST37891', 'trimmed and attached');
+  await sendCapiEvents([ev], { env, fetchImpl });
+  assert.equal(bodies[1].test_event_code, undefined, 'the next call carries no code: nothing was kept');
+  await sendCapiEvents([ev], { env: { ...env, META_CAPI_TEST_EVENT_CODE: 'ENV1' }, fetchImpl });
+  assert.equal(bodies[2].test_event_code, 'ENV1', 'the env code remains the default');
+});
