@@ -1,0 +1,104 @@
+PAYMENTOLOGY ONBOARDING: WHAT TO SEND
+Written 2026-10-15. Two parts: (A) the "Tell us more about your company and how we can
+help you" box on paymentology.com "Let's talk", (B) the follow-up email once a Paymentology
+contact replies. Background and reasoning: docs/CARDS.md. No em dashes (founder style).
+Read the four checks at the bottom before sending.
+
+=============================================================================
+(A) FORM TEXT (paste into the box)
+=============================================================================
+
+WaPay is a live digital wallet in South Africa that customers use inside WhatsApp. They load money by card, EFT and retail vouchers, buy airtime, data and electricity, send vouchers, request payments with a link, and withdraw to their bank. Every balance movement is recorded in our own double-entry ledger, every spend is confirmed with the customer's PIN, and identity verification (ID plus liveness) is integrated.
+
+We would like to issue our customers a WaPay-branded virtual Mastercard in ZAR, requested and managed in the WhatsApp chat and spending the customer's existing WaPay balance. We have read about Paymentology's alliance with Bank Zero and would like to explore launching under it.
+
+What we would like to discuss:
+1. The programme structure with Bank Zero as sponsor: prepaid or debit, KYC requirements, and where customer funds must be held.
+2. ActiveFAST, so that our ledger approves each authorisation, with STIP covering our downtime.
+3. Showing card details on our own web page through PaySecure without our servers handling plaintext card data, and adding the card to Apple Pay and Google Pay.
+4. 3-D Secure options for customers who live in WhatsApp rather than in an app.
+5. Card art carrying the WaPay logo.
+6. Commercials (set-up, monthly minimums, per card and per transaction fees, interchange) and a realistic timeline to a pilot.
+
+-----------------------------------------------------------------------------
+Short version, if the box has a character limit:
+
+WaPay is a live WhatsApp wallet in South Africa (load, buy airtime, data and electricity, pay links, withdrawals) on our own double-entry ledger. We want to issue customers a WaPay-branded virtual Mastercard in ZAR that spends their WaPay balance, ideally under Paymentology's alliance with Bank Zero, using ActiveFAST so our ledger approves each authorisation. Please contact us to discuss the programme structure, card data display, 3-D Secure, card art, commercials and timeline.
+
+=============================================================================
+(B) FOLLOW-UP EMAIL (after a Paymentology contact replies)
+=============================================================================
+
+Subject: WaPay virtual Mastercard: programme questions ahead of our call
+
+Hi <name>,
+
+Thank you for getting back to us. To make our first call useful, here is how WaPay works today and the questions that decide how we build the card.
+
+HOW WAPAY WORKS TODAY
+
+WaPay is a wallet that lives in WhatsApp. Customers onboard with their WhatsApp number and a PIN, load money by card and Instant EFT, by retail voucher, and by payment links that others pay, and spend it on airtime, data, electricity and vouchers. Withdrawals to bank accounts are live through a payout partner. Our own double-entry ledger records every balance movement in integer cents. Every movement is idempotent, and every spend reserves funds first and then settles or releases them. Identity verification (South African ID or passport plus a liveness check) is integrated through Didit and would be mandatory before a card is issued.
+
+WHAT WE WANT TO BUILD
+
+A WaPay-branded virtual Mastercard in ZAR, one per customer, requested in the WhatsApp chat after identity verification. It spends the customer's WaPay balance, so there is one balance and no separate card load. The customer can freeze it, set limits, see transactions and get alerts in WhatsApp. Card details are never sent in a chat message: the customer opens a short-lived secure web page to see the card number and CVV, or to add the card to Apple Pay or Google Pay. Physical cards would come later, if at all.
+
+QUESTIONS
+
+Programme and sponsor
+1. Can WaPay launch under your alliance with Bank Zero, and what does Bank Zero need from us (licences or registrations, PASA participation, due diligence pack)?
+2. Prepaid or debit: which product type fits a customer-funded wallet balance, and who is the legal issuer and the customer's contracting party?
+3. Where must customer funds sit? If the balance stays in our ledger, does Bank Zero require the funds in a ring-fenced or trust account at Bank Zero, and how is the card settlement account prefunded and sized?
+4. Which KYC and FICA standard does Bank Zero require before issuance, which checks may we perform ourselves, and which must Bank Zero perform?
+5. Does the programme run on Banking.Live or on Lume, on the Pro or the Enterprise plan, and does that change anything for a new client?
+
+Authorisation and balance
+6. Is ActiveFAST available for this programme, so that our system approves or declines each authorisation against our ledger?
+7. What response time do you configure for ActiveFAST, how many retries, and what happens to the transaction when we time out?
+8. Which STIP rules and limits would apply when we are unreachable? Do you hold a balance for STIP that we keep current through the balance update API, and how often should we push it?
+9. Our servers are in Stockholm. Where does your FAST sender run, is Stockholm acceptable for latency and for data residency, or do you or Bank Zero require cardholder data and the authorisation endpoint to be in South Africa (for example through on-soil processing)?
+10. We understand TID links the messages of one transaction and RID identifies each message, stable on replay. Please confirm that token plus TID plus RID is the right idempotency key, and the format of TID and RID. How are partial approvals, presentments without a prior authorisation and expired authorisation holds handled, and how is the FAST endpoint secured (mTLS, IP allowlist, signing) and retried?
+11. Which settlement and reconciliation reports do we receive, at what time each day, and do they carry per-transaction fee, interchange and scheme fee breakdowns? The docs describe delivery to a client-hosted SFTP server. Could you deliver to an SFTP or storage location you host or that we name instead? And who funds settlement: does Bank Zero debit a prefunded account we hold at Bank Zero?
+
+Card data, tokenisation and 3-D Secure
+12. We have no native app. For PaySecure Get PAN and Get CVV2, may the AES session key in the Session-Id header be generated in the customer's browser, so that our server only relays ciphertext and the card details are decrypted only in the browser? Which cipher mode applies (the docs mention both GCM and CBC)? Do you offer a hosted card-details page or web component instead?
+13. Are Apple Pay and Google Pay available for a Bank Zero programme in South Africa? We saw your Apple Pay web provisioning offering. Is that open to a programme without a native app, and is there an equivalent for Google Pay?
+14. Who provides the 3-D Secure ACS, and how is the customer challenged? We have no SMS channel. On Sprint the one-time code can be sent to the client platform to pass on to the cardholder. Is that, or an out-of-band approval, available on Banking.Live, so that we can deliver the challenge in WhatsApp and confirm it with the customer's WaPay PIN?
+
+Controls and fraud
+15. Can we block merchant categories at programme level (for example gambling, MCC 7995) and set per-card limits and e-commerce or international switches through the API?
+16. Which fraud tools come with the programme, and which fraud monitoring responsibilities stay with WaPay?
+
+Branding
+17. Can the virtual card art carry the WaPay logo and colours, with the Mastercard mark and Bank Zero identified as the issuer? What is the approval process with Bank Zero and Mastercard, and can the same art be used as the Apple Pay and Google Pay card art?
+
+Commercials
+18. Please share the full fee schedule: implementation or set-up fees, monthly minimums, per active card or per card issued fees, per transaction processing fees, tokenisation and 3-D Secure fees, chargeback fees, and Bank Zero's own fees.
+19. How is interchange shared, and are there scheme fees we pay directly?
+20. Is there a collateral, reserve or minimum prefunding requirement?
+
+Onboarding and timeline
+21. What are the onboarding stages from signature to a live pilot, and the typical timeline? What do you need from us at each stage, and when do we get UAT access and the card test simulator?
+22. Could you send the card programme specification template, so we can prepare our answers before the call?
+
+WHAT WE CAN SEND YOU
+
+A programme overview, the funds-flow diagram, our customer journey in WhatsApp, our ledger design, our KYC and AML approach, a fraud and disputes outline, our PCI scope statement and projected volumes. Tell us which of these you need first.
+
+Kind regards,
+Niev
+WaPay
+niev@wapay.co.za
+
+=============================================================================
+BEFORE SENDING: FOUR CHECKS FOR THE FOUNDER
+=============================================================================
+
+1. The text says withdrawals are live and identity verification is "integrated". Both are
+   true. It does not claim verification runs on every customer today: WAPAY_PAYOUT_KYC=off
+   (docs/PAYOUTS.md, 2026-10-12). Bank Zero's due diligence will ask. Card issuance must
+   require verification whatever that switch says (docs/CARDS.md section 5).
+2. "A payout partner" refers to OTT. Name them only if you are comfortable doing so.
+3. Nothing here says WaPay holds a licence. Do not add one.
+4. Question 9 (Stockholm) is deliberate. Bank Zero's announcement stresses SA data residency,
+   and our database and functions run in Stockholm (vercel.json regions arn1).

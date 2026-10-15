@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-10-15 (88) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
+
+The founder asked whether WaPay can issue customers virtual cards through Paymentology,
+how it maps onto the product, and what to send Paymentology's sales form.
+`docs/CARDS.md`:
+- the parties: Paymentology processes, Bank Zero is the sponsor through the April 2026
+  alliance, Mastercard is the scheme;
+- the balance decision: ActiveFAST, so our ledger approves each authorisation and there is one
+  balance, against PassiveFAST, a separate card balance;
+- the regulatory and funds questions for counsel and Bank Zero, including the wallet's
+  closed-loop framing and identity checks being off for withdrawals;
+- every FAST message mapped onto `reserveHold`, new `adjustHold` and `captureFromHold`, and
+  `postEntry`;
+- the gaps: the one-shot hold, forced posts, idemKeys from TID/RID against the epoch guard, a
+  verified cardholder identity, the authorisation endpoint's cold-start latency, a
+  browser-decrypted PaySecure card page, client-hosted SFTP reports, 3DS without SMS, and
+  alert template costs;
+- the founder's architecture brief reconciled against the codebase; branding (yes, with Bank
+  Zero and Mastercard approval of the art); commercials (none published); a gated build plan.
+
+`EMAIL_TO_PAYMENTOLOGY_1_ONBOARDING.txt` holds the form text (long and short) and a 22-question
+follow-up email. Paymentology's sites were blocked by this session's network policy, so their
+pages were read through search extracts and every fact carries its source. CAPABILITIES lists
+Paymentology as discovery. No code changed.
+
+---
+
 ## 2026-10-15 (87) — Synthetic test send takes the test code in the POST body (option B): no env change, no redeploys, never stored
 
 Agreed with the Meta Ads agent: `POST /api/internal/capi-test-send` reads
