@@ -139,3 +139,10 @@ test('capi dataset and test-send routes: POST only, internal key, production onl
   const probe = read('../pages/api/internal/ads-pipe-check.js');
   assert.match(probe, /env WHATSAPP_BUSINESS_ACCOUNT_ID \(fallback\)/, 'the probe names the fallback env honestly');
 });
+
+test('the pipe check reports the newest ad account without identifiers', () => {
+  const probe = read('../pages/api/internal/ads-pipe-check.js');
+  assert.match(probe, /latestAdAccount/);
+  const block = probe.slice(probe.indexOf('SELECT a."createdAt" AS created_at'), probe.indexOf('ORDER BY a."createdAt" DESC LIMIT 1'));
+  assert.doesNotMatch(block, /msisdn|waId|displayName|->>'ctwaClid' AS|->>'adId' AS|->>'headline' AS/, 'only booleans for the identifying fields');
+});

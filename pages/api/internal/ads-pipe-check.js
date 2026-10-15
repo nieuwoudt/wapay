@@ -13,6 +13,7 @@
 import crypto from 'node:crypto';
 import { adsConfig, insightsUrl, adsCatalogUrl, redactToken, isoDay, GRAPH } from '../../../lib/meta-ads.js';
 import { capiConfig } from '../../../lib/meta-capi.js';
+import prisma from '../../../lib/prisma.js';
 
 export const config = { maxDuration: 25 };
 
@@ -137,6 +138,36 @@ export default async function handler(req, res) {
       dataset: ds.data ? (ds.data.id ? { id: ds.data.id } : ds.data) : ds,
     };
   });
+
+  // The newest ad-attributed account's journey, without identifiers: did the
+  // referral carry a click id, did onboarding complete, what did Meta answer.
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT a."createdAt" AS created_at,
+             a."onboardingState" = 'S5_COMPLETED' AS onboarded,
+             a."profile"->'attribution'->>'sourceType' AS source_type,
+             (a."profile"->'attribution'->>'ctwaClid') IS NOT NULL AS has_click_id,
+             (a."profile"->'attribution'->>'adId') IS NOT NULL AS has_ad_id,
+             (a."profile"->'attribution'->>'headline') IS NOT NULL AS has_headline,
+             a."profile"->'attribution'->>'onboardedAt' AS onboarded_at,
+             a."profile"->'attribution'->'capi' AS capi,
+             a."profile"->'attribution'->'capiLast' AS capi_last
+      FROM "Account" a
+      WHERE a."profile"->>'acquisitionSource' = 'ad'
+      ORDER BY a."createdAt" DESC LIMIT 1`;
+    const r = rows?.[0];
+    out.latestAdAccount = r
+      ? { createdAt: r.created_at, onboarded: Boolean(r.onboarded), sourceType: r.source_type, hasClickId: Boolean(r.has_click_id), hasAdId: Boolean(r.has_ad_id), hasHeadline: Boolean(r.has_headline), onboardedAt: r.onboarded_at, capi: r.capi, capiLast: r.capi_last }
+      : null;
+    const counts = await prisma.$queryRaw`
+      SELECT count(*) FILTER (WHERE "profile"->>'acquisitionSource' = 'ad')::int AS ad_accounts,
+             count(*) FILTER (WHERE ("profile"->'attribution'->'capi'->>'lead') IS NOT NULL)::int AS leads_sent
+      FROM "Account"`;
+    out.adAccounts = Number(counts?.[0]?.ad_accounts ?? 0);
+    out.leadsSent = Number(counts?.[0]?.leads_sent ?? 0);
+  } catch (error) {
+    out.latestAdAccount = { error: redactToken(String(error?.message || 'query failed')).slice(0, 200) };
+  }
 
   // Belt and braces: nothing that leaves carries a token.
   return res.status(200).send(redactToken(JSON.stringify(out)));

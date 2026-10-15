@@ -13,7 +13,12 @@ that one call (`sendCapiEvents` gained a `testEventCode` override; the env
 code stays the default), never logs or stores it, and answers 400 to a
 malformed code. Tests in `tests/growth.test.mjs` (the override is attached
 to one call and the next call carries nothing) and
-`tests/growth-route.test.mjs` (body path, no logging, 400 on shape).
+`tests/growth-route.test.mjs` (body path, no logging, 400 on shape). Later the same day, for the real-click rehearsal: every Conversions API
+send now leaves Meta's answer on the account (`attribution.capiLast`:
+events, HTTP status, events_received or the error's code, subcode, title
+and fbtrace_id; never a token), and the pipe check reports the newest
+ad-attributed account's journey as booleans only (click id present, ad id
+present, onboarded, marks, `capiLast`).
 
 ---
 

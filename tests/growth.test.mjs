@@ -109,6 +109,10 @@ test('conversions api: each milestone is sent once and marked on the profile', a
   assert.deepEqual(first.sent, ['LeadSubmitted', 'QualifiedLead', 'Purchase']);
   assert.equal(bodies[0].data[2].custom_data.value, 150);
   assert.equal(merges.length, 1, 'marks merged once');
+  const merged = JSON.parse(merges[0][2]);
+  assert.ok(merged.capiLast && merged.capiLast.at, "Meta's answer is kept beside the marks");
+  assert.equal(merged.capiLast.meta.events_received, 3);
+  assert.equal(merged.capiLast.ok, true);
   const second = await syncCapiForAccount({ prisma, accountId: 'acc1', now: new Date(), env, fetchImpl });
   assert.equal(second.skipped, 'COMPLETE');
   assert.equal(bodies.length, 1, 'nothing sent twice');
@@ -249,4 +253,13 @@ test('synthetic test send: a caller-supplied test code is attached to that one c
   assert.equal(bodies[1].test_event_code, undefined, 'the next call carries no code: nothing was kept');
   await sendCapiEvents([ev], { env: { ...env, META_CAPI_TEST_EVENT_CODE: 'ENV1' }, fetchImpl });
   assert.equal(bodies[2].test_event_code, 'ENV1', 'the env code remains the default');
+});
+
+test('compactCapiResponse keeps what an operator needs and nothing else', async () => {
+  const { compactCapiResponse } = await import('../lib/growth-attribution.js');
+  const ok = compactCapiResponse({ ok: true, status: 200, body: { events_received: 1, messages: [], fbtrace_id: 'Af1' } }, [{ event_name: 'LeadSubmitted' }], new Date('2026-10-15T16:00:00Z'));
+  assert.deepEqual(ok, { at: '2026-10-15T16:00:00.000Z', events: ['LeadSubmitted'], ok: true, http: 200, meta: { events_received: 1, messages: [], fbtrace_id: 'Af1' }, error: null });
+  const bad = compactCapiResponse({ ok: false, status: 400, body: { error: { message: 'Invalid parameter', type: 'OAuthException', code: 100, error_subcode: 2804087, error_user_title: 'Messaging event invalid ctwa clid', error_user_msg: 'The ctwa_clid parameter is invalid.', fbtrace_id: 'Af2', access_token: 'never' } } }, [{ event_name: 'LeadSubmitted' }]);
+  assert.equal(bad.ok, false); assert.equal(bad.error.subcode, 2804087); assert.equal(bad.error.fbtrace_id, 'Af2'); assert.equal(bad.meta, null);
+  assert.doesNotMatch(JSON.stringify(bad), /never|access_token/);
 });
