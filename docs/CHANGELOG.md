@@ -17,7 +17,11 @@ leaves Vercel. `POST /api/internal/capi-test-send` (internal key, production
 only, refuses without `META_CAPI_TEST_EVENT_CODE`) pushes one synthetic
 LeadSubmitted through the real sender and returns Meta's full response,
 redacted; it never touches a customer record. The pipe check now names the
-fallback WABA env honestly. `docs/GROWTH_DASHBOARD.md` §4 B rewritten.
+fallback WABA env honestly. `docs/GROWTH_DASHBOARD.md` §4 B rewritten. Same day, after the
+agent's confirmation question: a regression test locks that an account
+without an ad click id can never produce a Conversions API event, from the
+turn hook, the onboarding hook, the daily sweep and the event builder
+(`tests/growth.test.mjs`).
 
 ---
 

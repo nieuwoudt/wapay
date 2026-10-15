@@ -210,3 +210,30 @@ test('conversions api token: META_CAPI_ACCESS_TOKEN, else the Growth token in ME
   const botOnly = capiConfig({ ...base, META_WHATSAPP_TOKEN: 'bot-tok' });
   assert.equal(botOnly.token, ''); assert.equal(botOnly.configured, false); assert.equal(botOnly.reason, 'CREDENTIALS_MISSING');
 });
+
+test('organic accounts never produce a Conversions API event: no click id means no fetch, from the turn, the onboarding hook and the sweep', async () => {
+  const { growthOnTurn, growthOnOnboarded, capiSweep } = await import('../lib/growth-attribution.js');
+  const env = { META_CAPI_DATASET_ID: 'ds1', META_ADS_ACCESS_TOKEN: 'tok', WHATSAPP_BUSINESS_ACCOUNT_ID: '647978251504290', VERCEL_ENV: 'production' };
+  let fetches = 0;
+  const fetchImpl = async () => { fetches += 1; return { ok: true, status: 200, json: async () => ({ events_received: 1 }) }; };
+  const organic = { acquisitionSource: 'organic' };
+  const prisma = {
+    account: { async findUnique() { return { id: 'acc-org', profile: organic }; } },
+    consent: { async findFirst() { return { grantedAt: new Date() }; } },
+    paymentRequest: { async findFirst() { return { createdAt: new Date() }; } },
+    async $queryRaw(strings) { return String(strings.join('')).includes('ctwaClid') ? [] : [{ at: new Date(), cents: 5000 }]; },
+    async $executeRaw() { return 1; },
+  };
+  // Direct sync: an account with every milestone but no click id is skipped before any send.
+  const direct = await syncCapiForAccount({ prisma, accountId: 'acc-org', env, fetchImpl });
+  assert.equal(direct.skipped, 'NO_CLICK_ID');
+  // The two processor hooks: nothing is sent for an onboarded organic account.
+  await growthOnTurn({ prisma, account: { id: 'acc-org', onboardingState: 'S5_COMPLETED', profile: organic }, referral: null });
+  await growthOnOnboarded({ prisma, account: { id: 'acc-org', profile: organic } });
+  // The daily sweep only selects accounts whose profile carries a click id.
+  const swept = await capiSweep({ prisma, env, fetchImpl });
+  assert.equal(swept.checked, 0);
+  assert.equal(fetches, 0, 'no Conversions API call for an account without an ad click id');
+  // The event builder itself refuses to build without a click id.
+  assert.throws(() => buildBusinessMessagingEvent({ eventName: 'LeadSubmitted', eventTime: new Date(), wabaId: '647978251504290', eventId: 'x' }), /ctwaClid/);
+});
