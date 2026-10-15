@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-10-15 (86) — Conversions API: the Growth token only, the dataset created server-side, one synthetic test event before any spend
+
+Three changes from the Meta Ads agent's review of the pipe check.
+`lib/meta-capi.js` takes `META_CAPI_ACCESS_TOKEN` or, by default, the Growth
+token in `META_ADS_ACCESS_TOKEN`; the fallback to the bot's messaging token is
+gone (it lacks `whatsapp_business_manage_events` and the growth pipes must
+never handle it). `POST /api/internal/capi-dataset` (internal key, production
+only) reads `/{WABA}/dataset` and creates the dataset only when none is
+linked, returning the id for `META_CAPI_DATASET_ID`, so the token never
+leaves Vercel. `POST /api/internal/capi-test-send` (internal key, production
+only, refuses without `META_CAPI_TEST_EVENT_CODE`) pushes one synthetic
+LeadSubmitted through the real sender and returns Meta's full response,
+redacted; it never touches a customer record. The pipe check now names the
+fallback WABA env honestly. `docs/GROWTH_DASHBOARD.md` §4 B rewritten.
+
+---
+
 ## 2026-10-14 (85) — The bundles-by-network route is internal-only and served from our catalogue, never the supplier
 
 Blu thread, after Blue Label reported unusually high traffic from our credentials on the

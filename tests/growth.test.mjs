@@ -83,7 +83,7 @@ test('conversions api: off without a dataset id, and the event shape when on', a
   assert.deepEqual(ev.custom_data, { currency: 'ZAR', value: 50 });
   assert.throws(() => buildBusinessMessagingEvent({ eventName: 'Purchase', eventTime: Date.now(), wabaId: 'x' }), /ctwaClid/);
 
-  const env = { META_CAPI_DATASET_ID: 'ds1', META_WHATSAPP_TOKEN: 'tok', META_WHATSAPP_BUSINESS_ACCOUNT_ID: '801970852418258', META_CAPI_TEST_EVENT_CODE: 'TEST123' };
+  const env = { META_CAPI_DATASET_ID: 'ds1', META_ADS_ACCESS_TOKEN: 'tok', META_WHATSAPP_BUSINESS_ACCOUNT_ID: '801970852418258', META_CAPI_TEST_EVENT_CODE: 'TEST123' };
   let url = null, body = null;
   const sent = await sendCapiEvents([ev], { env, fetchImpl: async (u, init) => { url = u; body = JSON.parse(init.body); return { ok: true, status: 200, json: async () => ({ events_received: 1 }) }; } });
   assert.equal(sent.ok, true);
@@ -93,7 +93,7 @@ test('conversions api: off without a dataset id, and the event shape when on', a
 });
 
 test('conversions api: each milestone is sent once and marked on the profile', async () => {
-  const env = { META_CAPI_DATASET_ID: 'ds1', META_WHATSAPP_TOKEN: 'tok', META_WHATSAPP_BUSINESS_ACCOUNT_ID: '801970852418258' };
+  const env = { META_CAPI_DATASET_ID: 'ds1', META_ADS_ACCESS_TOKEN: 'tok', META_WHATSAPP_BUSINESS_ACCOUNT_ID: '801970852418258' };
   const profile = { attribution: { ctwaClid: 'ARAb12cd34ef', onboardedAt: '2026-10-09T09:00:00Z' } };
   const merges = [];
   const prisma = {
@@ -164,7 +164,7 @@ test('marketing api: the exact insights request, and the token never survives re
 });
 
 test('conversions api: only production can ever send; preview reports credentials missing or held', async () => {
-  const creds = { META_CAPI_DATASET_ID: 'ds1', META_WHATSAPP_TOKEN: 'tok', META_WHATSAPP_BUSINESS_ACCOUNT_ID: '647978251504290' };
+  const creds = { META_CAPI_DATASET_ID: 'ds1', META_ADS_ACCESS_TOKEN: 'tok', META_WHATSAPP_BUSINESS_ACCOUNT_ID: '647978251504290' };
   assert.equal(capiConfig({ ...creds, VERCEL_ENV: 'production' }).configured, true);
   assert.equal(capiConfig({ ...creds }).configured, true, 'no VERCEL_ENV (local) is allowed');
   const preview = capiConfig({ ...creds, VERCEL_ENV: 'preview' });
@@ -179,10 +179,10 @@ test('conversions api: only production can ever send; preview reports credential
 });
 
 test('pipe check findings (2026-10-12): the WABA falls back to WHATSAPP_BUSINESS_ACCOUNT_ID, and a zero-row refresh still records the fetch', async () => {
-  const c = capiConfig({ META_CAPI_DATASET_ID: 'ds1', META_WHATSAPP_TOKEN: 'tok', WHATSAPP_BUSINESS_ACCOUNT_ID: '647978251504290', VERCEL_ENV: 'production' });
+  const c = capiConfig({ META_CAPI_DATASET_ID: 'ds1', META_ADS_ACCESS_TOKEN: 'tok', WHATSAPP_BUSINESS_ACCOUNT_ID: '647978251504290', VERCEL_ENV: 'production' });
   assert.equal(c.wabaId, '647978251504290');
   assert.equal(c.configured, true);
-  assert.equal(capiConfig({ META_CAPI_DATASET_ID: 'ds1', META_WHATSAPP_TOKEN: 'tok', META_WHATSAPP_BUSINESS_ACCOUNT_ID: '1', WHATSAPP_BUSINESS_ACCOUNT_ID: '2' }).wabaId, '1', 'META_ spelling wins when both exist');
+  assert.equal(capiConfig({ META_CAPI_DATASET_ID: 'ds1', META_ADS_ACCESS_TOKEN: 'tok', META_WHATSAPP_BUSINESS_ACCOUNT_ID: '1', WHATSAPP_BUSINESS_ACCOUNT_ID: '2' }).wabaId, '1', 'META_ spelling wins when both exist');
   const { snapshotAdInsights, lastAdsFetchAt, LAST_FETCH_KEY } = await import('../lib/meta-ads.js');
   const env = { META_ADS_ACCESS_TOKEN: 'tok', META_AD_ACCOUNT_ID: '1090534783572735' };
   const catalog = new Map();
@@ -199,4 +199,14 @@ test('pipe check findings (2026-10-12): the WABA falls back to WHATSAPP_BUSINESS
   assert.equal(out.fetchedAt, now.toISOString());
   assert.ok(catalog.has(LAST_FETCH_KEY), 'the marker row was written');
   assert.equal((await lastAdsFetchAt({ prisma })).toISOString(), now.toISOString());
+});
+
+test('conversions api token: META_CAPI_ACCESS_TOKEN, else the Growth token in META_ADS_ACCESS_TOKEN, never the bot token', () => {
+  const base = { META_CAPI_DATASET_ID: 'ds1', WHATSAPP_BUSINESS_ACCOUNT_ID: '647978251504290', VERCEL_ENV: 'production' };
+  const growth = capiConfig({ ...base, META_ADS_ACCESS_TOKEN: 'growth-tok' });
+  assert.equal(growth.token, 'growth-tok'); assert.equal(growth.tokenSource, 'META_ADS_ACCESS_TOKEN'); assert.equal(growth.configured, true);
+  const explicit = capiConfig({ ...base, META_ADS_ACCESS_TOKEN: 'growth-tok', META_CAPI_ACCESS_TOKEN: 'capi-tok' });
+  assert.equal(explicit.token, 'capi-tok'); assert.equal(explicit.tokenSource, 'META_CAPI_ACCESS_TOKEN');
+  const botOnly = capiConfig({ ...base, META_WHATSAPP_TOKEN: 'bot-tok' });
+  assert.equal(botOnly.token, ''); assert.equal(botOnly.configured, false); assert.equal(botOnly.reason, 'CREDENTIALS_MISSING');
 });

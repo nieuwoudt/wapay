@@ -130,7 +130,9 @@ export default async function handler(req, res) {
     const info = wabas[i * 2], ds = wabas[i * 2 + 1];
     return {
       id,
-      source: id === capi.wabaId ? 'env META_WHATSAPP_BUSINESS_ACCOUNT_ID' : 'query waba=',
+      source: id !== capi.wabaId ? 'query waba='
+        : process.env.META_WHATSAPP_BUSINESS_ACCOUNT_ID ? 'env META_WHATSAPP_BUSINESS_ACCOUNT_ID'
+        : 'env WHATSAPP_BUSINESS_ACCOUNT_ID (fallback)',
       account: info.data ? { id: info.data.id, name: info.data.name } : info,
       dataset: ds.data ? (ds.data.id ? { id: ds.data.id } : ds.data) : ds,
     };

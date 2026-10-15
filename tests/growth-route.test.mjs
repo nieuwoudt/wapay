@@ -96,3 +96,36 @@ test('the Growth route never lists the last-fetch marker as an ad', () => {
   assert.match(route, /adCatalog\.findMany\(\{ where: \{ NOT: \{ adId: LAST_FETCH_KEY \} \}/);
   assert.match(route, /adsLastFetchedAt: adsLastAt \|\| null/);
 });
+
+test('capi dataset and test-send routes: POST only, internal key, production only, nothing sent without the test code, redacted output', async () => {
+  const dataset = read('../pages/api/internal/capi-dataset.js');
+  const testSend = read('../pages/api/internal/capi-test-send.js');
+  delete process.env.WAPAY_INTERNAL_API_KEY;
+  const mk = () => ({ statusCode: 0, headers: {}, setHeader(k, v) { this.headers[k] = v; }, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; }, send(b) { this.body = b; return this; } });
+  for (const mod of ['../pages/api/internal/capi-dataset.js', '../pages/api/internal/capi-test-send.js']) {
+    const { default: handler } = await import(mod);
+    const r1 = mk(); await handler({ method: 'GET', headers: {}, query: {} }, r1); assert.equal(r1.statusCode, 405, `${mod} GET`);
+    const r2 = mk(); await handler({ method: 'POST', headers: {}, query: {} }, r2); assert.equal(r2.statusCode, 401, `${mod} no key`);
+    process.env.WAPAY_INTERNAL_API_KEY = 'k-test'; process.env.VERCEL_ENV = 'preview';
+    const r3 = mk(); await handler({ method: 'POST', headers: { 'x-internal-api-key': 'k-test' }, query: {} }, r3); assert.equal(r3.statusCode, 403, `${mod} preview`);
+    delete process.env.WAPAY_INTERNAL_API_KEY; delete process.env.VERCEL_ENV;
+  }
+  // test-send: in production with the key but without a test code, nothing is sent (412 before any fetch)
+  process.env.WAPAY_INTERNAL_API_KEY = 'k-test'; process.env.VERCEL_ENV = 'production'; delete process.env.META_CAPI_TEST_EVENT_CODE;
+  const { default: sendHandler } = await import('../pages/api/internal/capi-test-send.js');
+  const r4 = mk(); await sendHandler({ method: 'POST', headers: { 'x-internal-api-key': 'k-test' }, query: {} }, r4);
+  assert.equal(r4.statusCode, 412); assert.equal(r4.body.error, 'TEST_CODE_MISSING');
+  delete process.env.WAPAY_INTERNAL_API_KEY; delete process.env.VERCEL_ENV;
+  // static locks
+  assert.ok(dataset.indexOf("graph('GET'") < dataset.indexOf("graph('POST'"), 'reads before it creates');
+  assert.equal((dataset.match(/graph\('POST'/g) || []).length, 1, 'exactly one create call');
+  assert.match(dataset, /process\.env\.VERCEL_ENV !== 'production'/);
+  assert.match(dataset, /send\(redactToken\(JSON\.stringify\(out\)\)\)/);
+  assert.match(testSend, /process\.env\.VERCEL_ENV !== 'production'/);
+  assert.ok(testSend.indexOf('TEST_CODE_MISSING') < testSend.indexOf('sendCapiEvents('), 'the test code is checked before the sender runs');
+  assert.match(testSend, /eventName: CAPI_EVENTS\.LEAD/);
+  assert.doesNotMatch(testSend, /updateProfile|patchAttribution|mergeProfile|prisma/, 'never touches a customer record');
+  assert.match(testSend, /send\(redactToken\(JSON\.stringify\(out\)\)\)/);
+  const probe = read('../pages/api/internal/ads-pipe-check.js');
+  assert.match(probe, /env WHATSAPP_BUSINESS_ACCOUNT_ID \(fallback\)/, 'the probe names the fallback env honestly');
+});

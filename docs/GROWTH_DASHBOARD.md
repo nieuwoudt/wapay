@@ -88,17 +88,21 @@ cannot slow or fail a customer's message.
    minute; history accrues nightly from then on.
 
 **B. Conversions API (sends funded accounts back to Meta)**
-1. Events Manager → the dataset linked to the WhatsApp Business Account (Meta creates one
-   per WABA; if none shows, the Marketing API doc's `POST /{WABA_ID}/dataset` creates it).
-   Copy the **dataset id**.
-2. The token needs `whatsapp_business_management` and
-   `whatsapp_business_manage_events`. The existing `META_WHATSAPP_TOKEN` usually has the
-   first; the second is granted on the same system user in step A3. If so, no new env is
-   needed for the token.
-3. Vercel: `META_CAPI_DATASET_ID` = the dataset id; optionally `META_CAPI_ACCESS_TOKEN` if
-   a separate token was minted; while testing, `META_CAPI_TEST_EVENT_CODE` from Events
-   Manager → Test events (remove it after). Redeploy.
-4. In Ads Manager, set the campaign's conversion location to WhatsApp and its
+1. The token is the WaPay Growth token already in `META_ADS_ACCESS_TOKEN` (ads_read +
+   whatsapp_business_manage_events). Nobody handles it again: the code uses it unless a
+   separate `META_CAPI_ACCESS_TOKEN` is set, and never the bot's messaging token.
+2. Create the dataset from the server so the token never leaves Vercel:
+   `POST /api/internal/capi-dataset` with the internal key (production only). It reads
+   `/{WABA}/dataset` first and creates one only when none is linked; Meta's create is
+   idempotent. The response carries the dataset id.
+3. Vercel Production: `META_CAPI_DATASET_ID` = that id. Redeploy. The Growth tab's
+   Conversions API chip reads "on" with nothing sent yet.
+4. Prove the pipe before any spend: set `META_CAPI_TEST_EVENT_CODE` from Events Manager →
+   Test events, redeploy, then `POST /api/internal/capi-test-send` (internal key,
+   production only). It pushes ONE synthetic LeadSubmitted through the real sender and
+   returns Meta's full response, redacted; it refuses to run without the test code and
+   never touches a customer record. Remove the test code afterwards.
+5. In Ads Manager, set the campaign's conversion location to WhatsApp and its
    optimisation event to **Purchase** (the event the doc says delivery can optimise on
    for WhatsApp; Instagram placements stay measurement-only).
 
@@ -120,7 +124,8 @@ dataset is already linked to it (a read, never a create), and both gates on send
 Every Graph call is a GET; the whole response passes through `redactToken`.
 
 **Two gates on the Conversions API** (`capiConfig().reason`): `CREDENTIALS_MISSING`
-until `META_CAPI_DATASET_ID` is set, and `NOT_PRODUCTION` on any Vercel environment
+until `META_CAPI_DATASET_ID` is set (the token is `META_CAPI_ACCESS_TOKEN`, else the Growth
+token in `META_ADS_ACCESS_TOKEN`; the bot's token is never used), and `NOT_PRODUCTION` on any Vercel environment
 other than production (the Growth tab shows "held: preview build"). A preview deploy
 can therefore never send an event even if someone copies the envs to it;
 `META_CAPI_ALLOW_NON_PRODUCTION=true` exists only for a local run against Meta's Test
