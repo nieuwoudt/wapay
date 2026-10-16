@@ -341,7 +341,7 @@ test('sweepPayoutsAndNotify reconciles PENDING + INIT rows and tells each finali
 
 test('static: the cron route is cron/secret/internal-key gated, calls the sweep, never a pay-out; daily-vas-sync sweeps best-effort', () => {
   const cron = read('../pages/api/cron/payout-reconcile.js');
-  assert.match(cron, /x-vercel-cron'\] === '1'/); assert.match(cron, /process\.env\.CRON_SECRET && key === process\.env\.CRON_SECRET/);
+  assert.match(cron, /import \{ isCronAuthed \} from '..\/..\/..\/lib\/cron-auth.js'/); assert.doesNotMatch(cron, /x-vercel-cron|query\?\.key/);
   assert.match(cron, /requireInternalAuth\(req, res\)/); assert.match(cron, /import \{ requireInternalAuth \} from '\.\.\/\.\.\/\.\.\/lib\/internal-auth\.js'/);
   assert.match(cron, /if \(!isAuthed\(req, res\)\) return;/);
   assert.match(cron, /await sweepPayoutsAndNotify\(\{ olderThanMs, initOlderThanMs, limit \}\)/);

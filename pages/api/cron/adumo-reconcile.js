@@ -10,14 +10,11 @@
  */
 import { requireInternalAuth } from '../../../lib/internal-auth.js';
 import { adumoReportingConfigured, reconcileAdumoIntents } from '../../../lib/adumo-reporting.js';
+// Golden thread O4 (2026-10-16): Bearer CRON_SECRET only; no header trust, no query token.
+import { isCronAuthed } from '../../../lib/cron-auth.js';
 
 export const config = { maxDuration: 60 };
 
-function isCronAuthed(req) {
-  if (req.headers['x-vercel-cron'] === '1') return true;
-  const key = req.query?.key;
-  return !!(process.env.CRON_SECRET && key === process.env.CRON_SECRET);
-}
 function isAuthed(req, res) {
   if (isCronAuthed(req)) return true;
   if (process.env.WAPAY_INTERNAL_API_KEY && typeof req.headers['x-internal-api-key'] === 'string') {

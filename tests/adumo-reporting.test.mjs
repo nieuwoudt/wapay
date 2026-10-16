@@ -159,7 +159,7 @@ test('static: checkout passes the webhook claim and the flow; return + webhook r
   assert.ok(!/buildVirtualCheckout|settleCardPayment|initialisevirtual|postEntry/.test(probe), 'the probe cannot start or settle a payment');
   assert.match(probe, /clientSecret: !!r\.clientSecret/); assert.ok(!/clientSecret: r\.clientSecret|jwtSecret: c\.jwtSecret\b/.test(probe), 'secrets are presence-only');
   const cron = read('../pages/api/cron/adumo-reconcile.js');
-  assert.match(cron, /x-vercel-cron/); assert.match(cron, /CRON_SECRET/); assert.match(cron, /requireInternalAuth\(req, res\)/);
+  assert.match(cron, /import \{ isCronAuthed \} from '..\/..\/..\/lib\/cron-auth.js'/); assert.doesNotMatch(cron, /x-vercel-cron/); assert.match(cron, /requireInternalAuth\(req, res\)/);
   assert.match(cron, /reconcileAdumoIntents\(\{ olderThanMs, limit/); assert.ok(!/buildVirtualCheckout|initialisevirtual/.test(cron));
   const lib = read('../lib/adumo-reporting.js');
   assert.ok(!/GetAPIKey/.test(lib)); assert.match(lib, /if \(st\.settled\) \{/); assert.match(lib, /paidCents !== gross/);

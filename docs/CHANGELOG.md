@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-10-16 (89) — Golden thread section 8: six of the money-path findings closed in the main session's files
+
+From the read-only inventory behind `docs/GOLDEN_THREAD.md` §8. **O4** cron
+routes: `lib/cron-auth.js` accepts only `Authorization: Bearer CRON_SECRET`
+(timing-safe; closed and logged when the secret is unset); the spoofable
+`x-vercel-cron` header and the query-string token are gone from all three
+routes; `payout-status` reports `cronSecretSet`. **O3** PayFast webhook: in
+production the notification must carry our `merchant_id` and the passphrase
+must be configured, both refused (with the raw ITN kept) before `verifyItn`;
+source IP stays warn-only because PayFast's live ranges exceed the published
+CIDRs (2026-08-21). **O5** Blu stub mode: `assertBluStubAllowed` throws in
+production at every stub site and in the electricity route, before any hold.
+**O6** the atomic claim: fuel's PENDING/RECONCILE → EXECUTING flip, 409 for the
+loser and a 120 s stale takeover, now on airtime, data and voucher execute,
+after the PIN and before the hold. **O7** `pages/api/test-deposit.js` and the
+scaffold's unauthenticated deposit route are removed. **O8** the PIN pepper
+migrates by rehash: current pepper, then `PIN_PEPPER_PREVIOUS`, then the
+in-source default; a verify under an old pepper rewrites the hash under the
+current one in the same update; production logs once until `PIN_PEPPER` is
+set. Tests: `tests/golden-thread-hardening.test.mjs`; the three cron locks
+and the Blu route-gate lock updated. Founder: confirm `CRON_SECRET` in Vercel,
+then set `PIN_PEPPER`.
+
 ## 2026-10-16 (88) — The golden thread: no personal data to any AI model, no money out without the customer's proof, bank and ID details sealed in flight, a timed-out withdrawal never handed to the AI
 
 Lisa's 2026-10-15 withdrawal (BUGLOG #111): the flow timed out at the ID

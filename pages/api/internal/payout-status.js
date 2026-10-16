@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     switches: { payoutEnabled: payoutEnabled(), payoutConfigured: payoutConfigured(), kycRequired: kycRequired(), diditConfigured: diditConfigured(), alertEmail: !!process.env.ALERT_EMAIL && !!process.env.RESEND_API_KEY,
       // The safeguards' switches, as booleans and numbers only, never a value (BUGLOG #111 to #113).
       piiKey: vaultConfigured(), pinProofSecret: !!(process.env.WAPAY_PIN_PROOF_SECRET || process.env.PIN_PEPPER || process.env.WAPAY_INTERNAL_API_KEY),
-      pinPepperSet: !!process.env.PIN_PEPPER, pinResetCoolOffHours: COOLOFF_HOURS(), payoutResumeHours: RESUME_HOURS(),
+      pinPepperSet: !!process.env.PIN_PEPPER, cronSecretSet: !!(process.env.CRON_SECRET && process.env.CRON_SECRET.length >= 16), pinResetCoolOffHours: COOLOFF_HOURS(), payoutResumeHours: RESUME_HOURS(),
       stateIdleMinutes: Number(process.env.WAPAY_STATE_IDLE_MINUTES ?? 30) },
     env: { baseUrl: process.env.OTT_PAYOUT_BASE_URL || null, username: mask(process.env.OTT_PAYOUT_USERNAME), password: !!process.env.OTT_PAYOUT_PASSWORD, apiKey: mask(process.env.OTT_PAYOUT_API_KEY) },
   };

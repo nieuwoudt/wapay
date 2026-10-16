@@ -1,11 +1,9 @@
 import Fastify from 'fastify';
 import idempotencyPlugin from './plugins/idempotency';
-import { registerDepositRoutes } from './routes/deposit';
 import { registerYoyoRoutes } from './routes/yoyo';
 
 const app = Fastify({ logger: true });
 await app.register(idempotencyPlugin);
-await registerDepositRoutes(app);
 await registerYoyoRoutes(app);
 
 app.get('/health', async () => ({ ok: true }));

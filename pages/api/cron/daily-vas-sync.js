@@ -10,7 +10,7 @@
  *   the Hobby plan allows one cron, so this is the sweep's daily floor)
  *
  * Auth:
- * - Vercel Cron header: x-vercel-cron=1 (preferred)
+ * - Authorization: Bearer CRON_SECRET (what Vercel sends when the env is set; lib/cron-auth.js)
  * - or query token: ?key=${CRON_SECRET}
  */
 
@@ -20,12 +20,9 @@ import { sweepPayoutsAndNotify } from '../../../lib/payouts.js';
 import { purgeOldTurns } from '../../../lib/turns.js';
 import { checkWalletIntegrity } from '../../../lib/ledger-integrity.js';
 import prisma from '../../../lib/prisma.js';
+// Golden thread O4 (2026-10-16): Bearer CRON_SECRET only; no header trust, no query token.
+import { isCronAuthed } from '../../../lib/cron-auth.js';
 
-function isCronAuthed(req) {
-  if (req.headers['x-vercel-cron'] === '1') return true;
-  const key = req.query?.key;
-  return process.env.CRON_SECRET && key === process.env.CRON_SECRET;
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {

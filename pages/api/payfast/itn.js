@@ -117,6 +117,26 @@ export default async function handler(req, res) {
     ? intent.metadata.grossCents
     : amountCents + feeCents;
 
+  // Golden thread O3 (2026-10-16): two checks that used to be optional are
+  // mandatory in production. (1) The notification must name OUR merchant:
+  // a valid signature from another PayFast merchant's passphrase-less
+  // account must never credit a WaPay wallet. (2) The passphrase must be
+  // configured: without it a sandbox-shaped ITN would verify against a live
+  // account. Source IP stays warn-only here: PayFast's live network sends
+  // from ranges beyond the published CIDRs (a real R20 was refused on
+  // 2026-08-21), so enforcing it would reject real money; the signature and
+  // the server POST-back are the strong checks.
+  const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  const ourMerchantId = String(process.env.PAYFAST_MERCHANT_ID || '').trim();
+  const preReject = async (reason) => {
+    console.error(JSON.stringify({ type: 'payfast_itn_rejected', reason, paymentId, sourceIp, merchant_id: params.merchant_id ? String(params.merchant_id).slice(-4) : null }));
+    await recordItnDebug({ paymentId, rawItn: params, reason, sourceIp }).catch(() => {});
+    return res.status(400).send('verification failed');
+  };
+  if (isProd && !ourMerchantId) return preReject('MERCHANT_ID_NOT_CONFIGURED');
+  if (ourMerchantId && String(params.merchant_id || '').trim() !== ourMerchantId) return preReject('MERCHANT_MISMATCH');
+  if (isProd && !process.env.PAYFAST_PASSPHRASE) return preReject('PASSPHRASE_NOT_CONFIGURED');
+
   // Verification BEFORE any money movement: signature (over raw fields,
   // empty values included), source IP, expected amount, payment status,
   // and PayFast server confirmation all live inside verifyItn.

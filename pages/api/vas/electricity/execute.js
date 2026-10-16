@@ -12,7 +12,7 @@
  */
 
 import prisma from '../../../../lib/prisma.js';
-import { BluVasExtendedClient } from '@wapay/providers-blu';
+import { BluVasExtendedClient, assertBluStubAllowed } from '@wapay/providers-blu';
 import { verifyPIN } from '@wapay/auth';
 import { isCategoryEnabledForWaId } from '../../../../lib/vas-config.js';
 import { buildElectricitySalePayload } from '../../../../lib/electricity-utils.js';
@@ -235,7 +235,8 @@ export default async function handler(req, res) {
       const bluStartTime = Date.now();
 
       // Check if stub mode is enabled
-      if (process.env.BLU_VAS_STUB_MODE === 'true') {
+      // Golden thread O5: the stub never runs in production; assertBluStubAllowed throws before any vend.
+      if (assertBluStubAllowed()) {
         console.log('⚠️ BLU_VAS_STUB_MODE enabled - simulating electricity purchase');
         bluResult = {
           providerRef: `STUB-ELEC-${Date.now()}`,

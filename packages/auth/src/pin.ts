@@ -20,8 +20,28 @@ const SOFT_LOCKOUT_MINUTES = 15;
 const HARD_LOCKOUT_DAYS = 365; // 1 year = permanent lock requiring OTP reset
 const PIN_TOKEN_EXPIRY_MINUTES = 5;
 
-// Pepper (should be in env var in production)
-const PIN_PEPPER = process.env.PIN_PEPPER || 'wapay_pin_pepper_2025_change_in_production';
+// The pepper lives in PIN_PEPPER. The value in source is the DEFAULT the
+// system ran on before the env was set (golden thread O8, 2026-10-16); it is
+// kept only so existing hashes still verify after the env is set, and every
+// such verification rehashes the PIN under the current pepper (migration by
+// rehash). PIN_PEPPER_PREVIOUS (comma-separated) carries any later rotation.
+const DEFAULT_PIN_PEPPER = 'wapay_pin_pepper_2025_change_in_production';
+const PIN_PEPPER = process.env.PIN_PEPPER || DEFAULT_PIN_PEPPER;
+let warnedDefaultPepper = false;
+/** Current pepper first, then the previous ones a hash may still carry. Exported for tests. */
+export function pepperCandidates(env: NodeJS.ProcessEnv = process.env): string[] {
+  const current = env.PIN_PEPPER || DEFAULT_PIN_PEPPER;
+  const previous = String(env.PIN_PEPPER_PREVIOUS || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const out = [current, ...previous];
+  if (current !== DEFAULT_PIN_PEPPER) out.push(DEFAULT_PIN_PEPPER);
+  return [...new Set(out)];
+}
+function warnIfDefaultPepper(): void {
+  if (warnedDefaultPepper || process.env.PIN_PEPPER) return;
+  warnedDefaultPepper = true;
+  const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  if (isProd) console.error(JSON.stringify({ type: 'pin_pepper_default_in_production', fix: 'set PIN_PEPPER in Vercel; existing PINs rehash on their next correct entry', timestamp: new Date().toISOString() }));
+}
 
 // JWT secret for PIN tokens. No default in source (BUGLOG #112): a secret in
 // a public repository signs nothing; without the env the token is not issued
@@ -79,15 +99,17 @@ async function hashPIN(pin: string): Promise<string> {
  * Verify PIN against hash
  * Note: Silently returns false on error to avoid oracle timing attacks
  */
-async function verifyPINHash(hash: string, pin: string): Promise<boolean> {
-  const pepperedPIN = pin + PIN_PEPPER;
-  
-  try {
-    return await argon2.verify(hash, pepperedPIN);
-  } catch {
-    // Treat errors as failure to avoid oracle signals
-    return false;
+async function verifyPINHash(hash: string, pin: string): Promise<{ ok: boolean; pepper: string | null }> {
+  // Current pepper first; a match on a previous pepper is reported so the
+  // caller can rehash. Errors read as failure (no oracle signal).
+  for (const pepper of pepperCandidates()) {
+    try {
+      if (await argon2.verify(hash, pin + pepper)) return { ok: true, pepper };
+    } catch {
+      // fall through to the next candidate
+    }
   }
+  return { ok: false, pepper: null };
 }
 
 /**
@@ -233,7 +255,9 @@ export async function verifyPIN(args: {
     }
     
     // Verify PIN
-    const isValid = await verifyPINHash(authFactor.secretHash, pin);
+    warnIfDefaultPepper();
+    const verified = await verifyPINHash(authFactor.secretHash, pin);
+    const isValid = verified.ok;
     
     if (!isValid) {
       // Increment attempts
@@ -280,15 +304,19 @@ export async function verifyPIN(args: {
       };
     }
     
-    // Reset attempts on successful verification
+    // Reset attempts on successful verification; a hash made under a previous
+    // pepper is rewritten under the current one in the same update (O8).
+    const rehash = verified.pepper && verified.pepper !== PIN_PEPPER ? await hashPIN(pin) : null;
     await prisma.authFactor.update({
       where: { id: authFactor.id },
       data: {
         attempts: 0,
         lockedUntil: null,
         updatedAt: new Date(),
+        ...(rehash ? { secretHash: rehash } : {}),
       },
     });
+    if (rehash) console.log(JSON.stringify({ type: 'pin_rehashed_under_current_pepper', accountId, timestamp: new Date().toISOString() }));
     
     // Generate PIN token (JWT, 5min expiry) with proper claims, only under a configured secret
     const now = Math.floor(Date.now() / 1000);
