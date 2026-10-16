@@ -19,11 +19,12 @@ What we would like to discuss:
 4. 3-D Secure options for customers who live in WhatsApp rather than in an app.
 5. Card art carrying the WaPay logo.
 6. Commercials (set-up, monthly minimums, per card and per transaction fees, interchange) and a realistic timeline to a pilot.
+7. Sandbox or UAT access as early as possible, so we can issue test virtual cards and run authorisations against our ledger while the commercial discussion runs.
 
 -----------------------------------------------------------------------------
 Short version, if the box has a character limit:
 
-WaPay is a live WhatsApp wallet in South Africa (load, buy airtime, data and electricity, pay links, withdrawals) on our own double-entry ledger. We want to issue customers a WaPay-branded virtual Mastercard in ZAR that spends their WaPay balance, ideally under Paymentology's alliance with Bank Zero, using ActiveFAST so our ledger approves each authorisation. Please contact us to discuss the programme structure, card data display, 3-D Secure, card art, commercials and timeline.
+WaPay is a live WhatsApp wallet in South Africa (load, buy airtime, data and electricity, pay links, withdrawals) on our own double-entry ledger. We want to issue customers a WaPay-branded virtual Mastercard in ZAR that spends their WaPay balance, ideally under Paymentology's alliance with Bank Zero, using ActiveFAST so our ledger approves each authorisation. Please contact us to discuss the programme structure, card data display, 3-D Secure, card art, commercials and timeline, and to give us sandbox access to issue test cards.
 
 =============================================================================
 (B) FOLLOW-UP EMAIL (after a Paymentology contact replies)
@@ -78,7 +79,7 @@ Commercials
 20. Is there a collateral, reserve or minimum prefunding requirement?
 
 Onboarding and timeline
-21. What are the onboarding stages from signature to a live pilot, and the typical timeline? What do you need from us at each stage, and when do we get UAT access and the card test simulator?
+21. What are the onboarding stages from signature to a live pilot, and the typical timeline? What do you need from us at each stage? Can we have sandbox or UAT access (an API key, PayControl login and the Card Test Simulator) before the agreement is signed, so our engineering runs in parallel?
 22. Could you send the card programme specification template, so we can prepare our answers before the call?
 
 WHAT WE CAN SEND YOU
