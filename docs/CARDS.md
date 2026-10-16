@@ -1,4 +1,190 @@
-# WaPay virtual Mastercard via Paymentology (Bank Zero sponsor): feasibility, architecture, onboarding
+# WaPay cards: PayCentral now, Paymentology direct at scale: feasibility, architecture, onboarding
+
+> **Current route (2026-10-16): PayCentral.** On the call of 2026-10-16 Paymentology said
+> working with them directly needs a minimum of **30,000 cards**. They referred WaPay to
+> **PayCentral**, a South African programme manager that runs on Paymentology's processing and
+> serves smaller volumes. Section 0 is the plan for PayCentral. Sections 1 to 11 below are the
+> Paymentology-direct analysis of 2026-10-15. That route needs 30,000 cards; keep it for when
+> we get there. Its ledger, KYC, card-page and policy analysis still applies wherever section 0
+> says so.
+
+## 0. The PayCentral route (2026-10-16)
+
+PayCentral's website, knowledgebase and API host (`paycentral.co.za`, `help.paycentral.co.za`,
+`api.paycentral.co.za`) are refused by this session's network policy, like Paymentology's. So
+this section rests on search extracts of their pages, their published fee pages and their
+terms, and labels inference as inference.
+
+### 0.1 Who PayCentral is
+
+- **What they are.** A South African fintech (Rivonia, founded about 2016 per a data
+  aggregator, unverified) that issues prepaid
+  Mastercard cards to businesses for employee pay, expenses and incentives. They call themselves
+  "the largest independent issuer of physical and virtual prepaid cards in South Africa", with
+  more than 463,000 cards issued and over 1,000 business clients
+  ([Paymentology client story](https://www.paymentology.com/client-story-paycentral),
+  [paycentral.co.za](https://paycentral.co.za/)).
+- **Issuer and processor.** Their platform terms name **Standard Bank** as the banking partner
+  ("for the time being the Standard Bank of South Africa Limited"). Paymentology (formerly
+  Tutuka) processes the pre-funded cards
+  ([terms PDF](https://paycentral.co.za/wp-content/uploads/2026/06/PayCentral-Terms-and-Conditions-EC130126.pdf)).
+  So the issuer is **Standard Bank, not Bank Zero**; section 2's party table changes
+  accordingly.
+- **Products.** **DigiCentral** is a virtual card (launched with Mastercard in December 2020).
+  **CashCentral** and **CashCentral+** are physical cards with ATM access
+  ([Mastercard release](https://www.mastercard.com/news/eemea/en/newsroom/press-releases/en/2020/december/paycentral-and-mastercard-enable-small-businesses-to-go-digital-and-pay-employees-with-virtual-cards-tapping-into-the-booming-digital-economy/)).
+- **Volumes.** The minimum order is one card. Branded (white-label) cards carry a minimum order
+  of unstated size ([FAQ](https://paycentral.co.za/faqs/)).
+- **API.** The knowledgebase advertises "reference docs, sandboxes and SDKs for every PayCentral
+  API surface". The one visible call is `GET https://api.paycentral.co.za/v1/wallet` with a
+  bearer token ([help.paycentral.co.za](https://help.paycentral.co.za/)). Their FAQ also offers
+  custom development by their in-house team (the page the founder shared:
+  `paycentral.co.za/payment-solutions/custom-development/`).
+
+### 0.2 What this changes in the plan
+
+| Topic | Paymentology direct (sections 1 to 11) | PayCentral |
+|---|---|---|
+| Minimum | 30,000 cards | 1 card; a branded minimum to be quoted |
+| Issuer / sponsor | Bank Zero (alliance) | Standard Bank |
+| API we integrate | Paymentology Banking.Live (FAST, PaySecure, PayControl) | **PayCentral's own API** (`api.paycentral.co.za/v1`). It is not Paymentology's API, even though Paymentology processes underneath |
+| Where the card balance lives | Our ledger (ActiveFAST): one balance | **At PayCentral / Standard Bank** (pre-funded): the business funds its PayCentral account by EFT and loads cards from it. Two balances: the WaPay wallet and the card |
+| Authorisations | We answer every one in about 2 seconds, with STIP behind us | PayCentral and Paymentology decide against the card balance. We only read transactions |
+| Physical cards | Possible later | Available now (CashCentral): R50 card, ATM up to R5,000 a day on the published list |
+| Card details (PAN/CVV) | Our web page with PaySecure, decrypted in the browser | PayCentral sends the details to the cardholder by email or SMS ([virtual payment solutions](https://www.paycentral.co.za/virtual-payment-solutions/)). Our systems never see a card number. Confirm whether an API or a hosted display is offered |
+| Data residency | Stockholm hosting is an open issue | Card data stays with PayCentral in SA. We hold only references and the last four digits |
+| Build size | Large: auth endpoint, hold lifecycle, STIP, FAST, SFTP | **Small**: load and unload calls on the existing two-phase pattern, card issue and status calls, a transaction feed, float and reconciliation |
+
+**Is the API "the same as Paymentology's"? No.** The concepts match (cardholder, card, load,
+status, transactions), so the provider-neutral `CardProvider` design in section 7 holds and
+PayCentral becomes provider number one. The calls, authentication and messages are
+PayCentral's own. Nothing in sections 3 and 5.3 (FAST messages, STIP, TID/RID) applies unless
+PayCentral offers remote authorisation, which nothing we found suggests (email question 3).
+
+### 0.3 Architecture on WaPay's code (pre-funded model)
+
+The card is a **destination** for money, like a withdrawal, not a rail that spends our balance.
+
+```
+Customer: "add R500 to my card"
+  └─ preview (fee quoted) → YES → PIN
+       └─ reserveHold(SPEND, amount + fee, idemKey card-load-<intent>)      lib/ledger-post.js
+            └─ PayCentral load card API (our reference = idemKey-derived)    packages/providers/paycentral
+                 ├─ success → settleHold(buildCardLoad)                       lib/ledger-core.js
+                 ├─ failure → releaseHold
+                 └─ timeout → ask PayCentral for the load's status, then settle or release
+                              (the OTT TIMEOUT_CHECK_REQUIRED pattern; never release on unknown)
+```
+
+**Ledger (new builders, same shape as `buildCashout`):**
+
+| Movement | Postings | Notes |
+|---|---|---|
+| Load card | `Dr WALLET:<acc>:SPEND` (amount + fee) / `Cr CLEARING:PAYCENTRAL` (amount) / `Cr REVENUE:FEE:CARD_LOAD` (fee) | The customer's money leaves WaPay's books and becomes a Standard Bank prepaid card balance |
+| PayCentral's own load fee to us | `Dr EXPENSE:PROVIDER:PAYCENTRAL` / `Cr CLEARING:PAYCENTRAL` | Grossed up for the VAT we cannot recover, as `cashoutRailCostCents` does |
+| Unload card to wallet (if offered) | `Dr CLEARING:PAYCENTRAL` / `Cr WALLET` | The published "load reversal" costs R125, so treat unload as an exception path, not a feature |
+| Fund the PayCentral float | Ops EFT; `CLEARING:PAYCENTRAL` is our position | Same as the OTT payout float: Mission Control floats card, low-float alarm |
+
+**What this removes from section 5.4:**
+- the one-shot hold problem;
+- forced posts that overdraw a wallet;
+- TID/RID idemKeys;
+- the 2-second authorisation endpoint and its cold-start risk;
+- STIP;
+- the PaySecure card page;
+- SFTP;
+- most of the 3DS question, since PayCentral or its ACS handles the challenge (to confirm).
+
+All of them belonged to us holding the balance.
+
+**What stays:**
+- the idemKey discipline (BUGLOG #17), with keys derived from the intent;
+- timeout recovery before any release (BUGLOG #15);
+- quote-binding fees (invariant 10);
+- PIN-gated deterministic flows, and the AI never stating a card balance (invariants 6 and 7);
+- the betting-MCC block, which must now be configured at PayCentral;
+- a verified cardholder identity record (section 5.4 item 4), now holding the FICA fields
+  PayCentral asks for.
+
+**New pieces:**
+1. **Provider client.** `packages/providers/paycentral`: auth, create cardholder, issue a
+   virtual card, order a physical card, load, unload, status (freeze, unfreeze, cancel),
+   balance, transactions.
+2. **Records.** A `Card` table (provider, provider card id, last four, expiry, type
+   VIRTUAL/PHYSICAL, status) plus the `ProviderRequest` row per load, as payouts do.
+3. **Transaction feed.** Webhooks if PayCentral has them, else a polling job, feeding card
+   history and purchase alerts. These are informational only: they move no WaPay money.
+4. **Card balance from the source.** "My card" shows PayCentral's own balance, fetched
+   deterministically. It is never computed by us and never stated by the AI.
+5. **Reconciliation.** Loads in our journal against PayCentral's statement; the float against
+   `CLEARING:PAYCENTRAL`.
+6. **Physical cards.** Delivery address capture, courier status, activation and PIN
+   (PayCentral's process, to confirm), and ATM copy under the cash-out policy.
+
+### 0.4 Regulatory: simpler, with one new question
+
+- **Where the money sits.** The open-loop spending happens on a Standard Bank prepaid card
+  that PayCentral manages, so section 4.1 largely answers itself. The money on the card sits
+  with the bank, and the WaPay wallet keeps its current shape.
+- **The new question.** Loading a card from the wallet is a **money-out movement**, the same
+  class as a withdrawal (`lib/payouts.js`), so it sits under the same counsel brief as payouts.
+  A physical card with ATM access is cash-out by definition.
+- **Consumer cardholders.** PayCentral's product is built for businesses paying their own
+  people. WaPay would be the business client issuing cards to the public. PayCentral and
+  Standard Bank must confirm that this is allowed and on what terms (email question 1).
+- **FICA.** Their homepage says R25,000-limit products need name, surname, cellphone and an SA
+  ID or valid work permit. That is lighter than a liveness check, and Didit can verify it.
+  Card issuance still requires it, whatever `WAPAY_PAYOUT_KYC` says.
+
+### 0.5 Commercials: the published list prices are too expensive for us; negotiate
+
+Published client and cardholder fees (fee pages, checked through search 2026-10-16; the pages
+disagree with each other in places, so treat them as indicative):
+
+| Product | Card | Monthly | Load | Other | Limits |
+|---|---|---|---|---|---|
+| DigiCentral (virtual) ([fees](https://paycentral.co.za/client-fees/digicentral/)) | none | none | **4.00% to 5.00% of the load, excl VAT** (tiered by size) | Load reversal R125; dormancy R15 after six months without a reload | Loads R25,000 a month; online R25,000 daily and monthly |
+| CashCentral (physical) ([fees](https://paycentral.co.za/client-fees/cashcentral/)) | R50 once | R9 | R17 per load | Wallet-to-card transfer R16 | Loads and POS R25,000 a month; ATM R5,000 a day, 3 a day, 12 a month |
+| CashCentral+ (physical) ([fees](https://www.paycentral.co.za/cardholder-fees/cashcentral-plus/)) | | R9 | R45 | | Loads R50,000 a month (page about a year old) |
+
+**Why that kills the margin.** At 4% to 5% plus VAT, a R200 load costs R9.20 to R11.50.
+- WaPay's whole fee model is flat and small: PayShap R8, deposits banded.
+- A customer adding R200 to a card would pay more than a PayShap withdrawal of the same money.
+- **Ask for:** a flat per-load price, or a percentage of 1% or less with a cap; no dormancy
+  fee; the branded-card minimum. The custom-development page suggests they will price a
+  bespoke programme.
+- **Not fixed by them:** any customer card fee stays a founder decision under the flat-fee,
+  quote-first rule.
+
+### 0.6 Branding
+
+PayCentral's FAQ says they help with "Mastercard licensing and card issuing" and offer branding
+across physical cards, printed collateral and their platforms, with a minimum order for
+branded cards. A WaPay-branded physical card is therefore on offer, subject to that minimum.
+To confirm for the virtual card:
+- whether DigiCentral card art can carry the WaPay logo;
+- whether the card-details email or SMS can carry WaPay's name rather than PayCentral's.
+
+### 0.7 Dummy cards and the next step
+
+- **Sandbox.** PayCentral advertises sandboxes, and the minimum order is one card. So test
+  cards are realistic as soon as PayCentral gives us sandbox credentials. This is faster than
+  the Paymentology route, where test access only came with onboarding.
+- **What the sandbox lets us build:**
+  - the provider client and the `Card` table;
+  - "get a card", "add money to my card", "my card", freeze and unfreeze in WhatsApp;
+  - the float card in Mission Control.
+
+  That is all against their sandbox, with tests in the existing style, behind
+  `WAPAY_CARDS_ENABLED` and an allowlist.
+- **To send.** `EMAIL_TO_PAYCENTRAL_1_ONBOARDING.txt` is the first email, with the questions
+  that decide the build.
+- **What we need to read their API.** Allow `paycentral.co.za`, `help.paycentral.co.za` and
+  `api.paycentral.co.za` in this environment's network settings, or paste the API reference.
+
+---
+
+## Paymentology direct (2026-10-15; the route at 30,000 cards)
 
 *Discovery written 2026-10-15. Nothing is built. This is the single answer to "can WaPay issue
 cards, how would it fit our code, and what do we ask Paymentology". The onboarding text and the

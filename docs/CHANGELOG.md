@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-10-16 (89) — Cards: the route is PayCentral (Paymentology direct needs 30,000 cards); plan rewritten for a pre-funded card (docs only)
+
+On the founder's call Paymentology set a 30,000-card minimum for direct work and referred
+WaPay to PayCentral. PayCentral is a South African programme manager on Paymentology's
+processing, with Standard Bank as issuer, virtual (DigiCentral) and physical (CashCentral)
+Mastercard cards, a one-card minimum and its own API. `docs/CARDS.md` section 0:
+- what PayCentral is, and what changes against the Paymentology plan;
+- the model: cards are pre-funded, so the card is a destination we load from the wallet with
+  the payout-style two-phase flow, not a rail that spends our balance. The authorisation
+  endpoint, STIP, the hold lifecycle work, the PaySecure page and SFTP all drop out;
+- new ledger builders, and a loaded card treated as money out under the payouts counsel brief;
+- the published fees: 4% to 5% per virtual load, which our flat-fee model cannot carry, so
+  negotiate;
+- branding, the sandbox, and the next steps.
+
+`EMAIL_TO_PAYCENTRAL_1_ONBOARDING.txt` is the first email, with 17 questions. The Paymentology
+email is marked superseded. CAPABILITIES lists PayCentral as the current card route and
+Paymentology direct as parked. Their sites are blocked from this environment, so the research
+is search-sourced and labelled.
+
+---
+
 ## 2026-10-15 (88) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
 
 The founder asked whether WaPay can issue customers virtual cards through Paymentology,

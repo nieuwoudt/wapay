@@ -1,4 +1,8 @@
 PAYMENTOLOGY ONBOARDING: WHAT TO SEND
+SUPERSEDED 2026-10-16: Paymentology's minimum for direct work is 30,000 cards, and they
+referred WaPay to PayCentral. Use EMAIL_TO_PAYCENTRAL_1_ONBOARDING.txt now. Keep this file for
+when WaPay reaches that volume.
+
 Written 2026-10-15. Two parts: (A) the "Tell us more about your company and how we can
 help you" box on paymentology.com "Let's talk", (B) the follow-up email once a Paymentology
 contact replies. Background and reasoning: docs/CARDS.md. No em dashes (founder style).
