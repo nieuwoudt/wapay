@@ -20,6 +20,7 @@ import { matchPinResetAsk, wrongPinText, lockedPinText, startPinReset, handlePin
 import { echoLoop, instructedPhrases, loopBreakText } from '../lib/loop-guard.js';
 import { capabilityById } from '../lib/capabilities.js';
 import { startWithdraw, handleWithdrawReply, executeWithdraw } from '../lib/payout-chat.js';
+import { proofFor } from './helpers/pin-proof.mjs';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const processor = read('../pages/api/webhooks/message-processor-v2.js');
@@ -171,7 +172,7 @@ test('the cool-off in the withdraw flow: only destinations saved before the rese
   assert.equal(s0.state, 'PAYOUT_ACCOUNT');
   const typed = await handleWithdrawReply({ account: reset(false), state: s0.state, data: s0.data, text: '62099988877' });
   assert.equal(typed.state, 'PAYOUT_ACCOUNT'); assert.match(typed.text, /can only go to an account or number saved before the reset/);
-  const unsaved = await executeWithdraw({ account: reset(false), data: { ...WITHDRAW_DATA }, deps: { requestPayout: async () => { throw new Error('must not be called'); } } });
+  const unsaved = await executeWithdraw({ account: reset(false), data: { ...WITHDRAW_DATA }, pinProof: proofFor(reset(false), { ...WITHDRAW_DATA }), deps: { requestPayout: async () => { throw new Error('must not be called'); } } });
   assert.equal(unsaved.done, false); assert.match(unsaved.text, /Nothing was sent and nothing has left your balance/);
   const fine = await startWithdraw({ account: reset(true), ask: { method: 'PAYSHAP', amountCents: 5000 }, deps: base });
   assert.equal(fine.state, 'PAYOUT_ACCOUNT', 'an ID-checked reset has no cool-off');

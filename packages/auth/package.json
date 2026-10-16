@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./pin-proof": {
+      "types": "./dist/pin-proof.d.ts",
+      "default": "./dist/pin-proof.js"
     }
   },
   "scripts": {

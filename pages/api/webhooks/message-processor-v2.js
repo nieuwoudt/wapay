@@ -66,7 +66,9 @@ import {
   MAX_DEPOSIT_CENTS,
   shortfallCents,
 } from '../../../lib/deposits.js';
-import { orchestrate, runAgentTurn, buildAgentSystemPrompt } from '@wapay/ai';
+import { orchestrate, runAgentTurn, buildAgentSystemPrompt, runWithPrivacy, addPrivacyNames } from '@wapay/ai';
+import { privacyNamesFor } from '../../../lib/privacy-names.js';
+import { bareSecretKind, bareSecretReply, nothingPendingLine, privacyBlockedLine, expiredStepText } from '../../../lib/money-truth.js';
 import { buildToolDefinitions, executeTool } from '../../../lib/agent/tools/index.js';
 import { agentGuard, outputGate } from '../../../lib/agent/guards.js';
 import { recordAgentTurn, agentTurnsInLastHour } from '../../../lib/agent/turn-ledger.js';
@@ -1113,9 +1115,14 @@ async function userLang(account) {
 }
 
 /**
- * Process incoming WhatsApp message
+ * Process incoming WhatsApp message. Every model call this message causes
+ * runs inside its privacy scope: the names learned along the way never reach
+ * a model (@wapay/ai boundary.ts, BUGLOG #111).
  */
 export async function processMessage({ from, text, messageId, profile, sharedContact, referral = null }) {
+  return runWithPrivacy([profile?.name], () => processMessageInner({ from, text, messageId, profile, sharedContact, referral }));
+}
+async function processMessageInner({ from, text, messageId, profile, sharedContact, referral = null }) {
   // Log incoming message
   logStructured('whatsapp_inbound', {
     from,
@@ -1129,6 +1136,7 @@ export async function processMessage({ from, text, messageId, profile, sharedCon
 
   // Get or create user
   const { account, isNewUser } = await getOrCreateUser(from, profile, { referral });
+  addPrivacyNames(privacyNamesFor({ account }));
 
   // De-duplicate inbound message IDs to prevent repeated replies if Meta retries delivery
   if (messageId && (await wasMessageProcessed(from, messageId))) {
@@ -1578,6 +1586,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
 
   // Check if user is in a conversation state (e.g., entering voucher PIN)
   let { state, data } = await getConversationState(from);
+  addPrivacyNames(privacyNamesFor({ data }));
 
   // The customer's side of the turn, recorded once per inbound message
   // (escapes re-enter this function without a messageId and must not record
@@ -1593,6 +1602,8 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       // A bank account number or an ID number typed bare in the withdraw
       // flow keeps no digits in memory either.
       secretInput: /^PAYOUT_(ACCOUNT|ID)$/.test(String(state || '')),
+      // The account holder's name typed at the name step is kept as "[name]" (BUGLOG #111).
+      nameInput: state === 'PAYOUT_NAME',
     });
   }
 
@@ -1602,7 +1613,28 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     // "Just the amount". A state without a stamp (set before this shipped) expires too.
     const setAt = Date.parse(data?.stateSetAt || '') || 0;
     const idleMs = Number(process.env.WAPAY_STATE_IDLE_MINUTES ?? 30) * 60 * 1000;
-    if (!setAt || Date.now() - setAt > idleMs) {
+    // The next message after the expiry is never handed to the AI as new when
+    // it answers the step that expired (BUGLOG #111, Lisa 2026-10-15: her ID
+    // and then her PIN went to the AI, which asked for the PIN and said the
+    // pay-out was being confirmed): a withdrawal carries on, is confirmed
+    // again, or is said to have stopped; any other flow's late PIN or ID is
+    // told the step timed out.
+    const expired = !setAt || Date.now() - setAt > idleMs;
+    const late = expired && setAt && /^PAYOUT_/.test(String(state)) && !isHomeTrigger(text)
+      ? await (await import('../../../lib/payout-chat.js')).resumeLateWithdraw({ account, state, data, text, setAt: data?.stateSetAt }).catch(() => null)
+      : null;
+    if (late?.resume) {
+      logStructured('state_resumed_late', { from, state, idleMinutes: Math.round((Date.now() - setAt) / 60000) });
+      await updateConversationState(from, state, late.data);
+      data = { ...late.data, stateSetAt: new Date().toISOString() };
+    } else if (late) {
+      logStructured('state_expired_late_answer', { from, state, next: late.state || null, idleMinutes: Math.round((Date.now() - setAt) / 60000) });
+      return await deliverPayoutStep({ from, account, step: late });
+    } else if (expired && bareSecretKind(text)) {
+      logStructured('state_expired_secret', { from, state, kind: bareSecretKind(text) });
+      await updateConversationState(from, null);
+      return await sendWhatsAppText({ to: from, text: await localizeOutbound(expiredStepText(), await userLang(account)), kind: 'guard' });
+    } else if (expired) {
       logStructured('state_expired', { from, state, idleMinutes: setAt ? Math.round((Date.now() - setAt) / 60000) : null });
       await updateConversationState(from, null);
       state = null; data = null;
@@ -4188,7 +4220,8 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         return await sendWhatsAppText({ to: from, text: await localizeOutbound(`Please enter your 4-digit WaPay PIN, or reply "cancel" to stop.`, await userLang(account)) });
       }
-      const pinResult = await verifyPIN({ accountId: account.id, pin: text.trim() });
+      // A correct PIN returns a proof bound to this intent and amount; executeWithdraw refuses without it (BUGLOG #112).
+      const pinResult = await verifyPIN({ accountId: account.id, pin: text.trim(), approves: { intentId: data?.intentId, amountCents: data?.amountCents } });
       if (!pinResult.ok) {
         // The withdrawal waits in both cases; "forgot PIN" resumes it after a reset (2026-10-14).
         const { wrongPinText, lockedPinText } = await import('../../../lib/pin-reset.js');
@@ -4202,7 +4235,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       // requestPayout is idempotent on the intent id regardless.
       await updateConversationState(from, null);
       const { executeWithdraw } = await import('../../../lib/payout-chat.js');
-      const step = await executeWithdraw({ account, data });
+      const step = await executeWithdraw({ account, data, pinProof: pinResult.proof || null });
       logStructured('withdraw_executed', { accountId: account.id, done: !!step.done });
       return await deliverPayoutStep({ from, account, step: { ...step, raw: true } });
     }
@@ -6564,6 +6597,16 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
     return handled;
   }
 
+  // A bare PIN, ID or passport number never reaches the model (BUGLOG #111).
+  // While a clarify is pending a 4-digit answer may be its amount, so only the ID kinds then.
+  const secretKind = bareSecretKind(text);
+  if (secretKind && !(pendingIntent && secretKind === 'PIN')) {
+    logStructured('secret_not_sent_to_model', { from, accountId: account.id, kind: secretKind, path: 'agent' });
+    const sent = await deliver({ to: from, text: await localizeOutbound(bareSecretReply(secretKind), await userLang(account)), kind: 'guard' });
+    await ledger({ path: 'guard', outcome: 'BARE_SECRET' });
+    return sent;
+  }
+
   // Per-customer budget of model turns: a bored customer cannot burn model
   // calls, and a capped customer is not capped again by asking (guard and
   // budget rows do not count).
@@ -6628,12 +6671,16 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   const ctx = { prisma, account, waId: from, pack, now: new Date() };
   // 6 s per model call, two rounds at most: the whole turn stays well
   // inside Meta's retry window even with a tool round.
-  const result = await runAgentTurn({ system, messages, tools, executeTool: (name, args) => executeTool({ name, args, ctx }), timeoutMs: 6000 });
+  const names = privacyNamesFor({ account, pack });
+  addPrivacyNames(names);
+  const result = await runAgentTurn({ system, messages, tools, executeTool: (name, args) => executeTool({ name, args, ctx }), timeoutMs: 6000, names });
   const base = { path: 'agent', model: result.model, toolCalls: result.toolCalls, inputTokens: result.usage?.inputTokens, outputTokens: result.usage?.outputTokens };
   logStructured('agent_turn', { from, accountId: account.id, outcome: result.outcome, tools: (result.toolCalls || []).map((c) => c.name), ms: result.timings?.totalMs, error: result.error || null });
 
   if (result.outcome === 'error') {
-    const sent = await deliver({ to: from, text: await fallback(), kind: 'fallback' });
+    // The model boundary's refusal is said as what it is; the ledger row keeps the reason (BUGLOG #111).
+    const text = result.error === 'AI_PRIVACY_BLOCK' ? await localizeOutbound(privacyBlockedLine(), await userLang(account)) : await fallback();
+    const sent = await deliver({ to: from, text, kind: 'fallback' });
     await ledger({ ...base, outcome: 'error', error: result.error, gatesFired });
     return sent;
   }
@@ -6653,7 +6700,7 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   // A reply or a clarifying question: the output gates, then one message.
   let out = sanitizeUserText(result.text || '') || '';
   let blocked = false;
-  const gate = outputGate(out, { withdrawLive });
+  const gate = outputGate(out, { withdrawLive, payoutPending: !!pack?.pendingPayout });
   if (gate.rule) gatesFired.push(gate.rule);
   if (!gate.ok) {
     logStructured('agent_reply_blocked', { from, accountId: account.id, rule: gate.rule });
@@ -6672,7 +6719,7 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
     blocked = true;
   }
   if (!blocked && !out.trim()) blocked = true;
-  if (blocked) out = await fallback();
+  if (blocked) out = (gate.rule === 'PIN_ASK' || gate.rule === 'MONEY_CLAIM') ? await localizeOutbound(nothingPendingLine(pack?.balances?.spendCents || 0), await userLang(account)) : await fallback();
   // The same loop breaker as the two-tier path (2026-10-14).
   if (!blocked) { const broken = await breakEchoLoop({ from, account, reply: out, inbound: text, source: 'agent' }); if (broken) { out = broken; gatesFired.push('ECHO_LOOP'); } }
   const sent = await deliver({ to: from, text: out, kind: blocked ? 'fallback' : 'agent' });
@@ -6684,6 +6731,14 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
 }
 async function handleAIChat({ from, text, account, messageId = null }) {
   console.log('🤖 Routing to AI chat:', redactBearerDigits(text));
+
+  // A bare PIN, ID or passport number with no step waiting for it never
+  // reaches the model (BUGLOG #111): the answer is deterministic.
+  const secretKind = bareSecretKind(text);
+  if (secretKind) {
+    logStructured('secret_not_sent_to_model', { from, accountId: account.id, kind: secretKind, path: 'two-tier' });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(bareSecretReply(secretKind), await userLang(account)), kind: 'guard' });
+  }
 
   // Check if OpenAI is configured
   if (!process.env.OPENAI_API_KEY) {
@@ -6725,9 +6780,12 @@ async function handleAIChat({ from, text, account, messageId = null }) {
     // The brain gets the live, data-driven spend catalogue every turn —
     // claims pre-gated on the wiCode production flag so the model can never
     // promise redemption that is not live (v1.3 amendment 2).
+    const names = privacyNamesFor({ account, pack });
+    addPrivacyNames(names);
     const result = await orchestrate(text, contextString, {
       knowledge: buildBrainKnowledge({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), capabilityLines: promptLines({ waId: from, account }) }),
       withdrawLive: payoutAllowedFor(from),
+      names,
     });
 
     // Memory writes: deterministic, best-effort, never blocking the reply.
@@ -6760,7 +6818,11 @@ async function handleAIChat({ from, text, account, messageId = null }) {
 
     let fallbackMessage = `😅 Sorry, I didn't quite catch that. Could you say it another way? Or type "help" to see everything I can do.`;
 
-    if (error.message === 'AI_QUOTA_EXCEEDED') {
+    if (error.message === 'AI_PRIVACY_BLOCK') {
+      // The model boundary refused: a secret in the message (BUGLOG #111). Kinds only in the log.
+      logStructured('model_boundary_refused_turn', { from, accountId: account.id, path: 'two-tier', kinds: error.kinds || null });
+      fallbackMessage = privacyBlockedLine();
+    } else if (error.message === 'AI_QUOTA_EXCEEDED') {
       fallbackMessage = `😴 I'm taking a quick breather. Please try again in a moment, or type "help" to see what I can do.`;
     } else if (error.message === 'AI_CONFIG_ERROR') {
       fallbackMessage = `🔧 Something's not wired up right on my side. Please try again soon, or type "help" for the basics.`;
@@ -6820,9 +6882,10 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
   // customer's model reply, not only the shadow list (review 2026-09-17).
   // A blocked reply becomes the fact line from the record, never a menu.
   const rawReply = sanitizeUserText(result.reply || '');
-  const replyGate = rawReply ? outputGate(rawReply, { withdrawLive: payoutAllowedFor(from) }) : { ok: true, text: rawReply, rule: null };
+  const replyGate = rawReply ? outputGate(rawReply, { withdrawLive: payoutAllowedFor(from), payoutPending: !!pack?.pendingPayout }) : { ok: true, text: rawReply, rule: null };
   if (!replyGate.ok) logStructured('reply_blocked', { from, accountId: account.id, action: result.action, rule: replyGate.rule });
-  const reply = replyGate.ok ? replyGate.text : agentFallbackLine(pack);
+  // A model that asked for the PIN or claimed a pay-out gets the truth instead (BUGLOG #111).
+  const reply = replyGate.ok ? replyGate.text : (replyGate.rule === 'PIN_ASK' || replyGate.rule === 'MONEY_CLAIM') ? nothingPendingLine(pack?.balances?.spendCents || 0) : agentFallbackLine(pack);
 
   switch (result.action) {
     case 'CHECK_BALANCE': {

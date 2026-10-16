@@ -7,6 +7,7 @@
 import prisma from '../../../lib/prisma.js';
 import { newAccountProfile, findPayLinkReferrer } from '../../../lib/growth-attribution.js';
 import { mergeConversationData } from '../../../lib/conversation-data.js';
+import { sealFlowData, unsealFlowData } from '../../../lib/flow-seal.js';
 
 export async function wasMessageProcessed(waId, messageId) {
   if (!waId || !messageId) return false;
@@ -215,7 +216,9 @@ export async function updateConversationState(waId, state, data = null) {
     });
     // stateSetAt lets the processor expire a flow nobody finished (founder
     // 2026-09-15: a withdrawal parked at 08:49 still answered "Just the amount" at 20:33).
-    const nextData = state ? { ...merged, stateSetAt: new Date().toISOString() } : (() => { const { stateSetAt, ...rest } = merged || {}; return rest; })();
+    const unsealedNext = state ? { ...merged, stateSetAt: new Date().toISOString() } : (() => { const { stateSetAt, ...rest } = merged || {}; return rest; })();
+    // A bank account or ID number typed mid-flow is stored sealed, never plain (BUGLOG #113).
+    const nextData = sealFlowData(unsealedNext);
 
     await prisma.account.update({
       where: { waId },
@@ -246,9 +249,15 @@ export async function getConversationState(waId) {
       },
     });
     
+    // Sealed values are opened here and only here; a flow that cannot be opened starts fresh (BUGLOG #113).
+    const opened = unsealFlowData(account?.conversationData || null);
+    if (opened.unreadable) {
+      console.error(JSON.stringify({ type: 'flow_data_unreadable', state: account?.conversationState || null }));
+      return { state: null, data: null };
+    }
     return {
       state: account?.conversationState || null,
-      data: account?.conversationData || null,
+      data: opened.data || null,
     };
   } catch (error) {
     console.error('❌ Error getting conversation state:', error);

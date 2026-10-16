@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 import { requestPayout, reconcilePayout, reconcilePendingPayouts, reconcileInitPayout, sweepPayoutsAndNotify, getLatestPayout, payoutOutcomeMessage, payoutReference } from '../lib/payouts.js';
 import { matchDepositStatusRequest } from '../lib/deposits.js';
+import { proofFor } from './helpers/pin-proof.mjs';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
@@ -86,7 +87,7 @@ function client(perform, statusScript) {
   };
 }
 async function parked({ prisma, ledger, c, intentId = 'intent-7000' }) {
-  const r = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId, method: 'PAYSHAP', amountCents: 5000, recipient, providers });
+  const r = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId, method: 'PAYSHAP', amountCents: 5000, recipient, providers, authorization: proofFor(kycd, { intentId: intentId, amountCents: 5000 }) });
   assert.equal(r.status, 'PENDING');
   return r;
 }

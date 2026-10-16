@@ -530,6 +530,73 @@ async function run() {
   }
 
   // ------------------------------------------------------------------
+  // 6f. The timeout (Lisa, 2026-10-15; BUGLOG #111): her withdrawal waited
+  // four hours at the ID step; her ID and then her PIN went to the AI, which
+  // asked for the PIN and said "Your payout is being confirmed now" with
+  // nothing sent. Now: a late answer carries the withdrawal on, a late yes or
+  // PIN is confirmed again and never used, a bare PIN or ID outside a flow is
+  // answered without a model (both brains), and a day-old flow says it stopped.
+  // ------------------------------------------------------------------
+  {
+    const prev = { on: process.env.WAPAY_PAYOUT_ENABLED, kyc: process.env.WAPAY_PAYOUT_KYC, agent: process.env.WAPAY_AGENT_V3_MSISDNS };
+    process.env.WAPAY_PAYOUT_ENABLED = 'true'; process.env.WAPAY_PAYOUT_KYC = 'off';
+    const qa = await prisma.account.findFirst({ where: { waId: QA_WA_ID } });
+    const ageState = async (hours) => {
+      const a = await prisma.account.findUnique({ where: { id: qa.id } });
+      await prisma.account.update({ where: { id: qa.id }, data: { conversationData: { ...(a.conversationData || {}), stateSetAt: new Date(Date.now() - hours * 3600 * 1000).toISOString() } } });
+    };
+    const clearPinReset = async () => { const a = await prisma.account.findUnique({ where: { id: qa.id } }); const { pinReset, ...rest } = a.profile || {}; await prisma.account.update({ where: { id: qa.id }, data: { profile: rest } }); };
+    try {
+      await clearPinReset();
+      await prisma.payoutIdentity.deleteMany({ where: { accountId: qa.id } });
+      await prisma.payoutDestination.deleteMany({ where: { accountId: qa.id } });
+      await fundQaAccount({ cents: 20000, key: 'timeout' });
+      await s.say('cancel');
+      for (const t of ['withdraw 50 to my bank account', '1234567890', 'Capitec', 'Lisa Moyo']) await s.say(t);
+      await ageState(4);
+      const t1 = await s.say('FN123456');
+      const t2 = await s.say('Zimbabwe');
+      await ageState(4);
+      const t3 = await s.say('yes');
+      const t4 = await s.say('yes');
+      await ageState(4);
+      const before = ottCalls.length;
+      const t5 = await s.say(QA_PIN);
+      const usedLatePin = ottCalls.length !== before;
+      const t6 = await s.say('cancel');
+      for (const t of ['withdraw 50']) await s.say(t);
+      await ageState(4);
+      const t7 = await s.say('2580');
+      const t8 = await s.say('2580');
+      const t9 = await s.say('8001015009087');
+      for (const t of ['withdraw 50 to my bank account', '1234567890', 'Capitec', 'Lisa Moyo']) await s.say(t);
+      await ageState(30);
+      const t10 = await s.say('FN123456');
+      process.env.WAPAY_AGENT_V3_MSISDNS = QA_WA_ID;
+      const t11 = await s.say('2580');
+      const t12 = await s.say('8001015009087');
+      const leak = (r) => has(r.replyText, /enter your (?:wapay )?pin|being confirmed|on its way|is being processed/i);
+      verdict('Lisa 9: a timed-out withdrawal never hands her ID or PIN to the AI; late answers carry on or are confirmed again; nothing is paid on a late PIN', [
+        { level: 'FAIL', ok: has(t1.replyText, /Which country issued that passport/), what: 'her ID four hours later carries the withdrawal on (the country is asked)' },
+        { level: 'FAIL', ok: has(t2.replyText, /Please confirm:/), what: 'then the confirmation, everything shown before any PIN' },
+        { level: 'FAIL', ok: has(t3.replyText, /checking it with you again before your PIN/) && has(t3.replyText, /Please confirm:/), what: 'a late YES is confirmed again, never straight to the PIN' },
+        { level: 'FAIL', ok: has(t4.replyText, /Enter your WaPay PIN/), what: 'a fresh YES reaches the PIN step' },
+        { level: 'FAIL', ok: has(t5.replyText, /I did not use the PIN you just sent/) && !usedLatePin, what: 'a late PIN is not used and nothing reaches the rail' },
+        { level: 'FAIL', ok: has(t6.replyText, /Cancelled|cancel/i), what: 'cancel ends it' },
+        { level: 'FAIL', ok: has(t7.replyText, /timed out/) && has(t7.replyText, /nothing was paid/), what: 'a PIN after an early step timed out is told so, deterministically' },
+        { level: 'FAIL', ok: has(t8.replyText, /Nothing is waiting for a PIN right now/), what: 'a bare PIN outside a flow never reaches the two-tier model' },
+        { level: 'FAIL', ok: has(t9.replyText, /Nothing is waiting for an ID or passport number/), what: 'a bare ID outside a flow never reaches the two-tier model' },
+        { level: 'FAIL', ok: has(t10.replyText, /stopped because it waited too long/) && has(t10.replyText, /Nothing was sent/), what: 'a day-old withdrawal says it stopped' },
+        { level: 'FAIL', ok: has(t11.replyText, /Nothing is waiting for a PIN right now/) && has(t12.replyText, /Nothing is waiting for an ID or passport number/), what: 'the agent path: a bare PIN or ID never reaches the model either' },
+        { level: 'FAIL', ok: ![t1, t2, t3, t5, t7, t8, t9, t10, t11, t12].some(leak), what: 'no reply asks for a PIN out of turn or claims a pay-out is under way' },
+      ], s);
+    } finally {
+      await s.say('cancel').catch(() => {});
+      for (const [k, v] of [['WAPAY_PAYOUT_ENABLED', prev.on], ['WAPAY_PAYOUT_KYC', prev.kyc], ['WAPAY_AGENT_V3_MSISDNS', prev.agent]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+  }
+
+  // ------------------------------------------------------------------
   // 7. Languages: switch, localized replies, non-English inbound
   // ------------------------------------------------------------------
   {

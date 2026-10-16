@@ -88,7 +88,8 @@ test('M2/M3/M4/L5/L6: a blocked clarify is never parked, the fallback is localiz
 test('C11 gap: the output gate protects every customer\'s model reply in the dispatcher, not only the shadow list; a blocked reply is the fact line, never a menu', () => {
   const d = between('async function dispatchOrchestratorAction(', "switch (result.action) {");
   assert.match(d, /const rawReply = sanitizeUserText\(result\.reply \|\| ''\);/);
-  assert.match(d, /outputGate\(rawReply, \{ withdrawLive: payoutAllowedFor\(from\) \}\)/);
-  assert.match(d, /const reply = replyGate\.ok \? replyGate\.text : agentFallbackLine\(pack\);/);
+  assert.match(d, /outputGate\(rawReply, \{ withdrawLive: payoutAllowedFor\(from\), payoutPending: !!pack\?\.pendingPayout \}\)/);
+  // A PIN request or a pay-out claim with none pending is replaced by the truth, every other block by the fact line (BUGLOG #111).
+  assert.match(d, /const reply = replyGate\.ok \? replyGate\.text : \(replyGate\.rule === 'PIN_ASK' \|\| replyGate\.rule === 'MONEY_CLAIM'\) \? nothingPendingLine\(pack\?\.balances\?\.spendCents \|\| 0\) : agentFallbackLine\(pack\);/);
   assert.doesNotMatch(d, /welcomeLines\(\)/, 'a blocked reply never becomes the welcome menu');
 });

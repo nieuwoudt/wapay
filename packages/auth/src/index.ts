@@ -14,4 +14,4 @@ export * from './pin.js';
 export * from './consent.js';
 export * from './audit.js';
 export * from './onboarding.js';
-
+export * from './pin-proof.js';

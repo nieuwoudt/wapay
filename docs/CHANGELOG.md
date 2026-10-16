@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-10-16 (88) — The golden thread: no personal data to any AI model, no money out without the customer's proof, bank and ID details sealed in flight, a timed-out withdrawal never handed to the AI
+
+Lisa's 2026-10-15 withdrawal (BUGLOG #111): the flow timed out at the ID
+step, her ID and her PIN went to the two-tier AI, which asked for the PIN and
+said "Your payout is being confirmed now"; nothing was sent. The founder asked
+for it to be structural. Shipped:
+
+- **The model boundary** `packages/ai/src/boundary.ts`: the one door for every
+  provider call (two-tier `callStructured`, the agent's `callModel`, the
+  translator, product embeddings). Names, phones, e-mails and our own
+  references become `[[N1]]`/`[[P1]]`/`[[E1]]`/`[[S1]]` tokens and are restored
+  on the way out; a secret in the customer's message refuses the call
+  (`AI_PRIVACY_BLOCK`) with a deterministic answer and kinds-only logs. A
+  per-message privacy scope (`runWithPrivacy` around `processMessage`) carries
+  every name the request learns. A read-only scan of every production
+  account's AI context: no false refusal.
+- **Bare secrets before the model** (`lib/money-truth.js`), both brains.
+- **Output gate** `PIN_ASK` and `MONEY_CLAIM` (`lib/agent/guards.js`), both
+  reply sites, with `payoutPending` from the record.
+- **Late answers** (`resumeLateWithdraw`): carry on, confirm again, or say it
+  stopped; any other flow's late PIN or ID is told the step timed out.
+- **The PIN proof** (`@wapay/auth/pin-proof`, BUGLOG #112): `verifyPIN` and
+  the business step-up issue it; `executeWithdraw` and `requestPayout` demand
+  it before any row, cent, hold or rail call.
+- **Flow data sealed** (`lib/flow-seal.js`, BUGLOG #113) under `WAPAY_PII_KEY`;
+  account-holder names out of memory.
+- **Adumo callbacks** refuse an empty or public secret (BUGLOG #114).
+- **PIN reset:** its own words inside a running reset stay in it.
+- `/api/internal/payout-status` reports the safeguards' switches.
+- `docs/GOLDEN_THREAD.md` (new), linked from `CLAUDE.md` and
+  `docs/HANDOVER_V1.3.md`; `next.config.js` aliases `@wapay/auth/pin-proof`.
+
+Tests: `tests/model-boundary.test.mjs`, `tests/money-out-safeguards.test.mjs`,
+`tests/payout-timeout.test.mjs` (new), payout tests carry real proofs
+(`tests/helpers/pin-proof.mjs`), source locks moved with the anchors; harness
+scenario 6f.
+
+---
+
 ## 2026-10-15 (87) — Synthetic test send takes the test code in the POST body (option B): no env change, no redeploys, never stored
 
 Agreed with the Meta Ads agent: `POST /api/internal/capi-test-send` reads

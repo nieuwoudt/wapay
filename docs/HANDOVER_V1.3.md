@@ -143,6 +143,19 @@ credentials change, not a build.
   can fix now; the same refusal is never sent three times without a person
   (`lib/payout-gate.js` pattern). A build is not done until the harness proves it on
   the customer's own sentences.
+- **The golden thread (founder, 2026-10-16, BUGLOG #111 to #114):** every loop
+  iteration keeps `docs/GOLDEN_THREAD.md` true and extends it in the same commit
+  when it adds a model call, a money path, a stored secret or a customer promise.
+  Three of its rules came from Lisa's timed-out withdrawal and are structural, not
+  copy: (1) nothing personal reaches a model: every provider call crosses
+  `packages/ai/src/boundary.ts`, which tokenises names, phones and e-mails and
+  REFUSES a call carrying a secret (`AI_PRIVACY_BLOCK`, a deterministic answer, the
+  reason in the log); (2) a flow's late answer is never a new message for the AI
+  (the idle-expiry branch resumes, re-confirms or says it stopped); (3) money leaves
+  only with the customer's proof (`verifyPIN` issues it, `requestPayout` demands it
+  before any row, cent, hold or rail call). Run `pnpm test`, `pnpm build` and
+  `pnpm qa:chat`; the boundary and the safeguards have their own test files
+  (`tests/model-boundary.test.mjs`, `tests/money-out-safeguards.test.mjs`).
 
 ## v1.3.1 amendments (founder, 2026-08-29 PM)
 

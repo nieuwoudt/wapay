@@ -73,7 +73,7 @@ test('1. the ID step takes a passport, asks the issuing country, confirms it mas
   assert.ok(!/FN123456/.test(s5.text)); assert.equal(s5.data.idPending ?? null, null);
   const pin = await handleWithdrawReply({ account: lisa, state: s5.state, data: s5.data, text: 'yes' });
   assert.equal(pin.state, 'PAYOUT_PIN');
-  const done = await executeWithdraw({ account: lisa, data: pin.data, deps: d });
+  const done = await executeWithdraw({ account: lisa, data: pin.data, pinProof: proofFor(lisa, pin.data), deps: d });
   const r = d.last.recipient;
   assert.equal(r.id_number, 'FN123456'); assert.equal(r.id_type, 'PASSPORT'); assert.equal(r.country_of_issue, 'ZW'); assert.equal(r.nationality, 'ZW');
   assert.equal(r.firstname, 'Lisa'); assert.equal(r.surname, 'Moyo');
@@ -81,7 +81,7 @@ test('1. the ID step takes a passport, asks the issuing country, confirms it mas
   assert.equal(done.data.recipient.id_type, 'PASSPORT'); assert.equal(done.data.recipient.country_of_issue, 'ZW');
   // The answer to OTT's id_type question is a Vercel change, not a deploy.
   process.env.WAPAY_PAYOUT_PASSPORT_ID_TYPE = 'Passport';
-  await executeWithdraw({ account: lisa, data: pin.data, deps: d });
+  await executeWithdraw({ account: lisa, data: pin.data, pinProof: proofFor(lisa, pin.data), deps: d });
   assert.equal(d.last.recipient.id_type, 'Passport'); assert.equal(passportIdType(), 'Passport');
   delete process.env.WAPAY_PAYOUT_PASSPORT_ID_TYPE;
 });
@@ -92,7 +92,7 @@ test('1. an SA ID still goes without id_type; a 12-digit number from South Afric
   const base = { method: 'CASHSEND', amountCents: 5000, intentId: 'wa-r5-sa', options: ['PAYSHAP', 'CASHSEND', 'NEDCASH'], balanceCents: 35000, fields: { CASHSEND: ['id_number', 'mobile'] }, recipient: { mobile: '27601879361', fullName: 'Lisa Moyo' } };
   const sa = await handleWithdrawReply({ account: lisa, state: 'PAYOUT_ID', data: base, text: '9001015009087' });
   assert.equal(sa.state, 'PAYOUT_CONFIRM'); assert.match(sa.text, /ID number: •••087/);
-  await executeWithdraw({ account: lisa, data: sa.data, deps: d });
+  await executeWithdraw({ account: lisa, data: sa.data, pinProof: proofFor(lisa, sa.data), deps: d });
   assert.equal(d.last.recipient.id_number, '9001015009087');
   assert.ok(!('id_type' in d.last.recipient) && !('country_of_issue' in d.last.recipient) && !('nationality' in d.last.recipient), 'the SA ID wire shape proven since 2026-09-23 is unchanged');
   const twelve = await handleWithdrawReply({ account: lisa, state: 'PAYOUT_ID', data: base, text: '900101500908' });
@@ -120,11 +120,11 @@ test('1. a saved passport skips the ID step and goes on the wire with its countr
   assert.equal(s1.state, 'PAYOUT_CONFIRM', 'name and passport are saved: no name or ID step');
   assert.match(s1.text, /Passport \/ foreign ID: •••456 \(Zimbabwe, saved\)/);
   const pin = await handleWithdrawReply({ account: lisa, state: s1.state, data: s1.data, text: 'yes' });
-  await executeWithdraw({ account: lisa, data: pin.data, deps: d });
+  await executeWithdraw({ account: lisa, data: pin.data, pinProof: proofFor(lisa, pin.data), deps: d });
   assert.equal(base.last.recipient.id_number, 'FN123456'); assert.equal(base.last.recipient.id_type, 'PASSPORT'); assert.equal(base.last.recipient.country_of_issue, 'ZW'); assert.equal(base.last.recipient.nationality, 'ZW');
   // Typed this time and saved on YES: the vault is told the kind and the country.
   const typed = { method: 'NEDCASH', amountCents: 5000, intentId: 'wa-r5-save', recipient: { mobile: '27601879361', fullName: 'Lisa Moyo', id_number: 'FN123456', id_type: 'PASSPORT', country_of_issue: 'ZW' } };
-  const done = await executeWithdraw({ account: lisa, data: typed, deps: { ...d, getIdentity: undefined, loadIdentity: async () => null } });
+  const done = await executeWithdraw({ account: lisa, data: typed, pinProof: proofFor(lisa, typed), deps: { ...d, getIdentity: undefined, loadIdentity: async () => null } });
   const yes = await handleWithdrawReply({ account: lisa, state: 'PAYOUT_SAVE', data: done.data, text: 'yes', deps: d });
   assert.match(yes.text, /your name and passport or ID number ending 456/);
   assert.deepEqual({ idNumber: saved[0].idNumber, idType: saved[0].idType, countryOfIssue: saved[0].countryOfIssue }, { idNumber: 'FN123456', idType: 'PASSPORT', countryOfIssue: 'ZW' });
@@ -482,6 +482,7 @@ test('8. the gift claim message says the PIN is separate from the balance, never
 // ---------------------------------------------------------------------------
 import { matchNicknameAsk, nicknameLastDestination } from '../lib/payout-nickname.js';
 import { destinationLabel, displayLabelOf, setPayoutDestinationNickname } from '../lib/payout-beneficiaries.js';
+import { proofFor } from './helpers/pin-proof.mjs';
 
 test('9. a bare YES for an account asks for a name once; a name sets it, "no" or "ok" keeps it, anything else passes through; their own number is "Mine" without a question', async () => {
   envOff();

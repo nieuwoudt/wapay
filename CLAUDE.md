@@ -18,6 +18,10 @@ WaPay is a **live WhatsApp wallet for South Africa** (Next.js on Vercel, Postgre
   - `docs/CAPABILITIES.md` — the single honest answer to "what works?"
   - Strategy/agreements/research live as `WAPAY_*.md` next to the tracker
 
+## The golden thread (read first, keep always)
+
+`docs/GOLDEN_THREAD.md` holds the security and money-safety rules every change must keep, each with the code that enforces it and the test that fails the build when it breaks (founder, 2026-10-16): no personal data to any AI model, ever (one model boundary, `packages/ai/src/boundary.ts`); no money leaves a customer's balance without the customer's own proof (`@wapay/auth/pin-proof`, checked in `requestPayout`); bank and ID details encrypted at rest, in flight too; the chat never claims what the ledger does not say; the chat never traps. A change that adds a model call, a money path, a stored secret or a customer promise adds its line there in the same commit.
+
 ## Money-safety invariants (never weaken)
 
 1. **Integer cents only.** No floats in money math, ever.

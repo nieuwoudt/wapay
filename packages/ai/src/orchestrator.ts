@@ -20,6 +20,9 @@
  *     the ledger (the AI must never invent transaction status).
  *   - All slots (msisdn, amounts, meter numbers) are re-validated
  *     deterministically by the processor before any flow starts.
+ *   - Every call crosses the model boundary (boundary.ts): personal data is
+ *     tokenised, a secret refuses the call with AI_PRIVACY_BLOCK, and the
+ *     slots and reply are restored on the way out (BUGLOG #111).
  *
  * Model tiers are env-tunable for the later Claude migration:
  *   WAPAY_ORCHESTRATOR_MODEL   (default gpt-5.5)
@@ -27,6 +30,7 @@
  */
 
 import OpenAI from 'openai';
+import { guardChatMessages, newVault, restoreDeep, type PrivacyVault } from './boundary.js';
 
 let openaiInstance: OpenAI | null = null;
 
@@ -360,7 +364,14 @@ async function callStructured<T>(args: {
   schemaName: string;
   schema: Record<string, unknown>;
   maxTokens: number;
+  vault: PrivacyVault;
+  names?: Array<string | null | undefined>;
 }): Promise<T> {
+  // The boundary, at the lowest level: nothing reaches the client untokenised, and a secret never reaches it at all.
+  const { messages } = guardChatMessages(
+    [{ role: 'system' as const, content: args.system }, { role: 'user' as const, content: args.user }],
+    { names: args.names || [], vault: args.vault }
+  );
   const openai = getOpenAI();
   // GPT-5-family models reject `temperature`/`max_tokens` and take
   // `max_completion_tokens` + `reasoning_effort` instead (probed live
@@ -370,10 +381,7 @@ async function callStructured<T>(args: {
     : { max_tokens: args.maxTokens, temperature: 0 };
   const completion = await openai.chat.completions.create({
     model: args.model,
-    messages: [
-      { role: 'system', content: args.system },
-      { role: 'user', content: args.user },
-    ],
+    messages: messages as any,
     ...(modelParams as any),
     response_format: {
       type: 'json_schema',
@@ -390,7 +398,7 @@ async function callStructured<T>(args: {
     throw new Error('AI_EMPTY_RESPONSE');
   }
   // strict json_schema guarantees shape; parse failures here are provider bugs.
-  return JSON.parse(content) as T;
+  return restoreDeep(JSON.parse(content) as T, args.vault);
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +443,8 @@ export interface OrchestrateOptions {
    * the withdraw flow. Defaults to the global switch when omitted.
    */
   withdrawLive?: boolean;
+  /** Names to keep from the model (the customer's, saved people); the request's privacy scope adds its own. */
+  names?: Array<string | null | undefined>;
 }
 
 /**
@@ -454,6 +464,16 @@ export async function orchestrate(
   const userContent = buildUserContent(text, context);
   const orchestratorModel = ORCHESTRATOR_MODEL();
   const agentModel = CATEGORY_AGENT_MODEL();
+  // One vault for both tiers, so [[P1]] means the same number in each. The
+  // customer's current line alone is checked first: a bare PIN there is a
+  // secret even though "2580" anywhere else is just a number.
+  const vault = newVault();
+  const names = opts.names || [];
+  try {
+    guardChatMessages([{ role: 'user' as const, content: text }], { names, currentIndex: 0, vault });
+  } catch (error) {
+    throw normalizeAiError(error);
+  }
 
   let tier1: OrchestratorTierOutput;
   const t0 = Date.now();
@@ -465,6 +485,8 @@ export async function orchestrate(
       schemaName: 'wapay_route',
       schema: ORCHESTRATOR_SCHEMA as unknown as Record<string, unknown>,
       maxTokens: 200,
+      vault,
+      names,
     });
   } catch (error) {
     throw normalizeAiError(error);
@@ -494,6 +516,8 @@ export async function orchestrate(
       schemaName: 'wapay_action',
       schema: AGENT_SCHEMA as unknown as Record<string, unknown>,
       maxTokens: 350,
+      vault,
+      names,
     });
   } catch (error) {
     throw normalizeAiError(error);

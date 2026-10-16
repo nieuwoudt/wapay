@@ -11,6 +11,7 @@
 import * as argon2 from 'argon2';
 import { SignJWT, jwtVerify } from 'jose';
 import { getPrisma } from '@wapay/domain';
+import { issuePinProof, type PinApproval } from './pin-proof.js';
 
 const PIN_REGEX = /^[0-9]{4,6}$/;
 const SOFT_LOCKOUT_ATTEMPTS = 5;
@@ -22,8 +23,10 @@ const PIN_TOKEN_EXPIRY_MINUTES = 5;
 // Pepper (should be in env var in production)
 const PIN_PEPPER = process.env.PIN_PEPPER || 'wapay_pin_pepper_2025_change_in_production';
 
-// JWT secret for PIN tokens
-const PIN_TOKEN_SECRET = process.env.PIN_TOKEN_SECRET || 'wapay_pin_token_secret_2025';
+// JWT secret for PIN tokens. No default in source (BUGLOG #112): a secret in
+// a public repository signs nothing; without the env the token is not issued
+// (nothing reads it today; money moves on the PIN proof in pin-proof.ts).
+const PIN_TOKEN_SECRET = process.env.PIN_TOKEN_SECRET || '';
 
 // JWT issuer and audience for PIN tokens
 const PIN_TOKEN_ISSUER = 'wapay';
@@ -199,7 +202,9 @@ export async function setPIN(args: {
 export async function verifyPIN(args: {
   accountId: string;
   pin: string;
-}): Promise<{ ok: boolean; token?: string; error?: string; lockedUntil?: Date }> {
+  /** What this PIN approves; a correct PIN then returns a proof bound to it (pin-proof.ts). */
+  approves?: PinApproval;
+}): Promise<{ ok: boolean; token?: string; proof?: string; error?: string; lockedUntil?: Date }> {
   const { accountId, pin } = args;
   const prisma = getPrisma();
   
@@ -285,9 +290,9 @@ export async function verifyPIN(args: {
       },
     });
     
-    // Generate PIN token (JWT, 5min expiry) with proper claims
+    // Generate PIN token (JWT, 5min expiry) with proper claims, only under a configured secret
     const now = Math.floor(Date.now() / 1000);
-    const token = await new SignJWT({})
+    const token = !PIN_TOKEN_SECRET ? undefined : await new SignJWT({})
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt(now)
       .setIssuer(PIN_TOKEN_ISSUER)
@@ -310,9 +315,13 @@ export async function verifyPIN(args: {
     
     console.log(`✅ PIN verified successfully for account ${accountId}`);
     
+    // The only place a PIN proof is issued: a correct PIN, for the approval named.
+    const proof = args.approves ? issuePinProof({ accountId, intentId: args.approves.intentId, amountCents: args.approves.amountCents }) : null;
+
     return {
       ok: true,
       token,
+      ...(proof ? { proof } : {}),
     };
     
   } catch (error) {
@@ -328,6 +337,7 @@ export async function verifyPIN(args: {
  * Verify PIN token with proper JWT claims validation
  */
 export async function verifyPINToken(token: string): Promise<{ valid: boolean; accountId?: string; error?: string }> {
+  if (!PIN_TOKEN_SECRET) return { valid: false, error: 'INVALID_TOKEN' };
   try {
     const { payload } = await jwtVerify(
       token,
