@@ -47,8 +47,12 @@ test('the referral travels webhook → processor → getOrCreateUser, and the gr
   assert.match(userManager, /getOrCreateUser\(waId, profile = \{\}, \{ referral = null \} = \{\}\)/);
   assert.match(userManager, /profile: growthProfile/);
   // The onboarded hook sits inside the S5 block, after askAccountType.
-  const s5 = processor.indexOf("=== 'S5_COMPLETED') {\n        await askAccountType");
-  assert.ok(s5 > 0 && processor.indexOf('growthOnOnboarded({ account })', s5) - s5 < 600);
+  // The S5 block: ad arrivals get the first-link prompt, everyone else the business question, then the growth hook.
+  const s5 = processor.indexOf("=== 'S5_COMPLETED') {\n        if (isAdAcquired(account)) {");
+  assert.ok(s5 > 0, 'the S5 block branches on the ad arrival first');
+  const ask = processor.indexOf('await askAccountType({ from, account })', s5);
+  const hook = processor.indexOf('growthOnOnboarded({ account })', s5);
+  assert.ok(ask > s5 && hook > ask && hook - s5 < 1500, 'the business question and the onboarded hook stay inside the S5 block');
 });
 
 test('Mission Control: the Growth tab exists and the cron carries the growth steps', () => {
@@ -145,4 +149,15 @@ test('the pipe check reports the newest ad account without identifiers', () => {
   assert.match(probe, /latestAdAccount/);
   const block = probe.slice(probe.indexOf('SELECT a."createdAt" AS created_at'), probe.indexOf('ORDER BY a."createdAt" DESC LIMIT 1'));
   assert.doesNotMatch(block, /msisdn|waId|displayName|->>'ctwaClid' AS|->>'adId' AS|->>'headline' AS/, 'only booleans for the identifying fields');
+});
+
+test('ad reminders route: internal key, GET counts only, POST sends through notifyCustomer, never money', async () => {
+  const src = read('../pages/api/internal/ad-reminders.js');
+  delete process.env.WAPAY_INTERNAL_API_KEY;
+  const { default: handler } = await import('../pages/api/internal/ad-reminders.js');
+  const mk = () => ({ statusCode: 0, headers: {}, setHeader(k, v) { this.headers[k] = v; }, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } });
+  const r1 = mk(); await handler({ method: 'POST', headers: {}, query: {} }, r1); assert.equal(r1.statusCode, 401);
+  const r2 = mk(); await handler({ method: 'DELETE', headers: {}, query: {} }, r2); assert.equal(r2.statusCode, 405);
+  assert.match(src, /sendAdReminders\(\{ prisma, now, limit, send: \(\{ to, text, kind \}\) => notifyCustomer/);
+  assert.doesNotMatch(src, /requestPayout|performPayout|postEntry|reserveHold/, 'the route can never move money');
 });

@@ -33,6 +33,7 @@ mock.module('@wapay/whatsapp', { namedExports: {
   outboundSendCount: () => 0,
   runWithSendScope: (fn) => fn(),
   sendWhatsAppText: async () => ({ ok: true }), sendWhatsAppTemplate: async () => ({ ok: true }),
+  sendWhatsAppReplyButtons: async () => ({ ok: true }), buildReplyButtonsPayload: (a) => a,
   sendWhatsAppCtaUrl: async () => ({ ok: true }), sendWhatsAppUtilityDirect: async () => ({ ok: true }),
   directSendEnabled: () => false,
 } });

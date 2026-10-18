@@ -6,8 +6,11 @@
  */
 
 import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed, wasErrorSent, markErrorSent } from './user-manager.js';
-import { growthOnTurn, growthOnOnboarded } from '../../../lib/growth-attribution.js';
-import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, outboundSendCount } from '@wapay/whatsapp';
+import { growthOnTurn, growthOnOnboarded, syncCapiForAccount } from '../../../lib/growth-attribution.js';
+import { classifyAdEntry, adEntryReply, firstNameFrom, firstLinkPrompt, parseFirstLinkAsk, firstLinkRetry, firstLinkCreatedCopy, matchesStop, STOP_REPLY, feeExample, isFaqKind, PAYOUT_BUTTON_KINDS, AD_STATES, buttonsAsText } from '../../../lib/ad-flow.js';
+import { markReminderOptOut } from '../../../lib/ad-reminders.js';
+import { mergeProfileSubkeyAtomic } from '../../../lib/profile-merge.js';
+import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, sendWhatsAppReplyButtons, outboundSendCount } from '@wapay/whatsapp';
 // Every outbound text goes through lib/say.js, which records the assistant
 // side of the turn by construction (docs/AGENT_ARCHITECTURE_V2.md C2).
 import { sendWhatsAppText, recordInbound } from '../../../lib/say.js';
@@ -107,6 +110,7 @@ import {
   handleS3OtpVerified,
   handleS4PinSet,
   handleResendOTP,
+  startOnboardingFromAd,
 } from '@wapay/auth';
 
 /**
@@ -1157,6 +1161,17 @@ async function processMessageInner({ from, text, messageId, profile, sharedConta
 
   console.log(`📊 Account state: ${onboardingState} (new: ${isNewUser})`);
 
+  // Ad chat flow (docs/AD_CHAT_FLOW.md, 2026-10-18): a person who tapped a
+  // click-to-WhatsApp ad is answered from the brief, deterministically, with
+  // no model call. Only ad arrivals ever enter; everything else falls through.
+  {
+    const adTurn = await handleAdEntryTurn({ from, account, text, profile, referral, onboardingState }).catch((e) => {
+      logStructured('ad_entry_error', { from, error: e?.message });
+      return null;
+    });
+    if (adTurn) return adTurn;
+  }
+
   // "Receipt PRXXXXXX" — the wa.me deep link from the pay page. Answered
   // for EVERY sender BEFORE the onboarding gate: a card payer's first-ever
   // message is this ask, and the receipt must never be swallowed by the
@@ -1337,7 +1352,13 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
       // the auth package's state machine is untouched, and a failure here can
       // never undo the completed onboarding.
       if (done?.ok && (await getOnboardingState(account.id)) === 'S5_COMPLETED') {
-        await askAccountType({ from, account }).catch((e) => logStructured('business_signup_ask_failed', { from, error: e?.message }));
+        if (isAdAcquired(account)) {
+          // Ad arrival (docs/AD_CHAT_FLOW.md section 8): nothing in front of the first link.
+          await sendWhatsAppText({ to: from, text: firstLinkPrompt(firstNameFrom(profile?.name || account.displayName)), kind: 'ad' }).catch((e) => logStructured('ad_first_link_prompt_failed', { from, error: e?.message }));
+          await updateConversationState(from, AD_STATES.FIRST_LINK, { stateSetAt: new Date().toISOString() }).catch(() => {});
+        } else {
+          await askAccountType({ from, account }).catch((e) => logStructured('business_signup_ask_failed', { from, error: e?.message }));
+        }
         // Growth: remember the moment and tell Meta (LeadSubmitted) if an ad brought them.
         await growthOnOnboarded({ account }).catch((e) => logStructured('growth_onboarded_hook_failed', { from, error: e?.message }));
       }
@@ -1611,6 +1632,15 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     // Idle expiry (founder 2026-09-15): a flow nobody finished for WAPAY_STATE_IDLE_MINUTES
     // (default 30) is over. The next message starts fresh, so "hello" goes home instead of
     // "Just the amount". A state without a stamp (set before this shipped) expires too.
+    // An ad arrival's first-link ask (docs/AD_CHAT_FLOW.md section 8) still
+    // counts when it comes late: an amount typed within WAPAY_AD_FIRST_LINK_RESUME_HOURS
+    // (24) of the prompt makes the link instead of reading as a timed-out
+    // secret or a fresh turn. Only in that exact state; past the cap it expires.
+    if (state === AD_STATES.FIRST_LINK && parseFirstLinkAsk(text)) {
+      const promptedAt = Date.parse(data?.stateSetAt || '') || 0;
+      const resumeMs = Number(process.env.WAPAY_AD_FIRST_LINK_RESUME_HOURS ?? 24) * 3600 * 1000;
+      if (promptedAt && Date.now() - promptedAt <= resumeMs) data = { ...(data || {}), stateSetAt: new Date().toISOString() };
+    }
     const setAt = Date.parse(data?.stateSetAt || '') || 0;
     const idleMs = Number(process.env.WAPAY_STATE_IDLE_MINUTES ?? 30) * 60 * 1000;
     // The next message after the expiry is never handed to the AI as new when
@@ -2886,6 +2916,93 @@ async function deliverBusinessStep({ from, account, step }) {
   const msg = step.raw ? step.text : await localizeOutbound(step.text, await userLang(account));
   return await sendWhatsAppText({ to: from, text: msg });
 }
+/* ---------------- Ad chat flow (docs/AD_CHAT_FLOW.md, 2026-10-18) ---------------- */
+
+function isAdAcquired(account) {
+  return account?.profile?.acquisitionSource === 'ad';
+}
+
+function adLooksLikeQuestion(text) {
+  const t = String(text || '').trim();
+  return /\?$/.test(t) || /^(can|could|how|do|does|is|are|what|which|where|when|why|will|would)\b/i.test(t);
+}
+
+/** Text with reply buttons; falls back to a numbered text line; keeps the line in memory. */
+async function sendAdReply({ from, account, reply }) {
+  if (!reply.buttons?.length) return await sendWhatsAppText({ to: from, text: reply.text, kind: 'ad' });
+  const sent = await sendWhatsAppReplyButtons({ to: from, bodyText: reply.text, buttons: reply.buttons });
+  if (!sent?.ok) return await sendWhatsAppText({ to: from, text: `${reply.text}\n\n${buttonsAsText(reply.buttons)}`, kind: 'ad' });
+  try {
+    const { recordTurn } = await import('../../../lib/turns.js');
+    await recordTurn({ prisma, accountId: account.id, role: 'assistant', text: reply.text, kind: 'ad', waMessageId: sent?.data?.messages?.[0]?.id });
+  } catch {
+    // Memory is best-effort; the message was delivered.
+  }
+  return sent;
+}
+
+async function startAdOnboarding({ from, account, profile }) {
+  const displayName = profile?.name || account.displayName || 'Friend';
+  return await startOnboardingFromAd({ accountId: account.id, waId: from, msisdn: account.msisdn || from, displayName });
+}
+
+/**
+ * The ad arrival's turn. Returns a result when it answered, null when the
+ * normal path should run. No model call anywhere in here.
+ */
+async function handleAdEntryTurn({ from, account, text, profile, referral, onboardingState }) {
+  const adAcquired = isAdAcquired(account);
+  if (!referral && !adAcquired) return null;
+  const { state: convState } = await getConversationState(from);
+  // Section 10: "stop" opts out of the one reminder. Never inside a PIN, a
+  // PIN reset or a confirm step, where the flow owns every word.
+  const protectedState = /_PIN$|PIN_RESEND_AUTH|AWAITING_VOUCHER_PIN|^PIN_RESET_|CONFIRM/.test(String(convState || ''));
+  if (adAcquired && !protectedState && matchesStop(text)) {
+    await markReminderOptOut({ accountId: account.id }).catch(() => {});
+    if (convState === AD_STATES.ENTRY || convState === AD_STATES.FIRST_LINK) await updateConversationState(from, null);
+    await sendWhatsAppText({ to: from, text: STOP_REPLY, kind: 'ad' });
+    return { ok: true, adStop: true };
+  }
+  const kind = classifyAdEntry(text);
+  const firstName = firstNameFrom(profile?.name || account.displayName);
+  const fee = feeExample(paymentRequestFeeCents);
+  const hasAccount = onboardingState === 'S5_COMPLETED';
+  // Section 12: which question brought them in. An id, never their words.
+  if (referral && !account.profile?.attribution?.entry) {
+    await mergeProfileSubkeyAtomic({ accountId: account.id, key: 'attribution', patch: { entry: kind } }).catch(() => {});
+  }
+  if (!hasAccount) {
+    if (onboardingState !== 'S0_INITIAL') return null; // the OTP, PIN or consent step answers
+    if (!referral && convState !== AD_STATES.ENTRY) return null; // not an ad entry turn
+    const reply = adEntryReply(kind, { firstName, fee, hasAccount: false });
+    if (reply.startOnboarding || PAYOUT_BUTTON_KINDS.includes(kind)) {
+      if (reply.startOnboarding) await sendWhatsAppText({ to: from, text: reply.text, kind: 'ad' });
+      await updateConversationState(from, null);
+      logStructured('ad_onboarding_started', { from, accountId: account.id, entry: kind });
+      return await startAdOnboarding({ from, account, profile });
+    }
+    await sendAdReply({ from, account, reply });
+    await updateConversationState(from, AD_STATES.ENTRY, { kind, stateSetAt: new Date().toISOString() });
+    return { ok: true, adEntry: kind };
+  }
+  // An existing account arriving from the ad: straight to the first link (section 7).
+  if (referral && !convState) {
+    await sendWhatsAppText({ to: from, text: firstLinkPrompt(firstName), kind: 'ad' });
+    await updateConversationState(from, AD_STATES.FIRST_LINK, { stateSetAt: new Date().toISOString() });
+    return { ok: true, adFirstLink: true };
+  }
+  if (convState) return null; // a flow is running: it owns the turn
+  if (isFaqKind(kind) && adLooksLikeQuestion(text)) {
+    await sendAdReply({ from, account, reply: adEntryReply(kind, { firstName, fee, hasAccount: true }) });
+    return { ok: true, adFaq: kind };
+  }
+  if (PAYOUT_BUTTON_KINDS.includes(kind)) {
+    // The pay-out flow at its first step; it ends at its own PIN step.
+    return await handleWithdrawStart({ from, account, ask: { amountCents: null }, text: 'withdraw' });
+  }
+  return null;
+}
+
 async function askAccountType({ from, account }) {
   const { accountTypeQuestion } = await import('../../../lib/business-chat.js');
   logStructured('business_signup_question', { accountId: account.id });
@@ -3070,7 +3187,7 @@ function matchRequestMoneyAsk(text = '', slots = null) {
  * The link page offers BOTH legs: pay from a WaPay balance (free, deep
  * links back into chat) or card/EFT via PayFast (payer covers the fee).
  */
-async function handleCreatePaymentRequest({ from, account, amountCents, rawText = '', confirmed = false }) {
+async function handleCreatePaymentRequest({ from, account, amountCents, rawText = '', confirmed = false, adPayerName = null }) {
   if (!Number.isInteger(amountCents) || amountCents < MIN_REQUEST_CENTS || amountCents > MAX_REQUEST_CENTS) {
     await updateConversationState(from, 'REQUEST_MONEY_AMOUNT');
     const askMsg = await localizeOutbound(
@@ -3092,6 +3209,7 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
       amountCents,
       askCents,
       rawText,
+      adPayerName,
     });
     const chooseMsg = await localizeOutbound(
       `🙏 *Get paid ${randsShort(amountCents)}*
@@ -3150,6 +3268,17 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
   const who = account.displayName || maskMsisdn(account.msisdn) || 'A WaPay user';
 
   logStructured('payrequest_created', { from, accountId: account.id, code: request.id, amountCents });
+
+  // Ad arrival (docs/AD_CHAT_FLOW.md section 8): one short, forwardable message
+  // with the link in it, and QualifiedLead told to Meta now rather than next turn.
+  if (isAdAcquired(account)) {
+    await sendWhatsAppText({ to: from, text: firstLinkCreatedCopy({ amountCents, url, payerName: adPayerName }), kind: 'ad' });
+    await Promise.race([
+      syncCapiForAccount({ accountId: account.id }).catch(() => null),
+      new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
+    ]);
+    return { ok: true, adLink: request.id };
+  }
 
   // COMPOSE-TIME QUOTE (founder feedback 2026-08-27). The requester typed the
   // amount, so it is their anchor — landing under it later reads as a loss.
@@ -4260,6 +4389,26 @@ async function handleConversationState({ from, text, state, data, account }) {
       return await handleCreatePaymentRequest({ from, account, amountCents: filled.amountCents, rawText: text });
     }
 
+    case 'AD_FIRST_LINK': {
+      // Ad arrival, right after onboarding: "R250 from Thandi for the birthday gift".
+      const ask = parseFirstLinkAsk(text);
+      if (ask) {
+        await updateConversationState(from, null);
+        return await handleCreatePaymentRequest({ from, account, amountCents: ask.amountCents, rawText: text, adPayerName: ask.payerName || null });
+      }
+      const faq = classifyAdEntry(text);
+      if (isFaqKind(faq)) {
+        // A section-2 question keeps the first-link prompt waiting.
+        return await sendAdReply({ from, account, reply: adEntryReply(faq, { firstName: firstNameFrom(account.displayName), fee: feeExample(paymentRequestFeeCents), hasAccount: true }) });
+      }
+      if (data?.retried || isConversationalEscape(text) || isHomeTrigger(text)) {
+        await updateConversationState(from, null);
+        return await handlePostOnboarding({ account, from, text });
+      }
+      await updateConversationState(from, AD_STATES.FIRST_LINK, { ...(data || {}), retried: true, stateSetAt: data?.stateSetAt || new Date().toISOString() });
+      return await sendWhatsAppText({ to: from, text: firstLinkRetry(), kind: 'ad' });
+    }
+
     case 'REQUEST_MONEY_CONFIRM': {
       const pick = text.trim().toLowerCase();
       if (/^(cancel|stop|no|home|menu|back|exit)$/i.test(pick)) {
@@ -4281,6 +4430,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           amountCents: one ? data.amountCents : data.askCents,
           rawText: data.rawText || '',
           confirmed: true,
+          adPayerName: data.adPayerName || null,
         });
       }
       if (isConversationalEscape(text)) {

@@ -1118,6 +1118,21 @@ function Growth() {
         )}
       </div>
 
+      {(g.entryBreakdown || []).length > 0 && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <h2>Which question brought them in</h2>
+          <p className="note">Ad arrivals by the suggested question they tapped (or typed), and how far each group got. Reminders sent {n0(g.reminders?.sent)} · opted out {n0(g.reminders?.optedOut)}.</p>
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead><tr><th>Entry</th><th className="n">Contacts</th><th className="n">Accounts</th><th className="n">Activated</th><th className="n">Funded</th></tr></thead>
+              <tbody>{g.entryBreakdown.map((e) => (
+                <tr key={e.entry}><td>{e.label}</td><td className="n">{n0(e.contacts)}</td><td className="n">{n0(e.onboarded)}</td><td className="n">{n0(e.activated)}</td><td className="n">{n0(e.funded)}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="card" style={{ marginTop: 14 }}>
         <h2>The Scale Model's inputs, measured</h2>
         <p className="note">Each input the planning model assumes, with what the data says so far. A value counts once its sample reaches {g.minSample}; until then the plan case stands and the chip reads “too early”. The link above opens the model with every measured value in place.</p>

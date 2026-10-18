@@ -754,6 +754,81 @@ async function run() {
     }
   }
 
+  // ------------------------------------------------------------------
+  // 7. Ad arrivals (docs/AD_CHAT_FLOW.md, 2026-10-18): the tapped questions, no
+  //    second welcome, onboarding straight in, the first link, the section-2
+  //    truth for FAQs, and "stop". A fresh QA number with a synthetic referral.
+  // ------------------------------------------------------------------
+  {
+    const AD_WA_ID = process.env.CHAT_QA_AD_WA_ID || '27600000902';
+    const REF = { source_url: 'https://fb.me/wapay-qa', source_type: 'ad', source_id: 'qa-ad-1', headline: 'Please pay me', body: 'Get paid on WhatsApp', media_type: 'image', ctwa_clid: `qa-clid-${process.pid}` };
+    const teardownAd = async () => {
+      const acc = await prisma.account.findFirst({ where: { waId: AD_WA_ID } });
+      if (!acc) return;
+      await prisma.paymentRequest.updateMany({ where: { accountId: acc.id, status: 'PENDING' }, data: { status: 'CANCELLED' } }).catch(() => {});
+      await prisma.paymentRequest.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.authFactor.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.conversationTurn.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.agentTurn.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.otpCode.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.consent.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.auditLog.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.wallet.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.account.delete({ where: { id: acc.id } }).catch(() => {});
+    };
+    const existing = await prisma.account.findFirst({ where: { waId: AD_WA_ID } });
+    if (existing && existing.onboardingState === 'S5_COMPLETED' && existing.profile?.acquisitionSource !== 'ad') {
+      console.log('[SKIP] Ad arrival: CHAT_QA_AD_WA_ID belongs to a real account; set another number');
+    } else {
+      await teardownAd();
+      const prevOtp = process.env.WAPAY_ONBOARDING_OTP;
+      // The harness cannot read a real one-time code; the OTP step is skipped so
+      // PIN and consent still run. Production keeps the OTP.
+      process.env.WAPAY_ONBOARDING_OTP = 'off';
+      try {
+        const ad = createSession(AD_WA_ID);
+        const a = await ad.say('What does it cost?', { referral: REF, profile: { name: 'Thandi QA' } });
+        const b = await ad.say('How it works');
+        const c = await ad.say('Open my account');
+        const d = await ad.say('2580');
+        const e = await ad.say('I accept');
+        const f = await ad.say('R20 from Thandi for the test');
+        const g = await ad.say('Can I buy airtime?');
+        const h = await ad.say('How do I get my money out?');
+        const i = await ad.say('stop');
+        const row = await prisma.account.findFirst({ where: { waId: AD_WA_ID } });
+        const attr = row?.profile?.attribution || {};
+        const links = row ? await prisma.paymentRequest.count({ where: { accountId: row.id } }) : 0;
+        const banned = /\b(banking|send money|transfer|withdraw|cash ?out)\b/i;
+        verdict('Ad arrival: Q3 → how it works → open → PIN → consent → first link → FAQ → stop', [
+          { level: 'FAIL', ok: has(a.replyText, /Under R50, getting paid is free/) && has(a.replyText, /\[Open my account\]/), what: 'the cost answer carries the open-account button' },
+          { level: 'FAIL', ok: !has(a.replyText, /Welcome to WaPay/i) && !a.replies.some((r) => /onboarding_step_1/.test(r.text)), what: 'no second welcome, no welcome template' },
+          { level: 'FAIL', ok: has(b.replyText, /Forward the payment link we send you/), what: '"How it works" answers the three steps' },
+          { level: 'FAIL', ok: has(c.replyText, /Great, Thandi/) && has(c.replyText, /pin|onboarding_step_3/i), what: '"Open my account" greets by name and reaches the PIN step at once' },
+          { level: 'FAIL', ok: has(d.replyText, /accept|consent|onboarding_step_4|Step 3 of 3/i), what: 'the PIN moves to the consent step' },
+          { level: 'FAIL', ok: has(e.replyText, /Let's get you paid\. Who owes you, and how much\?/), what: 'completion asks for the first link, not the business question' },
+          { level: 'FAIL', ok: has(f.replyText, /Here's your payment link for R20: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/) && has(f.replyText, /Forward it to Thandi/), what: '"R20 from Thandi" mints the link with the short forwardable copy' },
+          { level: 'FAIL', ok: links === 1, what: 'exactly one link exists' },
+          { level: 'FAIL', ok: has(g.replyText, /coming soon/), what: '"Can I buy airtime?" is coming soon' },
+          { level: 'FAIL', ok: has(h.replyText, /PayShap/) && has(h.replyText, /\[Nedbank cash\]/), what: 'money-out answer with the three pay-out buttons' },
+          { level: 'FAIL', ok: has(i.replyText, /no more reminders/i) && attr.reminderOptOut === true, what: '"stop" opts out of the reminder' },
+          { level: 'FAIL', ok: attr.entry === 'Q3' && Boolean(attr.ctwaClid) && Boolean(attr.onboardedAt), what: 'the account carries entry Q3, the click id and the onboarding time' },
+          { level: 'FAIL', ok: [a, b, c, d, e, f, g, h, i].every((t) => !banned.test(t.replyText)), what: 'no banned word anywhere in the flow' },
+        ], ad);
+        await teardownAd();
+        const ad2 = createSession(AD_WA_ID);
+        const q1 = await ad2.say('Open my WaPay account', { referral: REF, profile: { name: 'Sipho QA' } });
+        verdict('Ad arrival: Q1 goes straight into onboarding', [
+          { level: 'FAIL', ok: has(q1.replyText, /Great, Sipho\. Let's open your WaPay account/) && has(q1.replyText, /pin|onboarding_step_3/i), what: 'one greeting line, then the first onboarding step' },
+          { level: 'FAIL', ok: !q1.replies.some((r) => /onboarding_step_1/.test(r.text)), what: 'the welcome template is skipped' },
+        ], ad2);
+      } finally {
+        if (prevOtp === undefined) delete process.env.WAPAY_ONBOARDING_OTP; else process.env.WAPAY_ONBOARDING_OTP = prevOtp;
+        await teardownAd();
+      }
+    }
+  }
+
   return results;
 }
 

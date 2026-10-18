@@ -82,6 +82,9 @@ export default async function handler(req, res) {
              (a."profile"->'attribution'->>'ctwaClid') IS NOT NULL AS attributed,
              (a."profile"->'attribution'->'capi'->>'lead') IS NOT NULL AS capi_lead,
              (a."profile"->'attribution'->'capi'->>'purchase') IS NOT NULL AS capi_purchase,
+             a."profile"->'attribution'->>'entry' AS entry,
+             (a."profile"->'attribution'->>'reminderSentAt') IS NOT NULL AS reminded,
+             coalesce(a."profile"->'attribution'->>'reminderOptOut', 'false') = 'true' AS reminder_opt_out,
              c.onboarded_at, l.first_link_at, l.links_total, l.first_paid_at, f.first_funded_at, m.last_money_at
       FROM "Account" a
       LEFT JOIN (SELECT "accountId", min("grantedAt") AS onboarded_at FROM consents GROUP BY 1) c ON c."accountId" = a.id
@@ -107,6 +110,9 @@ export default async function handler(req, res) {
     attributed: Boolean(r.attributed),
     capiLead: Boolean(r.capi_lead),
     capiPurchase: Boolean(r.capi_purchase),
+    entry: r.entry || null,
+    reminded: Boolean(r.reminded),
+    reminderOptOut: Boolean(r.reminder_opt_out),
     onboardedAt: r.onboarded_at ? new Date(r.onboarded_at) : null,
     firstLinkAt: r.first_link_at ? new Date(r.first_link_at) : null,
     linksTotal: num(r.links_total),
@@ -302,6 +308,15 @@ export default async function handler(req, res) {
   }
   const daily = [...dayMap.values()].sort((x, y) => (x.date < y.date ? -1 : 1)).slice(-Math.min(days, 120));
 
+  // ---- which tapped question brought them in (ad arrivals) ----
+  const ENTRY_LABELS = { Q1: 'Open my WaPay account', Q2: 'How do I get paid with a link?', Q3: 'What does it cost?', Q4: 'Turn my WhatsApp into a wallet', OPEN: 'Open my account (button)', COST: 'What it costs (button)', HOW: 'How it works (button)', free_text: 'Typed their own message' };
+  const entryBreakdown = Object.keys(ENTRY_LABELS).map((k) => {
+    const rs = adRows.filter((a) => (a.entry || 'free_text') === k);
+    const onb = rs.filter((a) => a.onboarded);
+    return { entry: k, label: ENTRY_LABELS[k], contacts: rs.length, onboarded: onb.length, activated: onb.filter((a) => a.firstLinkAt).length, funded: onb.filter((a) => a.firstFundedAt).length };
+  }).filter((e) => e.contacts > 0);
+  const reminders = { sent: adRows.filter((a) => a.reminded).length, optedOut: adRows.filter((a) => a.reminderOptOut).length };
+
   // ---- the loop ----
   const adSet = new Set(adRows.map((a) => a.id));
   const level1 = rows.filter((a) => a.referrer && adSet.has(a.referrer));
@@ -404,6 +419,8 @@ export default async function handler(req, res) {
     },
     funnelBySource,
     ads,
+    entryBreakdown,
+    reminders,
     daily,
     cohorts,
     loop,

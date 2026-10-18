@@ -27,6 +27,8 @@ mock.module('@wapay/whatsapp', {
   namedExports: {
     sendWhatsAppText: async ({ to, text }) => { outbox.push({ to, text }); return { ok: true }; },
     sendWhatsAppTemplate: async ({ to, name }) => { outbox.push({ to, text: `[template:${name}]` }); return { ok: true }; },
+    sendWhatsAppReplyButtons: async ({ to, bodyText, buttons }) => { outbox.push({ to, text: `${bodyText}\n${(buttons || []).map((b) => `[${b.title}]`).join(' ')}` }); return { ok: true }; },
+    buildReplyButtonsPayload: (a) => a,
     sendWhatsAppCtaUrl: async ({ to, bodyText, url }) => { outbox.push({ to, text: `${bodyText}\n[button -> ${url}]` }); return { ok: true }; },
     seedWhatsappTemplates: async () => ({}),
     buildCatalog: async () => ({}),

@@ -204,6 +204,76 @@ export function buildCtaUrlPayload(args: SendCtaUrlArgs): Record<string, any> {
 }
 
 /**
+ * Interactive REPLY buttons (2026-10-18, the ad chat flow): body copy plus up
+ * to three tappable choices. A tap comes back through the webhook as an
+ * interactive button_reply whose TITLE the webhook forwards as the message
+ * text, so the processor matches titles. Free-form (session) message:
+ * deliverable inside the 24h window, which always holds when replying.
+ */
+export type ReplyButton = { id: string; title: string };
+export type SendReplyButtonsArgs = { to: string; bodyText: string; buttons: ReplyButton[]; footerText?: string };
+const REPLY_BUTTONS_MAX = 3;
+
+export function buildReplyButtonsPayload(args: SendReplyButtonsArgs): Record<string, any> {
+  const { to, bodyText, buttons, footerText } = args;
+  if (!to) throw new Error('to is required');
+  if (!bodyText) throw new Error('bodyText is required');
+  if (!Array.isArray(buttons) || buttons.length === 0) throw new Error('at least one button is required');
+  if (buttons.length > REPLY_BUTTONS_MAX) throw new Error(`at most ${REPLY_BUTTONS_MAX} buttons`);
+  if (bodyText.length > CTA_BODY_MAX) throw new Error(`bodyText exceeds ${CTA_BODY_MAX} chars`);
+  if (footerText && footerText.length > CTA_FOOTER_MAX) throw new Error(`footerText exceeds ${CTA_FOOTER_MAX} chars`);
+  for (const b of buttons) {
+    if (!b?.id || !b?.title) throw new Error('every button needs an id and a title');
+    if (b.title.length > CTA_BUTTON_MAX) throw new Error(`button title exceeds ${CTA_BUTTON_MAX} chars: "${b.title}"`);
+    if (b.id.length > 256) throw new Error('button id exceeds 256 chars');
+  }
+  return {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: bodyText },
+      ...(footerText ? { footer: { text: footerText } } : {}),
+      action: { buttons: buttons.map((b) => ({ type: 'reply', reply: { id: b.id, title: b.title } })) },
+    },
+  };
+}
+
+export async function sendWhatsAppReplyButtons(args: SendReplyButtonsArgs): Promise<{
+  ok: boolean;
+  data?: any;
+  error?: string;
+}> {
+  try {
+    const accessToken = process.env.META_WHATSAPP_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;
+    const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER_ID;
+    if (!accessToken || !phoneNumberId) {
+      throw new Error('META_WHATSAPP_TOKEN or META_WHATSAPP_PHONE_NUMBER_ID not set');
+    }
+    const payload = buildReplyButtonsPayload(args);
+    const url = `${WHATSAPP_API_BASE}/${phoneNumberId}/messages`;
+    console.log(`📤 Sending WhatsApp reply buttons to ${args.to}`);
+    const { statusCode, body } = await request(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+      body: JSON.stringify(payload),
+    });
+    const data = await body.json() as any;
+    if (statusCode >= 400) {
+      console.error('❌ WhatsApp reply buttons send failed:', data);
+      return { ok: false, error: data.error?.message || 'Unknown error' };
+    }
+    console.log(`✅ WhatsApp reply buttons sent: ${data.messages?.[0]?.id}`);
+    bumpSends();
+    return { ok: true, data };
+  } catch (error) {
+    console.error('❌ Error sending WhatsApp reply buttons:', error);
+    return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+/**
  * Send WhatsApp template message
  */
 /**

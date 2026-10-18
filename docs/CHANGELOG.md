@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-10-18 (90) — The ad chat flow: how the bot answers a person who tapped a Click-to-WhatsApp ad
+
+Baked in from the founder's brief of 18 October (the 224-line revision), spec of
+record `docs/AD_CHAT_FLOW.md`. An ad arrival (the referral on the first message,
+or an account already stamped `acquisitionSource = ad`) is answered
+deterministically, with no model call (`lib/ad-flow.js`): the four suggested
+questions and the three reply buttons, exact then loose; a first name from the
+profile only when it reads as one; Q1 and Q4 go straight into onboarding
+without the welcome template (`startOnboardingFromAd` in `packages/auth`,
+S0 to S1 recorded silently, OTP at once); Q2 and Q3 answer with reply buttons
+(`sendWhatsAppReplyButtons` in `packages/whatsapp`, numbered text when buttons
+cannot be delivered); the five section-2 questions (how people pay, money out,
+cash top-up, airtime, pay someone) are answered from the brief's "what WaPay
+can do today" list, with coming-soon features always coming soon. On
+completion an ad arrival is asked for its first link instead of the business
+question (state `AD_FIRST_LINK`; "R250 from Thandi for the birthday gift"
+parsed; the existing please-pay-me creation runs, and the created-link
+message is the short forwardable shape; `QualifiedLead` sent at once); a late
+amount counts within 24 hours in that exact state. The paid message for an ad
+arrival is the short shape. One reminder, ever (`lib/ad-reminders.js`: 20 to
+23.5 hours after the customer's last message, mid-onboarding or no link,
+locked before the send; "stop" opts out and is answered once, never inside a
+PIN, reset or confirm step), run by the daily cron and on demand by
+`POST /api/internal/ad-reminders`. The entry question is stored as an id on the
+account (`attribution.entry`) and the Growth tab shows which question converts.
+PIN and consent prompts now say "Step 2 of 3" and "Step 3 of 3". Tests:
+`tests/ad-flow.test.mjs` (every string the module produces passes the section
+11 word rules), route locks in `tests/growth-route.test.mjs`, harness
+scenario 7 (two ad arrivals on a fresh QA number).
+
+---
+
 ## 2026-10-16 (89) — Golden thread section 8: six of the money-path findings closed in the main session's files
 
 From the read-only inventory behind `docs/GOLDEN_THREAD.md` §8. **O4** cron

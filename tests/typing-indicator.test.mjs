@@ -62,8 +62,8 @@ test('outbound counter increments only on ok:true customer sends, never for typi
   const src = await fileText(SEND);
   assert.ok(src.includes('export function outboundSendCount(): number'));
   const increments = src.match(/bumpSends\(\);/g) || [];
-  assert.equal(increments.length, 3, 'text, template and CTA-URL each count once');
-  for (const name of ['sendWhatsAppText', 'sendWhatsAppTemplate', 'sendWhatsAppCtaUrl']) {
+  assert.equal(increments.length, 4, 'text, template, CTA-URL and reply buttons each count once (reply buttons added 2026-10-18 for the ad chat flow)');
+  for (const name of ['sendWhatsAppText', 'sendWhatsAppTemplate', 'sendWhatsAppCtaUrl', 'sendWhatsAppReplyButtons']) {
     assert.ok(fnBody(src, name).includes('bumpSends();'), `${name} must increment the counter`);
   }
   assert.ok(

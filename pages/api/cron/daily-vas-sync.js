@@ -109,7 +109,12 @@ export default async function handler(req, res) {
       const { capiSweep } = await import('../../../lib/growth-attribution.js');
       const ads = await snapshotAdInsights({ prisma, days: 3 });
       const capi = await capiSweep({ prisma, limit: 50, deadlineMs: 15 * 1000 });
-      growth = { ads, capi };
+      // The ad arrival's one reminder (docs/AD_CHAT_FLOW.md section 8), sent on
+      // the customer's own 24h window through notifyCustomer.
+      const { sendAdReminders } = await import('../../../lib/ad-reminders.js');
+      const { notifyCustomer } = await import('../../../lib/notify.js');
+      const reminders = await sendAdReminders({ prisma, limit: 20, send: ({ to, text, kind }) => notifyCustomer({ to, text, kind }) });
+      growth = { ads, capi, reminders };
       // Logged, not returned: tests/payout-reconcile.test.mjs pins the response literal.
       console.log(JSON.stringify({ type: 'cron_growth', ...growth, timestamp: new Date().toISOString() }));
     } catch (e) {

@@ -32,6 +32,8 @@ mock.module('@wapay/whatsapp', {
   namedExports: {
     sendWhatsAppText: async ({ to, text }) => { outbox.push({ to, text }); return { ok: true }; },
     sendWhatsAppTemplate: async () => ({ ok: true }),
+    sendWhatsAppReplyButtons: async () => ({ ok: true }),
+    buildReplyButtonsPayload: (a) => a,
     sendWhatsAppCtaUrl: async () => ({ ok: true }),
     seedWhatsappTemplates: async () => ({}),
   },
