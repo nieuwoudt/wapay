@@ -257,7 +257,8 @@ test('promptLines never names a capability the gate says is off, and names every
 test('fee lines come from feeSchedule and limits from the flows', () => {
   assert.match(capabilityById('DEPOSIT_CARD').feeLine(), /4\.2% \+ R2\.30/);
   assert.match(capabilityById('DEPOSIT_VOUCHER').feeLine(), /keeps 6%.*adds R94/);
-  assert.match(capabilityById('SEND').feeLine(), /Free to another WaPay user.*R3 flat/);
+  // A send is free to anyone since 2026-10-18 (BUGLOG #117): balance to balance, never a voucher.
+  assert.match(capabilityById('SEND').feeLine(), /Free, to anyone\. If they never join, it comes back to you after 30 days\./);
   assert.match(capabilityById('REQUEST_MONEY').feeLine(), /under R50/);
   withEnv({ ...NEUTRAL }, () => assert.match(capabilityById('WITHDRAW').feeLine(), /no withdrawal fee to quote/));
   withEnv({ ...NEUTRAL, WAPAY_PAYOUT_ENABLED: 'true' }, () => assert.match(capabilityById('WITHDRAW').feeLine(), /PayShap/));

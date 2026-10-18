@@ -48,7 +48,7 @@ test('answers carry the real numbers from the charging functions', () => {
   assert.match(exact, /R250 costs R263/, 'the named amount gets an exact quote');
   assert.equal(feeAskAmountCents('how much does it cost to deposit R250?'), 25000);
   const g = feeAnswer('general', null, { scope: ON_SCOPE });
-  for (const frag of ['What WaPay costs', 'free', 'R3 flat', 'under R50', 'No monthly fees']) assert.ok(g.includes(frag), frag);
+  for (const frag of ['What WaPay costs', 'free', 'Sending money from your balance is free, to any SA number', 'under R50', 'No monthly fees']) assert.ok(g.includes(frag), frag);
   assert.ok(!/—/.test(g) && !/PayShap/.test(g) && !/\bbet/i.test(g), 'customer copy rules');
 });
 

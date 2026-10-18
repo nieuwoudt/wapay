@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-10-18 (92) — "Send money" moves balance, never a voucher: a member is paid at once, anyone else's money waits for them, free, no rail
+
+The founder's decision of 18 Oct, built (BUGLOG #117):
+
+- **A member** (onboarding complete) is paid balance to balance at once (P2P_SEND).
+- **Anyone else's money** is held as WaPay's liability and lands in their balance on their first message after joining, once.
+- **Unclaimed after 30 days**, it goes back to the sender, who is told (the daily cron).
+- **Every send** is free and touches no rail.
+- **The sender** reads the same words whether or not the number is on WaPay.
+
+Built:
+
+- `lib/send-money.js`;
+- `pages/api/wallet/send/{preview,execute}.js`;
+- `lib/pending-gifts.js` (`createHeldGift`, `claimHeldGiftsToBalance`, `refundExpiredHeldGifts`; voucher claims exclude rail WAPAY);
+- `buildGiftRefund` in `lib/ledger-core.js` (additive);
+- the processor (send routing, PIN step, receipt, recipient line, claim on join, the parked send's fee);
+- `lib/gifting.js` (money notice, sanitised sender label);
+- the cron fold-in;
+- the copy (registry, fee facts, how it works, model truth);
+- migration `20261018_pending_gift_held`, applied to production first;
+- golden thread rule 2.11.
+
+---
+
 ## 2026-10-18 (91) — Launch scope: airtime, data, electricity, voucher loads and the OTT self-purchase read "coming soon" for every customer
 
 The founder, on the day the first Click-to-WhatsApp ad went into Meta's review: these

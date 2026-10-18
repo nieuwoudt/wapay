@@ -22,6 +22,22 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { seedQaAccount, teardownQaAccount, createSession, QA_WA_ID } from './chat-harness.mjs';
 import { fundQaAccount, parkQaState, QA_PIN, ottCalls, prisma } from './chat-harness.mjs';
 
+// The ledger send (BUGLOG #117): the processor's self-HTTP to /api/wallet/send/* is
+// served IN PROCESS by the real route handlers against the harness database, so a
+// scenario's send can never reach a deployed host.
+const realFetchForSend = globalThis.fetch;
+globalThis.fetch = async (url, init) => {
+  const m = String(url).match(/\/api\/wallet\/send\/(preview|execute)$/);
+  if (!m) return realFetchForSend(url, init);
+  const { default: handler } = await import(`../../pages/api/wallet/send/${m[1]}.js`);
+  const headers = Object.fromEntries(Object.entries(init?.headers || {}).map(([k, v]) => [k.toLowerCase(), v]));
+  const req = { method: init?.method || 'GET', headers, body: init?.body ? JSON.parse(init.body) : {}, url: `/api/wallet/send/${m[1]}` };
+  let status = 200; let payload = null;
+  const res = { status(c) { status = c; return res; }, json(p) { payload = p; return res; }, setHeader() { return res; } };
+  await handler(req, res);
+  return new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } });
+};
+
 const results = [];
 
 function verdict(name, checks, session, notes = []) {
@@ -189,7 +205,8 @@ async function run() {
       { level: 'FAIL', ok: !has(a.replyText, /How much electricity would you like to buy/i) && has(a.replyText, /R10 to R5000/) && has(a.replyText, /buy R100 electricity/), what: '"Can I buy electricity?" explains and offers the words to start' },
       { level: 'FAIL', ok: !has(b.replyText, /Withdraw from WaPay|Reply 1, 2 or 3/i) && has(b.replyText, /cannot be exchanged for cash/i), what: 'an OTT cash-out question is answered, not turned into a withdrawal' },
       { level: 'FAIL', ok: has(c.replyText, /Checkers does not take OTT vouchers/i) && has(c.replyText, /Talk360|Pay@/), what: '"Is it accepted at Checkers?" gets a no by name and the places it does work' },
-      { level: 'FAIL', ok: has(d.replyText, /lands in their balance and it is free/i) && !has(d.replyText, /instantly|in minutes/i) && !looksLikeMenu(d.replyText), what: '"Can I send money to someone?" explains sending, with no time promised (2026-10-12)' },
+      // The ledger send (BUGLOG #117): free, balance to balance, the same words whether or not they are on WaPay.
+      { level: 'FAIL', ok: has(d.replyText, /It is free and lands in their WaPay balance/i) && has(d.replyText, /straight away if they use WaPay, or when they join/i) && !has(d.replyText, /voucher PIN|instantly|in minutes/i) && !looksLikeMenu(d.replyText), what: '"Can I send money to someone?" explains the ledger send, free, membership-neutral, no time promised (2026-10-12, 2026-10-18)' },
     ], s);
   }
   {
@@ -598,6 +615,87 @@ async function run() {
     } finally {
       await s.say('cancel').catch(() => {});
       for (const [k, v] of [['WAPAY_PAYOUT_ENABLED', prev.on], ['WAPAY_PAYOUT_KYC', prev.kyc], ['WAPAY_AGENT_V3_MSISDNS', prev.agent]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 6g. Send money through the ledger (founder 2026-10-18, BUGLOG #117): to a
+  // member it lands in their balance at once, free; to anyone else it is held
+  // and lands when they join, once; never a voucher, never a PIN; the sender
+  // reads the same words either way (membership-neutral). Two harness-made
+  // recipients, torn down with every ledger row the sends created.
+  // ------------------------------------------------------------------
+  {
+    const B = '27600000902'; const C = '27600000903';
+    const qa = await prisma.account.findFirst({ where: { waId: QA_WA_ID } });
+    const foreign = await prisma.account.findFirst({ where: { waId: { in: [B, C] }, NOT: { displayName: 'CHAT_QA_HARNESS' } } });
+    const mkMember = async (waId) => {
+      const a = await prisma.account.create({ data: { waId, msisdn: waId, displayName: 'CHAT_QA_HARNESS', onboardingState: 'S5_COMPLETED', onboardingStatus: 'COMPLETE', status: 'ACTIVE', conversationState: null, conversationData: {}, profile: {} } });
+      await prisma.wallet.create({ data: { accountId: a.id, balanceType: 'SPEND', currency: 'ZAR', availableCents: 0, pendingCents: 0 } });
+      return a;
+    };
+    const spendOf = async (waId) => (await prisma.wallet.findFirst({ where: { account: { waId }, balanceType: 'SPEND' } }))?.availableCents ?? null;
+    const cleanup = async () => {
+      const previews = await prisma.providerRequest.findMany({ where: { accountId: qa.id, route: 'send-preview' }, select: { id: true } });
+      const keys = previews.flatMap(({ id }) => [`send-${id}`, `gift-held-gift-${id}`, `gift-claim-balance-gift-${id}`, `gift-refund-gift-${id}`]);
+      if (keys.length) {
+        await prisma.journalLine.deleteMany({ where: { entry: { idemKey: { in: keys } } } }).catch(() => {});
+        await prisma.journalEntry.deleteMany({ where: { idemKey: { in: keys } } }).catch(() => {});
+      }
+      await prisma.pendingGift.deleteMany({ where: { senderAccountId: qa.id } }).catch(() => {});
+      await prisma.beneficiary.deleteMany({ where: { accountId: qa.id } }).catch(() => {});
+      for (const waId of [B, C]) {
+        const a = await prisma.account.findFirst({ where: { waId, displayName: 'CHAT_QA_HARNESS' } });
+        if (!a) continue;
+        await prisma.conversationTurn.deleteMany({ where: { accountId: a.id } }).catch(() => {});
+        await prisma.providerRequest.deleteMany({ where: { accountId: a.id } }).catch(() => {});
+        await prisma.wallet.deleteMany({ where: { accountId: a.id } }).catch(() => {});
+        await prisma.account.delete({ where: { id: a.id } }).catch(() => {});
+      }
+    };
+    if (foreign) {
+      verdict('Send 1: send money through the ledger (skipped: a test number belongs to a real account)', [{ level: 'WARN', ok: false, what: 'harness recipient numbers are taken; set other numbers' }], s);
+    } else {
+      try {
+        await cleanup();
+        await mkMember(B);
+        await fundQaAccount({ cents: 20000, key: 'send' });
+        const before = await spendOf(QA_WA_ID);
+        const ottBefore = ottCalls.length;
+        await s.say('cancel');
+        const m1 = await s.say('send R50 to 0600000902');
+        const m2 = await s.say('yes');
+        const m3 = await s.say(QA_PIN);
+        const bSpend = await spendOf(B);
+        const n1 = await s.say('send R30 to 0600000903');
+        const n2 = await s.say('yes');
+        const n3 = await s.say(QA_PIN);
+        const held = await prisma.pendingGift.findFirst({ where: { senderAccountId: qa.id, recipientMsisdn: '0600000903' } });
+        const after = await spendOf(QA_WA_ID);
+        await mkMember(C);
+        const c = createSession(C);
+        const c1 = await c.say('hi');
+        const cSpend1 = await spendOf(C);
+        const c2 = await c.say('hi');
+        const cSpend2 = await spendOf(C);
+        const claims = held ? await prisma.journalEntry.count({ where: { idemKey: `gift-claim-balance-${held.id}` } }) : -1;
+        const heldAfter = held ? await prisma.pendingGift.findUnique({ where: { id: held.id } }) : null;
+        const neutral = (t) => has(t, /straight away if they use WaPay, or when they join\. No fee\./) && !has(t, /voucher|does not have WaPay|not on WaPay/i);
+        verdict('Send 1: to a member it lands at once, free; to anyone else it is held and lands when they join, once; never a voucher or a PIN; the sender reads the same words either way', [
+          { level: 'FAIL', ok: neutral(m1.replyText) && neutral(n1.replyText), what: 'the confirm is the same for a member and a non-member, free, no voucher' },
+          { level: 'FAIL', ok: has(m2.replyText, /Enter your WaPay PIN\* to send R50 to 0600000902/), what: 'YES asks for the PIN for the send' },
+          { level: 'FAIL', ok: has(m3.replyText, /Sent R50/) && has(n3.replyText, /Sent R30/) && has(m3.replyText, /in their WaPay balance, or it waits there for them until they join WaPay/) && has(n3.replyText, /in their WaPay balance, or it waits there for them until they join WaPay/), what: 'the receipt is the same for both' },
+          { level: 'FAIL', ok: bSpend === 5000, what: 'the member balance rose by R50 at once' },
+          { level: 'FAIL', ok: !!held && held.rail === 'WAPAY' && held.voucherPin === null && held.amountCents === 3000, what: 'the R30 to a non-member is held: rail WAPAY, no PIN' },
+          { level: 'FAIL', ok: before - after === 8000, what: 'the sender paid R80 in total, no fee' },
+          { level: 'FAIL', ok: ottCalls.length === ottBefore, what: 'no rail was called' },
+          { level: 'FAIL', ok: has(c1.replyText, /sent you R30\. It is in your WaPay balance/) && cSpend1 === 3000, what: 'joining lands the R30 in their balance with one line' },
+          { level: 'FAIL', ok: !has(c2.replyText, /sent you R30/) && cSpend2 === 3000 && claims === 1 && heldAfter?.status === 'DELIVERED', what: 'a second message claims nothing; one claim entry; the row is DELIVERED' },
+          { level: 'FAIL', ok: ![m1, m2, m3, n1, n2, n3, c1, c2].some((r) => has(r.replyText, /voucher PIN|PIN:/i)), what: 'no voucher PIN anywhere' },
+        ], s);
+      } finally {
+        await cleanup();
+      }
     }
   }
 

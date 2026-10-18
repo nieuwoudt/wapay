@@ -72,6 +72,7 @@ import {
 import { orchestrate, runAgentTurn, buildAgentSystemPrompt, runWithPrivacy, addPrivacyNames } from '@wapay/ai';
 import { privacyNamesFor } from '../../../lib/privacy-names.js';
 import { bareSecretKind, bareSecretReply, nothingPendingLine, privacyBlockedLine, expiredStepText } from '../../../lib/money-truth.js';
+import { sendConfirmText, sendReceiptText } from '../../../lib/send-money.js';
 import { buildToolDefinitions, executeTool } from '../../../lib/agent/tools/index.js';
 import { agentGuard, outputGate } from '../../../lib/agent/guards.js';
 import { recordAgentTurn, agentTurnsInLastHour } from '../../../lib/agent/turn-ledger.js';
@@ -582,6 +583,41 @@ function isConversationalEscape(text) {
  */
 /** The ways a gift preview is entered from "send money" (never the explicit self-purchase, which is OTT_VOUCHER_SELF). */
 const SEND_PATH_INTENTS = new Set(['STATE_VOUCHER_GIFT_RECIPIENT', 'STATE_VOUCHER_GIFT_RECIPIENT_BENEFICIARY', 'STATE_VOUCHER_GIFT_AMOUNT', 'ORCHESTRATOR', 'AI_CHAT', 'SMART_PRODUCT_QUERY']);
+/**
+ * A send to another number (BUGLOG #117): quoted by /api/wallet/send/preview
+ * (free, the quote of record), confirmed with the same words whether or not
+ * the number is on WaPay (membership-neutral), then the PIN, then
+ * /api/wallet/send/execute moves the money in the ledger. No rail.
+ */
+async function startSendPreviewAndConfirm({ from, account, amountCents, recipientMsisdn, rawText = '' }) {
+  const previewUrl = apiUrl('/api/wallet/send/preview');
+  logInternalFetchCall({ url: previewUrl, path: '/api/wallet/send/preview' });
+  const previewRes = await fetch(previewUrl, { method: 'POST', headers: withInternalHeaders(), body: JSON.stringify({ accountId: account.id, amountCents, recipientMsisdn }) });
+  await logInternalFetchResponse({ url: previewUrl, res: previewRes });
+  const p = previewRes.headers.get('content-type')?.includes('application/json') ? await previewRes.json() : { ok: false, error: 'NON_JSON' };
+  if (!p.ok) {
+    if (p.error === 'INSUFFICIENT_FUNDS') {
+      const totalCents = Number.isInteger(p.totalCents) ? p.totalCents : amountCents;
+      const availableCents = Number.isInteger(p.availableBalance) ? p.availableBalance : 0;
+      const shortfallCents = Math.max(totalCents - availableCents, MIN_DEPOSIT_CENTS);
+      await sendWhatsAppText({ to: from, text: await localizeOutbound(`💰 To send ${randsShort(totalCents)} you need ${randsShort(totalCents - availableCents)} more: your balance is ${randsShort(availableCents)}.\n\nTop up ${randsShort(shortfallCents)} with the button below and I will finish the send the moment it lands. Or reply "cancel".`, await userLang(account)) });
+      const linkResult = await handleCardDepositLink({ from, account, amountCents: shortfallCents, rawText });
+      await updateConversationState(from, 'RESUME_VOUCHER_PURCHASE', { amountCents, recipientMsisdn });
+      return linkResult;
+    }
+    await updateConversationState(from, null);
+    if (p.error === 'SELF') {
+      const { SEND_TO_SELF_TEXT } = await import('../../../lib/payout-gate.js');
+      return await sendWhatsAppText({ to: from, text: await localizeOutbound(SEND_TO_SELF_TEXT, await userLang(account)) });
+    }
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(`❌ ${p.error === 'USER_INPUT' && p.message ? p.message : 'I could not prepare that send.'} Nothing was sent. Try again with the amount and the number, like "send R50 to 0781234567".`, await userLang(account)) });
+  }
+  logSlotFill({ intent: 'SEND', text: rawText, slots: { amountCents, msisdn: p.recipientMsisdn }, routeDecision: 'SEND_CONFIRM', missing: [], from, accountId: account.id });
+  await updateConversationState(from, 'VOUCHER_GIFT_CONFIRM', { amountCents, feeCents: p.feeCents || 0, totalCents: p.totalCents, recipientMsisdn: p.recipientMsisdn, previewId: p.previewId, send: true });
+  // The FULL number, unmasked, so the sender can catch a wrong destination before the PIN.
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(sendConfirmText({ amountCents, recipientMsisdn: p.recipientMsisdn }), await userLang(account)) });
+}
+
 async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, recipientMsisdn, intent = 'VOUCHER_GIFT', rawText = '' }) {
   // Launch scope (2026-10-18): the self-purchase is coming soon until VAS_LIVE_OTT_VOUCHER; sends to others are not gated here.
   if (intent === 'OTT_VOUCHER_SELF' && !isRailLiveFor('OTT_VOUCHER', from)) {
@@ -596,6 +632,12 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
     await updateConversationState(from, null);
     logStructured('send_to_self_refused', { from, accountId: account.id, intent });
     return await sendWhatsAppText({ to: from, text: await localizeOutbound(SEND_TO_SELF_TEXT, await userLang(account)) });
+  }
+  // "Send money" moves balance, never a voucher (founder 2026-10-18, BUGLOG #117): every send to
+  // another number goes through the ledger (lib/send-money.js). Only the explicit self-purchase
+  // (intent OTT_VOUCHER_SELF, or its resume to the own number) keeps the voucher preview below.
+  if (intent !== 'OTT_VOUCHER_SELF' && normaliseMsisdn(recipientMsisdn || '') !== normaliseMsisdn(account.msisdn || '')) {
+    return await startSendPreviewAndConfirm({ from, account, amountCents, recipientMsisdn, rawText });
   }
   const previewUrl = apiUrl('/api/vas/voucher/preview');
   logInternalFetchCall({ url: previewUrl, path: '/api/vas/voucher/preview' });
@@ -890,7 +932,7 @@ function waIdFromMsisdn(msisdn = '') {
  *   window, so the approved template is tried FIRST; free text is only a
  *   fallback for recipients with an open session.
  */
-async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCents }) {
+async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCents, delivered = null }) {
   try {
     const buyerMsisdn = normaliseMsisdn(account?.msisdn || '');
     const targetMsisdn = normaliseMsisdn(recipientMsisdn || '');
@@ -907,6 +949,7 @@ async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCe
       senderMsisdn: account?.msisdn,
       product,
       amountCents,
+      delivered,
     });
     const to = waIdFromMsisdn(targetMsisdn);
 
@@ -1441,6 +1484,12 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
  * guide; everything else is the OTT online voucher. Bearer rules for both:
  * verbatim English, never localized, never logged.
  */
+/** A sender's WhatsApp label shown to someone else: no markdown or control characters, 40 at most (memory cross-user-actions-need-consent-gate). */
+function sanitizeSenderName(raw) {
+  const t = String(raw || '').normalize('NFKC').replace(/[\u0000-\u001f\u007f*_~`>\[\]()]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  return t || null;
+}
+
 function giftClaimText(gift, senderName = null) {
   if (gift.rail === 'YOYO') {
     return buildWicodeClaimMessage({
@@ -1601,6 +1650,27 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     }
   } catch (reconError) {
     if (!reconError?.skipHook) logStructured('payout_reconcile_hook_failed', { from, error: reconError?.message });
+  }
+
+  // Money someone SENT this number while it was not on WaPay (rail WAPAY,
+  // BUGLOG #117) becomes their balance now, once: the claim posts
+  // gift-claim-balance-<giftId> (idempotent) and the row flips DELIVERED under
+  // a guard, so a second message claims nothing. One line per gift; the
+  // sender's name is sanitised (it is the sender's own WhatsApp label).
+  try {
+    const { claimHeldGiftsToBalance } = await import('../../../lib/pending-gifts.js');
+    const held = await claimHeldGiftsToBalance({ account });
+    for (const g of held) {
+      let who = null;
+      try {
+        const sender = await prisma.account.findUnique({ where: { id: g.senderAccountId }, select: { displayName: true } });
+        who = sanitizeSenderName(sender?.displayName);
+      } catch { /* the name is cosmetic */ }
+      await sendWhatsAppText({ to: from, text: await localizeOutbound(`🎁 ${who || 'Someone'} sent you ${randsShort(g.amountCents)}. It is in your WaPay balance: spend it here or say *withdraw* to move it to your bank.`, await userLang(account)), kind: 'receipt' });
+      logStructured('held_gift_claimed', { from, accountId: account.id, giftId: g.giftId, amountCents: g.amountCents });
+    }
+  } catch (heldError) {
+    logStructured('held_gift_claim_failed', { from, accountId: account.id, error: heldError?.message });
   }
 
   // A claim marks the gift DELIVERED before anything is sent, so every path
@@ -6019,7 +6089,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       const balanceCents = Math.round(parseFloat(balance) * 100) || 0;
       const resumeRecipient = data?.recipientMsisdn || account.msisdn;
       const resumeIsSelf = normaliseMsisdn(resumeRecipient) === normaliseMsisdn(account.msisdn || '');
-      const resumeNeededCents = resumeAmountCents + (resumeIsSelf ? 0 : 300);
+      // A send to another number is free since 2026-10-18 (BUGLOG #117); the self-purchase never had a fee.
+      const resumeNeededCents = resumeAmountCents;
 
       if (balanceCents >= resumeNeededCents) {
         await updateConversationState(from, null);
@@ -6399,7 +6470,7 @@ async function handleConversationState({ from, text, state, data, account }) {
 
         if (/^(no|cancel|stop|not now|later|reset|restart|start over)$/i.test(normalized)) {
           await updateConversationState(from, null);
-          await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Voucher gift cancelled.`, await userLang(account)) });
+          await sendWhatsAppText({ to: from, text: await localizeOutbound(data?.send ? `👍 Cancelled. Nothing was sent.` : `👍 Voucher gift cancelled.`, await userLang(account)) });
           return await renderHome({ from, account });
         }
 
@@ -6441,6 +6512,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           amountCents,
           feeCents,
           recipientMsisdn,
+          ...(data?.send ? { send: true } : {}),
         });
 
         logStructured('vas_voucher_gift_pin_requested', {
@@ -6454,7 +6526,9 @@ async function handleConversationState({ from, text, state, data, account }) {
         return await sendWhatsAppText({
           to: from,
           text:
-            await localizeOutbound(normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')
+            await localizeOutbound(data?.send
+              ? `🔐 *Enter your WaPay PIN* to send ${randsShort(amountCents)} to ${recipientMsisdn}.`
+              : normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')
               ? `🔐 *Enter Your PIN*\n\nTo buy your ${randsShort(amountCents)} OTT voucher${feeCents > 0 ? ` (total ${randsShort(amountCents + feeCents)} incl. fee)` : ''}, please enter your WaPay PIN.`
               : `🔐 *Enter Your PIN*\n\nTo send the ${randsShort(amountCents)} WaPay voucher to ${recipientMsisdn} (total ${randsShort(amountCents + (feeCents || 0))} incl. fee), please enter your WaPay PIN.`, await userLang(account)),
         });
@@ -6467,7 +6541,7 @@ async function handleConversationState({ from, text, state, data, account }) {
 
         if (/^(cancel|stop|no|reset|restart)$/i.test(normalized.toLowerCase())) {
           await updateConversationState(from, null);
-          await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Voucher gift cancelled.`, await userLang(account)) });
+          await sendWhatsAppText({ to: from, text: await localizeOutbound(data?.send ? `👍 Cancelled. Nothing was sent.` : `👍 Voucher gift cancelled.`, await userLang(account)) });
           return await renderHome({ from, account });
         }
 
@@ -6512,14 +6586,17 @@ async function handleConversationState({ from, text, state, data, account }) {
         await sendWhatsAppText({
           to: from,
           text:
-            await localizeOutbound(normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')
+            await localizeOutbound(data?.send
+              ? `⏳ Sending...`
+              : normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')
               ? `⏳ Generating your OTT voucher...`
               : `⏳ Sending your WaPay voucher...`, await userLang(account)),
         });
 
         try {
-          const executeUrl = apiUrl('/api/vas/voucher/execute');
-          logInternalFetchCall({ url: executeUrl, path: '/api/vas/voucher/execute' });
+          // A send moves money in the ledger (BUGLOG #117); only the self-purchase calls the voucher route.
+          const executeUrl = apiUrl(data?.send ? '/api/wallet/send/execute' : '/api/vas/voucher/execute');
+          logInternalFetchCall({ url: executeUrl, path: data?.send ? '/api/wallet/send/execute' : '/api/vas/voucher/execute' });
           const executeRes = await fetch(executeUrl, {
             method: 'POST',
             headers: withInternalHeaders(),
@@ -6562,8 +6639,8 @@ async function handleConversationState({ from, text, state, data, account }) {
               await sendWhatsAppText({
                 to: from,
                 text:
-                  await localizeOutbound(`💰 You need ${randsShort(totalCents)} for this voucher but your balance is R${balance}.\n\n` +
-                  `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your voucher. 🎟️` +
+                  await localizeOutbound(`💰 You need ${randsShort(totalCents)} for this ${data?.send ? 'send' : 'voucher'} but your balance is R${balance}.\n\n` +
+                  `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your ${data?.send ? 'send' : 'voucher'}. 🎟️` +
                   (isRailLiveFor('BLU_LOAD', from) ? `\n\n(Prefer cash? Buy a Blu Voucher at any till and send me the code.)` : ''), await userLang(account)),
               });
               const linkResult = await handleCardDepositLink({
@@ -6584,8 +6661,19 @@ async function handleConversationState({ from, text, state, data, account }) {
             return await sendWhatsAppErrorOnce({
               to: from,
               errorKey: `${previewId || 'vgift'}:${executeData.error || 'ERROR'}`,
-              text: `❌ ${executeData.message || 'Voucher gift failed.'}\n\nPlease try again later.`,
+              text: data?.send
+                ? `❌ That send did not go through, so nothing left your balance. Say "send R${Math.round((amountCents || 0) / 100)} to ${recipientMsisdn}" to try again.`
+                : `❌ ${executeData.message || 'Voucher gift failed.'}\n\nPlease try again later.`,
             });
+          }
+
+          // A send: the same receipt whether or not they are on WaPay (membership-neutral);
+          // the recipient's informational line says where the money is (BUGLOG #117).
+          if (data?.send) {
+            logStructured('send_execute_success', { from, accountId: account.id, previewId, delivered: executeData.delivered, amountCents: executeData.amountCents ?? amountCents, recipientMasked: maskMsisdn(recipientMsisdn) });
+            await sendWhatsAppText({ to: from, text: await localizeOutbound(sendReceiptText({ amountCents: executeData.amountCents ?? amountCents, recipientMsisdn, newBalanceCents: executeData.newBalance || 0 }), await userLang(account)), kind: 'receipt' });
+            await notifyGiftRecipient({ account, recipientMsisdn, product: 'MONEY', amountCents: executeData.amountCents ?? amountCents, delivered: executeData.delivered });
+            return await sendPostTransactionCta(from);
           }
 
           // Success! Sender receipt — never the voucher PIN (the recipient

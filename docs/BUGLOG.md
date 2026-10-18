@@ -4,7 +4,32 @@
 
 ---
 
-## 116. The "not enabled" reply advertised airtime while refusing a category, the VAS flags were frozen at import, and two voucher rails had no switch at all
+## 117. "Send money" bought a voucher: the recipient got a PIN, not money, while the copy promised "it lands in their balance"
+
+- **Symptom (Lisa, 12 Oct; the founder's decision, 18 Oct):**
+  - Every send went to `/api/vas/voucher/execute`, which bought an OTT voucher for the recipient. A WaPay member got a voucher PIN instead of money in their balance; Lisa's R350 came as a PIN on OTT's test host, and her balance stayed R0.
+  - The registry, the how-it-works answer and the model's product truth all said "if they are on WaPay it lands in their balance and it is free".
+  - The one send that did move balance (`buildSend`) only paid payment requests.
+- **Root cause:** the send flow was built as a voucher sale (the closed-loop posture of August); the member case was never wired, and the copy described a product that did not exist.
+- **Fix (founder 18 Oct: send stays on, through the ledger; free; member = onboarding complete; unclaimed after 30 days goes back to the sender):**
+  - **The money:** `lib/send-money.js` `sendMoney`. A member gets `buildSend`, P2P_SEND, idemKey `send-<previewId>`, free. Anyone else gets `buildGiftHeld`, free, and a `pending_gifts` row (`rail 'WAPAY'`, no PIN) in one transaction.
+  - **The routes:** `/api/wallet/send/preview` and `/api/wallet/send/execute`. Internal key; the PIN is verified inside, approving this preview and amount; `sendMoney` checks the proof before any write (golden thread 2.11); fuel's EXECUTING claim; no rail client.
+  - **Joining:** the recipient's first message after joining calls `claimHeldGiftsToBalance` (guarded flip, `gift-claim-balance-<giftId>`, a second claim is a no-op) and gets one line.
+  - **The fake-PIN trap:** `claimPendingGifts` now defaults to the voucher rails. The fuel and OTT self-purchase sweeps used to hand every waiting gift out as a PIN, so a held gift would have gone out as one.
+  - **The refund:** the daily cron refunds held money after 30 days (`buildGiftRefund`, `gift-refund-<giftId>`) and tells the sender once.
+  - **Membership-neutral copy:** the confirm and the receipt read the same for a member and a non-member ("straight away if they use WaPay, or when they join"). The recipient's line says where the money is, never a PIN.
+  - **The situation copy:** `money-situation` and `payout-gate` describe a held gift as balance on its way, never a voucher PIN.
+  - **Fees:** the voucher-gift fee no longer applies to a send, the parked top-up needs no fee, and the copy is updated on every surface.
+  - **Migration** `20261018_pending_gift_held` (`voucherPin` nullable), applied to production before the deploy.
+- **Guard:** `tests/send-money.test.mjs`:
+  - a member transfer, a held gift, a claim once, the voucher sweeps blind to held gifts, the refund once, no proof means nothing moves;
+  - the copy is identical for both, with no rail in the path;
+  - the chat wiring order.
+
+  `tests/voucher-gift-ledger.test.mjs` pins `buildGiftRefund`. The wording locks moved in capabilities, fee-facts, how-it-works, orchestrator-routing and payout-chat. Harness scenario 6g runs both sends, the join, the second message and no rail through the real processor, with the send routes served in-process.
+- **Still to confirm:** a member send and a non-member send on production with the founder's own number and a second pilot number (his run sheet). The recipient template `wapay_voucher_received` reads "{{1}} sent you {{2}} with WaPay", which stays true for money; a money-specific template would be clearer and needs Meta approval.
+
+ advertised airtime while refusing a category, the VAS flags were frozen at import, and two voucher rails had no switch at all
 
 - **Symptom (read on 2026-10-18 while implementing the launch scope):** `categoryUnavailableMessage` ended with "You can still buy airtime, data, or electricity right now" whatever was live; `VAS_LIVE` was computed once at import, so a Vercel flag flip only reached a cold function and no test process could exercise both worlds; the Blu voucher load and the OTT self-purchase could not be switched off at all; airtime had no gate anywhere (the only VAS category without one), so `VAS_LIVE_AIRTIME=false` would have left "buy airtime" working.
 - **Root cause:** the flags predated the registry; each category gate was added by hand where someone had looked.

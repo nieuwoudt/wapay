@@ -138,7 +138,9 @@ test('engine: prompts carry the money-truth rules and the honest product list', 
   assert.match(engineSource, /SPEND-ONLY/, 'withdrawals honestly unavailable');
   assert.match(engineSource, /CANNOT be exchanged for cash/, 'the OTT written answer is baked in');
   assert.ok(!/PayShap/.test(engineSource), 'no PayShap cash-out claim survives in prompts');
-  assert.match(engineSource, /R3 fee/, 'send-money fee is stated');
+  // A send is free and moves balance to balance (BUGLOG #117); the model never says who is on WaPay.
+  assert.match(engineSource, /It moves from their WaPay balance to the recipient's WaPay balance, free, R10 to R1000/, 'send-money truth is stated');
+  assert.match(engineSource, /Never say whether a particular number is on WaPay/);
 });
 
 test('engine: all 11 official languages are declared', () => {

@@ -29,7 +29,8 @@ test('launch scope: an off topic answers coming soon and what works today, never
   assert.doesNotMatch(dep, /ask any major retailer for a \*Blu Voucher\*/);
   assert.match(howItWorksAnswer('ott', holdCtx), /WaPay \(OTT\) vouchers are coming soon/);
   assert.doesNotMatch(howItWorksAnswer('ott', holdCtx), /Say "buy an OTT voucher for R100"/);
-  assert.match(howItWorksAnswer('send', holdCtx), /lands in their WaPay balance and it is free/, 'send stays live (founder, 2026-10-18)');
+  assert.match(howItWorksAnswer('send', holdCtx), /It is free and lands in their WaPay balance/, 'send stays live (founder, 2026-10-18)');
+  assert.doesNotMatch(howItWorksAnswer('send', holdCtx), /spend it on airtime/, 'with airtime off, a recipient is never told to spend on it');
   assert.match(howItWorksAnswer('fuel', holdCtx), /coming to WaPay soon/);
   assert.doesNotMatch(howItWorksAnswer('fuel', holdCtx), /airtime, data, electricity, vouchers/, 'the fuel redirect names only what works');
 });
@@ -66,7 +67,7 @@ test('answers carry the steps, the real limits and the words to start, and follo
   assert.match(howItWorksAnswer('ott', { ...ctx, text: 'can I use it on Talk360?' }), /Yes, Talk360 takes OTT vouchers/);
   assert.equal(matchHowItWorksAsk('Is it accepted at Checkers?'), 'ott'); assert.equal(matchHowItWorksAsk('does takealot take it?'), 'ott'); assert.equal(matchHowItWorksAsk('can I pay netflix with it'), 'ott');
   const s = howItWorksAnswer('send', ctx);
-  assert.match(s, /lands in their WaPay balance and it is free/); assert.match(s, /withdraw it to their own bank account/); assert.ok(!/instantly|in minutes|within (?:seconds|a minute)/.test(s), "no time promised (2026-10-12)");
+  assert.match(s, /It is free and lands in their WaPay balance/); assert.match(s, /straight away if they use WaPay, or when they join/); assert.doesNotMatch(s, /voucher PIN|R3/); assert.match(s, /withdraw it to their own bank account/); assert.ok(!/instantly|in minutes|within (?:seconds|a minute)/.test(s), "no time promised (2026-10-12)");
   assert.match(howItWorksAnswer('send', { ...ctx, withdrawLive: false }), /Cash withdrawals are coming soon/);
   assert.match(howItWorksAnswer('fuel', ctx), /coming to WaPay soon/); assert.match(howItWorksAnswer('fuel', { ...ctx, wicodeLive: true }), /Shell and Engen/);
   assert.match(howItWorksAnswer('deposit', ctx), /R20 costs R24/);

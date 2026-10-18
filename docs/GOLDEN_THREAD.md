@@ -46,6 +46,7 @@ A rule that has only a comment is not on this thread.
 | 2.8 | **A reset without a second check pauses withdrawals to new destinations.** After a PIN reset with no ID check, a withdrawal can only go to a destination saved before the reset, for 24 hours (`WAPAY_PIN_RESET_COOLOFF_HOURS`; 0 switches it off). | `pinResetCoolOff`, read in `startWithdraw` and `executeWithdraw` | `tests/pin-reset.test.mjs` |
 | 2.9 | **A card callback mints nothing it cannot prove.** Without the whole merchant configuration nothing is approved: an empty secret signs for anyone, and an empty merchant id matches an empty claim. Adumo's public sandbox secret never approves outside the sandbox. | `verifyJwtHs256` and `verifyAdumoResponse` (`lib/adumo.js`) | `tests/money-out-safeguards.test.mjs`, `tests/adumo.test.mjs` |
 | 2.10 | **No operator route changes a balance.** Admin routes are read-only. A manual credit is a `postEntry` with an idemKey, never a direct wallet update. | constitution invariant 2 | `tests/ledger-core.test.mjs`, `tests/ledger-post.test.mjs`, inventory 2026-10-16 |
+| 2.11 | **A send moves money only inside WaPay, with the sender's proof.** "Send money" moves balance to balance (a member) or into WaPay's held-gift liability (anyone else), never a voucher and never a rail. The route verifies the sender's PIN for this preview and amount; `sendMoney` checks the proof before any write. Held money is claimed once into the recipient's balance, or refunded to the sender after 30 days. What the sender reads is the same whether or not the number is on WaPay. | `lib/send-money.js`, `pages/api/wallet/send/*`, `lib/pending-gifts.js` (`claimHeldGiftsToBalance`, `refundExpiredHeldGifts`; voucher claims exclude rail WAPAY) | `tests/send-money.test.mjs`, harness 6g |
 
 ## 3. Bank and ID details are stored encrypted
 
@@ -109,6 +110,7 @@ These come from the read-only inventory of every money path. Each one needs an o
 | O8 | **`PIN_PEPPER` default in source** (§6). | **Code closed 2026-10-16, env open:** `pepperCandidates()` tries the current pepper, then `PIN_PEPPER_PREVIOUS`, then the in-source default; a PIN that verifies under an old pepper is rehashed under the current one in the same update. Production logs `pin_pepper_default_in_production` once per instance until the founder sets `PIN_PEPPER` (any 32+ random bytes); no customer is locked out by the change. |
 | O9 | **The leaked supplier and Meta secrets are not rotated yet** (memory `key-rotation-deferred`). | Rotate before launch. |
 | O10 | **KYC is off for every customer** (`WAPAY_PAYOUT_KYC=off`, the founder's open-pilot decision of 2026-10-12). | Revisit with counsel before scale. |
+| O11 | **"Send money" is a wallet-to-wallet transfer since 2026-10-18 (BUGLOG #117).** One customer's balance credits another's, or WaPay holds it for a non-member. That is e-money, not a closed-loop voucher sale. This is the founder's open-pilot stance, like O10. | Take it to counsel with O10 before a public launch. |
 
 ## 9. History
 

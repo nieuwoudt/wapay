@@ -163,7 +163,7 @@ test('a question in the middle of the withdraw flow is answered, then the step r
   const d = deps(10000); // R100 (cash needs R68 since the R50 floor of 2026-10-10)
   const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
   const q1 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: 'If I send someone money, can they withdraw it?' });
-  assert.equal(q1.state, 'PAYOUT_METHOD', 'the flow is parked, not advanced'); assert.match(q1.text, /lands in their WaPay balance and it is free/); assert.match(q1.text, /Back to your withdrawal/); assert.match(q1.text, /1️⃣ \*PayShap\*/);
+  assert.equal(q1.state, 'PAYOUT_METHOD', 'the flow is parked, not advanced'); assert.match(q1.text, /It is free and lands in their WaPay balance/); assert.match(q1.text, /Back to your withdrawal/); assert.match(q1.text, /1️⃣ \*PayShap\*/);
   const q2 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: 'Does it work when I send cash to an ATM? How do I withdraw the money?' });
   assert.equal(q2.state, 'PAYOUT_METHOD', '"ATM" inside a question is not a menu choice'); assert.match(q2.text, /Here is how it works/);
   const pick = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '3' });

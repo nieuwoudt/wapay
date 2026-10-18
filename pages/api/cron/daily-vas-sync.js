@@ -79,6 +79,17 @@ export default async function handler(req, res) {
       payoutSweep = { error: e?.message || String(e) };
     }
 
+    // Held sends nobody collected in 30 days go back to their senders, each told
+    // once (BUGLOG #117; Hobby plan, so it rides this daily cron like the pay-out
+    // sweep). Best-effort: never changes this route's answer or status.
+    try {
+      const { refundHeldGiftsAndNotify } = await import('../../../lib/send-money.js');
+      const heldRefund = await refundHeldGiftsAndNotify({});
+      console.log(JSON.stringify({ type: 'cron_held_gift_refund', ...heldRefund, timestamp: new Date().toISOString() }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_held_gift_refund_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
     // Conversation memory retention (docs/AGENT_ARCHITECTURE_V2.md C14): turns
     // older than 30 days are deleted; best-effort, never fails the cron.
     let turnsPurged = null;

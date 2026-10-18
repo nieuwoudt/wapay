@@ -79,3 +79,8 @@ Yours:
 2. **Intent before vocabulary** in the slot rescue (`lib/agent/slot-rescue.js`, where "50 and 2" lives): "put / move / transfer / pay (in|into|to) my (bank) account", "how much can I withdraw", "withdraw X from waypay" → WITHDRAW; "send money" with the customer's own number → WITHDRAW (item 4 refuses it in the send flow); a received voucher mentioned → VOUCHER-HELP, never BUY. `matchWithdrawAsk` (lib/payout-chat.js) already reads all of these for the regex path; import it rather than writing a second table.
 3. **Repeat detection for every reply:** before sending, compare the reply with the last assistant turn; if equal, send the explanation tier instead (what they have, what it can and cannot do, the one next step); the third time offer a person. The withdraw gate does this with `refs.gate`; a generic version belongs in `lib/say.js` or the output gate.
 4. **Refusals lead with the customer's money:** "You have R0 to withdraw. …", never "Withdrawals start at R50" first. `situationSentences` is the shared wording.
+
+## H. The ledger send (2026-10-18, BUGLOG #117): one ask in your files
+
+- `lib/context-pack.js` `giftsSent`: show a held send (`pending_gifts.rail = 'WAPAY'`, status ISSUED) as **HELD: waiting for them to join, free; back to you after 30 days if they never do**. Show REFUNDED as "came back to you". Today the pack sees it as ISSUED, so the model may call it a voucher.
+
