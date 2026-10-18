@@ -4,6 +4,15 @@
 
 ---
 
+## 115. Every new account since 10 October was stamped "organic": the pay-link referrer lookup ordered by a column that does not exist
+
+- **Symptom (seen in the ad-flow harness run, 2026-10-18 07:16 UTC):** `growth_referrer_lookup_error … Unknown argument \`createdAt\`` on every account creation. `findPayLinkReferrer` caught the error and returned null, so `newAccountProfile` fell back to `organic` and the pay-link loop (payer who later onboards, with the requester as referrer) was never recorded. Since commit `b93ee70` (2026-10-10).
+- **Root cause:** `ProviderRequest` has `requestTs`, not `createdAt`; the lookup added `orderBy: { createdAt: 'desc' }` to the earlier `findFirst` that had no ordering. Best-effort error handling hid it.
+- **Fix:** `orderBy: { requestTs: 'desc' }`. No data to repair: no card payer has onboarded since 10 October (8 accounts, none pay-link acquired).
+- **Guard:** `tests/growth.test.mjs` (a stub that throws on `createdAt`, and asserts the requester comes back).
+
+---
+
 ## 114. A forged card callback could have credited an account if the Adumo signing secret was empty
 
 - **Symptom (the read-only money-path inventory of 2026-10-16; nothing happened):** `verifyJwtHs256` accepted any secret, the empty string included (Node signs and verifies with an empty HMAC key), and `verifyAdumoResponse` compared the token's merchant and application ids with the configured ones by a case-insensitive equality that treats two empty values as equal. With `ADUMO_JWT_SECRET` unset (or set to Adumo's published sandbox secret, which is in our source), anyone could create a payment request, open checkout and POST a self-signed token to `/api/webhooks/adumo`, and `settleCardPayment` would credit the requester.
