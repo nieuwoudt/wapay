@@ -46,7 +46,7 @@ test('FUEL is gated on the wiCode production flag and defaults OFF', () => {
   assert.equal(VAS_CATEGORY_CONFIG.FUEL.comingSoon, true);
   assert.equal(VAS_CATEGORY_CONFIG.FUEL.provider, 'YOYO');
   const vasConfig = readFileSync(fileURLToPath(new URL('../lib/vas-config.js', import.meta.url)), 'utf8');
-  assert.match(vasConfig, /get FUEL\(\) \{ return process\.env\.WAPAY_WICODE_LIVE === 'true'; \}/);
+  assert.match(vasConfig, /get FUEL\(\) \{ return !launchHold\(\) && process\.env\.WAPAY_WICODE_LIVE === 'true'; \}/);
 });
 
 test('fuel commission defaults to 0 bps until a rate is signed', () => {

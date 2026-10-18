@@ -262,10 +262,11 @@ test('cash-out script: coming soon, no dates, and redirects to live spending', (
   assert.doesNotMatch(s, /Airtime and data/i, 'launch scope 2026-10-18: prepaid is off by default, so it is not a destination');
   const prev = process.env.VAS_LIVE_AIRTIME;
   try {
-    process.env.VAS_LIVE_AIRTIME = 'true';
+    process.env.VAS_LIVE_AIRTIME = 'true'; process.env.WAPAY_LAUNCH_HOLD = 'off';
     assert.match(cashoutScript(), /\*Airtime\*/, 'switched on, it is a destination again');
   } finally {
     if (prev === undefined) delete process.env.VAS_LIVE_AIRTIME; else process.env.VAS_LIVE_AIRTIME = prev;
+    delete process.env.WAPAY_LAUNCH_HOLD;
   }
   // The payout partner is never named to customers. "OTT" as the VOUCHER
   // network ("stores that accept OTT vouchers") is existing public copy and

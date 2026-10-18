@@ -36,7 +36,7 @@ test('the shadow gate: a listed number reaches the agent after the guard hooks a
 });
 
 test('inside the turn: guards run before any model call, the budget before the context load, the ledger records every path', () => {
-  const guardAt = turn.indexOf('const guard = agentGuard(text, { pendingIntent });');
+  const guardAt = turn.indexOf('const guard = agentGuard(text, { pendingIntent, scope: launchScopeFor({ waId: from, account }) });');
   const budgetAt = turn.indexOf('agentTurnsInLastHour({ prisma, accountId: account.id })');
   const loadAt = turn.indexOf('loadContextPack({ prisma, account })');
   const modelAt = turn.indexOf('await runAgentTurn({');

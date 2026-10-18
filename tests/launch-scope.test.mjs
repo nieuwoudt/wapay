@@ -18,6 +18,8 @@ import {
 import { homeLines, helpLines, welcomeLines, promptLines, worksToday, launchScopeFor, isCapabilityLiveFor } from '../lib/capabilities.js';
 import { CAN_DO } from '../lib/ad-flow.js';
 import { scopeFromEnv } from '@wapay/ai';
+import { agentGuard, comingSoonCommand } from '../lib/agent/guards.js';
+import { launchHold } from '../lib/vas-config.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const processor = read('../pages/api/webhooks/message-processor-v2.js');
@@ -28,7 +30,7 @@ const PILOT = '27787051175';
 const OTHER = '27780000002';
 const SWITCHES = ['VAS_LIVE_AIRTIME', 'VAS_LIVE_DATA', 'VAS_LIVE_ELECTRICITY', 'VAS_LIVE_BLU_LOAD', 'VAS_LIVE_OTT_LOAD', 'VAS_LIVE_OTT_VOUCHER'];
 const LISTS = ['VAS_ALLOWLIST_AIRTIME', 'VAS_ALLOWLIST_DATA', 'VAS_ALLOWLIST_ELECTRICITY', 'VAS_ALLOWLIST_BLU_LOAD', 'VAS_ALLOWLIST_OTT_LOAD', 'VAS_ALLOWLIST_OTT_VOUCHER'];
-const NEUTRAL = Object.fromEntries([...SWITCHES, ...LISTS, 'OTT_MERCHANT_API_KEY', 'WAPAY_PAYOUT_ENABLED', 'WAPAY_PAYOUT_ALLOWLIST', 'WAPAY_WICODE_LIVE', 'VAS_ALLOWLIST_FUEL'].map((k) => [k, undefined]));
+const NEUTRAL = Object.fromEntries([...SWITCHES, ...LISTS, 'WAPAY_LAUNCH_HOLD', 'OTT_MERCHANT_API_KEY', 'WAPAY_PAYOUT_ENABLED', 'WAPAY_PAYOUT_ALLOWLIST', 'WAPAY_WICODE_LIVE', 'VAS_ALLOWLIST_FUEL'].map((k) => [k, undefined]));
 
 function withEnv(env, fn) {
   const prev = {};
@@ -58,32 +60,32 @@ test('the six switches are off by default, read at call time, and =true turns ea
     assert.deepEqual(s, { airtime: false, data: false, electricity: false, anyVas: false, allVas: false, bluLoad: false, ottLoad: false, voucher: false });
   });
   for (const [env, key] of [['VAS_LIVE_AIRTIME', 'AIRTIME'], ['VAS_LIVE_DATA', 'DATA'], ['VAS_LIVE_ELECTRICITY', 'ELECTRICITY']]) {
-    withEnv({ ...NEUTRAL, [env]: 'true' }, () => {
+    withEnv({ ...NEUTRAL, WAPAY_LAUNCH_HOLD: 'off', [env]: 'true' }, () => {
       assert.equal(VAS_LIVE[key], true, `${env} read at call time, not at import`);
       assert.equal(isCategoryEnabledForWaId(key, OTHER), true);
       assert.deepEqual(getLiveCategories(), [key]);
     });
-    withEnv({ ...NEUTRAL, [env]: 'TRUE ' }, () => assert.equal(VAS_LIVE[key], true, 'case and whitespace tolerant'));
-    withEnv({ ...NEUTRAL, [env]: 'false' }, () => assert.equal(VAS_LIVE[key], false));
-    withEnv({ ...NEUTRAL, [env]: '' }, () => assert.equal(VAS_LIVE[key], false, 'empty means unset'));
+    withEnv({ ...NEUTRAL, WAPAY_LAUNCH_HOLD: 'off', [env]: 'TRUE ' }, () => assert.equal(VAS_LIVE[key], true, 'case and whitespace tolerant'));
+    withEnv({ ...NEUTRAL, WAPAY_LAUNCH_HOLD: 'off', [env]: 'false' }, () => assert.equal(VAS_LIVE[key], false));
+    withEnv({ ...NEUTRAL, WAPAY_LAUNCH_HOLD: 'off', [env]: '' }, () => assert.equal(VAS_LIVE[key], false, 'empty means unset'));
   }
-  withEnv({ ...NEUTRAL, VAS_LIVE_BLU_LOAD: 'true' }, () => assert.equal(isRailLiveFor('BLU_LOAD', OTHER), true));
-  withEnv({ ...NEUTRAL, VAS_LIVE_OTT_VOUCHER: 'true' }, () => assert.equal(launchScope(OTHER).voucher, true));
-  withEnv({ ...NEUTRAL, VAS_LIVE_OTT_LOAD: 'true' }, () => assert.equal(launchScope(OTHER).ottLoad, false, 'the OTT load rail also needs the merchant key'));
-  withEnv({ ...NEUTRAL, VAS_LIVE_OTT_LOAD: 'true', OTT_MERCHANT_API_KEY: 'k' }, () => assert.equal(launchScope(OTHER).ottLoad, true));
+  withEnv({ ...NEUTRAL, VAS_LIVE_BLU_LOAD: 'true', WAPAY_LAUNCH_HOLD: 'off' }, () => assert.equal(isRailLiveFor('BLU_LOAD', OTHER), true));
+  withEnv({ ...NEUTRAL, VAS_LIVE_OTT_VOUCHER: 'true', WAPAY_LAUNCH_HOLD: 'off' }, () => assert.equal(launchScope(OTHER).voucher, true));
+  withEnv({ ...NEUTRAL, VAS_LIVE_OTT_LOAD: 'true', WAPAY_LAUNCH_HOLD: 'off' }, () => assert.equal(launchScope(OTHER).ottLoad, false, 'the OTT load rail also needs the merchant key'));
+  withEnv({ ...NEUTRAL, VAS_LIVE_OTT_LOAD: 'true', OTT_MERCHANT_API_KEY: 'k', WAPAY_LAUNCH_HOLD: 'off' }, () => assert.equal(launchScope(OTHER).ottLoad, true));
   // The env surface is exactly the documented one (no second spelling anywhere).
   for (const env of SWITCHES) assert.ok(vasConfigSrc.includes(`'${env}'`), env);
 });
 
 test('VAS_ALLOWLIST_<KEY> narrows an ON switch to the named testers, for rails as for categories', () => {
-  withEnv({ ...NEUTRAL, VAS_LIVE_AIRTIME: 'true', VAS_ALLOWLIST_AIRTIME: ` ${PILOT},` }, () => {
+  withEnv({ ...NEUTRAL, VAS_LIVE_AIRTIME: 'true', VAS_ALLOWLIST_AIRTIME: ` ${PILOT},`, WAPAY_LAUNCH_HOLD: 'off' }, () => {
     assert.equal(isCategoryEnabledForWaId('AIRTIME', PILOT), true);
     assert.equal(isCategoryEnabledForWaId('AIRTIME', OTHER), false);
     assert.equal(isCategoryLive('AIRTIME'), true, 'the global check is the switch alone');
     assert.equal(launchScope(PILOT).airtime, true);
     assert.equal(launchScope(OTHER).airtime, false);
   });
-  withEnv({ ...NEUTRAL, VAS_LIVE_BLU_LOAD: 'true', VAS_ALLOWLIST_BLU_LOAD: PILOT }, () => {
+  withEnv({ ...NEUTRAL, VAS_LIVE_BLU_LOAD: 'true', VAS_ALLOWLIST_BLU_LOAD: PILOT, WAPAY_LAUNCH_HOLD: 'off' }, () => {
     assert.equal(isRailLiveFor('BLU_LOAD', PILOT), true);
     assert.equal(isRailLiveFor('BLU_LOAD', OTHER), false);
     assert.equal(isCapabilityLiveFor('DEPOSIT_VOUCHER', { waId: OTHER }), false);
@@ -96,7 +98,7 @@ test('VAS_ALLOWLIST_<KEY> narrows an ON switch to the named testers, for rails a
 test('the coming-soon words: what is off, what works, never a date, never a banned word', () => {
   withEnv(NEUTRAL, () => {
     const s = launchScope(OTHER);
-    assert.deepEqual(comingSoonPhrases(s), ['airtime, data, electricity', 'fuel vouchers', 'cash top-ups with Blu and OTT vouchers']);
+    assert.deepEqual(comingSoonPhrases(s), ['airtime, data, electricity', 'fuel vouchers', 'cash deposits with a Blu or OTT voucher', 'a virtual card']);
     assert.equal(prepaidNames(s, { live: false }), 'airtime, data and electricity');
     assert.equal(prepaidNames(s), '');
     assert.equal(worksTodaySentence({ scope: s, withdrawLive: true }), 'Right now you can get paid with a "please pay me" link, add money by card or Instant EFT, send money to any SA number and withdraw to your bank or as cash at an ATM.');
@@ -109,9 +111,9 @@ test('the coming-soon words: what is off, what works, never a date, never a bann
       assert.doesNotMatch(t, BANNED, t);
     }
   });
-  withEnv({ ...NEUTRAL, VAS_LIVE_AIRTIME: 'true', VAS_LIVE_BLU_LOAD: 'true' }, () => {
+  withEnv({ ...NEUTRAL, VAS_LIVE_AIRTIME: 'true', VAS_LIVE_BLU_LOAD: 'true', WAPAY_LAUNCH_HOLD: 'off' }, () => {
     const s = launchScope(OTHER);
-    assert.deepEqual(comingSoonPhrases(s, { wicodeLive: true }), ['data, electricity', 'top-ups with an OTT voucher']);
+    assert.deepEqual(comingSoonPhrases(s, { wicodeLive: true }), ['data, electricity', 'top-ups with an OTT voucher', 'a virtual card']);
     assert.match(worksTodaySentence({ scope: s, withdrawLive: false, wicodeLive: false }), /add cash with a Blu voucher from any till, send money to any SA number and buy airtime\.$/);
   });
   assert.equal(joinAnd(['a']), 'a'); assert.equal(joinAnd(['a', 'b']), 'a and b'); assert.equal(joinAnd(['a', 'b', 'c']), 'a, b and c');
@@ -120,9 +122,10 @@ test('the coming-soon words: what is off, what works, never a date, never a bann
 test('the registry in the shipped default: no prepaid or voucher product advertised, send and pay links live, withdraw as the payout gate says', () => {
   withEnv({ ...NEUTRAL, WAPAY_PAYOUT_ENABLED: 'true' }, () => {
     const home = homeLines({ waId: OTHER });
-    assert.equal(home[0], `🛒 *Buy*: airtime, data and electricity, coming soon`);
-    assert.equal(home[1], `💸 *Send*: "send R50 to 083..."`);
-    assert.equal(home[3], `💳 *Deposit*: "deposit R100" by card or Instant EFT`);
+    assert.ok(!home.some((l) => l.startsWith('🛒')), 'no Buy line while every prepaid product is off');
+    assert.equal(home[0], `💸 *Send*: "send R50 to 083..."`);
+    assert.equal(home[2], `💳 *Deposit*: "deposit R100" by card or Instant EFT`);
+    assert.ok(home.includes(`🔜 *Coming soon*: airtime, data, electricity, fuel vouchers, cash deposits with a Blu or OTT voucher and a virtual card`), 'one coming-soon line names everything off, cash deposits and the virtual card included');
     assert.ok(home.includes(`🏧 *Withdraw*: "withdraw R200" to your bank, or cash at an ATM`), 'withdraw untouched');
     const help = helpLines({ waId: OTHER }).join('\n');
     assert.doesNotMatch(help, /Airtime|Data|Electricity|Redeem voucher/);
@@ -148,7 +151,7 @@ test('the model is told the same truth: product truth built from the scope, comi
   // The withdraw truth is exactly as before (payouts thread, 2026-10-18).
   assert.match(orchestrator, /\$\{withdrawLive \? '- Getting money OUT \(withdrawals\): LIVE\. The user types "withdraw" and an amount \(from R20\)/);
   withEnv(NEUTRAL, () => assert.deepEqual(scopeFromEnv(), { airtime: false, data: false, electricity: false, bluLoad: false, ottLoad: false, voucher: false }));
-  withEnv({ ...NEUTRAL, VAS_LIVE_DATA: 'true' }, () => assert.equal(scopeFromEnv().data, true));
+  withEnv({ ...NEUTRAL, VAS_LIVE_DATA: 'true', WAPAY_LAUNCH_HOLD: 'off' }, () => assert.equal(scopeFromEnv().data, true));
 });
 
 test('processor: every entry point of an off product answers coming soon; send money is not gated', () => {
@@ -199,4 +202,55 @@ test('processor: every entry point of an off product answers coming soon; send m
 
 test('the ad flow brief is unchanged: ad arrivals still hear the brief\'s own sentence', () => {
   assert.equal(CAN_DO.comingSoon, 'Airtime, data, electricity and fuel are coming soon.');
+});
+
+test('the master hold (WAPAY_LAUNCH_HOLD, unset = hold) outranks every switch and tester list; "off" releases it', () => {
+  const stale = { ...NEUTRAL, VAS_LIVE_ELECTRICITY: 'true', VAS_ALLOWLIST_ELECTRICITY: PILOT, WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: PILOT, VAS_LIVE_BLU_LOAD: 'true' };
+  withEnv({ ...stale, WAPAY_LAUNCH_HOLD: undefined }, () => {
+    assert.equal(launchHold(), true);
+    assert.equal(isCategoryEnabledForWaId('ELECTRICITY', PILOT), false, 'the tester list does not beat the hold');
+    assert.equal(isCapabilityLiveFor('FUEL', { waId: PILOT }), false);
+    assert.equal(isRailLiveFor('BLU_LOAD', OTHER), false);
+    assert.equal(VAS_CATEGORY_CONFIG.ELECTRICITY.comingSoon, true);
+  });
+  for (const v of ['off', 'OFF', 'false', '0', 'released']) {
+    withEnv({ ...stale, WAPAY_LAUNCH_HOLD: v }, () => {
+      assert.equal(launchHold(), false, v);
+      assert.equal(isCategoryEnabledForWaId('ELECTRICITY', PILOT), true);
+      assert.equal(isCategoryEnabledForWaId('ELECTRICITY', OTHER), false, 'the tester list narrows again');
+      assert.equal(isCapabilityLiveFor('FUEL', { waId: PILOT }), true);
+      assert.equal(isRailLiveFor('BLU_LOAD', OTHER), true);
+    });
+  }
+  withEnv({ ...stale, WAPAY_LAUNCH_HOLD: 'on' }, () => assert.equal(launchHold(), true, 'anything but a release word holds'));
+});
+
+test('the agent path: a purchase command for an off product is answered before the model; questions and sends still reach it', () => {
+  withEnv({ ...NEUTRAL }, () => {
+    const sc = (waId) => launchScopeFor({ waId });
+    for (const t of ['Buy airtime', 'buy R50 airtime', 'airtime', 'I want to buy data', 'Buy electricity', 'buy R100 electricity for 01234567890', 'Buy fuel', 'koop lugtyd', 'thenga ugesi']) {
+      const g = agentGuard(t, { scope: sc(PILOT) });
+      assert.equal(g?.kind, 'COMING_SOON', t);
+    }
+    assert.equal(agentGuard('Buy airtime', { scope: sc(PILOT) }).category, 'AIRTIME');
+    assert.equal(agentGuard('Buy fuel', { scope: sc(PILOT) }).category, 'FUEL');
+    for (const t of ['how much is airtime?', 'What does electricity cost', 'send R50 to 0821234567', 'my data', 'Home', 'balance', 'please pay me R50', 'withdraw R200', 'deposit R100']) {
+      assert.equal(agentGuard(t, { scope: sc(PILOT) }), null, t);
+    }
+    // The bearer guards keep priority; without a scope nothing is gated (the module stays import-free).
+    assert.equal(agentGuard('1234567890123456', { scope: sc(PILOT) }).kind, 'VOUCHER_PIN');
+    assert.equal(agentGuard('Buy airtime'), null);
+  });
+  withEnv({ ...NEUTRAL, VAS_LIVE_AIRTIME: 'true', VAS_ALLOWLIST_AIRTIME: PILOT, WAPAY_LAUNCH_HOLD: 'off' }, () => {
+    assert.equal(agentGuard('Buy airtime', { scope: launchScopeFor({ waId: PILOT }) }), null, 'live for the tester: the flow may start');
+    assert.equal(agentGuard('Buy airtime', { scope: launchScopeFor({ waId: OTHER }) })?.kind, 'COMING_SOON', 'still coming soon for everyone else');
+    assert.equal(comingSoonCommand('Buy data', { scope: launchScopeFor({ waId: PILOT }) })?.category, 'DATA');
+  });
+  // The processor passes this customer's scope and answers the guard kind with the flow's own coming-soon reply, never the model.
+  assert.match(processor, /const guard = agentGuard\(text, \{ pendingIntent, scope: launchScopeFor\(\{ waId: from, account \}\) \}\);/);
+  assert.match(processor, /if \(guard\.kind === 'COMING_SOON'\) \{\s*\/\/[^\n]*\n\s*handled = await replyCategoryUnavailable\(from, guard\.category, account\);/);
+  assert.match(processor, /FUEL: \['Fuel vouchers', true, '⛽'\]/);
+  // The home card's quick-reply footer never suggests a product that is off (founder's screenshot, 2026-10-18).
+  assert.match(processor, /let quickActions = \['Please pay me', 'Deposit', 'Check balance'\];\s*if \(scope\.airtime && scope\.data\) quickActions = \['Buy airtime', 'Buy data', 'Check balance'\];/);
+  assert.match(processor, /last\?\.route === 'airtime-execute' && scope\.airtime &&/);
 });

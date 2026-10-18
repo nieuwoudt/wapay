@@ -21,6 +21,7 @@ if (!/schema=wapay_qa_e2e_v13/.test(RAW)) {
 process.env.UNIFUEL_API_BASE_URL = 'http://localhost:3300';
 process.env.UNIFUEL_PARTNER_SECRET = 'wapay-e2e-secret-491a1a32';
 process.env.WAPAY_INTERNAL_API_KEY = 'e2e-internal-key';
+process.env.WAPAY_LAUNCH_HOLD = 'off'; // the master hold (2026-10-18) would otherwise keep fuel off in-process
 process.env.WAPAY_WICODE_LIVE = 'true';
 // Leg 2 needs WaPay's preview to ACCEPT an amount UniFuel range-rejects,
 // so the WaPay-side cap is lifted for this run only.

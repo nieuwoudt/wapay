@@ -60,7 +60,7 @@ The reference pattern is `pages/api/vas/airtime/execute.js`; data and electricit
 
 ## 3. VAS categories
 
-Gates live in `lib/vas-config.js` (`VAS_LIVE_*` switches read at call time, default **off** since the launch scope of 2026-10-18; per-user `VAS_ALLOWLIST_*` narrows an ON switch to testers). `docs/LAUNCH_SCOPE.md` has the switch table and the exact customer wording while off.
+Gates live in `lib/vas-config.js` (`VAS_LIVE_*` switches read at call time, default **off** since the launch scope of 2026-10-18; `WAPAY_LAUNCH_HOLD` unset holds everything off for everyone regardless; per-user `VAS_ALLOWLIST_*` narrows an ON switch to testers once the hold is released). `docs/LAUNCH_SCOPE.md` has the switch table and the exact customer wording while off.
 
 | Category | Provider | Default | State today | Caveats |
 |---|---|---|---|---|

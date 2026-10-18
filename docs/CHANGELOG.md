@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-10-18 (93) — The master hold, the agent-path guard and the home card's coming-soon line
+
+The founder tested the launch scope from his own number and saw electricity and fuel
+open (his number sits on two tester allowlists from earlier rollouts, with their
+switches still on in Vercel) and the Pay agent improvise "I can help you buy airtime".
+
+- `WAPAY_LAUNCH_HOLD` (unset = hold, `off` releases): while it holds, every launch-scope
+  product and fuel are off for everyone, whatever the per-product switches and allowlists
+  say (`lib/vas-config.js` `launchHold()`, honoured by `VAS_LIVE`, the rails and
+  `isWicodeLive`). The code default now wins over any switch left behind.
+- The agent path: `agentGuard` gains `comingSoonCommand`; a purchase command for an off
+  product ("Buy airtime", "Buy fuel", a bare "data") gets the flow's coming-soon reply
+  before the model; questions still reach the model, whose capability list now ends with
+  a coming-soon line it must not offer or start (`promptLines`).
+- Home card (founder's ask): no product line for anything off; one line, `🔜 *Coming
+  soon*: airtime, data, electricity, fuel vouchers, cash deposits with a Blu or OTT
+  voucher and a virtual card`. The welcome list and the catalogue reply use the same
+  phrases. The withdraw line is unchanged.
+- Tests: `tests/launch-scope.test.mjs` (the hold outranks switches and lists, five release
+  spellings, the guard's yes and no cases, the processor wiring); the registry, agent-tool
+  and harness locks updated.
+
+---
+
 ## 2026-10-18 (92) — "Send money" moves balance, never a voucher: a member is paid at once, anyone else's money waits for them, free, no rail
 
 The founder's decision of 18 Oct, built (BUGLOG #117):

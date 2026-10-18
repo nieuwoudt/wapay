@@ -125,6 +125,6 @@ test('the PayFast receipt names a parked purchase when the account sits in a RES
   assert.match(block, /\.catch\(\(\) => false\)/, 'a state read failure never blocks the receipt');
   assert.match(block, /Message me anything and I will finish your parked purchase\./);
   const guards = read('../lib/agent/guards.js');
-  assert.match(guards, /export function agentGuard\(text, \{ pendingIntent = null \} = \{\}\)/);
+  assert.match(guards, /export function agentGuard\(text, \{ pendingIntent = null, scope = null \} = \{\}\)/);
   assert.match(guards, /awaitingMeter = String\(pendingIntent\?\.action \|\| ''\)\.toUpperCase\(\) === 'BUY_ELECTRICITY'/);
 });

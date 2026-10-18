@@ -80,6 +80,7 @@ async function run() {
   // Launch scope (2026-10-18): the scenarios below were written for the pre-launch world, so its
   // switches are on in-process here; scenario 6e below runs the shipped default (everything off).
   for (const k of LAUNCH_SWITCHES) process.env[k] = 'true';
+  process.env.WAPAY_LAUNCH_HOLD = 'off';
   const s = createSession();
 
   // ------------------------------------------------------------------
@@ -864,8 +865,8 @@ async function run() {
   //     send money and pay links stay live. docs/LAUNCH_SCOPE.md.
   // ------------------------------------------------------------------
   {
-    const prevSwitches = Object.fromEntries(LAUNCH_SWITCHES.map((k) => [k, process.env[k]]));
-    for (const k of LAUNCH_SWITCHES) delete process.env[k];
+    const prevSwitches = Object.fromEntries([...LAUNCH_SWITCHES, 'WAPAY_LAUNCH_HOLD'].map((k) => [k, process.env[k]]));
+    for (const k of [...LAUNCH_SWITCHES, 'WAPAY_LAUNCH_HOLD']) delete process.env[k];
     try {
       await s.say('cancel');
       const a = await s.say('buy airtime');
@@ -891,7 +892,7 @@ async function run() {
         { level: 'FAIL', ok: soon(g) && !has(g.replyText, /Processing Voucher/i), what: 'a 16-digit PIN gets coming soon, never a redemption attempt' },
         { level: 'FAIL', ok: soon(h) && !has(h.replyText, /Confirm|enter your PIN/i), what: '"buy an OTT voucher" is coming soon, no preview' },
         { level: 'WARN', ok: soon(i) && !has(i.replyText, /keeps 6%/), what: 'the cash top-up fee question says coming soon, no Blu fee quoted' },
-        { level: 'FAIL', ok: has(j.replyText, /\*Buy\*: airtime, data and electricity, coming soon/) && has(j.replyText, /by card or Instant EFT/) && has(j.replyText, /\*Send\*/), what: 'the home card: Buy coming soon, card-only deposit, Send live' },
+        { level: 'FAIL', ok: has(j.replyText, /\*Coming soon\*: airtime, data, electricity, fuel vouchers, cash deposits with a Blu or OTT voucher and a virtual card/) && !has(j.replyText, /\*Buy\*/) && has(j.replyText, /by card or Instant EFT/) && has(j.replyText, /\*Send\*/), what: 'the home card: one coming-soon line (cash deposits and the virtual card included), no Buy line, card-only deposit, Send live' },
         { level: 'FAIL', ok: ![a, b, c, d, e2, f2, g, h, i, j].some((r) => /[—–]|\b(bet|betting|casino)\b/i.test(String(r.replyText || ''))), what: 'copy rules hold in every reply' },
       ], s);
     } finally {

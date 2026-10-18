@@ -190,6 +190,7 @@ const CATEGORY_SUBJECT = {
   BILLPAY: ['Bill payments', true, '🧾'],
   GAMING: ['Gaming top-ups', true, '🎮'],
   REMITTANCE: ['Money transfers', true, '🌍'],
+  FUEL: ['Fuel vouchers', true, '⛽'],
 };
 
 function categoryUnavailableMessage(category, waId = null) {
@@ -1038,11 +1039,12 @@ async function renderHome({ from, account }) {
   const vouchers = await voucherBalanceSummary(account);
 
   // Quick actions (best-effort). Prefer last successful VAS if available.
-  let quickActions = [
-    'Buy airtime',
-    'Buy data',
-    'Check balance',
-  ];
+  // Launch scope (2026-10-18): never suggest a product that is off for this customer.
+  const scope = launchScope(from);
+  let quickActions = ['Please pay me', 'Deposit', 'Check balance'];
+  if (scope.airtime && scope.data) quickActions = ['Buy airtime', 'Buy data', 'Check balance'];
+  else if (scope.airtime) quickActions = ['Buy airtime', 'Please pay me', 'Check balance'];
+  else if (scope.data) quickActions = ['Buy data', 'Please pay me', 'Check balance'];
 
   try {
     const last = await prisma.providerRequest.findFirst({
@@ -1055,7 +1057,7 @@ async function renderHome({ from, account }) {
     });
 
     const meta = last?.metadata || {};
-    if (last?.route === 'airtime-execute' && meta?.amountCents && meta?.msisdn) {
+    if (last?.route === 'airtime-execute' && scope.airtime && meta?.amountCents && meta?.msisdn) {
       const amt = (meta.amountCents / 100).toFixed(0);
       quickActions = [
         `Buy R${amt} airtime again`,
@@ -6928,11 +6930,14 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   // Bearer inputs and codes never reach the model: the existing flows take them.
   // The parked clarify intent tells the guard what a bare number means: a
   // 12-digit answer to "which meter?" is the meter, not a voucher PIN (2026-10-06).
-  const guard = agentGuard(text, { pendingIntent });
+  const guard = agentGuard(text, { pendingIntent, scope: launchScopeFor({ waId: from, account }) });
   if (guard) {
     logStructured('agent_guard', { from, accountId: account.id, kind: guard.kind });
     let handled;
-    if (guard.kind === 'VOUCHER_PIN') {
+    if (guard.kind === 'COMING_SOON') {
+      // Launch scope (2026-10-18): the flow's own coming-soon reply, never the model.
+      handled = await replyCategoryUnavailable(from, guard.category, account);
+    } else if (guard.kind === 'VOUCHER_PIN') {
       await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
       handled = await handleVoucherRedemption({ from, pin: guard.pin, account });
     } else if (guard.kind === 'PAY_REQUEST_CODE') {
