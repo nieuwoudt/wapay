@@ -52,7 +52,7 @@ test('processor free-text path uses orchestrate, not the legacy single call', ()
   // 2026-09-16: gated per CUSTOMER (the pilot allowlist), not the global switch.
   assert.match(
     processorSource,
-    /await orchestrate\(text, contextString, \{\s*knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), capabilityLines: promptLines\(\{ waId: from, account \}\) \}\),\s*withdrawLive: payoutAllowedFor\(from\),\s*names,\s*\}\)/
+    /await orchestrate\(text, contextString, \{\s*knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), capabilityLines: promptLines\(\{ waId: from, account \}\), scope: launchScope\(from\) \}\),\s*withdrawLive: payoutAllowedFor\(from\),\s*scope: launchScope\(from\),\s*names,\s*\}\)/
   );
   // 2026-10-16 (BUGLOG #111): the names the record holds go to the model boundary as tokens, never as names.
   assert.match(processorSource, /const names = privacyNamesFor\(\{ account, pack \}\);\s*addPrivacyNames\(names\);\s*const result = await orchestrate\(/);

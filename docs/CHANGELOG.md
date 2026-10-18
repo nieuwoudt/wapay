@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-10-18 (91) — Launch scope: airtime, data, electricity, voucher loads and the OTT self-purchase read "coming soon" for every customer
+
+The founder, on the day the first Click-to-WhatsApp ad went into Meta's review: these
+are not live for customers, say coming soon, keep building in the background; "send
+money" stays on. `docs/LAUNCH_SCOPE.md` is the page of record.
+
+- `lib/vas-config.js`: the switches read `process.env` at call time (getters), so a
+  flag flip needs no cold start and a test process can exercise both worlds; AIRTIME,
+  DATA and ELECTRICITY default **off**; three rails with the same idiom,
+  `VAS_LIVE_BLU_LOAD`, `VAS_LIVE_OTT_LOAD`, `VAS_LIVE_OTT_VOUCHER` (each narrowed by
+  `VAS_ALLOWLIST_<KEY>`); `launchScope(waId)` and the shared coming-soon copy
+  (`comingSoonReply`, `worksTodaySentence`, `comingSoonPhrases`).
+- Every customer surface reads the scope: the registry (`DEPOSIT_VOUCHER`, `VOUCHER_LOAD`,
+  `OTT_SELF` gated; home, help, welcome and prompt lines; a Get paid help line),
+  how-it-works (off topics answer coming soon and what works, the deposit ways lose the
+  cash bullet), fee facts, the spend catalogue and the brain knowledge (a COMING SOON
+  block), the orchestrator's product truth (built from the scope; withdraw line
+  byte-identical), the Pay agent's tool offers.
+- The processor gates every entry point of an off product, including the previously
+  ungated airtime path and the three PIN steps; "add money" goes straight to the card /
+  EFT ask while no voucher rail is live; a typed voucher PIN is answered, never
+  redeemed; the OTT self-purchase is coming soon at its three entries; the send flow to a
+  number is untouched.
+- Tests: `tests/launch-scope.test.mjs` (both worlds, every gate, no dates); the registry,
+  agent-tool, fee, how-it-works and wiring locks updated to pass the scope; harness
+  scenario 6e runs the shipped default end to end. The first full harness run found four
+  more ways into the airtime and electricity asks (the smart product query, the
+  context-aware airtime case, the orchestrator's electricity case, the parked ask states);
+  gated, then 16/16 in the standalone rerun of 6e plus the two legacy VAS scenarios;
+  unit suite 1106/1106.
+- BUGLOG #116. Under-18: no rule to build (founder): anyone with a WhatsApp account may
+  open an account, a nominal 16 and above, not enforced.
+
+---
+
 ## 2026-10-18 (90) — The ad chat flow: how the bot answers a person who tapped a Click-to-WhatsApp ad
 
 Baked in from the founder's brief of 18 October (the 224-line revision), spec of

@@ -83,13 +83,14 @@ test('movementBullet: date · type · amount · masked destination · icon, the 
 });
 
 test('how it works, deposit: every way as a bullet (cash included, OTT only when live), numbered steps 1 to 5, and the two closing lines', () => {
-  const brief = howItWorksBrief('deposit', { ottLoadLive: true });
+  const live = { airtime: true, data: true, electricity: true, anyVas: true, allVas: true, bluLoad: true, ottLoad: true, voucher: true };
+  const brief = howItWorksBrief('deposit', { ottLoadLive: true, scope: live });
   assert.match(brief, /^💳 You can add money these ways:\n• \*Card, Instant EFT, Apple Pay or Google Pay:\*/);
   assert.match(brief, /\n• \*Cash at a till:\* ask any major retailer for a \*Blu Voucher\*/);
   assert.match(brief, /\n• \*OTT voucher:\* already have one\? Send me its 16-digit PIN/);
   assert.match(brief, /\n\nTo find out more, just ask\.$/);
-  assert.doesNotMatch(howItWorksBrief('deposit', { ottLoadLive: false }), /OTT voucher/);
-  const steps = howItWorksAnswer('deposit', { ottLoadLive: false });
+  assert.doesNotMatch(howItWorksBrief('deposit', { ottLoadLive: false, scope: live }), /OTT voucher/);
+  const steps = howItWorksAnswer('deposit', { ottLoadLive: false, scope: live });
   for (const n of [1, 2, 3, 4, 5]) assert.match(steps, new RegExp(`\\n${n}\\. `));
   assert.match(steps, /\n1\. Say "deposit R100"/);
   assert.match(steps, /Just come back here if you have any questions\. If you get stuck on any step, just ask me and I will guide you\.$/);

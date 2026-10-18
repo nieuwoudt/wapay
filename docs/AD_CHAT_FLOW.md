@@ -38,9 +38,13 @@ Answers match this list exactly and never offer anything not on it (`CAN_DO` in
 electricity and fuel; topping up with cash through OTT and Blue Voucher. "Can I deposit
 cash?" is answered: not yet, coming soon, top up electronically for now.
 
-⚠️ The regular chat still sells airtime, data and electricity on Blu's QA credentials.
-For "coming soon" to be true for every customer, not only ad arrivals, the founder sets the
-VAS gates off in Vercel (see the launch note in the tracker).
+Since the launch scope of the same day (`docs/LAUNCH_SCOPE.md`, CHANGELOG 91) this is
+true for every customer, not only ad arrivals: airtime, data, electricity, voucher cash
+top-ups and the OTT self-purchase read "coming soon" by code default; "send money" stays
+live (the round-5 build makes it a ledger transfer).
+
+**Age.** No rule to build (founder, 2026-10-18): anyone with a WhatsApp account may open a
+WaPay account; it is not a bank account; a nominal 16 and above, not enforced.
 
 ## 3. The path every ad conversation follows
 

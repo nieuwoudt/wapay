@@ -57,8 +57,13 @@ const MENU_MARKERS = [
 ];
 const looksLikeMenu = (t) => MENU_MARKERS.some((re) => re.test(String(t || '')));
 
+const LAUNCH_SWITCHES = ['VAS_LIVE_AIRTIME', 'VAS_LIVE_DATA', 'VAS_LIVE_ELECTRICITY', 'VAS_LIVE_BLU_LOAD', 'VAS_LIVE_OTT_VOUCHER'];
+
 async function run() {
   await seedQaAccount();
+  // Launch scope (2026-10-18): the scenarios below were written for the pre-launch world, so its
+  // switches are on in-process here; scenario 6e below runs the shipped default (everything off).
+  for (const k of LAUNCH_SWITCHES) process.env[k] = 'true';
   const s = createSession();
 
   // ------------------------------------------------------------------
@@ -665,7 +670,7 @@ async function run() {
       verdict('Agent: "How can I withdraw money?" is short, honest, and never the menu', [
         { level: 'FAIL', ok: !looksLikeMenu(a.replyText), what: 'no menu' },
         { level: 'FAIL', ok: !has(a.replyText, /\b(january|february|march|april|june|july|august|september|october|november|december|20\d\d)\b/i), what: 'no date promised' },
-        { level: 'FAIL', ok: !has(a.replyText, /\bOTT\b/) || live, what: 'the payout partner is not named while withdrawals are off' },
+        { level: 'FAIL', ok: !has(a.replyText, /\bOTT\b(?! vouchers?\b)/) || live, what: 'the payout partner is not named while withdrawals are off (the OTT voucher product may be)' },
         { level: 'FAIL', ok: !has(a.replyText, /\bbet|wager|casino|odds\b/i), what: 'no betting word' },
         { level: 'WARN', ok: aLines.length <= 6, what: 'six lines or fewer (review 4: two lines and a question)' },
         live
@@ -751,6 +756,48 @@ async function run() {
     } finally {
       if (prevList === undefined) delete process.env.WAPAY_AGENT_V3_MSISDNS; else process.env.WAPAY_AGENT_V3_MSISDNS = prevList;
       if (prevBudget === undefined) delete process.env.WAPAY_AGENT_TURNS_PER_HOUR; else process.env.WAPAY_AGENT_TURNS_PER_HOUR = prevBudget;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 6e. Launch scope (2026-10-18): the shipped default. Airtime, data,
+  //     electricity, voucher loads and the OTT self-purchase read "coming
+  //     soon" with what works today; the home card and the catalogue agree;
+  //     send money and pay links stay live. docs/LAUNCH_SCOPE.md.
+  // ------------------------------------------------------------------
+  {
+    const prevSwitches = Object.fromEntries(LAUNCH_SWITCHES.map((k) => [k, process.env[k]]));
+    for (const k of LAUNCH_SWITCHES) delete process.env[k];
+    try {
+      await s.say('cancel');
+      const a = await s.say('buy airtime');
+      const b = await s.say('buy R50 electricity');
+      const c = await s.say('show MTN bundles');
+      const d = await s.say('Can I buy electricity?');
+      const e2 = await s.say('What can I buy with this?');
+      const f2 = await s.say('redeem voucher');
+      await s.say('cancel');
+      const g = await s.say('1234567812345678');
+      const h = await s.say('buy an OTT voucher for R50');
+      const i = await s.say('how much does it cost to deposit cash?');
+      const j = await s.say('hi');
+      const soon = (r) => has(r.replyText, /coming soon/i);
+      const works = (r) => has(r.replyText, /Right now you can get paid with a "please pay me" link/);
+      verdict('Launch scope: off products say coming soon and what works; nothing starts; home and catalogue agree', [
+        { level: 'FAIL', ok: soon(a) && works(a) && !has(a.replyText, /How much airtime would you like/i), what: '"buy airtime" is coming soon, no amount ask' },
+        { level: 'FAIL', ok: soon(b) && !has(b.replyText, /meter number/i), what: '"buy R50 electricity" is coming soon, no meter ask' },
+        { level: 'FAIL', ok: soon(c) && !has(c.replyText, /MTN.*R\d/i), what: '"show MTN bundles" is coming soon, no bundle list' },
+        { level: 'FAIL', ok: soon(d) && !has(d.replyText, /R10 to R5000/), what: '"Can I buy electricity?" is coming soon, never the steps' },
+        { level: 'FAIL', ok: has(e2.replyText, /Send money/i) && has(e2.replyText, /Get paid/i) && !has(e2.replyText, /Prepaid products you can buy here/) && has(e2.replyText, /Coming soon/), what: '"what can I buy" lists what works and names what is coming, no product menu' },
+        { level: 'FAIL', ok: has(f2.replyText, /How much would you like to add/i) && soon(f2) && !has(f2.replyText, /Blu Voucher.*send me the code/i), what: '"redeem voucher" becomes the card / EFT amount ask with the cash position' },
+        { level: 'FAIL', ok: soon(g) && !has(g.replyText, /Processing Voucher/i), what: 'a 16-digit PIN gets coming soon, never a redemption attempt' },
+        { level: 'FAIL', ok: soon(h) && !has(h.replyText, /Confirm|enter your PIN/i), what: '"buy an OTT voucher" is coming soon, no preview' },
+        { level: 'WARN', ok: soon(i) && !has(i.replyText, /keeps 6%/), what: 'the cash top-up fee question says coming soon, no Blu fee quoted' },
+        { level: 'FAIL', ok: has(j.replyText, /\*Buy\*: airtime, data and electricity, coming soon/) && has(j.replyText, /by card or Instant EFT/) && has(j.replyText, /\*Send\*/), what: 'the home card: Buy coming soon, card-only deposit, Send live' },
+        { level: 'FAIL', ok: ![a, b, c, d, e2, f2, g, h, i, j].some((r) => /[—–]|\b(bet|betting|casino)\b/i.test(String(r.replyText || ''))), what: 'copy rules hold in every reply' },
+      ], s);
+    } finally {
+      for (const [k, v] of Object.entries(prevSwitches)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
     }
   }
 

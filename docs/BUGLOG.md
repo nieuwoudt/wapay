@@ -4,6 +4,15 @@
 
 ---
 
+## 116. The "not enabled" reply advertised airtime while refusing a category, the VAS flags were frozen at import, and two voucher rails had no switch at all
+
+- **Symptom (read on 2026-10-18 while implementing the launch scope):** `categoryUnavailableMessage` ended with "You can still buy airtime, data, or electricity right now" whatever was live; `VAS_LIVE` was computed once at import, so a Vercel flag flip only reached a cold function and no test process could exercise both worlds; the Blu voucher load and the OTT self-purchase could not be switched off at all; airtime had no gate anywhere (the only VAS category without one), so `VAS_LIVE_AIRTIME=false` would have left "buy airtime" working.
+- **Root cause:** the flags predated the registry; each category gate was added by hand where someone had looked.
+- **Fix:** call-time getters, defaults off for the launch scope, three rails, one coming-soon reply built from the same gates as the home card, airtime gated at its four entry points, PIN-step gates for the three categories (`docs/LAUNCH_SCOPE.md`).
+- **Guard:** `tests/launch-scope.test.mjs` asserts every gate by source and the default world by behaviour.
+
+---
+
 ## 115. Every new account since 10 October was stamped "organic": the pay-link referrer lookup ordered by a column that does not exist
 
 - **Symptom (seen in the ad-flow harness run, 2026-10-18 07:16 UTC):** `growth_referrer_lookup_error … Unknown argument \`createdAt\`` on every account creation. `findPayLinkReferrer` caught the error and returned null, so `newAccountProfile` fell back to `organic` and the pay-link loop (payer who later onboards, with the requester as referrer) was never recorded. Since commit `b93ee70` (2026-10-10).

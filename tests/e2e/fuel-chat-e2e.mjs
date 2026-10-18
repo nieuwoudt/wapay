@@ -61,11 +61,8 @@ const wallet = async () => {
 console.log('LEG A: coming-soon gate');
 process.env.WAPAY_WICODE_LIVE = 'false';
 {
-  // Both the raw flag map AND the derived config are computed at import
-  // time — flip both for this in-process leg (prod flips via env+deploy).
-  const { VAS_LIVE, VAS_CATEGORY_CONFIG } = await import('../../lib/vas-config.js');
-  VAS_LIVE.FUEL = false;
-  VAS_CATEGORY_CONFIG.FUEL.enabled = false;
+  // Since 2026-10-18 the flag map reads process.env at call time (lib/vas-config.js),
+  // so the env flip above is the whole in-process switch.
   const a = await say('buy fuel');
   ok(/coming/i.test(a), 'flag off: "buy fuel" gets the coming-soon reply');
   const home = await say('hi');
@@ -73,8 +70,6 @@ process.env.WAPAY_WICODE_LIVE = 'false';
   // The same turn may legitimately deliver a leftover claimable wiCode from
   // the money E2E — only the purchase FLOW must not start.
   ok(!/Confirm Fuel Voucher|Enter Your PIN|How much fuel/i.test(a), 'flag off: no purchase flow starts');
-  VAS_LIVE.FUEL = true;
-  VAS_CATEGORY_CONFIG.FUEL.enabled = true;
 }
 process.env.WAPAY_WICODE_LIVE = 'true';
 

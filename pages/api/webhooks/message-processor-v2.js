@@ -18,7 +18,7 @@ import { recentTurns, renderTurns, redactForMemory } from '../../../lib/turns.js
 import { loadContextPack, renderCustomerRecord, statusCandidates, rankCandidates, preferredKind, formatRands, formatSast, movementBullet } from '../../../lib/context-pack.js';
 import { rescueWithdrawSlots } from '../../../lib/agent/slot-rescue.js';
 import { evaluatePolicy, requirementMessage } from '../../../lib/policy.js';
-import { capabilityById, homeLines, helpLines, welcomeLines, promptLines, fuelLiveFor as registryFuelLiveFor } from '../../../lib/capabilities.js';
+import { capabilityById, homeLines, helpLines, welcomeLines, promptLines, fuelLiveFor as registryFuelLiveFor, worksToday, launchScopeFor } from '../../../lib/capabilities.js';
 import { eraseTurns } from '../../../lib/turns.js';
 import { updateProfile } from '../../../lib/user-profile.js';
 import prisma from '../../../lib/prisma.js';
@@ -93,7 +93,7 @@ import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
 import { isValidSaMsisdn, normaliseMsisdn, bluCanVendTo } from '../../../lib/msisdn.js';
 import { agentV3For } from '../../../lib/shadow-list.js';
 import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '../../../lib/localize.js';
-import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
+import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId, isRailLiveFor, ottLoadConfigured, launchScope, comingSoonReply, comingSoonPhrases, joinAnd } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
 import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders, getLatestPayout, reconcilePayout, reconcileInitPayout, payoutOutcomeMessage, PAYOUT_METHODS } from '../../../lib/payouts.js';
@@ -176,16 +176,61 @@ async function sendWhatsAppErrorOnce({ to, errorKey, text }) {
   return res;
 }
 
-function categoryUnavailableMessage(category) {
-  const display = getCategoryDisplayName(category);
-  return `🚧 ${display} is listed, but purchasing is not enabled yet.\n\nYou can still buy airtime, data, or electricity right now.`;
+/**
+ * Launch scope (2026-10-18, lib/vas-config.js): a category that is switched
+ * off is "coming soon" (never a date) followed by what works today for THIS
+ * customer, from the same gates the home card and the model prompt read.
+ */
+const CATEGORY_SUBJECT = {
+  AIRTIME: ['Airtime', false, '📱'],
+  DATA: ['Data bundles', true, '📶'],
+  ELECTRICITY: ['Prepaid electricity', false, '💡'],
+  LIFESTYLE: ['Entertainment vouchers', true, '🎬'],
+  BILLPAY: ['Bill payments', true, '🧾'],
+  GAMING: ['Gaming top-ups', true, '🎮'],
+  REMITTANCE: ['Money transfers', true, '🌍'],
+};
+
+function categoryUnavailableMessage(category, waId = null) {
+  const [subject, plural, emoji] = CATEGORY_SUBJECT[String(category || '').toUpperCase()] || [getCategoryDisplayName(category), false, '🚧'];
+  const scope = launchScopeFor({ waId });
+  return comingSoonReply(subject, { plural, emoji, scope, withdrawLive: scope.withdrawLive, wicodeLive: scope.wicodeLive });
 }
 
-async function replyCategoryUnavailable(to, category) {
+async function replyCategoryUnavailable(to, category, account = null) {
+  const text = categoryUnavailableMessage(category, to);
   return await sendWhatsAppText({
     to,
-    text: categoryUnavailableMessage(category),
+    text: account ? await localizeOutbound(text, await userLang(account)) : text,
+    kind: 'flow',
   });
+}
+
+/** Is any voucher cash-in rail live for this customer (Blu voucher load, or the OTT load rail when configured)? */
+function cashLoadLiveFor(waId) {
+  return isRailLiveFor('BLU_LOAD', waId) || (isRailLiveFor('OTT_LOAD', waId) && ottLoadConfigured());
+}
+
+const CASH_LOAD_SOON = `Cash top-ups with Blu and OTT vouchers are coming soon on WaPay. I will tell you the moment they are live.`;
+
+/** The add-money ask while no voucher rail is live: card and Instant EFT only, the cash position said once. */
+function cardOnlyDepositPrompt() {
+  return (
+    `💳 *Add Money to WaPay*\n\n` +
+    `How much would you like to add? Reply with the amount, for example "R100", and I send you a secure payment link for your card, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan or Zapper.\n\n` +
+    CASH_LOAD_SOON
+  );
+}
+
+async function replyCashLoadComingSoon(from, account) {
+  const text = `🎟️ ${CASH_LOAD_SOON} Keep your voucher safe. For now you can add money by card or Instant EFT: say "deposit R100".\n\n${worksToday({ waId: from, account })}`;
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(text, await userLang(account)), kind: 'flow' });
+}
+
+async function replyVoucherComingSoon(from, account) {
+  const scope = launchScopeFor({ waId: from, account });
+  const text = comingSoonReply('Buying a WaPay (OTT) voucher for yourself', { emoji: '🎟️', scope, withdrawLive: scope.withdrawLive, wicodeLive: scope.wicodeLive });
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(text, await userLang(account)), kind: 'flow' });
 }
 
 function extractMsisdnFromText(text = '') {
@@ -244,6 +289,11 @@ function detectNetworkCodeFromMsisdn(msisdn = '') {
  * enter your meter number").
  */
 async function startElectricityPreviewAndConfirm({ from, account, amountCents, meterNumber, rawText = '' }) {
+  // Launch scope (2026-10-18): the category switch, per customer, before any Blu call.
+  if (!isCategoryEnabledForWaId('ELECTRICITY', from)) {
+    await updateConversationState(from, null);
+    return await replyCategoryUnavailable(from, 'ELECTRICITY', account);
+  }
   if (!/^\d{8,14}$/.test(String(meterNumber || ''))) {
     await updateConversationState(from, 'ELECTRICITY_METER', { amountCents });
     return await sendWhatsAppText({
@@ -422,6 +472,11 @@ function qaCredentialsLine(product) {
 
 
 async function startAirtimePreviewAndConfirm({ from, account, amountCents, msisdn, intent = 'BUY_AIRTIME', rawText = '' }) {
+  // Launch scope (2026-10-18): the category switch, per customer, before any Blu call.
+  if (!isCategoryEnabledForWaId('AIRTIME', from)) {
+    await updateConversationState(from, null);
+    return await replyCategoryUnavailable(from, 'AIRTIME', account);
+  }
   // On Blu's QA credentials only four test numbers can actually be vended to.
   // Saying so HERE costs the customer nothing; finding out after the confirm
   // and the PIN costs them a PIN attempt and tells them their own number is
@@ -528,6 +583,11 @@ function isConversationalEscape(text) {
 /** The ways a gift preview is entered from "send money" (never the explicit self-purchase, which is OTT_VOUCHER_SELF). */
 const SEND_PATH_INTENTS = new Set(['STATE_VOUCHER_GIFT_RECIPIENT', 'STATE_VOUCHER_GIFT_RECIPIENT_BENEFICIARY', 'STATE_VOUCHER_GIFT_AMOUNT', 'ORCHESTRATOR', 'AI_CHAT', 'SMART_PRODUCT_QUERY']);
 async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, recipientMsisdn, intent = 'VOUCHER_GIFT', rawText = '' }) {
+  // Launch scope (2026-10-18): the self-purchase is coming soon until VAS_LIVE_OTT_VOUCHER; sends to others are not gated here.
+  if (intent === 'OTT_VOUCHER_SELF' && !isRailLiveFor('OTT_VOUCHER', from)) {
+    await updateConversationState(from, null);
+    return await replyVoucherComingSoon(from, account);
+  }
   // "Send money" to your own number is not a voucher for yourself (founder 2026-10-12, the Lisa
   // case: "send money", R350, her own number, then a R367 link). Only the explicit self-purchase
   // ("buy an OTT voucher", intent OTT_VOUCHER_SELF) or its resume may reach here with the own number.
@@ -572,8 +632,8 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
         to: from,
         text:
           await localizeOutbound(`💰 You need ${randsShort(totalCents)} for this voucher but your balance is ${randsShort(availableCents)}.\n\n` +
-          `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your voucher. 🎟️\n\n` +
-          `(Prefer cash? Buy a Blu Voucher at any till and send me the code.)`, await userLang(account)),
+          `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your voucher. 🎟️` +
+          (isRailLiveFor('BLU_LOAD', from) ? `\n\n(Prefer cash? Buy a Blu Voucher at any till and send me the code.)` : ''), await userLang(account)),
       });
       const linkResult = await handleCardDepositLink({
         from,
@@ -1933,7 +1993,8 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     // know how this customer pays. A successful card deposit or voucher
     // redemption records the preference; after that, straight to their rail.
     const depositProfile = await getProfile({ accountId: account.id });
-    if (!depositProfile.preferredDepositMethod) {
+    // Launch scope (2026-10-18): the cash-or-card question exists only while the Blu rail is live.
+    if (!depositProfile.preferredDepositMethod && isRailLiveFor('BLU_LOAD', from)) {
       await updateConversationState(from, 'AWAITING_DEPOSIT_METHOD', { amountCents: cardDepositCents });
       return await sendWhatsAppText({
         to: from,
@@ -2061,6 +2122,8 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   // listing (observed live 2026-08-20). Redemption-ish phrasings ("redeem /
   // load / I have an OTT voucher") stay out — that's the future deposit path.
   if (matchOttVoucherSelfRequest(text, slots)) {
+    // Launch scope (2026-10-18): buying an OTT voucher for yourself is coming soon until VAS_LIVE_OTT_VOUCHER.
+    if (!isRailLiveFor('OTT_VOUCHER', from)) return await replyVoucherComingSoon(from, account);
     logSlotFill({
       intent: 'OTT_VOUCHER_SELF',
       text,
@@ -2178,7 +2241,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           return await handleListLifestyleProducts({ from, account });
           
         case 'ELECTRICITY':
-          if (!isCategoryLive('ELECTRICITY')) {
+          if (!isCategoryEnabledForWaId('ELECTRICITY', from)) {
             return await replyCategoryUnavailable(from, 'ELECTRICITY');
           }
           // Electricity purchase flow - start it
@@ -2206,6 +2269,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           
         case 'AIRTIME':
           // Airtime flow - start it
+          if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
           if (amount) {
             logSlotFill({
               intent: 'CONTEXT_AWARE',
@@ -2354,6 +2418,12 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
         });
 
       case 'REDEEM_VOUCHER':
+        // Launch scope (2026-10-18): with no voucher rail live, "add money" is the card / EFT amount ask.
+        if (!cashLoadLiveFor(from)) {
+          logSlotFill({ intent: 'REDEEM_VOUCHER', text, slots, routeDecision: 'DEPOSIT_CARD_AMOUNT', missing: ['amountCents'], from, accountId: account.id });
+          await updateConversationState(from, 'DEPOSIT_CARD_AMOUNT');
+          return await sendWhatsAppText({ to: from, text: await localizeOutbound(cardOnlyDepositPrompt(), await userLang(account)) });
+        }
         // Explicit: "redeem voucher"
         logSlotFill({
           intent: 'REDEEM_VOUCHER',
@@ -2370,11 +2440,13 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           text: buildDepositPrompt(),
         });
       case 'VOUCHER_PIN':
+        if (!cashLoadLiveFor(from)) return await replyCashLoadComingSoon(from, account);
         await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
         return await handleVoucherRedemption({ from, pin: detection.voucherPin || text, account });
 
       case 'BUY_AIRTIME':
         // User wants to buy airtime - start airtime flow
+        if (!isCategoryEnabledForWaId('AIRTIME', from)) return await replyCategoryUnavailable(from, 'AIRTIME', account);
         logStructured('vas_airtime_flow_start', {
           from,
           accountId: account.id,
@@ -2456,7 +2528,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           entities: detection.entities,
         });
 
-        if (!isCategoryLive('DATA')) {
+        if (!isCategoryEnabledForWaId('DATA', from)) {
           return await replyCategoryUnavailable(from, 'DATA');
         }
 
@@ -3042,7 +3114,7 @@ async function deliverPayoutStep({ from, account, step }) {
   return await sendWhatsAppText({ to: from, text: msg, ...(step.refs ? { refs: step.refs } : {}) });
 }
 function howItWorksContext(from) {
-  return { wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), fuelPartners: advertisedFuelPartners().map((p) => p.name), ottFacts: ottAcceptedFacts() };
+  return { wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), scope: launchScope(from), waId: from, fuelPartners: advertisedFuelPartners().map((p) => p.name), ottFacts: ottAcceptedFacts() };
 }
 async function howItWorksContextLive(from, text) {
   const providers = payoutEnabled() && payoutConfigured() ? await resolveProviders({}).catch(() => []) : [];
@@ -3063,7 +3135,7 @@ async function handleHowItWorks({ from, account, topic, text }) {
 }
 async function handleFeeAsk({ from, account, topic, text }) {
   logStructured('fee_ask', { accountId: account.id, topic });
-  const msg = await localizeOutbound(feeAnswer(topic, feeAskAmountCents(text), { withdrawLive: payoutAllowedFor(from) }), await userLang(account));
+  const msg = await localizeOutbound(feeAnswer(topic, feeAskAmountCents(text), { withdrawLive: payoutAllowedFor(from), scope: launchScope(from) }), await userLang(account));
   return await sendWhatsAppText({ to: from, text: msg });
 }
 async function handleWithdrawStart({ from, account, ask, text }) {
@@ -4529,9 +4601,9 @@ async function handleConversationState({ from, text, state, data, account }) {
             to: from,
             text:
               await localizeOutbound(`💰 You need ${randsShort(request.amountCents)} but your balance is R${balance}.\n\n` +
-              `Top up and try again:\n` +
-              `1️⃣ *Cash*: buy a Blu Voucher at any till and send me the code\n` +
-              `2️⃣ *Card / bank*: reply "deposit ${randsShort(shortfallCents)}" for a secure PayFast link`, await userLang(account)),
+              (isRailLiveFor('BLU_LOAD', from)
+                ? `Top up and try again:\n1️⃣ *Cash*: buy a Blu Voucher at any till and send me the code\n2️⃣ *Card / bank*: reply "deposit ${randsShort(shortfallCents)}" for a secure PayFast link`
+                : `Top up and try again: reply "deposit ${randsShort(shortfallCents)}" for a secure payment link by card or Instant EFT.`), await userLang(account)),
           });
         }
         logStructured('payrequest_pay_error', { from, accountId: account.id, code: data.code, error: error?.message });
@@ -4640,6 +4712,11 @@ async function handleConversationState({ from, text, state, data, account }) {
     case 'AWAITING_VOUCHER_PIN':
       // User entered voucher PIN - single-step flow
       {
+        // Launch scope: a PIN step parked before the switch flipped is released.
+        if (!cashLoadLiveFor(from)) {
+          await updateConversationState(from, null);
+          return await replyCashLoadComingSoon(from, account);
+        }
         const normalized = text.trim().toLowerCase();
 
         // "home"/"menu" must always be an exit — being trapped in a state
@@ -4725,6 +4802,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'AIRTIME_AMOUNT':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
       // User is entering airtime amount
       {
         const normalized = text.trim().toLowerCase();
@@ -4781,6 +4860,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'AIRTIME_MSISDN':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
       // User is entering phone number for airtime
       {
         const normalized = text.trim().toLowerCase();
@@ -4928,6 +5009,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'AIRTIME_CONFIRM':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
       // User is confirming airtime purchase
       {
         const normalized = text.trim().toLowerCase();
@@ -5009,6 +5092,8 @@ async function handleConversationState({ from, text, state, data, account }) {
     // DATA PURCHASE FLOW (slot-filled)
     // =================================================================
     case 'DATA_MSISDN':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('DATA', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'DATA', account); }
       {
         const normalized = text.trim().toLowerCase();
         if (/^(cancel|stop|no|reset|restart|back)$/i.test(normalized)) {
@@ -5045,6 +5130,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'DATA_NETWORK':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('DATA', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'DATA', account); }
       {
         const normalized = text.trim().toLowerCase();
         if (/^(cancel|stop|no|reset|restart|back)$/i.test(normalized)) {
@@ -5070,6 +5157,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'DATA_PERIOD':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('DATA', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'DATA', account); }
       {
         const normalized = text.trim().toLowerCase();
         if (/^(cancel|stop|no|reset|restart|back)$/i.test(normalized)) {
@@ -5091,6 +5180,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'DATA_CONFIRM':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('DATA', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'DATA', account); }
       {
         const normalized = text.trim().toLowerCase();
         if (/^(no|cancel|stop|not now|later|reset|restart|start over)$/i.test(normalized)) {
@@ -5158,6 +5249,11 @@ async function handleConversationState({ from, text, state, data, account }) {
 
     case 'DATA_PIN':
       {
+        // Launch scope: a flow parked before the switch flipped never vends.
+        if (!isCategoryEnabledForWaId('DATA', from)) {
+          await updateConversationState(from, null);
+          return await replyCategoryUnavailable(from, 'DATA', account);
+        }
         const normalized = text.trim().toLowerCase();
         if (/^(cancel|stop|no|reset|restart)$/i.test(normalized)) {
           await updateConversationState(from, null);
@@ -5242,6 +5338,11 @@ async function handleConversationState({ from, text, state, data, account }) {
     case 'AIRTIME_PIN':
       // User entering PIN to complete airtime purchase
       {
+        // Launch scope: a flow parked before the switch flipped never vends.
+        if (!isCategoryEnabledForWaId('AIRTIME', from)) {
+          await updateConversationState(from, null);
+          return await replyCategoryUnavailable(from, 'AIRTIME', account);
+        }
         const normalized = text.trim();
         
         // Cancel keywords - be more permissive
@@ -5397,7 +5498,7 @@ async function handleConversationState({ from, text, state, data, account }) {
 
       await updateConversationState(from, null);
       if (state === 'AI_DATA_PURCHASE') {
-        if (!isCategoryLive('DATA')) {
+        if (!isCategoryEnabledForWaId('DATA', from)) {
           return await replyCategoryUnavailable(from, 'DATA');
         }
         return await handleListDataBundles({ from, account, entities: data || {} });
@@ -5414,6 +5515,8 @@ async function handleConversationState({ from, text, state, data, account }) {
     // ELECTRICITY PURCHASE FLOW
     // =================================================================
     case 'ELECTRICITY_AMOUNT':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('ELECTRICITY', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'ELECTRICITY', account); }
       // User needs to provide amount for electricity
       {
         const normalized = text.trim().toLowerCase();
@@ -5467,6 +5570,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'ELECTRICITY_METER': {
+      if (!isCategoryEnabledForWaId('ELECTRICITY', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'ELECTRICITY', account); }
       const normalized = text.trim().toLowerCase();
       if (/^(cancel|stop|no|reset|restart|quit|exit|back)$/i.test(normalized)) {
         await updateConversationState(from, null);
@@ -5628,7 +5732,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
-            text: await localizeOutbound(`⚡ Electricity is coming soon. You'll be able to complete purchases once it's enabled for your account.`, await userLang(account)),
+            text: await localizeOutbound(categoryUnavailableMessage('ELECTRICITY', from), await userLang(account)),
           });
         }
 
@@ -5770,6 +5874,11 @@ async function handleConversationState({ from, text, state, data, account }) {
       if (/^(cancel|stop|no|home|menu|back|exit)$/i.test(normalized)) {
         await updateConversationState(from, null);
         return await renderHome({ from, account });
+      }
+      // Launch scope (2026-10-18): with the Blu rail off there is only the card; a parked choice goes straight to it.
+      if (!isRailLiveFor('BLU_LOAD', from) && Number.isInteger(data?.amountCents)) {
+        await updateConversationState(from, null);
+        return await handleCardDepositLink({ from, account, amountCents: data.amountCents, rawText: text });
       }
       const methodAmount = data?.amountCents;
       if (/^(2|card|bank|payfast|eft)\b/i.test(normalized) && Number.isInteger(methodAmount)) {
@@ -6454,8 +6563,8 @@ async function handleConversationState({ from, text, state, data, account }) {
                 to: from,
                 text:
                   await localizeOutbound(`💰 You need ${randsShort(totalCents)} for this voucher but your balance is R${balance}.\n\n` +
-                  `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your voucher. 🎟️\n\n` +
-                  `(Prefer cash? Buy a Blu Voucher at any till and send me the code.)`, await userLang(account)),
+                  `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your voucher. 🎟️` +
+                  (isRailLiveFor('BLU_LOAD', from) ? `\n\n(Prefer cash? Buy a Blu Voucher at any till and send me the code.)` : ''), await userLang(account)),
               });
               const linkResult = await handleCardDepositLink({
                 from,
@@ -6808,7 +6917,7 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   }
   const system = buildAgentSystemPrompt({
     registryLines: promptLines({ waId: from, account }),
-    feesBlock: feeFacts({ withdrawLive }),
+    feesBlock: feeFacts({ withdrawLive, scope: launchScope(from) }),
     customerRecord,
     focusKnowledge: null,
     language: profile?.language || null,
@@ -6933,8 +7042,9 @@ async function handleAIChat({ from, text, account, messageId = null }) {
     const names = privacyNamesFor({ account, pack });
     addPrivacyNames(names);
     const result = await orchestrate(text, contextString, {
-      knowledge: buildBrainKnowledge({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), capabilityLines: promptLines({ waId: from, account }) }),
+      knowledge: buildBrainKnowledge({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), capabilityLines: promptLines({ waId: from, account }), scope: launchScope(from) }),
       withdrawLive: payoutAllowedFor(from),
+      scope: launchScope(from),
       names,
     });
 
@@ -7065,6 +7175,15 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
     }
 
     case 'REDEEM_VOUCHER': {
+      // Launch scope (2026-10-18): no voucher rail live → the honest answer, or the card / EFT ask.
+      if (!cashLoadLiveFor(from)) {
+        if (looksLikeQuestion(text)) {
+          const notYet = `Not yet. ${CASH_LOAD_SOON} For now you can top up by card or Instant EFT: say "deposit R100" and I send you a secure payment link.`;
+          return await sendWhatsAppText({ to: from, text: await localizeOutbound(notYet, await userLang(account)), kind: 'agent' });
+        }
+        await updateConversationState(from, 'DEPOSIT_CARD_AMOUNT');
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(cardOnlyDepositPrompt(), await userLang(account)) });
+      }
       // A question ("can I deposit via an OTT voucher?") is answered in words
       // (founder review 5, 2026-10-06); only a request to do it opens the PIN step.
       if (looksLikeQuestion(text)) {
@@ -7077,6 +7196,7 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
     }
 
     case 'BUY_AIRTIME': {
+      if (!isCategoryEnabledForWaId('AIRTIME', from)) return await replyCategoryUnavailable(from, 'AIRTIME', account);
       if (amountCents && msisdn) {
         return await startAirtimePreviewAndConfirm({
           from,
@@ -7098,7 +7218,7 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
     }
 
     case 'BUY_DATA': {
-      if (!isCategoryLive('DATA')) {
+      if (!isCategoryEnabledForWaId('DATA', from)) {
         return await replyCategoryUnavailable(from, 'DATA');
       }
       await updateConversationState(from, null);
@@ -7137,6 +7257,7 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
     }
 
     case 'BUY_ELECTRICITY': {
+      if (!isCategoryEnabledForWaId('ELECTRICITY', from)) return await replyCategoryUnavailable(from, 'ELECTRICITY', account);
       // The meter the customer typed (or the proposal's cleaned one) goes to
       // the flow, which re-validates it exactly as if typed: shape here,
       // Blu's lookup before any confirm; the confirm and the PIN are minted
@@ -7165,6 +7286,7 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
     }
 
     case 'SEND_VOUCHER': {
+      if (result.slots?.self && !isRailLiveFor('OTT_VOUCHER', from)) return await replyVoucherComingSoon(from, account);
       // A named person ("send R50 to Philly") resolves through saved
       // beneficiaries — people this account has sent to or shared as a
       // contact card. The full number still shows at confirm, so a
@@ -7255,7 +7377,7 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
         if (reply && !looksLikeReceipt(reply, knownAmounts)) {
           return await sendWhatsAppText({ to: from, text: reply });
         }
-        const spendMsg = buildSpendDestinationsReply({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from) });
+        const spendMsg = buildSpendDestinationsReply({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), scope: launchScope(from) });
         const localizedSpend = await localizeOutbound(spendMsg, await userLang(account));
         return await sendWhatsAppText({ to: from, text: localizedSpend });
       }
@@ -7433,6 +7555,8 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
     
     // If user clearly mentions electricity-related terms, it's electricity
     if (hasElectricityIntent) {
+      // Launch scope (2026-10-18): the switch, per customer, before any ask.
+      if (!isCategoryEnabledForWaId('ELECTRICITY', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'ELECTRICITY', account); }
       // Check if they want to BUY (have amount) or just LIST
       const amountMatch = lowerText.match(/r\s?(\d+)/i);
       const meterMatch = lowerText.match(/\b(\d{10,14})\b/); // Meter numbers are typically 10-14 digits
@@ -7477,6 +7601,7 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
     const hasAirtimeIntent = airtimeIndicators.some(k => lowerText.includes(k));
     
     if (hasAirtimeIntent && !lowerText.includes('data') && !lowerText.includes('bundle')) {
+      if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
       // Check if they want to BUY
       const amountMatch = lowerText.match(/r\s?(\d+)/i);
       
@@ -7886,6 +8011,7 @@ async function showCategoryProducts({ from, account, category, text }) {
  * Handle listing airtime options
  */
 async function handleListAirtimeBundles({ from, account, networkCode }) {
+  if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
   logStructured('vas_airtime_fetch_call', {
     from,
     accountId: account.id,
@@ -7978,7 +8104,7 @@ async function handleListDataBundles({ from, account, entities }) {
     networkConfidence,
   });
 
-  if (!isCategoryLive('DATA')) {
+  if (!isCategoryEnabledForWaId('DATA', from)) {
     return await replyCategoryUnavailable(from, 'DATA');
   }
 
@@ -8080,6 +8206,11 @@ async function handleListDataBundles({ from, account, entities }) {
 }
 
 async function handleDataPurchaseFromSlots({ from, account, slots, rawText = '' }) {
+  // Launch scope (2026-10-18): the category switch, per customer, before any Blu call.
+  if (!isCategoryEnabledForWaId('DATA', from)) {
+    await updateConversationState(from, null);
+    return await replyCategoryUnavailable(from, 'DATA', account);
+  }
   const { msisdn, dataMb } = slots;
   // Same supplier limit as airtime: say so before the confirm and the PIN.
   if (!bluCanVendTo(msisdn)) {
@@ -8173,7 +8304,7 @@ async function handleListElectricityProducts({ from, account }) {
     intent: 'LIST_ELECTRICITY',
   });
 
-  if (!isCategoryLive('ELECTRICITY')) {
+  if (!isCategoryEnabledForWaId('ELECTRICITY', from)) {
     return await replyCategoryUnavailable(from, 'ELECTRICITY');
   }
 
@@ -8534,23 +8665,27 @@ async function handleListVasProducts({ from, account }) {
 
     // 2026-09-13: open with the catalogue-built list (vouchers, send, get
     // paid, withdraw when live, fuel when live), then the prepaid categories.
-    let message = `🛍️ *Here is everything your WaPay money can do right now*\n\n${spendDestinationLines({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from) })}\n\n🛒 *Prepaid products you can buy here:*\n\n`;
-    
-    for (const cat of categoryCounts) {
-      if (!isCategoryLive(cat.category)) continue;
-      const info = categoryNames[cat.category];
-      if (info) {
+    // Launch scope (2026-10-18): with every prepaid category off, the card
+    // says so once and never prints a product menu or a "buy airtime" tip.
+    const scope = launchScope(from);
+    const liveCategories = categoryCounts.filter((cat) => isCategoryLive(cat.category) && isCategoryEnabledForWaId(cat.category, from) && categoryNames[cat.category]);
+    let message = `🛍️ *Here is everything your WaPay money can do right now*\n\n${spendDestinationLines({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), scope })}\n\n`;
+    if (liveCategories.length) {
+      message += `🛒 *Prepaid products you can buy here:*\n\n`;
+      for (const cat of liveCategories) {
+        const info = categoryNames[cat.category];
         message += `${info.name}\n   _${info.desc}_\n\n`;
       }
+      const tips = { AIRTIME: `• "Buy R50 airtime"`, DATA: `• "Show me Vodacom bundles"\n• "Weekly MTN bundles"`, ELECTRICITY: `• "Buy R100 electricity"` };
+      message += `━━━━━━━━━━━━━━━━━━\n\n*How to use:*\n`;
+      message += liveCategories.map((cat) => tips[cat.category]).filter(Boolean).join('\n') + `\n`;
+      if (isRailLiveFor('BLU_LOAD', from)) message += `• "Redeem voucher"\n`;
+      message += `\nJust tell me what you need! 🎉`;
+    } else {
+      const soon = comingSoonPhrases(scope, { wicodeLive: fuelLiveFor(from) });
+      if (soon.length) message += `🔜 *Coming soon:* ${joinAnd(soon)}.\n\n`;
+      message += `Just tell me what you need! 🎉`;
     }
-    
-    message += `━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `*How to use:*\n`;
-    message += `• "Show me Vodacom bundles"\n`;
-    message += `• "Buy R50 airtime"\n`;
-    message += `• "Weekly MTN bundles"\n`;
-    message += `• "Redeem voucher"\n\n`;
-    message += `Just tell me what you need! 🎉`;
 
     logStructured('vas_list_vas_products_result', {
       from,
@@ -8608,6 +8743,7 @@ async function handleListAllProducts({ from, account }) {
  */
 async function attemptOttRedemption({ from, pin, account }) {
   if (!process.env.OTT_MERCHANT_API_KEY) return false; // rail not configured
+  if (!isRailLiveFor('OTT_LOAD', from)) return false; // launch scope: the OTT load rail is switched off
 
   const pinHash = crypto.createHash('sha256').update(String(pin)).digest('hex');
   // 'x' every 8 hex chars: a long digit run in a hash trips the ledger's
@@ -8752,6 +8888,12 @@ async function attemptOttRedemption({ from, pin, account }) {
  * Handle voucher redemption
  */
 async function handleVoucherRedemption({ from, pin, account }) {
+  // Launch scope (2026-10-18): with the Blu load rail off only the OTT rail (when live) may take the PIN.
+  if (!isRailLiveFor('BLU_LOAD', from)) {
+    if (isRailLiveFor('OTT_LOAD', from) && ottLoadConfigured() && await attemptOttRedemption({ from, pin, account })) return { ok: true };
+    await updateConversationState(from, null);
+    return await replyCashLoadComingSoon(from, account);
+  }
   console.log('🎟️ Processing voucher redemption:', { from, pin: '***' });
 
   // Send "processing" message

@@ -49,11 +49,13 @@ test('the AI knowledge, the fee answer and the spend reply follow the per-custom
 test('every processor call site passes withdrawLive: payoutAllowedFor(from) and the orchestrator honours it', () => {
   const sites = processor.match(/withdrawLive: payoutAllowedFor\(from\)/g) || [];
   assert.ok(sites.length >= 5, `expected the flag at the knowledge, prompt, spend-reply, product-list and fee-answer sites; found ${sites.length}`);
-  assert.match(processor, /buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), capabilityLines: promptLines\(\{ waId: from, account \}\) \}\)/);
-  assert.match(processor, /feeAnswer\(topic, feeAskAmountCents\(text\), \{ withdrawLive: payoutAllowedFor\(from\) \}\)/);
+  // 2026-10-18: the launch scope (lib/vas-config.js) rides with the withdraw flag at every site.
+  assert.match(processor, /buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), capabilityLines: promptLines\(\{ waId: from, account \}\), scope: launchScope\(from\) \}\)/);
+  assert.match(processor, /feeAnswer\(topic, feeAskAmountCents\(text\), \{ withdrawLive: payoutAllowedFor\(from\), scope: launchScope\(from\) \}\)/);
   assert.match(orchestrator, /withdrawLive\?: boolean;/);
-  assert.match(orchestrator, /agentPrompt\(tier1\.domain, opts\.knowledge, opts\.withdrawLive\)/);
-  assert.match(orchestrator, /const PRODUCT_TRUTH = \(withdrawLive: boolean = process\.env\.WAPAY_PAYOUT_ENABLED === 'true'\)/);
+  assert.match(orchestrator, /scope\?: LaunchScope;/);
+  assert.match(orchestrator, /agentPrompt\(tier1\.domain, opts\.knowledge, opts\.withdrawLive, opts\.scope\)/);
+  assert.match(orchestrator, /const PRODUCT_TRUTH = \(withdrawLive: boolean = process\.env\.WAPAY_PAYOUT_ENABLED === 'true', scope: LaunchScope = scopeFromEnv\(\)\)/);
   // No prompt text may read the global env directly any more.
   const envReadsInPrompts = (orchestrator.match(/process\.env\.WAPAY_PAYOUT_ENABLED === 'true' \?/g) || []).length;
   assert.equal(envReadsInPrompts, 0, 'prompt strings must use the withdrawLive argument, not the env');

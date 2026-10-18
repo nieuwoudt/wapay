@@ -11,7 +11,28 @@ import { TOPICS, matchHowItWorksAsk, howItWorksAnswer, howItWorksFacts, looksLik
 import { buildBrainKnowledge } from '../lib/spend-catalogue.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
-const ctx = { withdrawLive: true, wicodeLive: false, fuelPartners: ['Shell', 'Engen'], ottFacts: 'OTT vouchers are accepted online at partner platforms.' };
+const ON_SCOPE = { airtime: true, data: true, electricity: true, anyVas: true, allVas: true, bluLoad: true, ottLoad: false, voucher: true };
+const ctx = { withdrawLive: true, wicodeLive: false, fuelPartners: ['Shell', 'Engen'], ottFacts: 'OTT vouchers are accepted online at partner platforms.', scope: ON_SCOPE };
+// No scope in ctx and no switch set: the shipped default (launch scope 2026-10-18).
+const holdCtx = { withdrawLive: true, wicodeLive: false, fuelPartners: ['Shell', 'Engen'], ottFacts: 'OTT vouchers are accepted online at partner platforms.' };
+
+test('launch scope: an off topic answers coming soon and what works today, never the steps', () => {
+  for (const id of ['airtime', 'data', 'electricity']) {
+    const a = howItWorksAnswer(id, holdCtx);
+    assert.match(a, /coming soon on WaPay/, id);
+    assert.match(a, /Right now you can get paid with a "please pay me" link/, id);
+    assert.doesNotMatch(a, /R10 to R5000|buy R50 airtime|show MTN bundles/, `${id}: no steps while off`);
+    assert.doesNotMatch(a, /\b(january|february|march|april|may|june|july|august|september|october|november|december|20\d\d)\b/i, `${id}: no date promise`);
+  }
+  const dep = howItWorksAnswer('deposit', holdCtx);
+  assert.match(dep, /Cash at a till \(Blu or OTT voucher\):\* coming soon/);
+  assert.doesNotMatch(dep, /ask any major retailer for a \*Blu Voucher\*/);
+  assert.match(howItWorksAnswer('ott', holdCtx), /WaPay \(OTT\) vouchers are coming soon/);
+  assert.doesNotMatch(howItWorksAnswer('ott', holdCtx), /Say "buy an OTT voucher for R100"/);
+  assert.match(howItWorksAnswer('send', holdCtx), /lands in their WaPay balance and it is free/, 'send stays live (founder, 2026-10-18)');
+  assert.match(howItWorksAnswer('fuel', holdCtx), /coming to WaPay soon/);
+  assert.doesNotMatch(howItWorksAnswer('fuel', holdCtx), /airtime, data, electricity, vouchers/, 'the fuel redirect names only what works');
+});
 
 test('the founder sentences route to the right topic', () => {
   assert.equal(matchHowItWorksAsk('Can I buy electricity?'), 'electricity');
