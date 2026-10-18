@@ -43,6 +43,8 @@ See `docs/GOLDEN_THREAD.md` (the rules, where each is enforced, the test for eac
 | 5 | your ID number on its own | "🪪 Nothing is waiting for an ID or passport number right now, so I did not use it or keep it…" |
 | 6 | a withdrawal start, then nothing for a day, then your ID | "⏱️ Your withdrawal of R50 stopped because it waited too long… Nothing was sent…" |
 
+| 7 | a withdrawal with a **passport or foreign ID** (any amount you can afford, PayShap or cash) | the country is asked; "Done" or "In progress"; the provider record shows `PASSPORT/<country>`. **Still to prove on production:** Lisa's paid withdrawal went as an SA ID (see §F) |
+
 For Lisa: she can withdraw now. "withdraw 342 to my bank account", then answer each question as it comes (the bank account, Capitec, her name, her passport or ID and the country), YES, her PIN. The payout float is R545.56, enough for R350.
 
 ## E. Harness run (2026-10-16, real processor, mocked WhatsApp and OTT)
@@ -63,3 +65,10 @@ After the run, two narrowings of the boundary landed. They are covered by unit t
 
 - everyday words are never treated as names;
 - only person fields in tool results are tokenised, so product and merchant names stay visible.
+
+## F. Lisa's retry (2026-10-18)
+
+Paid: R342 by PayShap, reference `WPE98BD954141216`, 07:05 UTC, status SUCCESS, fee R8, her balance R0 after.
+
+The provider record's ID kind is `RSAID`: she withdrew with a South African ID number. **The passport and foreign-ID path is therefore NOT yet proven on production.** It is proven only in unit tests and in harness scenario Lisa 1, and OTT confirmed in writing which providers accept a passport. Row 7 of the run sheet in §D stays open until a passport withdrawal pays on production.
+
