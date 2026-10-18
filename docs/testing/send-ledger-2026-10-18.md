@@ -68,5 +68,13 @@ All Lisa scenarios 1 to 9 passed.
 
 ## F. Production
 
-Filled in after the deploy check.
+`67024ce` is live:
+
+- `/api/internal/payout-status` serves build 67024ce;
+- the WhatsApp webhook answers a bare GET with 403;
+- `/api/wallet/send/preview` and `/execute` answer 401 without the internal key.
+
+Switches: piiKey, pinProofSecret, pinPepperSet and cronSecretSet are all true; the 30-day refund rides the daily cron. Float R1,200.68 (not used by a send).
+
+Founder's sends: run sheet §C, to be filled in by the payouts thread.
 
