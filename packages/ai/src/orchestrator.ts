@@ -406,6 +406,10 @@ async function callStructured<T>(args: {
   maxTokens: number;
   vault: PrivacyVault;
   names?: Array<string | null | undefined>;
+  /** Per-request override of the client's 10 s budget (work outside the webhook, such as the daily audit's reviewer). */
+  timeoutMs?: number;
+  /** false leaves the boundary's tokens in the answer (the audit stores no name). Default: restored. */
+  restore?: boolean;
 }): Promise<T> {
   // The boundary, at the lowest level: nothing reaches the client untokenised, and a secret never reaches it at all.
   const { messages } = guardChatMessages(
@@ -427,7 +431,7 @@ async function callStructured<T>(args: {
       type: 'json_schema',
       json_schema: { name: args.schemaName, strict: true, schema: args.schema as any },
     },
-  });
+  }, args.timeoutMs ? { timeout: args.timeoutMs } : undefined);
 
   const choice = completion.choices[0];
   if (choice.message.refusal) {
@@ -438,7 +442,8 @@ async function callStructured<T>(args: {
     throw new Error('AI_EMPTY_RESPONSE');
   }
   // strict json_schema guarantees shape; parse failures here are provider bugs.
-  return restoreDeep(JSON.parse(content) as T, args.vault);
+  const parsed = JSON.parse(content) as T;
+  return args.restore === false ? parsed : restoreDeep(parsed, args.vault);
 }
 
 // ---------------------------------------------------------------------------
@@ -614,3 +619,45 @@ function normalizeAiError(error: any): Error {
 // voice, money rules and language table, and the same client (timeouts, no
 // retries). Named exports only; the text above is unchanged.
 export { PERSONA, MONEY_TRUTH_RULES, LANGUAGE_HINTS, getOpenAI };
+
+/**
+ * One structured call for work outside the chat: the daily conversation
+ * audit's reviewer (lib/audit/review.js, docs/audits/DAILY_AUDIT.md). The
+ * same door as every chat call (docs/GOLDEN_THREAD.md 1.1): the boundary
+ * turns the names the caller knows, phones, e-mails and references into
+ * tokens and refuses a secret; strict JSON schema output. `restore:false`
+ * leaves the tokens in the answer, so what the caller stores never carries a
+ * name even where the model quoted one. Errors are normalised like the
+ * engine's own (AI_UNAVAILABLE, AI_QUOTA_EXCEEDED, AI_PRIVACY_BLOCK).
+ */
+export async function callStructuredOnce<T>(args: {
+  model?: string;
+  system: string;
+  user: string;
+  schemaName: string;
+  schema: Record<string, unknown>;
+  maxTokens?: number;
+  names?: Array<string | null | undefined>;
+  timeoutMs?: number;
+  restore?: boolean;
+}): Promise<T> {
+  const vault = newVault();
+  try {
+    const out = await callStructured<T>({
+      model: args.model || ORCHESTRATOR_MODEL(),
+      system: args.system,
+      user: args.user,
+      schemaName: args.schemaName,
+      schema: args.schema,
+      maxTokens: args.maxTokens ?? 4000,
+      vault,
+      names: args.names || [],
+      timeoutMs: args.timeoutMs,
+      restore: args.restore,
+    });
+    return out;
+  } catch (error: any) {
+    if (error?.code === 'AI_PRIVACY_BLOCK') throw error;
+    throw normalizeAiError(error);
+  }
+}

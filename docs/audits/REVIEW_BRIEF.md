@@ -1,8 +1,13 @@
 # Review brief for a conversation shard (2026-10-19)
 
-Read the whole shard. Judge the bot against what is true today (docs/LAUNCH_SCOPE.md,
-docs/CAPABILITIES.md, the fee schedule and the pay-out methods on production), never against
-what you assume. Flag one finding per distinct problem and group repeats across accounts.
+Read the whole shard. Judge the bot against what is true today, never against what you
+assume. Since 2026-10-19 the "what is true today" block is GENERATED at run time by
+`truthBlock()` in `lib/audit/brief.js` from the registries (`lib/capabilities.js`,
+`lib/vas-config.js`, `feeSchedule()`, the pay-out methods on production), and the daily audit
+(docs/audits/DAILY_AUDIT.md) hands the reviewer that block, this rubric, and
+docs/audits/PROCESS_CHECKS.md. For a review by hand, print it with
+`node -e "import('./lib/audit/brief.js').then((m) => console.log(m.truthBlock()))"`.
+Flag one finding per distinct problem and group repeats across accounts.
 
 - **P1:** a wrong fact (fees, limits, what is live, methods that do not exist), a money intent
   executed wrongly or not at all, a security or privacy problem, a customer told something

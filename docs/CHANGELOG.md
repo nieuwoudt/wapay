@@ -34,6 +34,51 @@ Founder, 19 October, from seven annotated screenshots. Everything below is on th
   **Conversation on every profile** (`/api/admin/customer-turns`): both sides of the chat, the
   questions they asked, the same flags.
 
+## 2026-10-19 (99) — DRAFT: the daily conversation audit loop: the first audit's sweep and review run every night, findings stored with their recurrence, a Health feed for Mission Control, a checker that reads today's switches
+
+The founder, after the first audit by hand (docs/audits/conversation-audit-2026-10-19.md, 93
+problems across 348 customers): every day, without anyone asking. Built to
+docs/audits/DAILY_AUDIT_BRIEF.md; the manual is docs/audits/DAILY_AUDIT.md.
+
+- **`lib/audit/export.js`** ports the export script's redaction (six or more digits, the
+  account-name line, the full-name answer by position) into `exportTurns`: accounts with a
+  turn since the last run, ten turns of context each, the shard header's facts, account ids
+  only; the display name travels apart for the model boundary and the quote masks.
+- **`lib/audit/rules.js`** ports the deterministic sweep as pure functions over that export
+  (eWallet, R20, date, betting, em dash, internal names, error lines, a live product called
+  coming soon) and adds the coming-soon purchase started against today's scope, the first-link
+  example answered with a link, the unanswered last message, loops, clarification runs and
+  long replies as findings, with the pattern counts.
+- **`lib/audit/brief.js`** GENERATES "what is true today" from the registries (`worksToday`,
+  `launchScopeFor`, `comingSoonPhrases`, `feeSchedule`, the pay-out methods read from the
+  rail with the production list as the fallback) so a switch flipped in Vercel changes what
+  the reviewer judges against the same night; then the rubric, the correct-behaviour list and
+  the hand-maintained docs/audits/PROCESS_CHECKS.md (created: onboarding, pay links, send, add
+  money, withdraw, ad flow, business, close account, balance and PIN, language).
+- **`lib/audit/review.js`** chunks the transcripts (about 25 accounts or 60k characters) and
+  reads them four at a time, each once, through **`callStructuredOnce`**, a new export of
+  `packages/ai/src/orchestrator.ts` that reuses `callStructured` (the same boundary, strict
+  JSON, a per-request timeout, the tokens left in the answer so nothing stored carries a
+  name). Parsed tolerantly; skipped without `OPENAI_API_KEY` (`reviewed:false`).
+- **`lib/audit/store.js`** + migration `20261019_audit_loop`: `audit_runs` and
+  `audit_findings` keyed by `sha1(category + normalised title)`; open = first seen in the
+  latest run, recurring = seen in two or more runs, resolved = not seen in the last two runs
+  with conversations, or by hand; a resolved finding seen again reopens as recurring.
+- **`lib/audit/run.js`** `runDailyAudit`: export → rules → review → upsert → run row → trend
+  → one ops summary by WhatsApp (`opsPersonAlert`) and e-mail (`sendOpsAlert`) with counts,
+  the top recurring titles and the Mission Control link; `dry:true` writes and sends nothing.
+- **Routes:** `POST /api/internal/audit-run` (internal key; `?since=ISO`, `?dry=1`),
+  `POST /api/internal/audit-resolve { fingerprint, note }`, `GET /api/admin/audit`
+  (requireAdmin) with the Health tab's contract: `{ latestRun, counts, trend, findings,
+  recurring }`.
+- **Cron:** one capped call in `daily-vas-sync.js`, logged as `cron_daily_audit`, never in
+  the response.
+- Tests `tests/audit-loop.test.mjs`; env `WAPAY_AUDIT_MAX_ACCOUNTS` (400),
+  `WAPAY_AUDIT_REVIEW_MODEL` (the fast tier by default), `WAPAY_AUDIT_REVIEW_CONCURRENCY`,
+  `WAPAY_ADMIN_URL`. Apply the migration before deploying. Dry run on production 2026-10-19:
+  296 accounts and about 1,400 turns in a day, 7 distinct rule findings, every chunk through
+  the boundary without a refusal.
+
 ## 2026-10-19 (98) — The first conversation audit's fixes: the send flow speaks balance, the request ceiling and re-link rules, a real answer to "close my account", the example echo and "nobody owes me", the Send tap, add-money links named as such; the business question asks only on "ask"
 
 Four review agents read every customer conversation (348 accounts, 2,498 turns, redacted

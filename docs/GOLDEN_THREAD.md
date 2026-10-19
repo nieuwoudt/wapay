@@ -30,6 +30,8 @@ A rule that has only a comment is not on this thread.
 
 **Residual risk, stated honestly.** A name the customer types in free text that WaPay has never seen (a new recipient, as in "send R50 to Sipho") reaches the model as typed: the boundary can only hide the names it knows. The flows ask for every name the money needs at a step of their own (the account holder, a recipient), and those steps never reach a model.
 
+- **The daily conversation audit (2026-10-19, docs/audits/DAILY_AUDIT.md)** reads redacted transcripts (numbers masked, the full-name step masked by position, account ids only) and sends them to the model through `callStructuredOnce` in `packages/ai/src/orchestrator.ts`: the same door as every chat turn, names tokenised, secrets refused, and with `restore:false` so the tokens stay tokens in what is stored. Its findings carry account ids and quotes of the bot's own lines, never a customer's name or number.
+
 ## 2. No money leaves a customer's balance without the customer
 
 **Why.** The founder's rule: WaPay itself, a bug, an AI, an operator or anyone holding a link must never be able to move a customer's money out. The read-only inventory of every money path (2026-10-16, summarised in §8) found that every customer debit in chat verifies the PIN in the same request, and that no admin route and no AI tool posts money. One door was still too wide: the PIN was checked in the chat, but the pay-out function itself accepted any caller (BUGLOG #112).
