@@ -70,3 +70,22 @@ Until the tables exist the run fails cleanly (`audit_run_failed` in the log, not
 - The model receives: redacted transcripts (the memory already hides PINs, IDs, account numbers and the name typed at the withdrawal's name step), account ids, the facts above. Known names, phones, e-mails and references become tokens at the boundary; a surviving secret refuses the whole chunk (`AI_PRIVACY_BLOCK`, logged by kind). Nothing is restored on the way out.
 - The store keeps quotes of at most 200 characters from the redacted memory with known names masked; the ops summary and the logs keep counts and titles only.
 - The routes: `audit-run` and `audit-resolve` need the internal key; `admin/audit` needs the admin session or the key; all three are read-only on customer data.
+
+## The precision gate (added after the first real run, 2026-10-19 13:52 UTC)
+
+The first run over production found 59 distinct problems and called 54 of them P1 wrong facts;
+reading them, 50 were the reviewer misreading four things: the payer's card methods (it called
+them unsupported), who carries the card fee (it read "the payer never pays a fee" as a
+contradiction of "the fee comes off what you receive"), the fee arithmetic, and the business
+invite list taken as a rule about opening an account. Two changes:
+
+- The truth block now states those four facts outright, with worked fee examples computed by
+  the same functions the chat uses (`paymentRequestFeeCents`, `grossedUpRequestCents`), and says
+  that a "coming soon" line is never a wrong fact.
+- The schema asks for `rule` (the truth line contradicted, copied) and `confidence` (0 to 1).
+  `gateFinding` in `lib/audit/review.js` drops a wrong-fact finding whose bot line says coming
+  soon, drops a finding that reasons from the invite list when nobody mentioned a business, and
+  turns a P1 without a cited rule or with confidence under 0.8 into a P3 titled "Verify: …".
+  Deterministic findings are untouched. `tests/audit-precision.test.mjs` locks it.
+
+The trial rows from that first run were deleted and the loop was run again on the same day.
