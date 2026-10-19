@@ -36,7 +36,7 @@ test('voucher gift: "send R50 to 0840012300" resolves to VOUCHER_GIFT', () => {
   assert.equal(r.product, 'VOUCHER');
 });
 
-test('voucher gift: bare "send money" asks for a missing slot (voucher copy)', () => {
+test('voucher gift: bare "send money" asks for a missing slot (balance copy)', () => {
   const slots = parseSlots('send money');
   assert.equal(slots.productHint, 'SEND_MONEY');
 
@@ -46,7 +46,7 @@ test('voucher gift: bare "send money" asks for a missing slot (voucher copy)', (
     ['NEEDS_AMOUNT', 'NEEDS_RECIPIENT'].includes(r.kind),
     `expected an ask kind, got ${r.kind}`
   );
-  assert.match(r.message, /WaPay voucher/);
+  assert.match(r.message, /from your WaPay balance to theirs, free/);
 });
 
 test('voucher gift: "send R20 to" a recipient-less message asks for the number', () => {

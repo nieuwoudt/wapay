@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-10-19 (98) — The first conversation audit's fixes: the send flow speaks balance, the request ceiling and re-link rules, a real answer to "close my account", the example echo and "nobody owes me", the Send tap, add-money links named as such; the business question asks only on "ask"
+
+Four review agents read every customer conversation (348 accounts, 2,498 turns, redacted
+export) against docs/audits/REVIEW_BRIEF.md; the deterministic sweep ran first. The report
+is docs/audits/conversation-audit-2026-10-19.md. Fixed here:
+
+- **BUGLOG #122** the send flow's prompts and confirmation still said "a WaPay voucher they
+  can spend online where OTT vouchers are accepted" after the ledger send shipped; they now
+  say it moves from the sender's balance to theirs, free, and waits for a non-member. The
+  own-number refusal names "buy a voucher" only while that is live (`sendToSelfText`).
+- **BUGLOG #123** `grossedUpRequestCents` stopped after 64 steps and offered R3,064 for R3,000,
+  which nets R2,933 by card; it now loops until the net covers the ask, and at the link
+  ceiling the chooser offers no option 2 and says why.
+- **BUGLOG #124** a request for the amount of a link made minutes ago is that link ("already
+  live", with the link, no second one); a request for its grossed-up amount is option 2 of
+  it, so the first is cancelled and replaced instead of compounded (R150 → R159 → R169).
+- **BUGLOG #125** "close my account" was answered by the model with a "secure final step"
+  that does not exist, seven times; `lib/account-closure.js` matches it, says a person does
+  it, raises the person alert (WhatsApp twin and e-mail) once a day, and the product truth
+  forbids inventing a step.
+- **BUGLOG #126** the first-link example typed back word for word made links for nobody (ten
+  customers); it now gets "That was my example, who really owes you?". "Nobody owes me" and
+  its kin get the truth (WaPay does not pay you; it collects what you are owed) instead of
+  the prompt again, in the first-link state and at the get-paid amount step. A tapped
+  "Send Money" in the first-link state starts the flow instead of the FAQ line, and that FAQ
+  line now states the ledger truth without the section-11 words.
+- **BUGLOG #127** the withdraw gate and the unpaid-link answer called a card add-money link
+  "your R211 payment link"; `addMoneyLinkLabel` names it "R200 add-money link (R211 with the
+  card fee)".
+- **BUGLOG #128** the product truth told the model to say "withdraw R<amount>", which one
+  customer received three times in Sesotho as a raw placeholder; both texts now give a real
+  example.
+- **The business question** asks only on `WAPAY_ONBOARDING_BUSINESS_QUESTION=ask`: the
+  founder set the variable to "on" meaning "the removal is on", and production's flags showed
+  the question back at sign-up for an hour and a half.
+- Audit tooling in the repo: `scripts/audit/` (redacted export, deterministic sweep, README)
+  and `docs/audits/` (the brief, the reports). The export now redacts the full-name step by
+  position (finding S2-14).
+
 ## 2026-10-19 (97) — Payment links as the key figure, the viral loop, the path and valuation charts, a ten-minute refresh, the reply box, the flags readout, and two audit fixes
 
 Founder, day two of the ad, midday: "every ten minutes update the dashboard"; "give me this

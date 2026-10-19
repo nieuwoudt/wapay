@@ -267,9 +267,10 @@ test('the withdraw gate\'s add-money line names a till voucher only while Blu lo
   assert.ok(!/till/.test(reply({ WAPAY_LAUNCH_HOLD: 'off', VAS_LIVE_BLU_LOAD: 'true', VAS_ALLOWLIST_BLU_LOAD: PILOT })), 'a tester list narrows it to the testers');
 });
 
-test('the business question is off by default for the POC: onboarding ends without it, the S5 block asks only when the flag says on', () => {
-  for (const v of [undefined, '', 'off', 'false', '0', 'no']) withEnv({ WAPAY_ONBOARDING_BUSINESS_QUESTION: v }, () => assert.equal(businessQuestionEnabled(), false, String(v)));
-  for (const v of ['on', 'true', '1', 'yes', ' ON ']) withEnv({ WAPAY_ONBOARDING_BUSINESS_QUESTION: v }, () => assert.equal(businessQuestionEnabled(), true, v));
+test('the business question is off by default for the POC: onboarding ends without it, the S5 block asks only when the flag says ask', () => {
+  // The founder set the variable to "on" meaning "the removal is on" (2026-10-19): only the unambiguous word asks the question.
+  for (const v of [undefined, '', 'off', 'false', '0', 'no', 'on', 'true', '1', 'yes']) withEnv({ WAPAY_ONBOARDING_BUSINESS_QUESTION: v }, () => assert.equal(businessQuestionEnabled(), false, String(v)));
+  for (const v of ['ask', ' ASK ', 'Ask']) withEnv({ WAPAY_ONBOARDING_BUSINESS_QUESTION: v }, () => assert.equal(businessQuestionEnabled(), true, v));
   assert.match(processor, /\} else if \(\(await import\('\.\.\/\.\.\/\.\.\/lib\/business-chat\.js'\)\)\.businessQuestionEnabled\(\)\) \{\n[^\n]*\n[^\n]*\n\s*await askAccountType\(\{ from, account \}\)/, 'the question sits behind the flag, nothing else changed in the S5 block');
   assert.match(processor, /if \(matchBusinessSignupAsk\(text\)\) return await handleBusinessSignupAsk\(\{ from, account \}\);/, 'the typed command still answers through the invite gate');
 });

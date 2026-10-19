@@ -108,7 +108,7 @@ button.
 | How do I get my money out? | "You can pay out to any South African bank account with PayShap, or collect cash at a Nedbank or Absa ATM, no card needed." | buttons **To my bank account** · **Nedbank cash** · **Absa cash**, each starting the pay-out flow at its first step |
 | Can I top up with cash? / deposit cash? | "Not yet. Cash top-ups with OTT and Blue Voucher are coming soon. For now you can top up electronically with a card, Instant EFT, Capitec Pay, SnapScan and more." | same |
 | Can I buy airtime, data, electricity or fuel? | "Not yet, those are coming soon. Right now you can get paid, top up electronically, pay other WaPay users and pay out." | same |
-| Can I pay someone? | "Yes. You can pay any other WaPay user, free at any amount. If they're not on WaPay yet, they can open an account in their own WhatsApp." | same |
+| Can I pay someone? | "Yes. You can pay anyone from your WaPay balance to any SA number, free, and it lands in their WaPay balance. If they're not on WaPay yet, it waits for them. Just tell me the amount and their number." (ledger send since 2026-10-18; audit 2026-10-19 fixed the old members-only line) <!-- was: If they're not on WaPay yet, they can open an account in their own WhatsApp." | same |
 
 ## 7. During onboarding (OTP, PIN, consent)
 

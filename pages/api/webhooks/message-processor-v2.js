@@ -15,6 +15,9 @@ import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, sendWhatsAppReplyButtons, out
 // side of the turn by construction (docs/AGENT_ARCHITECTURE_V2.md C2).
 import { sendWhatsAppText, recordInbound } from '../../../lib/say.js';
 import { rememberSent } from '../../../lib/say.js';
+import { isFirstLinkExample, EXAMPLE_ECHO_REPLY, looksLikeNobodyOwesMe, NOBODY_OWES_ME_REPLY } from '../../../lib/ad-flow.js';
+import { matchCloseAccountAsk, closeAccountReply, closeAccountAlert } from '../../../lib/account-closure.js';
+import { getLatestPendingRequest as latestPendingLink, cancelPaymentRequest as cancelPendingLink } from '../../../lib/payment-requests.js';
 import { recentTurns, renderTurns, redactForMemory } from '../../../lib/turns.js';
 import { loadContextPack, renderCustomerRecord, statusCandidates, rankCandidates, preferredKind, formatRands, formatSast, movementBullet } from '../../../lib/context-pack.js';
 import { rescueWithdrawSlots } from '../../../lib/agent/slot-rescue.js';
@@ -609,8 +612,8 @@ async function startSendPreviewAndConfirm({ from, account, amountCents, recipien
     }
     await updateConversationState(from, null);
     if (p.error === 'SELF') {
-      const { SEND_TO_SELF_TEXT } = await import('../../../lib/payout-gate.js');
-      return await sendWhatsAppText({ to: from, text: await localizeOutbound(SEND_TO_SELF_TEXT, await userLang(account)) });
+      const { sendToSelfText } = await import('../../../lib/payout-gate.js');
+      return await sendWhatsAppText({ to: from, text: await localizeOutbound(sendToSelfText({ voucherLive: isRailLiveFor('OTT_VOUCHER', from) }), await userLang(account)) });
     }
     return await sendWhatsAppText({ to: from, text: await localizeOutbound(`❌ ${p.error === 'USER_INPUT' && p.message ? p.message : 'I could not prepare that send.'} Nothing was sent. Try again with the amount and the number, like "send R50 to 0781234567".`, await userLang(account)) });
   }
@@ -630,10 +633,10 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
   // case: "send money", R350, her own number, then a R367 link). Only the explicit self-purchase
   // ("buy an OTT voucher", intent OTT_VOUCHER_SELF) or its resume may reach here with the own number.
   if (SEND_PATH_INTENTS.has(intent) && normaliseMsisdn(recipientMsisdn || '') === normaliseMsisdn(account.msisdn || '')) {
-    const { SEND_TO_SELF_TEXT } = await import('../../../lib/payout-gate.js');
+    const { sendToSelfText } = await import('../../../lib/payout-gate.js');
     await updateConversationState(from, null);
     logStructured('send_to_self_refused', { from, accountId: account.id, intent });
-    return await sendWhatsAppText({ to: from, text: await localizeOutbound(SEND_TO_SELF_TEXT, await userLang(account)) });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(sendToSelfText({ voucherLive: isRailLiveFor('OTT_VOUCHER', from) }), await userLang(account)) });
   }
   // "Send money" moves balance, never a voucher (founder 2026-10-18, BUGLOG #117): every send to
   // another number goes through the ledger (lib/send-money.js). Only the explicit self-purchase
@@ -736,12 +739,11 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
       `\n` +
       `Your voucher PIN will be delivered right here. Spend it online at any store that accepts OTT vouchers.\n\n` +
       `Reply *YES* to confirm or *NO* to cancel.`
-    : `🎁 *Confirm WaPay Voucher*\n\n` +
-      `Voucher: ${randsShort(amountCents)}\n` +
-      `Fee: ${randsShort(feeCents)}\n` +
-      `Total: ${randsShort(totalCents)}\n` +
+    : `💸 *Confirm send*\n\n` +
+      `Amount: ${randsShort(amountCents)}\n` +
+      (feeCents > 0 ? `Fee: ${randsShort(feeCents)}\nTotal: ${randsShort(totalCents)}\n` : `No fee.\n`) +
       `To: ${normalisedRecipient}\n\n` +
-      `Please check the number carefully. They'll get a WaPay voucher they can spend online at any store that accepts OTT vouchers.\n\n` +
+      `Please check the number carefully. It moves from your WaPay balance to theirs; if they are not on WaPay yet, it waits for them.\n\n` +
       `Reply *YES* to confirm or *NO* to cancel.`, await userLang(account));
 
   return await sendWhatsAppText({ to: from, text: confirmMsg });
@@ -1387,7 +1389,7 @@ async function handleSharedContact({ from, account, sharedContact }) {
   const msg = await localizeOutbound(
     `💸 *Send money to ${label}*\n\n` +
     `How much would you like to send? For example "R50".\n\n` +
-    `They'll get a WaPay voucher they can spend online at any store that accepts OTT vouchers. Reply "cancel" to stop.`,
+    `It lands in their WaPay balance, free; if they are not on WaPay yet, it waits for them. Reply "cancel" to stop.`,
     await userLang(account)
   );
   return await sendWhatsAppText({ to: from, text: msg });
@@ -1941,6 +1943,9 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     if (answered) return answered;
     // Not a business owner (and not invited): route normally, say nothing.
   }
+
+  // CLOSE MY ACCOUNT (audit 2026-10-19, BUGLOG #125): a person does it; the chat says so once and raises the alert, never a "secure step".
+  if (matchCloseAccountAsk(text)) return await handleCloseAccountAsk({ from, account });
 
   // BUSINESS SIGN-UP from the chat (founder ask 2026-09-06): "business
   // account" / "register my business" starts the two-question flow for an
@@ -3155,6 +3160,20 @@ async function askAccountType({ from, account }) {
   logStructured('business_signup_question', { accountId: account.id });
   return await deliverBusinessStep({ from, account, step: accountTypeQuestion() });
 }
+async function handleCloseAccountAsk({ from, account }) {
+  const { opsPersonAlert } = await import('../../../lib/ops-alerts.js');
+  const { sendOpsAlert } = await import('../../../lib/email.js');
+  const alert = closeAccountAlert({ account });
+  const day = new Date().toISOString().slice(0, 10);
+  const [wa, mail] = await Promise.all([
+    opsPersonAlert({ text: alert.text, key: `close:${account.id}:${day}` }).catch(() => ({ sent: 0 })),
+    sendOpsAlert({ subject: alert.subject, detailsHtml: alert.detailsHtml }).catch(() => ({ success: false })),
+  ]);
+  const alerted = !!((wa && wa.sent) || (mail && mail.success));
+  logStructured('account_closure_asked', { accountId: account.id, alerted });
+  await updateConversationState(from, null);
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(closeAccountReply({ alerted }), await userLang(account)) });
+}
 async function handleBusinessSignupAsk({ from, account }) {
   const { startBusinessSignup } = await import('../../../lib/business-chat.js');
   const step = await startBusinessSignup({ account });
@@ -3354,6 +3373,28 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
     return await sendWhatsAppText({ to: from, text: askMsg });
   }
 
+  // The ad prompt's example typed back word for word (audit 2026-10-19, BUGLOG #126): ask for the real one, mint nothing.
+  if (isFirstLinkExample(rawText)) {
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(EXAMPLE_ECHO_REPLY, await userLang(account)), kind: 'ad' });
+  }
+  // A link made minutes ago (audit 2026-10-19, BUGLOG #124): the same amount again is that link, not a second one;
+  // its grossed-up amount is "option 2" of that link, so the first is replaced rather than compounded.
+  if (!confirmed) {
+    const recent = await latestPendingLink({ accountId: account.id }).catch(() => null);
+    const recentAgeMs = recent ? Date.now() - new Date(recent.createdAt).getTime() : Infinity;
+    if (recent && recentAgeMs < 15 * 60 * 1000) {
+      if (recent.amountCents === amountCents) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`That link is already live for ${randsShort(amountCents)}: ${paymentRequestUrl(recent.id)}\n\nForward it to the person who owes you. They do not need to open it for you, and you do not need to open it yourself. For a different amount, tell me the amount.`, await userLang(account)) });
+      }
+      if (amountCents <= MAX_REQUEST_CENTS && grossedUpRequestCents(recent.amountCents) === amountCents) {
+        await cancelPendingLink({ code: recent.id, accountId: account.id }).catch(() => null);
+        await sendWhatsAppText({ to: from, text: await localizeOutbound(`I cancelled your ${randsShort(recent.amountCents)} link and made the ${randsShort(amountCents)} one instead, so there is only one link.`, await userLang(account)) });
+        return await handleCreatePaymentRequest({ from, account, amountCents, rawText, confirmed: true, adPayerName });
+      }
+    }
+  }
+
   // CONFIRM BEFORE CREATE (founder 2026-08-27): when a card fee exists, the
   // requester chooses the link amount FIRST and exactly one link is ever
   // minted (the old flow created immediately and offered "make it R390",
@@ -3361,7 +3402,9 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
   // have no fee and nothing to choose, so they still create in one step.
   const quoteFeeCents = paymentRequestFeeCents(amountCents);
   if (!confirmed && quoteFeeCents > 0) {
-    const askCents = grossedUpRequestCents(amountCents);
+    // At the ceiling the card fee cannot be added on top (audit 2026-10-19, BUGLOG #123): no option 2, said plainly.
+    const grossCents = grossedUpRequestCents(amountCents);
+    const askCents = grossCents <= MAX_REQUEST_CENTS ? grossCents : null;
     await updateConversationState(from, 'REQUEST_MONEY_CONFIRM', {
       amountCents,
       askCents,
@@ -3379,10 +3422,13 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
         `or ${randsShort(amountCents - quoteFeeCents)} if they pay by card (${randsShort(quoteFeeCents)} card cost).
 
 ` +
-        `2️⃣ Link for *${randsShort(askCents)}*. You receive at least ${randsShort(amountCents)} however they pay.
+        (askCents
+          ? `2️⃣ Link for *${randsShort(askCents)}*. You receive at least ${randsShort(amountCents)} however they pay.
 
-` +
-        `Reply *1* or *2*, or "cancel".`,
+Reply *1* or *2*, or "cancel".`
+          : `The most a link can carry is ${randsShort(MAX_REQUEST_CENTS)}, so the card fee cannot be added on top at this amount.
+
+Reply *1* to make it, tell me a smaller amount, or "cancel".`),
       await userLang(account)
     );
     return await sendWhatsAppText({ to: from, text: chooseMsg });
@@ -4538,6 +4584,10 @@ async function handleConversationState({ from, text, state, data, account }) {
         await updateConversationState(from, null);
         return await renderHome({ from, account });
       }
+      if (looksLikeNobodyOwesMe(text)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(NOBODY_OWES_ME_REPLY, await userLang(account)), kind: 'ad' });
+      }
       const filled = parseSlots(text, { waId: from, accountId: account.id });
       if (!filled.amountCents) {
         if (isConversationalEscape(text)) {
@@ -4554,12 +4604,23 @@ async function handleConversationState({ from, text, state, data, account }) {
 
     case 'AD_FIRST_LINK': {
       // Ad arrival, right after onboarding: "R250 from Thandi for the birthday gift".
+      // Audit 2026-10-19: the example typed back gets an ask, not a link; "nobody owes me" gets the truth, not the prompt again.
+      if (isFirstLinkExample(text)) return await sendWhatsAppText({ to: from, text: EXAMPLE_ECHO_REPLY, kind: 'ad' });
+      if (looksLikeNobodyOwesMe(text)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: NOBODY_OWES_ME_REPLY, kind: 'ad' });
+      }
       const ask = parseFirstLinkAsk(text);
       if (ask) {
         await updateConversationState(from, null);
         return await handleCreatePaymentRequest({ from, account, amountCents: ask.amountCents, rawText: text, adPayerName: ask.payerName || null });
       }
       const faq = classifyAdEntry(text);
+      if (faq === 'FAQ_PAY_SOMEONE' && !adLooksLikeQuestion(text)) {
+        // A tapped "Send Money" is an action, not a question (audit 2026-10-19): the send flow, not the FAQ line.
+        await updateConversationState(from, null);
+        return await handlePostOnboarding({ account, from, text });
+      }
       if (isFaqKind(faq)) {
         // A section-2 question keeps the first-link prompt waiting.
         return await sendAdReply({ from, account, reply: adEntryReply(faq, { firstName: firstNameFrom(account.displayName), fee: feeExample(paymentRequestFeeCents), hasAccount: true }) });
@@ -4584,7 +4645,10 @@ async function handleConversationState({ from, text, state, data, account }) {
       // "1" = link for the amount asked; "2" = grossed-up link that nets it.
       // Amount echoes ("R380" / "R390") count as picking that option.
       const one = /^(1|1️⃣|one|first)$/i.test(pick) || parseSlots(text, {}).amountCents === data.amountCents;
-      const two = /^(2|2️⃣|two|second|full)$/i.test(pick) || parseSlots(text, {}).amountCents === data.askCents;
+      const two = !!data.askCents && (/^(2|2️⃣|two|second|full)$/i.test(pick) || parseSlots(text, {}).amountCents === data.askCents);
+      if (!data.askCents && /^(2|2️⃣|two|second|full)$/i.test(pick)) {
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`The most a link can carry is ${randsShort(MAX_REQUEST_CENTS)}, so the card fee cannot be added on top at this amount. Reply *1* for the ${randsShort(data.amountCents)} link, tell me a smaller amount, or "cancel".`, await userLang(account)) });
+      }
       if (one || two) {
         await updateConversationState(from, null);
         return await handleCreatePaymentRequest({
@@ -4602,7 +4666,9 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
       return await sendWhatsAppText({
         to: from,
-        text: await localizeOutbound(`Please reply *1* (link for ${randsShort(data.amountCents)}) or *2* (link for ${randsShort(data.askCents)}, you receive at least ${randsShort(data.amountCents)}), or "cancel".`, await userLang(account)),
+        text: await localizeOutbound(data.askCents
+          ? `Please reply *1* (link for ${randsShort(data.amountCents)}) or *2* (link for ${randsShort(data.askCents)}, you receive at least ${randsShort(data.amountCents)}), or "cancel".`
+          : `Please reply *1* (link for ${randsShort(data.amountCents)}), tell me a smaller amount, or "cancel".`, await userLang(account)),
       });
     }
 
@@ -6163,7 +6229,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         if (amountCents < 1000 || amountCents > 100000) {
           return await sendWhatsAppText({
             to: from,
-            text: await localizeOutbound(`Voucher amount must be between R10 and R1000.\n\nPlease enter a valid amount.`, await userLang(account)),
+            text: await localizeOutbound(`A send must be between R10 and R1000.\n\nTell me the amount, for example "R50", or "cancel" to stop.`, await userLang(account)),
           });
         }
 
@@ -6183,7 +6249,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         await updateConversationState(from, 'VOUCHER_GIFT_RECIPIENT', { amountCents });
         return await sendWhatsAppText({
           to: from,
-          text: await localizeOutbound(`🎁 *${randsShort(amountCents)} WaPay Voucher*\n\nWhich number should I send it to?\n\nReply with the recipient's cellphone number (e.g., 0781234567) or "cancel" to stop.`, await userLang(account)),
+          text: await localizeOutbound(`💸 *Send ${randsShort(amountCents)}*\n\nWhich number should I send it to?\n\nReply with the recipient's cellphone number (e.g., 0781234567) or "cancel" to stop.`, await userLang(account)),
         });
       }
 

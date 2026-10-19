@@ -4,6 +4,50 @@
 
 ---
 
+## 128. The model was told to say "withdraw R<amount>" and a customer received the placeholder three times
+
+- **Symptom (audit 2026-10-19, shard 4):** a customer writing Sesotho asked to withdraw three ways and three times got a line ending in `withdraw R<amount>`, angle brackets included, HTML-escaped by the localiser.
+- **Root cause:** the product truth (`packages/ai/src/orchestrator.ts`) and the knowledge line (`lib/spend-catalogue.js`) instructed the model with a template placeholder; the model copied it out.
+- **Fix (CHANGELOG 98):** both say "type withdraw and the amount, for example withdraw R100 (never angle-bracket placeholders)". Locked in `tests/dashboard-and-audit.test.mjs`.
+- **Lesson:** anything in an instruction to the model can come out of its mouth; examples, never placeholders.
+
+## 127. The withdraw gate called a customer's card add-money link "your R211 payment link"
+
+- **Symptom (audit 2026-10-19, shard 4):** at a R0 balance the gate said "Your R211 payment link from today was not paid"; the customer had never made a R211 link, he had asked to add R200 (R211 with the card fee). His real please-pay-me link was not mentioned.
+- **Root cause:** `moneySituation.pendingLinks` holds the customer's own PayFast add-money intents, and `shortGateReply`, `situationSentences` and `unpaidLinkAnswer` all called them "payment link" with the gross amount.
+- **Fix (CHANGELOG 98):** `addMoneyLinkLabel` names them "R200 add-money link (R211 with the card fee)" everywhere. Locked in `tests/dashboard-and-audit.test.mjs` and `tests/payout-round5.test.mjs`.
+
+## 126. The first-link example typed back made links for nobody; "nobody owes me" got the prompt again
+
+- **Symptom (audit 2026-10-19, all shards):** at least ten customers typed "R250 from Thandi for the birthday gift" word for word and got a real link; others wrote "nobody owes me", "who must pay me", "I need money now" and got the get-paid prompt again. A tapped "Send Money" in the first-link state got the FAQ line and the next amount became a request.
+- **Root cause:** the prompt reads as an instruction; the state treated every unparsed sentence as a retry; the FAQ classifier saw the tap as a question.
+- **Fix (CHANGELOG 98):** `isFirstLinkExample` → "That was my example"; `looksLikeNobodyOwesMe` → the truth about what WaPay does, in the first-link state and at the amount step; the Send tap starts the flow. Locked in `tests/dashboard-and-audit.test.mjs`.
+
+## 125. "Close my account" was answered with a "secure final step" that does not exist, seven times
+
+- **Symptom (audit 2026-10-19, shard 3):** a customer asked to close their account seven times within three minutes and was promised a secure final step each time, with hearts and sparkles; nothing happened and nobody was told.
+- **Root cause:** no handler existed, so the model improvised a process.
+- **Fix (CHANGELOG 98):** `lib/account-closure.js`: the ask is matched plainly, the reply says a person does it and that the balance stays theirs, the person alert goes out (WhatsApp twin and e-mail) once a day, and the product truth forbids inventing a step. Closure itself is still manual (settle, mark closed, confirm from the inbox).
+- **Lesson:** every request the product cannot fulfil needs a deterministic answer, or the model will invent one.
+
+## 124. Asking again after a fresh link made a second link, and asking for "option 2" compounded the fee
+
+- **Symptom (audit 2026-10-19, shards 2 and 3):** "I want number 2" after a R150 link re-ran the flow with R159 as the principal and offered R159 or R169; "make a fresh link for the same R1047" re-grossed to R1096; "you owed me" made a second identical link.
+- **Root cause:** `handleCreatePaymentRequest` never looked at the link just made; the model passed the last link's gross as the new amount.
+- **Fix (CHANGELOG 98):** within 15 minutes of a pending link, the same amount is answered "that link is already live" with the link and no second one; its grossed-up amount cancels the first and mints option 2 once, saying so. Locked in `tests/dashboard-and-audit.test.mjs`.
+
+## 123. The R3,000 request offered a R3,064 link "so you receive at least R3,000", which nets R2,933 by card
+
+- **Symptom (audit 2026-10-19, shard 4):** the chooser's option 2 at the maximum promised a net the link cannot deliver.
+- **Root cause:** `grossedUpRequestCents` gave up after 64 one-rand steps and returned the last tried value; the real gross-up (R3,134) is above the link maximum anyway.
+- **Fix (CHANGELOG 98):** the loop runs until the net covers the ask; at the ceiling the chooser offers no option 2 and says the fee cannot be added on top. Locked in `tests/dashboard-and-audit.test.mjs`.
+
+## 122. The send flow still promised "a WaPay voucher they can spend online where OTT vouchers are accepted"
+
+- **Symptom (audit 2026-10-19, shards 1, 2 and 4):** on 18 and 19 October the send flow's amount and number prompts, the confirmation and the range message all spoke of a voucher, one minute after another path gave the correct ledger-send wording; the own-number refusal pointed at "buy a voucher", which the next turn called coming soon.
+- **Root cause:** CHANGELOG 92 moved the money to the ledger but four prompts kept the old copy.
+- **Fix (CHANGELOG 98):** all four say it moves from the sender's balance to theirs, free, and waits for a non-member; `sendToSelfText` names the voucher only while buying one is live. Locked in `tests/dashboard-and-audit.test.mjs`, `tests/gifting.test.mjs`, `tests/gifting-routing.test.mjs`, `tests/voucher-gift-routing.test.mjs`.
+
 ## 121. An amount above the link maximum got the bare question again, twice, and the customer left
 
 - **Symptom (conversation audit 2026-10-19; a customer on 18 Oct 17:01 and 17:02 UTC):** at "How much would you like to request? (R5–R3000)" the customer typed a number that the chat answered with exactly the same question, twice; six minutes later they asked for airtime, then to withdraw, then to deposit R3,000. The number itself is redacted in memory, so the audit could not see it, but the code path shows the cause.

@@ -11,7 +11,7 @@
 | `S2_OTP_SENT` | "enter the code" ("resend" allowed, 5-minute rate limit) | correct code → PIN prompt template `onboarding_step_3_pin_creation` → `S3` |
 | `S3_OTP_VERIFIED` | "create a 4–6 digit PIN" (not 0000 / 1234) | PIN stored (argon2id) → consent template `consent_terms_` → `S4` |
 | `S4_PIN_SET` | "reply I accept" | consents recorded (T&C v1.0, privacy v1.0) → activation template `welcome_new_user_account_activation` → `S5`, audit `ONBOARDING_COMPLETED` |
-| `S5_COMPLETED` | **2026-09-06 to 2026-10-19:** "is this WaPay account for you, or for a business? Reply 1 or 2". **Off since 2026-10-19 (CHANGELOG 96):** onboarding ends here; the question is asked only when `WAPAY_ONBOARDING_BUSINESS_QUESTION=on` | see §2 |
+| `S5_COMPLETED` | **2026-09-06 to 2026-10-19:** "is this WaPay account for you, or for a business? Reply 1 or 2". **Off since 2026-10-19 (CHANGELOG 96):** onboarding ends here; the question is asked only when `WAPAY_ONBOARDING_BUSINESS_QUESTION=ask` | see §2 |
 
 Everything a money flow needs (PIN, consent, limits) exists at `S5`. The account row is keyed by the WhatsApp id (`waId`), the wallet is the account's SPEND wallet.
 
@@ -19,7 +19,7 @@ Everything a money flow needs (PIN, consent, limits) exists at `S5`. The account
 
 There is **no separate business onboarding**. A business is the same wallet with a `businesses` row (`docs/BUSINESS_PORTAL.md`): same PIN, same limits, same payment rails, and WaPay cannot tell (nor needs to) whether the number runs the WhatsApp Business app or the personal one.
 
-**Off by default since 2026-10-19** (founder, the POC: no business sign-up from onboarding; `WAPAY_ONBOARDING_BUSINESS_QUESTION=on` restores it). When on, right after `S5` the bot asks once: *"is this account for you, or for a business? 1 / 2"* (state `BIZ_SIGNUP_TYPE`). While off, the only door is the typed command below, which stays behind the invite gate, so no uninvited account can become a business.
+**Off by default since 2026-10-19** (founder, the POC: no business sign-up from onboarding; `WAPAY_ONBOARDING_BUSINESS_QUESTION=ask` restores it; "on" does not, CHANGELOG 98). When on, right after `S5` the bot asks once: *"is this account for you, or for a business? 1 / 2"* (state `BIZ_SIGNUP_TYPE`). While off, the only door is the typed command below, which stays behind the invite gate, so no uninvited account can become a business.
 
 - **1 / personal / cancel / anything unclear twice** → "Personal it is", state cleared, and a one-line hint that *business account* adds a business later. Nobody is ever stuck on the question.
 - **2 / business / "it's for my spaza shop"** → the invite gate from the portal applies (`mayRegister`: `WAPAY_BUSINESS_MSISDNS` or `WAPAY_BUSINESS_SIGNUPS=open`). Not invited while the pilot is closed → an honest waitlist answer, `profile.businessInterestAt` recorded, nothing created. Invited → *"what is your business's trading name?"* (state `BIZ_SIGNUP_NAME`).

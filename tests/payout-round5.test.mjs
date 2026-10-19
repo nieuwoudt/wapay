@@ -259,7 +259,7 @@ test('3. moneySituation reads the balance, the gifts (voucher or already in the 
   assert.equal(empty.availableCents, 0); assert.deepEqual(empty.giftsReceived, []); assert.equal(empty.identity.kind, null);
   assert.deepEqual(situationSentences(s, { now: new Date('2026-10-11T04:23:00Z') }), [
     'The R350 Nieuwoudt sent you yesterday came as a voucher PIN, not as money in your balance, so it cannot be withdrawn.',
-    'Your R367 payment link from yesterday was not paid, so nothing came in from it and nothing was taken.',
+    'Your R350 add-money link (R367 with the card fee) from yesterday was not paid, so nothing came in from it and nothing was taken.',
     'R58 is held for your R50 withdrawal (WPX) until the bank confirms it; if it does not go through, it comes back to your balance.',
   ]);
 });
@@ -276,9 +276,9 @@ test('3. the gate in tiers on Lisa\'s situation: her money and where it is, then
   const lisaAcc = { id: 'acc-lisa', waId: '27601879361', displayName: 'Lisa' };
   const now = new Date('2026-10-10T21:28:00Z');
   const t = [0, 1, 2, 3].map((repeats) => shortGateReply({ account: lisaAcc, balanceCents: 0, needCents: 5800, minCents: 5000, situation: LISA_SITUATION, repeats, personAsked: repeats === 2, now }));
-  assert.equal(t[0].text, '💸 You have R0 to withdraw. The R350 Nieuwoudt sent you today came as a voucher PIN, not as money in your balance, so it cannot be withdrawn. Your R367 payment link from today was not paid, so nothing came in from it and nothing was taken. A withdrawal needs at least R58 in your balance (the R50 minimum plus the R8 PayShap fee). Say *add money* to top up.');
+  assert.equal(t[0].text, '💸 You have R0 to withdraw. The R350 Nieuwoudt sent you today came as a voucher PIN, not as money in your balance, so it cannot be withdrawn. Your R350 add-money link (R367 with the card fee) from today was not paid, so nothing came in from it and nothing was taken. A withdrawal needs at least R58 in your balance (the R50 minimum plus the R8 PayShap fee). Say *add money* to top up.');
   assert.ok(!/Withdrawals start at/.test(t[0].text), 'never a product fact first');
-  assert.match(t[1].text, /^Let me explain where your money is, Lisa:\n\n• Balance you can withdraw: \*R0\*\n• The R350 from Nieuwoudt \(today\): a voucher PIN, not balance\n• Your R367 payment link: not paid, nothing was taken\n\nWhat you can do:\n1️⃣ Add money/);
+  assert.match(t[1].text, /^Let me explain where your money is, Lisa:\n\n• Balance you can withdraw: \*R0\*\n• The R350 from Nieuwoudt \(today\): a voucher PIN, not balance\n• Your R350 add-money link \(R367 with the card fee\): not paid, nothing was taken\n\nWhat you can do:\n1️⃣ Add money/);
   assert.match(t[1].text, /2️⃣ Use the voucher PIN at a shop that takes WaPay vouchers\n3️⃣ Withdraw once your balance is R58 or more: say \*withdraw\*/);
   assert.match(t[1].text, /a passport or foreign ID works too/, 'no ID on file: a passport is named');
   assert.match(t[2].text, /^🙋 I can see this is not working for you, Lisa, so I have asked a person from the WaPay team to look at your account and message you here\. Your money is safe\./);
@@ -379,11 +379,11 @@ test('4. a received voucher in the message: recognised, answered from the record
 test('5. an unpaid link: older than 15 minutes is "you have not paid", fresh is "no payment yet"; never "still confirming", no partner, no time promised', () => {
   const now = new Date('2026-10-10T21:25:00Z');
   const old = unpaidLinkAnswer({ intent: { requestTs: new Date('2026-10-10T20:16:54Z'), metadata: { amountCents: 35000, grossCents: 36700 } }, now });
-  assert.equal(old, 'You have not paid your R367 payment link from today: no payment came in for it, so nothing was taken. Ignore it if you did not mean to buy. If money did leave your bank for it, tell me and I will check.');
+  assert.equal(old, 'You have not paid your R350 add-money link (R367 with the card fee) from today: no payment came in for it, so nothing was taken. Ignore it if you did not mean to buy. If money did leave your bank for it, tell me and I will check.');
   const fresh = unpaidLinkAnswer({ intent: { requestTs: new Date('2026-10-10T21:20:00Z'), metadata: { amountCents: 5000, grossCents: 5300 } }, now });
-  assert.equal(fresh, 'I have not received a payment for your R53 payment link yet. If you have just paid, I will message you here as soon as it lands. If you did not pay, nothing was taken.');
+  assert.equal(fresh, 'I have not received a payment for your R50 add-money link (R53 with the card fee) yet. If you have just paid, I will message you here as soon as it lands. If you did not pay, nothing was taken.');
   const bare = unpaidLinkAnswer({ intent: { requestTs: new Date('2026-10-08T10:00:00Z'), metadata: {} }, now });
-  assert.match(bare, /^You have not paid your payment link from on|^You have not paid your payment link from /);
+  assert.match(bare, /^You have not paid your add-money link from on|^You have not paid your add-money link from /);
   for (const t of [old, fresh, bare]) assert.ok(!/still confirming|PayFast|minute|—/i.test(t), t);
 });
 
