@@ -465,7 +465,8 @@ test('7. the withdraw copy names only the cash ways on the merchant and the iden
   assert.ok(!/identity check/.test(howItWorksAnswer('withdraw', live)), 'identity checks are off in the open pilot');
   delete process.env.WAPAY_PAYOUT_KYC;
   assert.match(howItWorksAnswer('withdraw', live), /A once-off identity check applies before your first withdrawal\./);
-  assert.match(howItWorksBrief('withdraw', { withdrawLive: true, providers: [], text: 'can I withdraw?' }), /FNB eWallet/, 'with no provider list every way is named');
+  const bare = howItWorksBrief('withdraw', { withdrawLive: true, providers: [], text: 'can I withdraw?' });
+  assert.match(bare, /Absa or Nedbank ATM/); assert.ok(!/FNB eWallet/.test(bare), 'with no provider list the production two are named, never the eWallet (BUGLOG #119)'); assert.match(bare, /Withdrawals start at R50/);
   envOff();
 });
 

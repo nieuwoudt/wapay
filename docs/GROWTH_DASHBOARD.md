@@ -213,3 +213,17 @@ the smallest withdrawal, the situation lines, what to do) to `WAPAY_OPS_ALERT_MS
 once per account and day. The chat tells the customer a person was asked when either
 channel arrived. A reply to that WhatsApp reaches the bot, not the customer: answer them
 from the business inbox.
+
+**Answering a customer by hand (CHANGELOG 96).** When the person alert names an account,
+reply inside the customer's own chat with the ops route, which sends through `lib/say.js`
+so the chat remembers what was said:
+
+```
+curl -X POST -H "x-internal-api-key: $KEY" -H "content-type: application/json" \
+  -d '{"accountId":"<account id from the alert>","text":"Hi ..., this is the WaPay team ..."}' \
+  https://wapay-api.vercel.app/api/internal/ops-reply
+```
+
+Text only, one message of up to 1,500 characters, inside the customer's 24-hour window
+(the route answers 409 `WINDOW_CLOSED` otherwise; `?force=1` overrides for a number known
+to be reachable). It is not a bulk rail: one account per call, the account id must exist.

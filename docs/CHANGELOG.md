@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-10-19 (96) — The business question leaves sign-up for the POC: new wallets finish onboarding without it, and "business account" stays invite-only
+
+Founder, day two of the ad, after the Cytric case: "remove the business option from
+signing up for an account for now; let this person keep his; don't allow other accounts to
+sign up as a business account".
+
+- **`businessQuestionEnabled()`** (`lib/business-chat.js`), off by default: the S5 block of
+  the processor asks "is this account for you, or for a business?" only when
+  `WAPAY_ONBOARDING_BUSINESS_QUESTION=on`. Everything else stands: the typed command
+  ("business account", "register my business") still answers through the invite gate
+  (`mayRegister`: `WAPAY_BUSINESS_MSISDNS` or `WAPAY_BUSINESS_SIGNUPS=open`), so a wallet
+  that is not invited gets the honest waitlist line and no business row; the portal,
+  existing businesses and the interest list (`profile.businessInterestAt`, which is what
+  Cytric holds) are untouched. Ad arrivals never had the question (AD_CHAT_FLOW section 8).
+- **The ops reply** (`lib/ops-reply.js`, `POST /api/internal/ops-reply { accountId, text }`,
+  internal key): a person from the WaPay team answers a customer in their chat. Text only, one
+  message of up to 1,500 characters, inside the customer's 24-hour window (`?force=1`
+  overrides), sent through `lib/say.js` so the turn is recorded as the assistant's and the
+  chat remembers what the person said. First use: the follow-up to Cytric.
+- **The model's withdrawal knowledge** (BUGLOG #119): "from R50 up to R3000, cash in R50
+  steps", Absa or Nedbank ATM or a Pick n Pay / Boxer till, and "there is NO FNB eWallet
+  option", in `buildBrainKnowledge` and the product truth; the how-it-works brief and
+  steps quote the live methods' minimum or production's R50 floor (never the bare R20
+  config), `cashWays` without a provider list names the production two, an eWallet ask is
+  answered "not available on WaPay" plus the cash ways unless the rail lists it, and the
+  fee line and the generic collection steps name no FNB ATM.
+- Tests: `tests/launch-scope.test.mjs` (the flag in both worlds; the S5 block's shape; the
+  typed command's gate; the knowledge lines), `tests/ops-reply.test.mjs`,
+  `tests/how-it-works.test.mjs`. Docs: ONBOARDING.md, BUSINESS_PORTAL.md, CAPABILITIES.md,
+  GROWTH_DASHBOARD.md §8, env.template.
+
 ## 2026-10-19 (95) — The plan, where we are, and where today's pace leads; the ops e-mail's WhatsApp twin; the gate's add-money line follows the Blu switch
 
 Founder, day two of the ad: "make sure this plan is measured and the valuation figure is

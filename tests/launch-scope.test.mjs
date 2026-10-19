@@ -21,6 +21,9 @@ import { scopeFromEnv } from '@wapay/ai';
 import { agentGuard, comingSoonCommand } from '../lib/agent/guards.js';
 import { launchHold } from '../lib/vas-config.js';
 import { shortGateReply } from '../lib/payout-gate.js';
+import { businessQuestionEnabled } from '../lib/business-chat.js';
+import { buildBrainKnowledge } from '../lib/spend-catalogue.js';
+import { howItWorksBrief } from '../lib/how-it-works.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const processor = read('../pages/api/webhooks/message-processor-v2.js');
@@ -150,7 +153,7 @@ test('the model is told the same truth: product truth built from the scope, comi
   assert.match(orchestrator, /agentPrompt\(tier1\.domain, opts\.knowledge, opts\.withdrawLive, opts\.scope\)/);
   assert.doesNotMatch(orchestrator, /^- Add money, three ways:/m, 'the unconditional cash claim is gone');
   // The withdraw truth is exactly as before (payouts thread, 2026-10-18).
-  assert.match(orchestrator, /\$\{withdrawLive \? '- Getting money OUT \(withdrawals\): LIVE\. The user types "withdraw" and an amount \(from R20\)/);
+  assert.match(orchestrator, /\$\{withdrawLive \? '- Getting money OUT \(withdrawals\): LIVE\. The user types "withdraw" and an amount \(from R50\)/);
   withEnv(NEUTRAL, () => assert.deepEqual(scopeFromEnv(), { airtime: false, data: false, electricity: false, bluLoad: false, ottLoad: false, voucher: false }));
   withEnv({ ...NEUTRAL, VAS_LIVE_DATA: 'true', WAPAY_LAUNCH_HOLD: 'off' }, () => assert.equal(scopeFromEnv().data, true));
 });
@@ -262,4 +265,24 @@ test('the withdraw gate\'s add-money line names a till voucher only while Blu lo
   assert.ok(!/till/.test(reply({ VAS_LIVE_BLU_LOAD: 'true' })), 'the master hold outranks the switch');
   assert.match(reply({ WAPAY_LAUNCH_HOLD: 'off', VAS_LIVE_BLU_LOAD: 'true' }), /\(card, bank or a cash voucher bought at a till\)/);
   assert.ok(!/till/.test(reply({ WAPAY_LAUNCH_HOLD: 'off', VAS_LIVE_BLU_LOAD: 'true', VAS_ALLOWLIST_BLU_LOAD: PILOT })), 'a tester list narrows it to the testers');
+});
+
+test('the business question is off by default for the POC: onboarding ends without it, the S5 block asks only when the flag says on', () => {
+  for (const v of [undefined, '', 'off', 'false', '0', 'no']) withEnv({ WAPAY_ONBOARDING_BUSINESS_QUESTION: v }, () => assert.equal(businessQuestionEnabled(), false, String(v)));
+  for (const v of ['on', 'true', '1', 'yes', ' ON ']) withEnv({ WAPAY_ONBOARDING_BUSINESS_QUESTION: v }, () => assert.equal(businessQuestionEnabled(), true, v));
+  assert.match(processor, /\} else if \(\(await import\('\.\.\/\.\.\/\.\.\/lib\/business-chat\.js'\)\)\.businessQuestionEnabled\(\)\) \{\n[^\n]*\n[^\n]*\n\s*await askAccountType\(\{ from, account \}\)/, 'the question sits behind the flag, nothing else changed in the S5 block');
+  assert.match(processor, /if \(matchBusinessSignupAsk\(text\)\) return await handleBusinessSignupAsk\(\{ from, account \}\);/, 'the typed command still answers through the invite gate');
+});
+
+test('the model is never told about an FNB eWallet or a R20 withdrawal (Cytric, 2026-10-19; BUGLOG #119)', () => {
+  const k = withEnv({ ...NEUTRAL, WAPAY_PAYOUT_ENABLED: 'true' }, () => buildBrainKnowledge({ withdrawLive: true, wicodeLive: false }));
+  assert.match(k, /WITHDRAWALS ARE LIVE/); assert.match(k, /from R50 up to R3000/); assert.match(k, /There is NO FNB eWallet option/);
+  assert.ok(!/R20 to R3000|as an FNB eWallet/.test(k));
+  assert.match(orchestrator, /or cash at an Absa or Nedbank ATM or a Pick n Pay \/ Boxer till \(no FNB eWallet\);/);
+  assert.ok(!/or an FNB eWallet;/.test(orchestrator));
+  assert.ok(!/FNB ATM|as an FNB eWallet/.test(k), 'the fee line and the collection steps the model reads name no FNB rail');
+  // The customer who asks for an eWallet is told it is not on WaPay and what cash ways are (Cytric: "I do not have a bank account").
+  const ask = howItWorksBrief('withdraw', { withdrawLive: true, providers: [{ method: 'PAYSHAP' }, { method: 'CASHSEND' }, { method: 'NEDCASH' }], text: 'can I get it as an FNB eWallet?' });
+  assert.match(ask, /^An FNB eWallet is not available on WaPay\. You can collect cash at an Absa or Nedbank ATM, or a Pick n Pay \/ Boxer till/);
+  assert.match(howItWorksBrief('withdraw', { withdrawLive: true, providers: [{ method: 'EWALLET' }], text: 'fnb ewallet?' }), /^✅ Yes\. An FNB eWallet/);
 });

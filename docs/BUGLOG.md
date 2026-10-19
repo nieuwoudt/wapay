@@ -4,6 +4,13 @@
 
 ---
 
+## 119. The model told a customer withdrawals run "from R20" and offered an FNB eWallet that production does not have
+
+- **Symptom (Cytric, 19 Oct 09:05 and 09:07 UTC):** "limit" was answered "you can withdraw from *R20* to *R3000*"; "I do not have a bank account" was answered "...a Pick n Pay or Boxer till, or as an FNB eWallet". The live minimum is R50 on every method and the OTT production merchant has Absa and Nedbank cash only (no FNB eWallet, settled 2026-10-08).
+- **Root cause:** the model's knowledge (`buildBrainKnowledge` in `lib/spend-catalogue.js`) and the product truth (`packages/ai/src/orchestrator.ts`) carried a static sentence listing every method in the code, eWallet included, with the configured R20 floor; the chat flow and the how-it-works answers had been fixed for Lisa on 2026-10-10 (`cashWays` reads the live list) but these two lines had not, and `cashWays` with no provider list still named all three.
+- **Fix (CHANGELOG 96):** both lines name Absa or Nedbank ATM or a Pick n Pay / Boxer till, "from R50 up to R3000, cash in R50 steps", and say there is no FNB eWallet. In `lib/how-it-works.js` the quoted minimum is the live methods' minimum or production's R50 floor when no list is at hand (never the bare R20 config), `cashWays` without a list names the production two, and a customer who asks for an eWallet is told it is not on WaPay and what the cash ways are unless the rail lists it. The fee line (`lib/fee-facts.js`) and the generic collection steps (`lib/payout-collection.js`) no longer name an FNB ATM. Locked in `tests/launch-scope.test.mjs`, `tests/how-it-works.test.mjs` and `tests/payout-round5.test.mjs`.
+- **Lesson:** every sentence the model reads about a rail must be built from the live list or say less than the flow; grep the knowledge for a method's name whenever a rail is added or found absent.
+
 ## 118. The withdraw gate offered "a cash voucher bought at a till" while cash deposits were coming soon
 
 - **Symptom (Cytric, 19 Oct 08:30 UTC, day two of the ad):** at R0 the second gate reply listed "Add money to your balance: say *add money* (card, bank or a cash voucher bought at a till)" although the launch hold has Blu voucher loads off and the home card says cash deposits are coming soon.

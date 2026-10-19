@@ -58,7 +58,7 @@ test('answers carry the steps, the real limits and the words to start, and follo
   const e = howItWorksAnswer('electricity', ctx);
   assert.match(e, /R10 to R5000/); assert.match(e, /buy R100 electricity/); assert.match(e, /meter number/);
   const w = howItWorksAnswer('withdraw', ctx);
-  assert.match(w, /withdraw R200/); assert.match(w, /R8 fee/); assert.match(w, /Absa or Nedbank ATM/); assert.match(w, /FNB eWallet/); assert.match(w, /SA ID number or passport/); assert.match(w, /between R20 and R3000/);
+  assert.match(w, /withdraw R200/); assert.match(w, /R8 fee/); assert.match(w, /Absa or Nedbank ATM/); assert.ok(!/eWallet/.test(w), 'no eWallet unless the rail lists it (BUGLOG #119)'); assert.match(howItWorksAnswer('withdraw', { ...ctx, providers: [{ method: 'PAYSHAP' }, { method: 'CASHSEND' }, { method: 'EWALLET' }] }), /FNB eWallet/); assert.match(w, /SA ID number or passport/); assert.match(w, /between R50 and R3000/, 'no live list: the production floor, never the bare R20 config (BUGLOG #119)');
   assert.match(howItWorksAnswer('withdraw', { ...ctx, withdrawLive: false }), /coming soon/);
   const o = howItWorksAnswer('ott', ctx);
   assert.match(o, /12-digit PIN/); assert.match(o, /Checkers, Shoprite, Pick n Pay/); assert.match(o, /cannot be exchanged for cash/); assert.match(o, /36 months/);

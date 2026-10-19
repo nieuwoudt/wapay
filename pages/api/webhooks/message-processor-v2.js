@@ -1461,7 +1461,9 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
           // Ad arrival (docs/AD_CHAT_FLOW.md section 8): nothing in front of the first link.
           await sendWhatsAppText({ to: from, text: firstLinkPrompt(firstNameFrom(profile?.name || account.displayName)), kind: 'ad' }).catch((e) => logStructured('ad_first_link_prompt_failed', { from, error: e?.message }));
           await updateConversationState(from, AD_STATES.FIRST_LINK, { stateSetAt: new Date().toISOString() }).catch(() => {});
-        } else {
+        } else if ((await import('../../../lib/business-chat.js')).businessQuestionEnabled()) {
+          // Founder 2026-10-19: off by default for the POC (no business sign-up from onboarding);
+          // WAPAY_ONBOARDING_BUSINESS_QUESTION=on restores the question.
           await askAccountType({ from, account }).catch((e) => logStructured('business_signup_ask_failed', { from, error: e?.message }));
         }
         // Growth: remember the moment and tell Meta (LeadSubmitted) if an ad brought them.
