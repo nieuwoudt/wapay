@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-10-19 (95) — The plan, where we are, and where today's pace leads; the ops e-mail's WhatsApp twin; the gate's add-money line follows the Blu switch
+
+Founder, day two of the ad: "make sure this plan is measured and the valuation figure is
+clear on the dashboard: what the plan was, where we are now, the actual inputs, the
+trajectory if we continue at this rate, and what the valuation is and could be in six
+months' time"; and "I'd like to get these [ops] messages on WhatsApp so I can reply quickly".
+
+- **The plan-vs-now section** (`trajectory` in `lib/scale-model.js`; `valuation.trajectory`
+  in the growth route; `PlanVsNow` on Mission Control's Dashboard and Growth tabs, above the
+  matrix, one fetch for both): four tiles (valuation today, in six months at today's pace,
+  the plan in six months, compounding or the model on measured inputs) and a table of
+  accounts, funded, 30-day actives, net revenue a month and both valuation frames across
+  the plan by today (month 1 pro rata by launch day), now, the plan at the horizon, today's
+  pace held flat (the last seven days as a daily rate), compounding (only once two full
+  weeks exist, from 1 November; clamped to ±50% a week; the revenue multiple's growth uplift
+  applied as in the model) and the model on the measured inputs. Under it, the actual
+  inputs: the last seven days in accounts, funded and net revenue per day, 30-day actives,
+  net revenue over 30 days, the weekly growth or when it starts, and the frames
+  (10× annualised net revenue or R1,800 per active, floor R15m). Launch day 1 = 18 October,
+  model month 1 = October 2026, the horizon is April 2027.
+- **The ops e-mail's WhatsApp twin** (`opsPersonAlert` in `lib/ops-alerts.js`): the
+  third-tier withdraw alert ("X has asked to withdraw three times and cannot") now also
+  goes as one WhatsApp message to `WAPAY_OPS_ALERT_MSISDNS`, same references and masks as
+  the e-mail, once per account and day, and the chat counts a person as asked when either
+  channel arrived. The money alerts stay aggregates only.
+- **The withdraw gate's add-money line** (`lib/payout-gate.js`) names "a cash voucher bought
+  at a till" only while `BLU_LOAD` is live for that number; under the hold it says "card or
+  bank" (BUGLOG #118; the Cytric case, 19 October, read it the old way).
+- Tests: `tests/valuation-matrix.test.mjs` (trajectory arithmetic, floors, the plan rows
+  equal the matrix's simulate, the person alert and both channels in `payout-chat.js`),
+  `tests/launch-scope.test.mjs` (the gate line in both worlds), `tests/payout-round5.test.mjs`
+  (the twin fires with the e-mail at the third tier).
+
 ## 2026-10-19 (94) — Operator money-in alerts, the live valuation matrix, and the dashboard's money and float tiles
 
 Founder, day two of the ad: "a trigger as soon as people get paid into their

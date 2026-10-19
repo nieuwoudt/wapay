@@ -72,6 +72,8 @@ object every copy builder takes.
 
 Never a date, never a betting word, never an em dash (locked by `tests/launch-scope.test.mjs`).
 
+- **The withdraw gate's add-money line** (`lib/payout-gate.js`, tiers 1 to 3) names "a cash voucher bought at a till" only while `BLU_LOAD` is live for that number; otherwise "card or bank" (BUGLOG #118, CHANGELOG 95).
+
 ## 4. Where the gates sit (so nothing can be bought while off)
 
 `pages/api/webhooks/message-processor-v2.js`: the airtime, data and electricity intent

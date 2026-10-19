@@ -303,7 +303,8 @@ test('3. the gate in tiers on Lisa\'s situation: her money and where it is, then
 test('3. startWithdraw at R0: reads the situation, counts the repeats, alerts a person exactly once (the third time), returns the gate id for the stored turn', async () => {
   envOff();
   const alerts = [];
-  const mk = (repeats, ok = true, askedBefore = false) => ({ ...deps(0), moneySituation: async () => LISA_SITUATION, gateHistory: async () => ({ count: repeats, personAsked: askedBefore }), sendOpsAlert: async (a) => { alerts.push(a); return { success: ok }; } });
+  const twins = [];
+  const mk = (repeats, ok = true, askedBefore = false) => ({ ...deps(0), moneySituation: async () => LISA_SITUATION, gateHistory: async () => ({ count: repeats, personAsked: askedBefore }), opsPersonAlert: async (x) => { twins.push(x); return { sent: 0 }; }, sendOpsAlert: async (a) => { alerts.push(a); return { success: ok }; } });
   const first = await startWithdraw({ account: lisa, ask: matchWithdrawAsk('I want you to put in my bank account'), deps: mk(0) });
   assert.equal(first.state, null); assert.match(first.text, /^💸 You have R0 to withdraw\. The R350 Nieuwoudt sent you/); assert.deepEqual(first.refs, { gate: SHORT_GATE, tier: 0 });
   const second = await startWithdraw({ account: lisa, ask: {}, deps: mk(1) });
@@ -311,6 +312,7 @@ test('3. startWithdraw at R0: reads the situation, counts the repeats, alerts a 
   assert.equal(alerts.length, 0, 'no alert before the third time');
   const third = await startWithdraw({ account: lisa, ask: {}, deps: mk(2) });
   assert.match(third.text, /I have asked a person from the WaPay team/); assert.equal(alerts.length, 1); assert.match(alerts[0].subject, /three times/);
+  assert.equal(twins.length, 1, 'the WhatsApp twin goes with the e-mail'); assert.match(twins[0].text, /^🙋 Lisa has asked to withdraw three times and cannot\./); assert.match(twins[0].key, /^acc-lisa:\d{4}-\d{2}-\d{2}$/);
   assert.deepEqual(third.refs, { gate: SHORT_GATE, tier: 2, personAsked: true }, 'the stored reply remembers that a person was asked');
   const fourth = await startWithdraw({ account: lisa, ask: {}, deps: mk(3, true, true) });
   assert.match(fourth.text, /has been asked to help you/); assert.equal(alerts.length, 1, 'one alert, not one per message');

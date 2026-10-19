@@ -9,8 +9,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { projectionMatrix, simulate, preset, budgetFn, BUDGET_DEFAULT, milestones, fmtR } from '../lib/scale-model.js';
-import { opsAlertRecipients, opsAlertMinCents, moneyInText, payoutLowText, opsMoneyIn, opsPayoutDone } from '../lib/ops-alerts.js';
+import { projectionMatrix, trajectory, simulate, preset, budgetFn, BUDGET_DEFAULT, milestones, fmtR } from '../lib/scale-model.js';
+import { opsAlertRecipients, opsAlertMinCents, moneyInText, payoutLowText, opsMoneyIn, opsPayoutDone, opsPersonAlert } from '../lib/ops-alerts.js';
+import { stuckAlert } from '../lib/payout-gate.js';
 import { floatWarnCents, sastDayStart } from '../lib/payout-float.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
@@ -65,9 +66,15 @@ test('the growth route returns the matrix and the admin page renders it on both 
   assert.match(growth, /const earlyKeys = Object\.keys\(earlyRaw\)\.filter\(\(k\) => \(measuredRaw\[k\]\?\.n \?\? 0\) < MIN_SAMPLE && \(earlyRaw\[k\]\.n \?\? 0\) >= MIN_SAMPLE\)/);
   assert.match(growth, /scenarioUrl: scenario,\s*valuation,/);
   const page = read('../pages/admin/index.js');
-  assert.equal((page.match(/Valuation matrix, live/g) || []).length, 2, 'the Dashboard card and the Growth card');
-  assert.match(page, /<ValuationMatrix compact \/>/);
-  assert.match(page, /<ValuationMatrix v=\{g\.valuation\} \/>/);
+  // One fetch feeds both cards (the plan-vs-now section and the matrix) on the Dashboard; the Growth tab passes its own data.
+  assert.equal((page.match(/Valuation matrix, live/g) || []).length, 1, 'one card definition, rendered on both tabs');
+  assert.match(page, /<LiveValuation compact \/>/);
+  assert.match(page, /<LiveValuation v=\{g\.valuation\} minSample=\{g\.minSample\} \/>/);
+  assert.match(page, /<PlanVsNow v=\{v\} \/>/);
+  assert.match(page, /<ValuationMatrix v=\{v\} compact=\{compact\} \/>/);
+  assert.match(page, /The plan, where we are, and where today's pace leads/);
+  assert.match(growth, /valuation\.trajectory = trajectory\(\{/);
+  assert.match(growth, /\}, \{ modelInputs: inputsForMatrix, now \}\);/);
   assert.match(page, /\['Made a link', f\.linked, 'created a payment link'\]/);
   assert.match(page, /\['Customer balances', R\(v\.balancesCents \?\? v\.floatCents\)/);
   assert.ok(!page.includes("['Wallet float'"), 'the liability is no longer called a float');
@@ -166,4 +173,54 @@ test('the money paths call the alert after a successful, non-replayed credit; th
   assert.match(payouts, /log\('payout_finalised', \{ reference, status: 'SUCCESS' \}\);[\s\S]{0,200}await opsPayoutDone\(\{ amountCents: m\.amountCents, method: m\.method, reference: idemKey, prisma: prismaClient \}\);/);
   const alerts = read('../lib/ops-alerts.js');
   assert.doesNotMatch(alerts, /account\.waId|msisdn:|displayName|\.name\b/, 'the alert module never reaches for a customer identifier');
+});
+
+// ---------------------------------------------------------------- the plan, where we are, and where today's pace leads
+
+test('trajectory: now, the plan to date, today\'s pace held flat, compounding only after two full weeks, the model column, the floors', () => {
+  const a = { accountsTotal: 180, fundedTotal: 4, activesNow: 3, revenueMonthCents: 23670, last7: { accounts: 171, funded: 1, revenueCents: 14000 }, prior7: null };
+  const now = new Date('2026-10-19T10:00:00Z');
+  const t = trajectory(a, { now });
+  assert.equal(t.dayOfLaunch, 2, '18 October is day 1');
+  assert.deepEqual(t.horizon, { month: 7, label: 'Apr 2027' });
+  assert.equal(t.now.accounts, 180); assert.equal(t.now.funded, 4); assert.equal(t.now.actives, 3); assert.equal(t.now.revenueMonthCents, 23670);
+  assert.equal(t.now.valRev, 15e6); assert.equal(t.now.valActive, 15e6, 'today both frames sit on the R15m floor');
+  assert.equal(t.plan.month1.accounts, 833); assert.equal(t.plan.toDate.accounts, Math.round((833 * 2) / 30)); assert.equal(t.plan.toDate.day, 2);
+  assert.equal(t.flat.month, 7); assert.equal(t.flat.accounts, Math.round(180 + (171 / 7) * 180)); assert.equal(t.flat.funded, Math.round(4 + (1 / 7) * 180));
+  assert.equal(t.flat.revenueMonthCents, Math.round((14000 / 7) * 30)); assert.equal(t.flat.valRev, 15e6, 'at today\'s pace the revenue frame stays at the floor');
+  assert.equal(t.weeklyGrowth, null); assert.equal(t.compounded, null); assert.equal(t.weeklyGrowthFrom, '2026-11-01'); assert.equal(t.model, null);
+  assert.deepEqual(t.perDay, { accounts: 171 / 7, funded: 1 / 7, revenueCents: 2000 });
+  const planRow = simulate(preset('plan'), budgetFn(BUDGET_DEFAULT)).rows[6];
+  assert.equal(t.plan.ahead.accounts, Math.round(planRow.cumOnb)); assert.equal(t.plan.ahead.valRev, Math.round(planRow.valRev)); assert.equal(t.plan.ahead.label, 'Apr 2027');
+  assert.deepEqual(t.frames, { multiple: 10, perActive: 1800, floorRand: 15e6 });
+  // Two full weeks: compounding appears, clamped to ±50% a week; a model column appears with inputs.
+  const grown = { ...a, accountsTotal: 400, prior7: { accounts: 100, funded: 2, revenueCents: 5000 }, last7: { accounts: 200, funded: 4, revenueCents: 10000 } };
+  const t2 = trajectory(grown, { now, modelInputs: preset('great') });
+  assert.equal(t2.weeklyGrowth, 0.5, 'clamped'); assert.ok(t2.compounded.accounts > t2.flat.accounts); assert.ok(t2.compounded.valRev >= 15e6);
+  assert.equal(t2.model.ahead.accounts, Math.round(simulate(preset('great'), budgetFn(BUDGET_DEFAULT)).rows[6].cumOnb), 'the model column is the same simulate as the matrix');
+  const t3 = trajectory({ ...a, prior7: { accounts: 19, funded: 0, revenueCents: 0 } }, { now });
+  assert.equal(t3.weeklyGrowth, null, 'a prior week under 20 accounts is not a growth rate');
+  // Real money: the revenue frame lifts off the floor once annualised net revenue × multiple passes it.
+  const rich = trajectory({ ...a, activesNow: 9000, revenueMonthCents: 20000000, last7: { accounts: 700, funded: 300, revenueCents: 5000000 } }, { now });
+  assert.equal(rich.now.valRev, 20000000 / 100 * 12 * 10); assert.equal(rich.now.valActive, 9000 * 1800);
+});
+
+test('the person alert: the e-mail\'s text twin goes to the ops numbers once per key, masked, and the gate calls both channels', async () => {
+  const account = { id: 'acc_1', waId: '27601879361', displayName: 'Lisa', profile: {} };
+  const alert = stuckAlert({ account, balanceCents: 0, needCents: 5800, situation: null });
+  assert.match(alert.subject, /^Lisa has asked to withdraw three times and cannot$/);
+  assert.match(alert.text, /^🙋 Lisa has asked to withdraw three times and cannot\.\nAccount acc_1, WhatsApp •••9361, display name Lisa\.\nBalance the withdraw flow can use: R0; the smallest withdrawal needs R58\.\n/);
+  assert.match(alert.text, /a reply here reaches the bot, not them/);
+  assert.ok(!/27601879361|0601879361/.test(alert.text), 'the number is masked'); assert.ok(!/[—–]/.test(alert.text), 'no em dashes');
+  const sent = [];
+  const deps = { deliver: async ({ text, kind }) => { sent.push({ text, kind }); return { sent: 1, recipients: 1 }; } };
+  const r1 = await opsPersonAlert({ text: alert.text, key: 'acc_1:2026-10-19', prisma: stubDb(), deps });
+  assert.equal(r1.sent, 1); assert.equal(sent.length, 1); assert.equal(sent[0].kind, 'PERSON'); assert.equal(sent[0].text, alert.text);
+  const r2 = await opsPersonAlert({ text: alert.text, key: 'acc_1:2026-10-19', prisma: stubDb({ dupes: new Set(['ops-alert:person:acc_1:2026-10-19']) }), deps });
+  assert.deepEqual(r2, { skipped: 'DUPLICATE' }); assert.equal(sent.length, 1);
+  assert.deepEqual(await opsPersonAlert({ text: '', key: 'k', prisma: stubDb(), deps }), { skipped: 'NO_TEXT' });
+  assert.deepEqual(await opsPersonAlert({ text: 'x', prisma: stubDb(), deps }), { skipped: 'NO_KEY' });
+  const chat = read('../lib/payout-chat.js');
+  assert.match(chat, /\(deps\.opsPersonAlert \|\| realOpsPersonAlert\)\(\{ text: alert\.text, key: `\$\{account\.id\}:\$\{new Date\(\)\.toISOString\(\)\.slice\(0, 10\)\}`, prisma: prismaClient \}\)/);
+  assert.match(chat, /personAsked = !!sent\?\.success \|\| \(wa\?\.sent \|\| 0\) > 0;/);
 });

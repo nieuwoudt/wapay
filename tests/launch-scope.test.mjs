@@ -20,6 +20,7 @@ import { CAN_DO } from '../lib/ad-flow.js';
 import { scopeFromEnv } from '@wapay/ai';
 import { agentGuard, comingSoonCommand } from '../lib/agent/guards.js';
 import { launchHold } from '../lib/vas-config.js';
+import { shortGateReply } from '../lib/payout-gate.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const processor = read('../pages/api/webhooks/message-processor-v2.js');
@@ -253,4 +254,12 @@ test('the agent path: a purchase command for an off product is answered before t
   // The home card's quick-reply footer never suggests a product that is off (founder's screenshot, 2026-10-18).
   assert.match(processor, /let quickActions = \['Please pay me', 'Deposit', 'Check balance'\];\s*if \(scope\.airtime && scope\.data\) quickActions = \['Buy airtime', 'Buy data', 'Check balance'\];/);
   assert.match(processor, /last\?\.route === 'airtime-execute' && scope\.airtime &&/);
+});
+
+test('the withdraw gate\'s add-money line names a till voucher only while Blu loads are live for that number', () => {
+  const reply = (env) => withEnv({ ...NEUTRAL, ...env }, () => shortGateReply({ account: { waId: OTHER, displayName: 'Cytric' }, balanceCents: 0, needCents: 5800, minCents: 5000, repeats: 1 }).text);
+  assert.match(reply({}), /say \*add money\* \(card or bank\)/); assert.ok(!/till/.test(reply({})), 'the hold: no till');
+  assert.ok(!/till/.test(reply({ VAS_LIVE_BLU_LOAD: 'true' })), 'the master hold outranks the switch');
+  assert.match(reply({ WAPAY_LAUNCH_HOLD: 'off', VAS_LIVE_BLU_LOAD: 'true' }), /\(card, bank or a cash voucher bought at a till\)/);
+  assert.ok(!/till/.test(reply({ WAPAY_LAUNCH_HOLD: 'off', VAS_LIVE_BLU_LOAD: 'true', VAS_ALLOWLIST_BLU_LOAD: PILOT })), 'a tester list narrows it to the testers');
 });

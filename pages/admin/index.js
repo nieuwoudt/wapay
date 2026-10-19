@@ -864,11 +864,7 @@ function Dashboard() {
         ))}
         <FloatTile balancesCents={v.balancesCents ?? v.floatCents} payouts7dCents={null} />
       </div>
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2>Valuation matrix, live</h2>
-        <p className="note">The Scale Model's plan case next to the same model run on what the data has measured so far, under the plan budget and under today's ad spend held flat. Every input without a big enough sample stays at its plan value, so the projection moves as the numbers come in. The full matrix and every input are on the Growth tab.</p>
-        <ValuationMatrix compact />
-      </div>
+      <LiveValuation compact />
       <div className="card" style={{ marginTop: 14 }}>
         <h2>The funnel</h2>
         <p className="note">All-time. Contacts include {m.funnel?.capturedPayers ?? 0} captured pay-link payer(s) who have not onboarded yet.</p>
@@ -988,9 +984,8 @@ const SCENARIO_LABELS = {
   stop: 'Stop-and-fix case',
 };
 
-function ValuationMatrix({ v: given = null, compact = false }) {
+function useValuation(given) {
   const [fetched, setFetched] = useState(null);
-  const [month, setMonth] = useState(12);
   useEffect(() => {
     if (given) return undefined;
     let cancelled = false;
@@ -1000,7 +995,86 @@ function ValuationMatrix({ v: given = null, compact = false }) {
       .catch(() => { if (!cancelled) setFetched(false); });
     return () => { cancelled = true; };
   }, [given]);
-  const v = given || fetched;
+  return given || fetched;
+}
+
+/* The plan, where we are, the actual inputs, and where today's pace leads (founder, 2026-10-19). */
+function PlanVsNow({ v }) {
+  if (v === false) return <div className="empty">Could not load the projection.</div>;
+  const t = v?.trajectory;
+  if (!t) return <div className="empty">Projecting…</div>;
+  const worth = (row) => Math.max(row.valRev, row.valActive);
+  const basis = (row) => (worth(row) <= t.frames.floorRand ? 'the pre-traction floor' : row.valRev >= row.valActive ? 'revenue frame' : 'per-active frame');
+  const pct = (g) => `${g >= 0 ? '+' : ''}${Math.round(g * 100)}% a week`;
+  const h = t.horizon.label;
+  const cols = [
+    { key: 'planToDate', title: `Plan by day ${t.dayOfLaunch}`, sub: 'month 1 pro rata', row: t.plan.toDate },
+    { key: 'now', title: 'Now', sub: `day ${t.dayOfLaunch} of the launch`, row: t.now, strong: true },
+    { key: 'planAhead', title: `Plan, ${h}`, sub: `model month ${t.plan.ahead.month}`, row: t.plan.ahead },
+    { key: 'flat', title: `Today's pace, ${h}`, sub: 'last 7 days held flat', row: t.flat },
+    { key: 'compounded', title: `Compounding, ${h}`, sub: t.compounded ? pct(t.weeklyGrowth) : `needs two full weeks (from ${t.weeklyGrowthFrom})`, row: t.compounded },
+    { key: 'model', title: `Model on measured inputs, ${h}`, sub: 'plan budget', row: t.model ? t.model.ahead : null },
+  ];
+  const lines = [
+    ['Accounts', (r) => fmtN(r.accounts)],
+    ['Funded accounts', (r) => fmtN(r.funded)],
+    ['30-day actives', (r) => fmtN(r.actives)],
+    ['Net revenue a month', (r) => R(r.revenueMonthCents)],
+    ['Valuation, revenue frame', (r) => fmtR(r.valRev)],
+    ['Valuation, per active user', (r) => fmtR(r.valActive)],
+  ];
+  const tiles = [
+    ['Valuation today', fmtR(worth(t.now)), basis(t.now)],
+    [`In ${t.monthsAhead} months at today's pace`, fmtR(worth(t.flat)), basis(t.flat)],
+    [`Plan, ${h}`, fmtR(worth(t.plan.ahead)), basis(t.plan.ahead)],
+    t.compounded ? [`Compounding at ${pct(t.weeklyGrowth)}, ${h}`, fmtR(worth(t.compounded)), basis(t.compounded)]
+      : t.model ? [`Model on measured inputs, ${h}`, fmtR(worth(t.model.ahead)), basis(t.model.ahead)] : null,
+  ].filter(Boolean);
+  return (
+    <div>
+      <div className="grid kpis">
+        {tiles.map(([k, val, sub]) => (<div className="card" key={k}><div className="k">{k}</div><div className="v">{val}</div><div className="vs">{sub}</div></div>))}
+      </div>
+      <div style={{ overflowX: 'auto', marginTop: 10 }}>
+        <table style={{ minWidth: 900 }}>
+          <thead><tr><th></th>{cols.map((c) => <th key={c.key} className="n">{c.title}<div className="note" style={{ margin: 0, fontWeight: 400 }}>{c.sub}</div></th>)}</tr></thead>
+          <tbody>
+            {lines.map(([label, f]) => (
+              <tr key={label}><td>{label}</td>{cols.map((c) => <td key={c.key} className="n" style={c.strong ? { fontWeight: 700 } : undefined}>{c.row ? f(c.row) : '—'}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>
+        Actual inputs, last 7 days: {fmtN(t.last7.accounts)} accounts ({t.perDay.accounts.toFixed(1)} a day), {fmtN(t.last7.funded)} funded ({t.perDay.funded.toFixed(2)} a day), {R(t.last7.revenueCents)} net revenue ({R(Math.round(t.perDay.revenueCents))} a day); 30-day actives {fmtN(t.now.actives)}; net revenue last 30 days {R(t.now.revenueMonthCents)}.
+        {' '}Weekly growth: {t.weeklyGrowth != null ? `${pct(t.weeklyGrowth)} (accounts, this week over last)` : `measured once two full weeks exist (from ${t.weeklyGrowthFrom}); until then the trajectory holds today's pace flat`}.
+        {' '}Valuation frames as in the plan: {t.frames.multiple}× annualised net revenue (more with faster growth) or R{fmtN(t.frames.perActive)} per 30-day active, never below the {fmtR(t.frames.floorRand)} floor. The model's measured inputs are listed under the matrix below.
+      </p>
+    </div>
+  );
+}
+
+/* One fetch for both cards: the plan-vs-now section and the matrix (the Growth tab passes its own data). */
+function LiveValuation({ v: given = null, compact = false, minSample = null }) {
+  const v = useValuation(given);
+  return (
+    <>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>The plan, where we are, and where today's pace leads</h2>
+        <p className="note">The plan is the 13 September assessment (model month 1 = October 2026; launch day 1 = 18 October). Now is live. The trajectory takes the last seven days as a daily rate and holds it for six months; once two full weeks exist it also compounds at the measured weekly growth. Valuations use the plan's two frames and its floor.</p>
+        <PlanVsNow v={v} />
+      </div>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Valuation matrix, live</h2>
+        <p className="note">Plan = the 13 September assessment. Measured = the same model with every input the data has measured (sample of {minSample ?? 20} or more) in place of its plan value, under the plan budget and under today's ad spend held flat; the rest stand at plan. The line under the table says which inputs were used.</p>
+        <ValuationMatrix v={v} compact={compact} />
+      </div>
+    </>
+  );
+}
+
+function ValuationMatrix({ v, compact = false }) {
+  const [month, setMonth] = useState(12);
   if (v === false) return <div className="empty">Could not load the projection.</div>;
   if (!v) return <div className="empty">Projecting…</div>;
   const keys = compact ? ['plan', 'now', 'nowCurrentSpend'] : ['plan', 'now', 'nowCurrentSpend', 'great', 'stop'];
@@ -1171,11 +1245,7 @@ function Growth() {
         ))}
       </div>
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2>Valuation matrix, live</h2>
-        <p className="note">Plan = the 13 September assessment. Measured = the same model with every input the data has measured (sample of {g.minSample} or more) in place of its plan value; the rest stay at plan. Two budgets: the plan's phases, and today's ad spend held flat at {fmtR(g.valuation?.currentMonthlySpend)} a month. Great and Stop are the bound cases. Valuation is the revenue frame (multiple on annualised net revenue, growth-adjusted) with the per-active frame beside it.</p>
-        <ValuationMatrix v={g.valuation} />
-      </div>
+      <LiveValuation v={g.valuation} minSample={g.minSample} />
 
       <div className="grid two" style={{ marginTop: 14 }}>
         <div className="card">

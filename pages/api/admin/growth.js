@@ -16,7 +16,7 @@
 
 import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
-import { INPUTS, preset, boundStatus, measuredToInputs, scenarioUrl, SCALE_MODEL_URL, projectionMatrix } from '../../../lib/scale-model.js';
+import { INPUTS, preset, boundStatus, measuredToInputs, scenarioUrl, SCALE_MODEL_URL, projectionMatrix, trajectory } from '../../../lib/scale-model.js';
 import { adsConfigured, snapshotAdInsights, lastAdsFetchAt, LAST_FETCH_KEY } from '../../../lib/meta-ads.js';
 import { capiConfigured, capiConfig } from '../../../lib/meta-capi.js';
 
@@ -400,6 +400,27 @@ export default async function handler(req, res) {
   const earlyKeys = Object.keys(earlyRaw).filter((k) => (measuredRaw[k]?.n ?? 0) < MIN_SAMPLE && (earlyRaw[k].n ?? 0) >= MIN_SAMPLE);
   const inputsForMatrix = { ...measuredToInputs(Object.fromEntries(earlyKeys.map((k) => [k, earlyRaw[k]])), { minN: MIN_SAMPLE }), ...inputs };
   const valuation = projectionMatrix({ inputs: inputsForMatrix, earlyKeys, currentMonthlySpend: Math.round(((spend7dCents / 100) / 7) * 30), launchMonth: '2026-10' });
+  // Where we are and where today's pace leads (founder, 2026-10-19): actual counts, the last seven days as a rate.
+  const d7 = new Date(now.getTime() - 7 * DAY_MS), d14 = new Date(now.getTime() - 14 * DAY_MS), d30 = new Date(now.getTime() - 30 * DAY_MS);
+  const revenueBetween = async (from, to) => safe(async () => {
+    const r = await prisma.$queryRaw`
+      SELECT (sum(coalesce(jl."creditCents", 0)) - sum(coalesce(jl."debitCents", 0)))::bigint AS net
+      FROM "JournalLine" jl JOIN "JournalEntry" je ON je.id = jl."entryId"
+      WHERE jl."accountCode" LIKE 'REVENUE:%' AND je."createdAt" > ${from} AND je."createdAt" <= ${to}`;
+    return num(r?.[0]?.net);
+  }, 0);
+  const [rev7, revPrior7, rev30] = await Promise.all([revenueBetween(d7, now), revenueBetween(d14, d7), revenueBetween(d30, now)]);
+  const between = (f, from, to) => rows.filter((a) => a.onboarded && f(a) && f(a) > from && f(a) <= to).length;
+  const onbAt = (a) => a.onboardedAt, fundAt = (a) => a.firstFundedAt;
+  const priorWeek = { accounts: between(onbAt, d14, d7), funded: between(fundAt, d14, d7), revenueCents: revPrior7 };
+  valuation.trajectory = trajectory({
+    accountsTotal: rows.filter((a) => a.onboarded).length,
+    fundedTotal: rows.filter((a) => a.onboarded && a.firstFundedAt).length,
+    activesNow: mau,
+    revenueMonthCents: rev30,
+    last7: { accounts: between(onbAt, d7, now), funded: between(fundAt, d7, now), revenueCents: rev7 },
+    prior7: priorWeek.accounts > 0 ? priorWeek : null,
+  }, { modelInputs: inputsForMatrix, now });
 
   res.setHeader('Cache-Control', 'private, max-age=60');
   return res.status(200).json({

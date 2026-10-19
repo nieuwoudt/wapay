@@ -178,6 +178,24 @@ October 2026. `tests/valuation-matrix.test.mjs` pins the repo model to the artif
 great case (M6: 81.6k accounts, 36.8k actives, R920k a month, R265m, R1.11m peak funding,
 1m at M13), so the matrix and the artifact can never disagree.
 
+### 7b. The plan, where we are, and where today's pace leads (2026-10-19, CHANGELOG 95)
+
+`trajectory` (`lib/scale-model.js`) takes the actual counts the growth route reads (onboarded
+accounts, funded accounts, 30-day actives, net revenue over the trailing 30 days, and the
+last seven days and the seven before as accounts, funded and net revenue) and returns, with
+the valuation on both plan frames at each point: **now** (with the launch day; day 1 =
+18 October), **the plan to date** (the plan's month 1 pro rata by launch day), **the plan at
+the horizon** (six months ahead, model month 7 = April 2027), **today's pace held flat** (the
+seven-day rate × 180 days; actives = funded per month at that pace, never below today's),
+**compounding** (only once the prior seven days hold 20 or more accounts, i.e. from
+1 November; week-over-week growth clamped to ±50%, compounded weekly; the revenue multiple's
+growth uplift applied as in `simulate`), and **the model on the measured inputs** (the same
+`simulate` the matrix uses, at month 1 and the horizon). The growth route returns it as
+`valuation.trajectory`; `PlanVsNow` renders it on the Dashboard and Growth tabs above the
+matrix (one fetch feeds both cards). The valuation tile shows the higher of the two frames
+and says when it is the floor. Nothing here is a forecast of behaviour: it is arithmetic on
+the last seven days, labelled as such, next to the plan and the model.
+
 ## 8. Operator alerts (2026-10-19)
 
 `lib/ops-alerts.js`: `opsMoneyIn` after a non-replayed card credit (PayFast ITN and Adumo
@@ -187,3 +205,11 @@ pay-out float (`lib/payout-float.js`, 60-second cache) with cover over balances 
 at the week's pay-out pace, the warn level, open links and today's pay-outs. Recipients
 `WAPAY_OPS_ALERT_MSISDNS`; delivery through `notifyCustomer` (text inside the window, the
 direct rail or `WAPAY_TEMPLATE_OPS_ALERT` outside it). Once per event via ProcessedMessage.
+
+**The person alert (CHANGELOG 95).** The third-tier withdraw e-mail (`stuckAlert` in
+`lib/payout-gate.js`, sent through `ALERT_EMAIL`) now has a WhatsApp twin: `opsPersonAlert`
+sends the same content (account id, masked WhatsApp tail, display name, usable balance,
+the smallest withdrawal, the situation lines, what to do) to `WAPAY_OPS_ALERT_MSISDNS`,
+once per account and day. The chat tells the customer a person was asked when either
+channel arrived. A reply to that WhatsApp reaches the bot, not the customer: answer them
+from the business inbox.

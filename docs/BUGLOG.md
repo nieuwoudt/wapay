@@ -4,6 +4,13 @@
 
 ---
 
+## 118. The withdraw gate offered "a cash voucher bought at a till" while cash deposits were coming soon
+
+- **Symptom (Cytric, 19 Oct 08:30 UTC, day two of the ad):** at R0 the second gate reply listed "Add money to your balance: say *add money* (card, bank or a cash voucher bought at a till)" although the launch hold has Blu voucher loads off and the home card says cash deposits are coming soon.
+- **Root cause:** `shortGateReply` (`lib/payout-gate.js`) had the parenthetical as a literal; the launch scope (CHANGELOG 91/93) gated every other add-money surface but not this one.
+- **Fix (CHANGELOG 95):** the line reads `isRailLiveFor('BLU_LOAD', account.waId)` at call time: "card or bank" under the hold or when the number is not on the tester list, the till voucher only when the rail is live for them. Locked in `tests/launch-scope.test.mjs`.
+- **Lesson:** a copy string that names a product is a gate; grep every surface for the product's words when a switch is added ("till", "voucher", "cash").
+
 ## 117. "Send money" bought a voucher: the recipient got a PIN, not money, while the copy promised "it lands in their balance"
 
 - **Symptom (Lisa, 12 Oct; the founder's decision, 18 Oct):**
