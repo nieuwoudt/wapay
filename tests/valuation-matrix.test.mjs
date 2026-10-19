@@ -48,6 +48,10 @@ test('projectionMatrix: plan, measured overlay under two budgets, bound cases, l
   assert.equal(w.currentMonthlySpend, 11500);
   assert.deepEqual(w.measuredUsed.map((u) => [u.key, u.status]), [['cpConv', 'great'], ['convToOnb', 'great']]);
   assert.equal(w.assumedCount, 29);
+  const e = projectionMatrix({ inputs: { actToFund: 2, onbToAct: 40 }, earlyKeys: ['actToFund'] });
+  assert.deepEqual(e.measuredUsed.map((u) => [u.key, u.early]), [['onbToAct', false], ['actToFund', true]]);
+  assert.equal(e.earlyCount, 1);
+  assert.ok(e.scenarios.now.at[1].valRev < v.scenarios.plan.at[1].valRev, 'a 2% paid-link rate pulls the projection below the plan');
   for (const sc of Object.values(w.scenarios)) {
     assert.equal(sc.at.length, 4);
     assert.ok(Number.isInteger(sc.peakFunding) && sc.peakFunding >= 0);
@@ -57,7 +61,8 @@ test('projectionMatrix: plan, measured overlay under two budgets, bound cases, l
 
 test('the growth route returns the matrix and the admin page renders it on both tabs', () => {
   const growth = read('../pages/api/admin/growth.js');
-  assert.match(growth, /projectionMatrix\(\{ inputs, currentMonthlySpend: Math\.round\(\(\(spend7dCents \/ 100\) \/ 7\) \* 30\), launchMonth: '2026-10' \}\)/);
+  assert.match(growth, /projectionMatrix\(\{ inputs: inputsForMatrix, earlyKeys, currentMonthlySpend: Math\.round\(\(\(spend7dCents \/ 100\) \/ 7\) \* 30\), launchMonth: '2026-10' \}\)/);
+  assert.match(growth, /const earlyKeys = Object\.keys\(earlyRaw\)\.filter\(\(k\) => \(measuredRaw\[k\]\?\.n \?\? 0\) < MIN_SAMPLE && \(earlyRaw\[k\]\.n \?\? 0\) >= MIN_SAMPLE\)/);
   assert.match(growth, /scenarioUrl: scenario,\s*valuation,/);
   const page = read('../pages/admin/index.js');
   assert.equal((page.match(/Valuation matrix, live/g) || []).length, 2, 'the Dashboard card and the Growth card');

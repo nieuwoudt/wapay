@@ -385,7 +385,21 @@ export default async function handler(req, res) {
   // The live valuation matrix (2026-10-19): today's ad spend pace is the trailing seven days of Meta spend, held flat.
   const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
   const spend7dCents = (adsDaily || []).filter((r) => new Date(r.d) >= weekAgo).reduce((s, r) => s + num(r.spend), 0);
-  const valuation = projectionMatrix({ inputs, currentMonthlySpend: Math.round(((spend7dCents / 100) / 7) * 30), launchMonth: '2026-10' });
+  // The funnel inputs are judged on a mature cohort (14 to 44 days old). Until one exists the
+  // matrix would silently keep the plan's paid-link rate while the live evidence says otherwise,
+  // so for the PROJECTION ONLY the young cohort fills in (every onboarded account in the window),
+  // labelled "early read"; the measured table above keeps the mature rule.
+  const young = rows.filter((a) => a.onboarded && inWindow(a.onboardedAt));
+  const youngAct = young.filter((a) => a.firstLinkAt);
+  const youngNoAct = young.filter((a) => !a.firstLinkAt);
+  const earlyRaw = {
+    onbToAct: { value: young.length > 0 ? (100 * youngAct.length) / young.length : null, n: young.length },
+    actToFund: { value: youngAct.length > 0 ? (100 * youngAct.filter((a) => a.firstFundedAt).length) / youngAct.length : null, n: youngAct.length },
+    selfLoad: { value: youngNoAct.length > 0 ? (100 * youngNoAct.filter((a) => a.firstFundedAt).length) / youngNoAct.length : null, n: youngNoAct.length },
+  };
+  const earlyKeys = Object.keys(earlyRaw).filter((k) => (measuredRaw[k]?.n ?? 0) < MIN_SAMPLE && (earlyRaw[k].n ?? 0) >= MIN_SAMPLE);
+  const inputsForMatrix = { ...measuredToInputs(Object.fromEntries(earlyKeys.map((k) => [k, earlyRaw[k]])), { minN: MIN_SAMPLE }), ...inputs };
+  const valuation = projectionMatrix({ inputs: inputsForMatrix, earlyKeys, currentMonthlySpend: Math.round(((spend7dCents / 100) / 7) * 30), launchMonth: '2026-10' });
 
   res.setHeader('Cache-Control', 'private, max-age=60');
   return res.status(200).json({

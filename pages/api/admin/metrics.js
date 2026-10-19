@@ -140,7 +140,7 @@ export default async function handler(req, res) {
   });
   // Made a link: the step between an account and money in (launch day showed it is where the funnel waits).
   const linked = await safe(async () => {
-    const rows = await prisma.$queryRaw`SELECT count(DISTINCT "accountId")::int AS n FROM "PaymentRequest"`;
+    const rows = await prisma.$queryRaw`SELECT count(DISTINCT "accountId")::int AS n FROM "payment_requests"`;
     return rows?.[0]?.n ?? null;
   });
   // Today's money, South African day: in from outside, out to the rail, and what is waiting to be paid.
@@ -152,7 +152,7 @@ export default async function handler(req, res) {
                        WHERE je.source LIKE 'LOAD_%' AND jl."accountCode" LIKE 'WALLET:%' AND jl."creditCents" > 0 AND je."createdAt" >= ${dayStart}`,
       prisma.$queryRaw`SELECT count(*)::int AS n, coalesce(sum((metadata->>'amountCents')::int), 0)::int AS cents FROM "ProviderRequest"
                        WHERE route = 'ott-payout' AND status = 'SUCCESS' AND "requestTs" >= ${dayStart}`,
-      prisma.$queryRaw`SELECT count(*)::int AS n, coalesce(sum("amountCents"), 0)::int AS cents FROM "PaymentRequest" WHERE status = 'PAID' AND "paidAt" >= ${dayStart}`,
+      prisma.$queryRaw`SELECT count(*)::int AS n, coalesce(sum("amountCents"), 0)::int AS cents FROM "payment_requests" WHERE status = 'PAID' AND "paidAt" >= ${dayStart}`,
       prisma.paymentRequest.aggregate({ where: { status: 'PENDING' }, _sum: { amountCents: true }, _count: true }),
       prisma.wallet.count({ where: { balanceType: 'SPEND', availableCents: { gte: 2000 } } }),
     ]);

@@ -1039,7 +1039,7 @@ function ValuationMatrix({ v: given = null, compact = false }) {
         </table>
       </div>
       <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>
-        Measured so far and used: {(v.measuredUsed || []).length ? v.measuredUsed.map((u) => `${u.label} ${u.unit === '%' ? u.value + '%' : u.unit === 'R' ? 'R' + u.value : u.value} (plan ${u.unit === '%' ? u.plan + '%' : u.unit === 'R' ? 'R' + u.plan : u.plan}, ${u.status})`).join(' · ') : 'nothing yet'}. {v.assumedCount} inputs still at their plan value, the payer step among them: the projection firms up as links get paid.
+        Measured so far and used: {(v.measuredUsed || []).length ? v.measuredUsed.map((u) => `${u.label} ${u.unit === '%' ? u.value + '%' : u.unit === 'R' ? 'R' + u.value : u.value} (plan ${u.unit === '%' ? u.plan + '%' : u.unit === 'R' ? 'R' + u.plan : u.plan}, ${u.status}${u.early ? ', early read' : ''})`).join(' · ') : 'nothing yet'}. {v.assumedCount} inputs still at their plan value.{v.earlyCount ? ` "Early read" means accounts younger than 14 days were judged, because no older cohort exists yet; the measured table below keeps the stricter rule.` : ''}
       </p>
     </div>
   );
