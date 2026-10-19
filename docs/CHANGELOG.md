@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-10-19 (100) — Mission Control: six tabs, a refresh button and a 1-day range, period money tiles, the support inbox, the conversation on every profile, links over time and the fee outlook, the path all time, the valuation path with hover, the insight box
+
+Founder, 19 October, from seven annotated screenshots. Everything below is on the admin host.
+
+- **Tabs:** Dashboard, Valuation Metrics (the old Growth tab, with the plan-vs-now block, the
+  matrix, the path and valuation charts and the insight), Inbox, Customers, Health
+  (money-engine health, the daily conversation audit, the Pay agent card, pay-out
+  reconciliation) and Supplier Floats (the pay-out float tile next to customer balances, every
+  supplier float, UniFuel). Deep links: `/admin?tab=…` and `/admin?customer=<number>` opens one
+  customer on its own page; the ↗ next to each name in the list does that in a new tab.
+- **Refresh and the range:** a ↻ Refresh button on the Dashboard, Health, Supplier Floats and
+  Inbox, the 1-day range, and the three money tiles follow the selected period ("Money in, last
+  30 days"), with the pay-out float tile re-read on every refresh and every ten minutes.
+- **Links over time:** on the links card, cumulative value created and paid with the open count
+  per day, and the fee outlook of every link made so far if paid by card and then paid out by
+  PayShap or as cash at an Absa or Nedbank ATM (`links.daily` in `/api/admin/metrics`, cash fees
+  from `cashoutFeeCents`). Paid please-pay-me links appear in "What's being sold".
+- **The path, all time:** cumulative accounts from the first one ever (`pathSeries` in
+  `/api/admin/growth`), linear, with a legend, today's total, today's pace carried forward and
+  the plan's point. **The valuation path:** the plan, the same model on the inputs measured so
+  far, and today's pace, every point with a hover title.
+- **The insight box:** rules on the measured inputs and the plan to date: the biggest finding
+  (the input furthest below its stop line), what to work on, the most promising figure, with
+  red, yellow and green chips as the matrix measures them.
+- **Inbox** (`/api/admin/inbox`, `lib/inbox.js`): every customer who wrote in the window, newest
+  first, with the last thing they said and the flags an operator needs (unanswered, close
+  account, person asked, gate tier, replied by us), filters, the conversation and the reply box.
+  **Conversation on every profile** (`/api/admin/customer-turns`): both sides of the chat, the
+  questions they asked, the same flags.
+
 ## 2026-10-19 (98) — The first conversation audit's fixes: the send flow speaks balance, the request ceiling and re-link rules, a real answer to "close my account", the example echo and "nobody owes me", the Send tap, add-money links named as such; the business question asks only on "ask"
 
 Four review agents read every customer conversation (348 accounts, 2,498 turns, redacted

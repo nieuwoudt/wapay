@@ -10,7 +10,7 @@
  * arrives via the session-gated APIs after OTP login.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import { fmtR, fmtN, simulate, preset, budgetFn, BUDGET_DEFAULT } from '../../lib/scale-model.js';
 
@@ -842,10 +842,11 @@ function Dashboard() {
   return (
     <>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-        <div className="tabs">{['7', '30', '90', 'all'].map((r) => (
+        <div className="tabs">{['1', '7', '30', '90', 'all'].map((r) => (
           <button key={r} className={range === r ? 'on' : ''} onClick={() => setRange(r)}>{r === 'all' ? 'All' : r + 'd'}</button>
         ))}</div>
-        <span className="note" style={{ margin: 0 }}>generated {dt(m.generatedAt)} · live ledger data</span>
+        <button className="linkish" onClick={() => setTick((t) => t + 1)} title="Re-read every number now">↻ Refresh</button>
+        <span className="note" style={{ margin: 0 }}>generated {dt(m.generatedAt)} · live ledger data · refreshes itself every 10 minutes</span>
       </div>
       <div className="grid kpis">
         {[
@@ -860,14 +861,19 @@ function Dashboard() {
         ))}
       </div>
       <div className="grid kpis" style={{ marginTop: 10 }}>
-        {[
-          ['Money in today', R(v.today?.moneyInCents), `${v.today?.moneyInCount ?? '—'} loads from outside · ${v.today?.linksPaidCount ?? '—'} links paid (${R(v.today?.linksPaidCents)})`],
-          ['Pay-outs today', R(v.today?.payoutsCents), `${v.today?.payoutsCount ?? '—'} paid to the rail`],
-          ['Open links', n0(v.today?.openLinksCount), `${R(v.today?.openLinksCents)} waiting for a payer`],
-        ].map(([k, val, sub]) => (
-          <div className="card" key={k}><div className="k">{k}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>
-        ))}
-        <FloatTile balancesCents={v.balancesCents ?? v.floatCents} payouts7dCents={null} />
+        {(() => {
+          // The money tiles follow the selected period (founder 2026-10-19); the 1-day range is "today".
+          const p = range === '1' ? v.today : (v.period || v.today);
+          const label = range === '1' ? 'today' : range === 'all' ? 'all time' : `last ${range} days`;
+          return [
+            [`Money in, ${label}`, R(p?.moneyInCents), `${p?.moneyInCount ?? '—'} loads from outside · ${p?.linksPaidCount ?? '—'} links paid (${R(p?.linksPaidCents)})`],
+            [`Pay-outs, ${label}`, R(p?.payoutsCents), `${p?.payoutsCount ?? '—'} paid to the rail`],
+            ['Open links', n0(m.links?.open?.n ?? v.today?.openLinksCount), `${R(m.links?.open?.cents ?? v.today?.openLinksCents)} waiting for a payer`],
+          ].map(([k, val, sub]) => (
+            <div className="card" key={k}><div className="k">{k}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>
+          ));
+        })()}
+        <FloatTile balancesCents={v.balancesCents ?? v.floatCents} payouts7dCents={null} tick={tick} />
       </div>
       <LinksAndLoop links={m.links} viral={m.viral} generatedAt={m.generatedAt} />
       <LiveValuation compact tick={tick} />
@@ -923,33 +929,7 @@ function Dashboard() {
         </p>
       </div>
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2>Money-engine health</h2>
-        <p className="note">If any of these is red, treat every number above as suspect until it is fixed.</p>
-        <OpsHealth ops={m.ops} />
-      </div>
-
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2>Conversations and the Pay agent</h2>
-        <p className="note">Both sides of every chat, what the agent answered behind the shadow list, what it cost, which output gates fired, and any pay-out still parked with the bank rail.</p>
-        <Conversations />
-      </div>
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2>Pay-out reconciliation</h2>
-        <p className="note">What WaPay owes its customers, what is held for pay-outs, what the journal says was paid out, and whether every pay-out’s three records agree. Red means a customer or the float is out of pocket until someone looks.</p>
-        <PayoutBooks />
-      </div>
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2>Supplier floats</h2>
-        <p className="note">Prepaid balances at each counterparty, next to what the ledger believes. Top up before a low float fails a vend.</p>
-        <Floats />
-      </div>
-
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2>UniFuel / wiCode</h2>
-        <p className="note">WaPay-originated fuel voucher issuance and redemptions, via the UniFuel service.</p>
-        <UniFuelPanel />
-      </div>
+      <p className="note" style={{ marginTop: 14 }}>Money-engine health, the Pay agent and pay-out reconciliation live on the Health tab; supplier floats and UniFuel on the Supplier Floats tab.</p>
     </>
   );
 }
@@ -978,96 +958,184 @@ function LinksAndLoop({ links: l, viral: vl, generatedAt }) {
       <div className="grid kpis">
         {[...tiles, ...loop].map(([k, val, sub]) => (<div className="card" key={k}><div className="k">{k}</div><div className="v">{val}</div><div className="vs">{sub}</div></div>))}
       </div>
+      {l?.daily?.length > 1 && (
+        <div className="grid two" style={{ marginTop: 12 }}>
+          <div>
+            <div className="k">Links over time, this period</div>
+            <p className="note">Cumulative value created and paid, and how many links are open at the end of each day.</p>
+            <DailyLines rows={cumulativeLinks(l.daily)} series={[{ key: 'createdRand', name: 'Created, R (cumulative)', color: 'var(--s1)' }, { key: 'paidRand', name: 'Paid, R (cumulative)', color: 'var(--good)' }, { key: 'open', name: 'Open links (count)', color: 'var(--s4)' }]} />
+          </div>
+          <div>
+            <div className="k">Fee outlook from every link made so far</div>
+            <p className="note">If every link made to date is paid by card: the card fee WaPay keeps, and the pay-out fees if the money then leaves by PayShap or as cash at an Absa or Nedbank ATM.</p>
+            <DailyLines rows={l.daily.map((d) => ({ date: d.date, card: Math.round(d.cardFeeCents / 100), payshap: Math.round(d.payshapFeeCents / 100), cash: Math.round(d.cashFeeCents / 100) }))} series={[{ key: 'card', name: 'Card fees, R', color: 'var(--s1)' }, { key: 'payshap', name: 'PayShap pay-out fees, R', color: 'var(--good)' }, { key: 'cash', name: 'Cash pay-out fees, R', color: 'var(--s4)' }]} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 const PAYSHAP_FEE_RAND = 8;
+function cumulativeLinks(daily) {
+  let c = 0, p = 0;
+  return daily.map((d) => { c += d.createdCents || 0; p += d.paidCents || 0; return { date: d.date, createdRand: Math.round(c / 100), paidRand: Math.round(p / 100), open: d.open || 0 }; });
+}
 
-/* The path: accounts opened so far and the pace, with today's pace carried forward (founder 2026-10-19, "make it small"). */
-function PathChart({ daily, t }) {
-  if (!t || !daily?.length) return <div className="empty">No days yet.</div>;
-  const W = 560, H = 170, L = 44, Rr = 10, T = 10, B = 22;
-  const days = [...daily].sort((a, b) => (a.date < b.date ? -1 : 1));
-  // Anchor the cumulative series on today's total so it is exact however long the window is.
-  let cum = t.now.accounts; const actual = [];
-  for (let i = days.length - 1; i >= 0; i--) { actual.unshift({ date: days[i].date, v: cum, n: days[i].onboarded || 0 }); cum -= days[i].onboarded || 0; }
-  const launchIdx = actual.findIndex((d) => d.n > 0 || d.v > 0);
-  const series = launchIdx >= 0 ? actual.slice(launchIdx) : actual;
+/* The path (founder 2026-10-19, "all time, clear"): cumulative accounts from the first one ever, today's pace carried forward, the plan's point. */
+function PathChart({ series, t }) {
+  if (!t || !series?.length) return <div className="empty">No accounts yet.</div>;
+  const W = 560, H = 190, L = 46, Rr = 14, T = 14, B = 26;
   const horizonDays = t.monthsAhead * 30;
+  const actual = series;
+  const n = actual.length;
   const flat = Array.from({ length: Math.ceil(horizonDays / 7) + 1 }, (_, i) => ({ d: Math.min(horizonDays, i * 7), v: t.now.accounts + t.perDay.accounts * Math.min(horizonDays, i * 7) }));
   const g = t.weeklyGrowth;
   const comp = g != null ? flat.map(({ d }, i) => { let acc = t.now.accounts, wk = t.last7.accounts; for (let w = 0; w < i; w++) { wk *= 1 + g; acc += wk; } return { d, v: acc }; }) : null;
-  const maxV = Math.max(10, ...flat.map((p) => p.v), ...(comp || []).map((p) => p.v), t.plan.ahead.accounts);
-  const minV = 1;
-  const logy = (v) => T + (H - T - B) * (1 - (Math.log10(Math.max(minV, v)) - Math.log10(minV)) / (Math.log10(maxV) - Math.log10(minV)));
-  const totalDays = (series.length - 1) + horizonDays;
+  const maxV = Math.max(10, ...flat.map((p) => p.v), ...(comp || []).map((p) => p.v), t.plan.ahead.accounts) * 1.08;
+  const y = (v) => T + (H - T - B) * (1 - v / maxV);
+  const totalDays = (n - 1) + horizonDays;
   const x = (i) => L + ((W - L - Rr) * i) / Math.max(1, totalDays);
-  const ticks = [1, 10, 100, 1000, 10000, 100000, 1000000].filter((v) => v <= maxV * 1.5);
-  const lbl = (v) => (v >= 1e6 ? `${v / 1e6}m` : v >= 1e3 ? `${v / 1e3}k` : String(v));
-  const actualPath = series.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${logy(p.v).toFixed(1)}`).join('');
-  const off = series.length - 1;
-  const flatPath = flat.map((p, i) => `${i ? 'L' : 'M'}${x(off + p.d).toFixed(1)},${logy(p.v).toFixed(1)}`).join('');
-  const compPath = comp ? comp.map((p, i) => `${i ? 'L' : 'M'}${x(off + p.d).toFixed(1)},${logy(p.v).toFixed(1)}`).join('') : null;
-  const planX = x(off + horizonDays), planY = logy(t.plan.ahead.accounts);
+  const step = maxV > 20000 ? 10000 : maxV > 5000 ? 2000 : maxV > 2000 ? 1000 : maxV > 500 ? 200 : 100;
+  const ticks = []; for (let v = 0; v <= maxV; v += step) ticks.push(v);
+  const lbl = (v) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}m` : v >= 1e3 ? `${Math.round(v / 1e3)}k` : String(Math.round(v)));
+  const actualPath = actual.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.accounts).toFixed(1)}`).join('');
+  const off = n - 1;
+  const flatPath = flat.map((p, i) => `${i ? 'L' : 'M'}${x(off + p.d).toFixed(1)},${y(p.v).toFixed(1)}`).join('');
+  const compPath = comp ? comp.map((p, i) => `${i ? 'L' : 'M'}${x(off + p.d).toFixed(1)},${y(p.v).toFixed(1)}`).join('') : null;
+  const planX = x(off + horizonDays), planY = y(t.plan.ahead.accounts);
+  const last = actual[n - 1];
+  const mid = actual[Math.floor(n / 2)];
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" style={{ width: '100%', height: 'auto' }}>
-      {ticks.map((v) => (<g key={v}><line x1={L} x2={W - Rr} y1={logy(v)} y2={logy(v)} stroke="var(--grid)" strokeDasharray="2 4" /><text x={L - 6} y={logy(v) + 3} textAnchor="end" fontSize="9" fill="var(--ink3)">{lbl(v)}</text></g>))}
-      <path d={flatPath} fill="none" stroke="var(--s1)" strokeWidth={1.5} strokeDasharray="5 4" />
-      {compPath && <path d={compPath} fill="none" stroke="var(--s4)" strokeWidth={1.5} strokeDasharray="2 3" />}
-      <path d={actualPath} fill="none" stroke="var(--good)" strokeWidth={2.2} />
-      {series.map((p, i) => <circle key={p.date} cx={x(i)} cy={logy(p.v)} r={2.2} fill="var(--good)"><title>{`${p.date}: ${p.v.toLocaleString('en-ZA')} accounts (+${p.n})`}</title></circle>)}
-      <circle cx={planX} cy={planY} r={3} fill="none" stroke="var(--ink3)" /><text x={planX - 6} y={planY - 6} textAnchor="end" fontSize="9" fill="var(--ink3)">plan {lbl(Math.round(t.plan.ahead.accounts / 1000) * 1000)}</text>
-      <text x={x(0)} y={H - 6} fontSize="9" fill="var(--ink3)">{series[0]?.date.slice(5)}</text>
-      <text x={x(off)} y={H - 6} textAnchor="middle" fontSize="9" fill="var(--ink3)">today</text>
-      <text x={W - Rr} y={H - 6} textAnchor="end" fontSize="9" fill="var(--ink3)">{t.horizon.label}</text>
-    </svg>
+    <div>
+      <div className="note" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        <span><i style={{ display: 'inline-block', width: 18, height: 3, background: 'var(--good)', marginRight: 5, verticalAlign: 3 }} />accounts, all time</span>
+        <span><i style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dashed var(--s1)', marginRight: 5, verticalAlign: 3 }} />today's pace</span>
+        {compPath && <span><i style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dotted var(--s4)', marginRight: 5, verticalAlign: 3 }} />compounding</span>}
+        <span><i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 9, border: '1.5px solid var(--ink3)', marginRight: 5, verticalAlign: -1 }} />plan at {t.horizon.label}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" style={{ width: '100%', height: 'auto' }}>
+        {ticks.map((v) => (<g key={v}><line x1={L} x2={W - Rr} y1={y(v)} y2={y(v)} stroke="var(--grid)" strokeDasharray="2 4" /><text x={L - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fill="var(--ink3)">{lbl(v)}</text></g>))}
+        <path d={flatPath} fill="none" stroke="var(--s1)" strokeWidth={1.6} strokeDasharray="5 4" />
+        {compPath && <path d={compPath} fill="none" stroke="var(--s4)" strokeWidth={1.6} strokeDasharray="2 3" />}
+        <path d={actualPath} fill="none" stroke="var(--good)" strokeWidth={2.4} />
+        {actual.map((p, i) => <circle key={p.date} cx={x(i)} cy={y(p.accounts)} r={n > 120 ? 1.2 : 2} fill="var(--good)"><title>{`${p.date}: ${p.accounts.toLocaleString('en-ZA')} accounts (+${p.newAccounts})`}</title></circle>)}
+        <text x={x(off) + 4} y={y(last.accounts) - 6} fontSize="10" fontWeight="600" fill="var(--good)">{last.accounts.toLocaleString('en-ZA')} today</text>
+        <circle cx={planX} cy={planY} r={3.5} fill="none" stroke="var(--ink3)" strokeWidth={1.5}><title>{`Plan at ${t.horizon.label}: ${t.plan.ahead.accounts.toLocaleString('en-ZA')} accounts`}</title></circle>
+        <text x={planX - 6} y={planY - 7} textAnchor="end" fontSize="9" fill="var(--ink3)">plan {lbl(t.plan.ahead.accounts)}</text>
+        <text x={x(off + horizonDays) - 2} y={y(flat[flat.length - 1].v) - 6} textAnchor="end" fontSize="9" fill="var(--s1)">{lbl(flat[flat.length - 1].v)} at today's pace</text>
+        <text x={x(0)} y={H - 8} fontSize="9" fill="var(--ink3)">{actual[0].date}</text>
+        {n > 20 && <text x={x(Math.floor(n / 2))} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--ink3)">{mid.date}</text>}
+        <text x={x(off)} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--ink3)">today</text>
+        <text x={W - Rr} y={H - 8} textAnchor="end" fontSize="9" fill="var(--ink3)">{t.horizon.label}</text>
+      </svg>
+    </div>
   );
 }
 
-/* The valuation path: the plan's monthly curve against today's pace, both frames' floor included. */
-function ValuationPath({ t }) {
+/* The valuation path: the plan's monthly curve, the same model on the inputs measured so far, and today's pace held flat; hover any point. */
+function ValuationPath({ t, v }) {
   if (!t) return null;
   const planRows = simulate(preset('plan'), budgetFn(BUDGET_DEFAULT)).rows.slice(0, 13);
-  const months = planRows.map((r) => ({ m: r.m, plan: Math.max(r.valRev, r.valActive) }));
+  const measuredInputs = Object.fromEntries((v?.measuredUsed || []).map((u) => [u.key, u.value]));
+  const modelRows = Object.keys(measuredInputs).length ? simulate({ ...preset('plan'), ...measuredInputs }, budgetFn(BUDGET_DEFAULT)).rows.slice(0, 13) : null;
+  const worthOf = (r) => Math.max(r.valRev, r.valActive);
   // Today's pace held flat: the seven-day revenue rate as a month, funded-per-month as actives, the higher frame, never below the floor.
-  const paceAt = () => {
+  const pace = (() => {
     const revMonthRand = (t.perDay.revenueCents * 30) / 100;
     const actives = Math.max(t.now.actives, t.perDay.funded * 30);
     return Math.max(t.frames.floorRand, revMonthRand * 12 * t.frames.multiple, actives * t.frames.perActive);
-  };
-  const W = 560, H = 150, L = 48, Rr = 10, T = 10, B = 22;
-  const maxV = Math.max(...months.map((p) => p.plan), paceAt()) * 1.05;
-  const y = (v) => T + (H - T - B) * (1 - v / maxV);
+  })();
+  const W = 560, H = 170, L = 52, Rr = 14, T = 12, B = 24;
+  const maxV = Math.max(...planRows.map(worthOf), ...(modelRows || []).map(worthOf), pace) * 1.08;
+  const y = (val) => T + (H - T - B) * (1 - val / maxV);
   const x = (i) => L + ((W - L - Rr) * i) / 12;
-  const planPath = months.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.plan).toFixed(1)}`).join('');
-  const pacePath = months.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(paceAt()).toFixed(1)}`).join('');
+  const label = (m) => planRows[m - 1] ? `${t.now.label.split(' ')[1]}`.slice(0, 0) + monthLabel(m) : '';
+  function monthLabel(m) { const d = new Date(Date.UTC(2026, 9 + (m - 1), 1)); return d.toLocaleString('en-ZA', { month: 'short', year: '2-digit', timeZone: 'UTC' }); }
+  const path = (rows, f) => rows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(f(r)).toFixed(1)}`).join('');
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(maxV * f));
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" style={{ width: '100%', height: 'auto' }}>
-      {ticks.map((v) => (<g key={v}><line x1={L} x2={W - Rr} y1={y(v)} y2={y(v)} stroke="var(--grid)" strokeDasharray="2 4" /><text x={L - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fill="var(--ink3)">{fmtR(v)}</text></g>))}
-      <path d={planPath} fill="none" stroke="var(--ink3)" strokeWidth={1.5} strokeDasharray="5 4" />
-      <path d={pacePath} fill="none" stroke="var(--good)" strokeWidth={2.2} />
-      <circle cx={x(0)} cy={y(Math.max(t.now.valRev, t.now.valActive))} r={3} fill="var(--good)" />
-      <text x={x(0)} y={H - 6} fontSize="9" fill="var(--ink3)">{t.now.label}</text>
-      <text x={x(6)} y={H - 6} textAnchor="middle" fontSize="9" fill="var(--ink3)">{t.horizon.label}</text>
-      <text x={W - Rr} y={H - 6} textAnchor="end" fontSize="9" fill="var(--ink3)">month 13</text>
-    </svg>
+    <div>
+      <div className="note" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        <span><i style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dashed var(--ink3)', marginRight: 5, verticalAlign: 3 }} />the plan</span>
+        {modelRows && <span><i style={{ display: 'inline-block', width: 18, height: 3, background: 'var(--s1)', marginRight: 5, verticalAlign: 3 }} />model on measured inputs</span>}
+        <span><i style={{ display: 'inline-block', width: 18, height: 3, background: 'var(--good)', marginRight: 5, verticalAlign: 3 }} />today's pace</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" style={{ width: '100%', height: 'auto' }}>
+        {ticks.map((val) => (<g key={val}><line x1={L} x2={W - Rr} y1={y(val)} y2={y(val)} stroke="var(--grid)" strokeDasharray="2 4" /><text x={L - 6} y={y(val) + 3} textAnchor="end" fontSize="9" fill="var(--ink3)">{fmtR(val)}</text></g>))}
+        <path d={path(planRows, worthOf)} fill="none" stroke="var(--ink3)" strokeWidth={1.6} strokeDasharray="5 4" />
+        {planRows.map((r, i) => <circle key={`p${i}`} cx={x(i)} cy={y(worthOf(r))} r={2.5} fill="var(--ink3)"><title>{`Plan, ${monthLabel(r.m)}: ${fmtR(worthOf(r))} (${Math.round(r.cumOnb).toLocaleString('en-ZA')} accounts, ${Math.round(r.mau).toLocaleString('en-ZA')} actives, ${fmtR(Math.round(r.revenue))} a month)`}</title></circle>)}
+        {modelRows && <path d={path(modelRows, worthOf)} fill="none" stroke="var(--s1)" strokeWidth={2} />}
+        {modelRows && modelRows.map((r, i) => <circle key={`m${i}`} cx={x(i)} cy={y(worthOf(r))} r={2.5} fill="var(--s1)"><title>{`Model on measured inputs, ${monthLabel(r.m)}: ${fmtR(worthOf(r))} (${Math.round(r.cumOnb).toLocaleString('en-ZA')} accounts, ${Math.round(r.mau).toLocaleString('en-ZA')} actives, ${fmtR(Math.round(r.revenue))} a month)`}</title></circle>)}
+        <path d={planRows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(pace).toFixed(1)}`).join('')} fill="none" stroke="var(--good)" strokeWidth={2.4} />
+        {planRows.map((r, i) => <circle key={`t${i}`} cx={x(i)} cy={y(pace)} r={2.5} fill="var(--good)"><title>{`Today's pace, ${monthLabel(r.m)}: ${fmtR(pace)} (${i === 0 ? 'now: ' : ''}${t.now.accounts.toLocaleString('en-ZA')} accounts today, ${t.now.actives} actives, R${(t.now.revenueMonthCents / 100).toFixed(0)} a month; the floor until net revenue grows)`}</title></circle>)}
+        <text x={x(0)} y={H - 7} fontSize="9" fill="var(--ink3)">{monthLabel(1)}</text>
+        <text x={x(6)} y={H - 7} textAnchor="middle" fontSize="9" fill="var(--ink3)">{monthLabel(7)}</text>
+        <text x={W - Rr} y={H - 7} textAnchor="end" fontSize="9" fill="var(--ink3)">{monthLabel(13)}</text>
+      </svg>
+    </div>
+  );
+}
+
+/* The insight (founder 2026-10-19): the biggest finding, what to work on, the most promising figure, from the measured inputs and the plan. Rules, not a model. */
+const WORK_ON = {
+  payersPerLink: 'Get the links that exist paid: follow up every sender after a day, make "forward it" the only step, and make the payer page obvious on a phone.',
+  actToFund: 'Turn link-makers into funded accounts: the first paid link is the funding event, so the work is the same as getting links paid.',
+  selfLoad: 'Give people who never make a link a reason to add money: one thing they can do with a balance today.',
+  onbToAct: 'Get more new accounts to make their first link: the first-link prompt is the moment; test its wording and the example.',
+  payerToOnb: 'Turn payers into members: the thank-you after a payment is the invitation.',
+  convToOnb: 'Fewer drop-outs between the first message and the finished account: the code and PIN steps.',
+  cpConv: 'The ad is cheap per conversation; keep the budget where it is and spend the effort on what happens after the first message.',
+};
+function insightFrom(v, t) {
+  const used = v?.measuredUsed || [];
+  const stops = used.filter((u) => u.status === 'stop');
+  const greats = used.filter((u) => u.status === 'great');
+  const fmt = (u) => `${u.label} ${u.unit === '%' ? u.value + '%' : u.unit === 'R' ? 'R' + u.value : u.value} against a plan of ${u.unit === '%' ? u.plan + '%' : u.unit === 'R' ? 'R' + u.plan : u.plan}`;
+  const worst = stops[0] || null;
+  const best = greats[0] || null;
+  const finding = worst
+    ? `Biggest finding: ${fmt(worst)}${worst.early ? ' (an early read, the cohort is young)' : ''}.`
+    : used.length ? 'No measured input is below its stop line yet.' : 'Nothing measured yet; the plan stands as the only view.';
+  const work = worst ? (WORK_ON[worst.key] || 'Work on the step that input measures before anything else.') : 'Keep the pipe open and wait for the first two-week cohort.';
+  const promising = best ? `Most promising: ${fmt(best)}.` : t ? `Most promising: ${t.now.accounts.toLocaleString('en-ZA')} accounts against a plan of ${t.plan.toDate.accounts} by day ${t.dayOfLaunch}.` : '';
+  const gap = t ? `Accounts run at ${t.plan.toDate.accounts ? Math.round((t.now.accounts / t.plan.toDate.accounts) * 100) : '—'}% of the plan to date, funded accounts at ${t.plan.toDate.funded ? Math.round((t.now.funded / t.plan.toDate.funded) * 100) : '—'}%.` : '';
+  return { finding, work, promising, gap, worst, best, stops, greats };
+}
+function InsightBox({ v, t }) {
+  if (!v) return null;
+  const i = insightFrom(v, t);
+  const Chip = ({ tone, children }) => <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, border: `1px solid ${tone}`, color: tone, marginRight: 8, whiteSpace: 'nowrap' }}>{children}</span>;
+  return (
+    <div className="card" style={{ marginTop: 14, borderColor: i.worst ? 'var(--crit)' : 'var(--good)' }}>
+      <h2>Insight: what the numbers say today</h2>
+      <p style={{ margin: '6px 0' }}><Chip tone="var(--crit)">finding</Chip>{i.finding}</p>
+      <p style={{ margin: '6px 0' }}><Chip tone="var(--warn, #e3b341)">work on</Chip>{i.work}</p>
+      <p style={{ margin: '6px 0' }}><Chip tone="var(--good)">promising</Chip>{i.promising}</p>
+      {i.gap && <p className="note" style={{ margin: '6px 0 0' }}>{i.gap} Green = at or above the great line, yellow = on plan or too early, red = below the stop line, as the matrix measures them.</p>}
+      {(i.stops.length > 1 || i.greats.length > 1) && (
+        <p className="note" style={{ margin: '6px 0 0' }}>
+          {i.stops.length > 1 && <>Also below the stop line: {i.stops.slice(1).map((u) => u.label).join(', ')}. </>}
+          {i.greats.length > 1 && <>Also above the great line: {i.greats.slice(1).map((u) => u.label).join(', ')}.</>}
+        </p>
+      )}
+    </div>
   );
 }
 
 /* ---------------- The pay-out float tile and the live valuation matrix ---------------- */
 
-function FloatTile({ balancesCents }) {
+function FloatTile({ balancesCents, tick = 0 }) {
   const [f, setF] = useState(null);
   const [err, setErr] = useState(false);
   useEffect(() => {
     let cancelled = false;
+    setErr(false);
     fetch('/api/admin/floats')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d) => { if (!cancelled) setF(d); })
       .catch(() => { if (!cancelled) setErr(true); });
     return () => { cancelled = true; };
-  }, []);
+  }, [tick]);
   const row = (f?.floats || []).find((x) => /payout/i.test(String(x.key || '')) || /pay-?out/i.test(String(x.name || '')));
   const cents = row?.api?.availableCents ?? null;
   const cover = cents != null && balancesCents > 0 ? Math.round((10 * cents) / balancesCents) / 10 : null;
@@ -1171,14 +1239,15 @@ function LiveValuation({ g: given = null, compact = false, minSample = null, tic
         <div className="card">
           <h2>The path: accounts, actual and at today's pace</h2>
           <p className="note">Cumulative accounts since launch (solid), today's seven-day pace carried forward (dashed), compounding once two full weeks exist (dotted), the plan's point at the horizon (ring). Log scale.</p>
-          {g === false ? <div className="empty">Could not load.</div> : !t ? <div className="empty">Measuring…</div> : <PathChart daily={g.daily} t={t} />}
+          {g === false ? <div className="empty">Could not load.</div> : !t ? <div className="empty">Measuring…</div> : <PathChart series={g.pathSeries} t={t} />}
         </div>
         <div className="card">
           <h2>Valuation: plan against today's pace</h2>
           <p className="note">The plan's month-by-month valuation (dashed) against today's pace held flat (solid), the higher of the two frames, never below the floor.</p>
-          {g === false ? <div className="empty">Could not load.</div> : !t ? <div className="empty">Measuring…</div> : <ValuationPath t={t} />}
+          {g === false ? <div className="empty">Could not load.</div> : !t ? <div className="empty">Measuring…</div> : <ValuationPath t={t} v={v} />}
         </div>
       </div>
+      <InsightBox v={v} t={t} />
       <div className="card" style={{ marginTop: 14 }}>
         <h2>The plan, where we are, and where today's pace leads</h2>
         <p className="note">The plan is the 13 September assessment (model month 1 = October 2026; launch day 1 = 18 October). Now is live. The trajectory takes the last seven days as a daily rate and holds it for six months; once two full weeks exist it also compounds at the measured weekly growth. Valuations use the plan's two frames and its floor.</p>
@@ -1540,8 +1609,8 @@ function ReplyBox({ accountId, name }) {
   );
 }
 
-function Customer() {
-  const [q, setQ] = useState('');
+function Customer({ initialQuery = '' }) {
+  const [q, setQ] = useState(initialQuery || '');
   const [c, setC] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1562,6 +1631,8 @@ function Customer() {
     } catch { setListErr('Could not load the customer list.'); }
   }, []);
   useEffect(() => { loadList(''); }, [loadList]);
+  const openedInitial = useRef(false);
+  useEffect(() => { if (initialQuery && !openedInitial.current) { openedInitial.current = true; openCustomer(initialQuery); } }, [initialQuery, openCustomer]);
 
   const openCustomer = useCallback(async (msisdn) => {
     setBusy(true); setErr(''); setC(null); setKycMsg('');
@@ -1622,7 +1693,7 @@ function Customer() {
               <tbody>
                 {list.customers.map((cu) => (
                   <tr key={cu.id} onClick={() => openCustomer(cu.msisdn)} style={{ cursor: 'pointer' }} title="Open this customer">
-                    <td>{cu.displayName || <span style={{ color: 'var(--ink3)' }}>—</span>}</td>
+                    <td>{cu.displayName || <span style={{ color: 'var(--ink3)' }}>—</span>} <a href={`/admin?tab=customer&customer=${encodeURIComponent(cu.msisdn)}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} title="Open on its own page" style={{ marginLeft: 6, fontSize: 11 }}>↗</a></td>
                     <td>{cu.msisdn}</td>
                     <td className="n">{R(cu.availableCents)}</td>
                     <td><span className={`pill ${cu.kycStatus === 'VERIFIED' ? 'g' : cu.kycStatus === 'NOT_VERIFIED' ? 'r' : 'y'}`}>{cu.kycStatus.replace('_', ' ')}</span></td>
@@ -1684,6 +1755,10 @@ function Customer() {
             </div>
           </div>
           <div className="card" style={{ marginTop: 14 }}>
+            <h2>Conversation and support <span className="note" style={{ display: 'inline', fontWeight: 400 }}>· everything they asked WaPay, and what WaPay and the team said</span></h2>
+            <ConversationCard accountId={c.account.id} />
+          </div>
+          <div className="card" style={{ marginTop: 14 }}>
             <h2>Everything they've bought &amp; moved</h2>
             <p className="note">Last 40 wallet postings, newest first — the double-entry truth.</p>
             <div style={{ overflowX: 'auto' }}>
@@ -1742,11 +1817,273 @@ function Customer() {
   );
 }
 
+/* ---------------- Health, Supplier Floats, the Inbox and the conversation card (founder 2026-10-19) ---------------- */
+
+function useMetrics(range = '30', tick = 0) {
+  const [m, setM] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/admin/metrics?range=${range}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setM(d); })
+      .catch(() => { if (!cancelled) setErr('Could not load metrics.'); });
+    return () => { cancelled = true; };
+  }, [range, tick]);
+  return [m, err];
+}
+
+function Health() {
+  const [tick, setTick] = useState(0);
+  const [m, err] = useMetrics('30', tick);
+  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), REFRESH_MS); return () => clearInterval(id); }, []);
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+        <button className="linkish" onClick={() => setTick((t) => t + 1)}>↻ Refresh</button>
+        <span className="note" style={{ margin: 0 }}>{m ? `generated ${dt(m.generatedAt)}` : ''} · refreshes itself every 10 minutes</span>
+      </div>
+      <div className="card">
+        <h2>Money-engine health</h2>
+        <p className="note">If any of these is red, treat every number on the Dashboard as suspect until it is fixed.</p>
+        {err ? <div className="empty">{err}</div> : !m ? <div className="empty">Checking…</div> : <OpsHealth ops={m.ops} />}
+      </div>
+      <AuditPanel tick={tick} />
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Conversations and the Pay agent</h2>
+        <p className="note">Both sides of every chat, what the agent answered behind the shadow list, what it cost, which output gates fired, and any pay-out still parked with the bank rail.</p>
+        <Conversations />
+      </div>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Pay-out reconciliation</h2>
+        <p className="note">What WaPay owes its customers, what is held for pay-outs, what the journal says was paid out, and whether every pay-out's three records agree. Red means a customer or the float is out of pocket until someone looks.</p>
+        <PayoutBooks />
+      </div>
+    </>
+  );
+}
+
+/* The daily conversation audit (built alongside this tab; reads /api/admin/audit when it exists). */
+function AuditPanel({ tick = 0 }) {
+  const [a, setA] = useState(null);
+  const [state, setState] = useState('loading');
+  useEffect(() => {
+    let cancelled = false;
+    setState('loading');
+    fetch('/api/admin/audit')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) { setA(d); setState('ok'); } })
+      .catch((e) => { if (!cancelled) setState(String(e?.message) === '404' ? 'absent' : 'error'); });
+    return () => { cancelled = true; };
+  }, [tick]);
+  const sevTone = (sev) => (sev === 'P1' ? 'var(--crit)' : sev === 'P2' ? 'var(--warn, #e3b341)' : 'var(--ink3)');
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <h2>Conversation audit, daily</h2>
+      <p className="note">Every new conversation is swept and reviewed against what is true today, findings are stored with their recurrence, and the bugs found, open and resolved are counted over time. The checker reads the live product registry, so a feature launch updates it.</p>
+      {state === 'loading' && <div className="empty">Reading…</div>}
+      {state === 'absent' && <div className="empty">The daily audit is being built; its first run will appear here.</div>}
+      {state === 'error' && <div className="empty">Could not read the audit.</div>}
+      {state === 'ok' && a && (
+        <>
+          <div className="grid kpis">
+            {[
+              ['Open', n0(a.counts?.open), a.latestRun ? `latest run ${dt(a.latestRun.finishedAt || a.latestRun.startedAt)}` : 'no run yet'],
+              ['Recurring', n0(a.counts?.recurring), 'seen in two or more runs'],
+              ['Resolved', n0(a.counts?.resolved), 'gone for two runs or marked by hand'],
+              ['Latest run', a.latestRun ? `${n0(a.latestRun.findings?.P1)} · ${n0(a.latestRun.findings?.P2)} · ${n0(a.latestRun.findings?.P3)}` : '—', a.latestRun ? `P1 · P2 · P3 over ${n0(a.latestRun.accounts)} accounts, ${n0(a.latestRun.turns)} turns${a.latestRun.reviewed ? '' : ' (rules only, no model review)'}` : ''],
+            ].map(([k, val, sub]) => (<div className="card" key={k}><div className="k">{k}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>))}
+          </div>
+          {a.trend?.length > 1 && (
+            <div style={{ marginTop: 10 }}>
+              <div className="k">Bugs found, resolved and open, per run</div>
+              <DailyLines rows={a.trend} series={[{ key: 'found', name: 'Found', color: 'var(--crit)' }, { key: 'resolved', name: 'Resolved', color: 'var(--good)' }, { key: 'open', name: 'Open', color: 'var(--s1)' }]} />
+            </div>
+          )}
+          {a.recurring?.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div className="k">Recurring</div>
+              <ul className="note" style={{ margin: '6px 0 0', paddingLeft: 18 }}>{a.recurring.slice(0, 10).map((f) => <li key={f.fingerprint}><b style={{ color: sevTone(f.severity) }}>{f.severity}</b> {f.title} · {n0(f.occurrences)} times</li>)}</ul>
+            </div>
+          )}
+          {a.findings?.length > 0 && (
+            <div style={{ overflowX: 'auto', marginTop: 10 }}>
+              <table>
+                <thead><tr><th>Sev</th><th>Category</th><th>Finding</th><th className="n">Accounts</th><th className="n">Seen</th><th>Status</th></tr></thead>
+                <tbody>{a.findings.slice(0, 60).map((f) => (
+                  <tr key={f.id || f.fingerprint}><td><b style={{ color: sevTone(f.severity) }}>{f.severity}</b></td><td className="note" style={{ margin: 0 }}>{f.category}</td><td title={f.why || ''}>{f.title}</td><td className="n">{n0(f.accounts)}</td><td className="n">{n0(f.occurrences)}</td><td><span className={`pill ${f.status === 'resolved' ? 'g' : f.status === 'recurring' ? 'r' : 'y'}`}>{f.status}</span></td></tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+          {!a.findings?.length && <div className="empty">No findings stored yet.</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
+function FloatsTab() {
+  const [tick, setTick] = useState(0);
+  const [m] = useMetrics('30', tick);
+  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), REFRESH_MS); return () => clearInterval(id); }, []);
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+        <button className="linkish" onClick={() => setTick((t) => t + 1)}>↻ Refresh</button>
+        <span className="note" style={{ margin: 0 }}>live supplier reads are cached for about a minute · refreshes itself every 10 minutes</span>
+      </div>
+      <div className="grid kpis">
+        <FloatTile balancesCents={m?.vitals?.balancesCents ?? m?.vitals?.floatCents ?? 0} tick={tick} />
+        <div className="card"><div className="k">Customer balances</div><div className="v">{m ? R(m.vitals?.balancesCents ?? m.vitals?.floatCents) : '…'}</div><div className="vs">what the pay-out float must cover</div></div>
+      </div>
+      <div className="card" style={{ marginTop: 14 }} key={`floats-${tick}`}>
+        <h2>Supplier floats</h2>
+        <p className="note">Prepaid balances at each counterparty, next to what the ledger believes. Top up before a low float fails a vend.</p>
+        <Floats />
+      </div>
+      <div className="card" style={{ marginTop: 14 }} key={`fuel-${tick}`}>
+        <h2>UniFuel / wiCode</h2>
+        <p className="note">WaPay-originated fuel voucher issuance and redemptions, via the UniFuel service.</p>
+        <UniFuelPanel />
+      </div>
+    </>
+  );
+}
+
+/* One customer's conversation: the flags an operator needs, the questions they asked, and both sides of the chat. */
+function ConversationCard({ accountId, tick = 0, compact = false }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  const [onlyQuestions, setOnlyQuestions] = useState(false);
+  useEffect(() => {
+    if (!accountId) return undefined;
+    let cancelled = false;
+    setErr(''); setD(null);
+    fetch(`/api/admin/customer-turns?id=${encodeURIComponent(accountId)}&limit=300`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j) => { if (!cancelled) setD(j); })
+      .catch(() => { if (!cancelled) setErr('Could not load the conversation.'); });
+    return () => { cancelled = true; };
+  }, [accountId, tick]);
+  if (err) return <div className="empty">{err}</div>;
+  if (!d) return <div className="empty">Loading the conversation…</div>;
+  const flags = [
+    d.unanswered && ['unanswered', 'var(--crit)'],
+    d.closeAsk && ['asked to close the account', 'var(--crit)'],
+    d.personAsked && ['a person was asked', 'var(--warn, #e3b341)'],
+    d.gateTier != null && [`gate tier ${d.gateTier}`, d.gateTier >= 2 ? 'var(--crit)' : 'var(--ink3)'],
+    d.opsReplies > 0 && [`${d.opsReplies} ${d.opsReplies === 1 ? 'reply' : 'replies'} from a person`, 'var(--good)'],
+  ].filter(Boolean);
+  const turns = onlyQuestions ? d.turns.filter((t) => t.role === 'user' && d.questions.some((q) => q.at === t.at)) : d.turns;
+  const who = (t) => (t.role === 'user' ? 'Customer' : t.kind === 'ops' ? 'WaPay team' : t.role === 'assistant' ? `WaPay${t.kind ? ` (${t.kind})` : ''}` : `Event${t.kind ? ` (${t.kind})` : ''}`);
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span className="note" style={{ margin: 0 }}>{d.counts.user} from them · {d.counts.bot} from WaPay · last message {d.lastUserAt ? dt(d.lastUserAt) : '—'}</span>
+        {flags.map(([label, tone]) => <span key={label} style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, border: `1px solid ${tone}`, color: tone }}>{label}</span>)}
+        <span className="spacer" />
+        <button className="linkish" onClick={() => setOnlyQuestions((q) => !q)}>{onlyQuestions ? 'Show everything' : `Questions only (${d.questions.length})`}</button>
+      </div>
+      <div style={{ maxHeight: compact ? 360 : 560, overflowY: 'auto', marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {turns.length === 0 && <div className="empty">Nothing here yet.</div>}
+        {turns.map((t) => (
+          <div key={t.id || t.at + t.role} style={{ alignSelf: t.role === 'user' ? 'flex-start' : 'flex-end', maxWidth: '82%', padding: '8px 11px', borderRadius: 12, background: t.role === 'user' ? 'var(--glass)' : t.kind === 'ops' ? 'var(--accent-soft)' : 'rgba(53,152,83,.10)', border: '1px solid var(--glass-edge)' }}>
+            <div className="note" style={{ margin: '0 0 3px', fontSize: 10.5 }}>{who(t)} · {dt(t.at)}</div>
+            <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: 'var(--ink)' }}>{t.text}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Inbox() {
+  const [days, setDays] = useState('7');
+  const [tick, setTick] = useState(0);
+  const [items, setItems] = useState(null);
+  const [err, setErr] = useState('');
+  const [sel, setSel] = useState(null);
+  const [filter, setFilter] = useState('all');
+  useEffect(() => {
+    let cancelled = false;
+    setErr('');
+    fetch(`/api/admin/inbox?days=${days}&limit=150`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setItems(d.items || []); })
+      .catch(() => { if (!cancelled) setErr('Could not load the inbox.'); });
+    return () => { cancelled = true; };
+  }, [days, tick]);
+  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), REFRESH_MS); return () => clearInterval(id); }, []);
+  const shown = (items || []).filter((i) => filter === 'all' || (filter === 'person' && i.needsPerson) || (filter === 'unanswered' && i.unanswered) || (filter === 'replied' && i.opsReplies > 0));
+  const selected = (items || []).find((i) => i.accountId === sel) || null;
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="tabs">{['1', '7', '30'].map((d) => <button key={d} className={days === d ? 'on' : ''} onClick={() => setDays(d)}>{d}d</button>)}</div>
+        <div className="tabs">{[['all', 'All'], ['person', 'Needs a person'], ['unanswered', 'Unanswered'], ['replied', 'Replied by us']].map(([k, l]) => <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{l}</button>)}</div>
+        <button className="linkish" onClick={() => setTick((t) => t + 1)}>↻ Refresh</button>
+        <span className="note" style={{ margin: 0 }}>customers who wrote in the window, newest first · refreshes itself every 10 minutes</span>
+      </div>
+      {err && <div className="card"><div className="empty">{err}</div></div>}
+      <div className="grid two">
+        <div className="card">
+          <h2>Conversations {items ? <span className="note" style={{ display: 'inline', fontWeight: 400 }}>· {shown.length} shown</span> : null}</h2>
+          {!items && !err && <div className="empty">Loading…</div>}
+          {items && !shown.length && <div className="empty">Nothing in this window.</div>}
+          <div style={{ maxHeight: 640, overflowY: 'auto' }}>
+            {shown.map((i) => (
+              <div key={i.accountId} onClick={() => setSel(i.accountId)} style={{ cursor: 'pointer', padding: '9px 10px', borderRadius: 10, marginBottom: 6, background: sel === i.accountId ? 'var(--accent-soft)' : 'var(--glass)', border: '1px solid var(--glass-edge)' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                  <b style={{ color: 'var(--ink)' }}>{i.displayName || 'Customer'}</b>
+                  <span className="note" style={{ margin: 0 }}>{i.msisdn ? `…${String(i.msisdn).slice(-4)}` : ''} · {i.state === 'S5_COMPLETED' ? 'account' : 'signing up'} · {i.source}</span>
+                  <span className="spacer" />
+                  <span className="note" style={{ margin: 0 }}>{i.lastUserAt ? dt(i.lastUserAt) : ''}</span>
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--ink2)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.lastUserText || ''}</div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
+                  {i.unanswered && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--crit)' }}>unanswered</span>}
+                  {i.closeAsk && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--crit)' }}>close account</span>}
+                  {i.personAsked && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--warn, #e3b341)' }}>person asked</span>}
+                  {i.gateTier != null && i.gateTier >= 2 && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--crit)' }}>gate tier {i.gateTier}</span>}
+                  {i.opsReplies > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--good)' }}>replied</span>}
+                  {i.questions?.length > 0 && <span className="note" style={{ margin: 0, fontSize: 10.5 }}>{i.questions.length} question{i.questions.length === 1 ? '' : 's'}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          {!selected && <div className="empty">Pick a conversation to read it and reply.</div>}
+          {selected && (
+            <>
+              <h2>{selected.displayName || 'Customer'} <span className="note" style={{ display: 'inline', fontWeight: 400 }}>· {selected.msisdn} · <a href={`/admin?tab=customer&customer=${encodeURIComponent(selected.msisdn || '')}`} target="_blank" rel="noopener noreferrer">open profile ↗</a></span></h2>
+              <ConversationCard accountId={selected.accountId} tick={tick} compact />
+              <ReplyBox accountId={selected.accountId} name={selected.displayName} />
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+const TABS = [['dashboard', 'Dashboard'], ['growth', 'Valuation Metrics'], ['inbox', 'Inbox'], ['customer', 'Customers'], ['health', 'Health'], ['floats', 'Supplier Floats']];
+
 export default function Admin() {
   const [authed, setAuthed] = useState(null);
   const [configured, setConfigured] = useState(true);
   const [passwordLogin, setPasswordLogin] = useState(false);
   const [tab, setTab] = useState('dashboard');
+  const [initialCustomer, setInitialCustomer] = useState('');
+  // Deep links (founder 2026-10-19): /admin?tab=customer&customer=27… opens one customer on its own page.
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const t = q.get('tab'); if (t && TABS.some(([k]) => k === t)) setTab(t);
+      const c = q.get('customer'); if (c) { setInitialCustomer(c); setTab('customer'); }
+    } catch {}
+  }, []);
   const probe = useCallback(() => {
     fetch('/api/admin/auth').then((r) => r.json()).then((s) => {
       setAuthed(s.authed); setConfigured(s.configured); setPasswordLogin(!!s.passwordLogin);
@@ -1776,9 +2113,7 @@ export default function Admin() {
         {authed && (
           <>
             <div className="tabs">
-              <button className={tab === 'dashboard' ? 'on' : ''} onClick={() => setTab('dashboard')}>Dashboard</button>
-              <button className={tab === 'growth' ? 'on' : ''} onClick={() => setTab('growth')}>Growth</button>
-              <button className={tab === 'customer' ? 'on' : ''} onClick={() => setTab('customer')}>Customers</button>
+              {TABS.map(([k, label]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>)}
             </div>
             <button className="linkish" onClick={async () => {
               await fetch('/api/admin/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) });
@@ -1789,7 +2124,9 @@ export default function Admin() {
       </header>
       {authed === null && <div className="card"><div className="empty">…</div></div>}
       {authed === false && <Login configured={configured} passwordLogin={passwordLogin} onDone={probe} />}
-      {authed === true && (tab === 'dashboard' ? <Dashboard /> : tab === 'growth' ? <Growth /> : <Customer />)}
+      {authed === true && (
+        tab === 'dashboard' ? <Dashboard /> : tab === 'growth' ? <Growth /> : tab === 'inbox' ? <Inbox /> : tab === 'health' ? <Health /> : tab === 'floats' ? <FloatsTab /> : <Customer initialQuery={initialCustomer} />
+      )}
     </div>
   );
 }

@@ -79,7 +79,7 @@ test('the growth route returns the matrix and the admin page renders it on both 
   assert.match(page, /\['Customer balances', R\(v\.balancesCents \?\? v\.floatCents\)/);
   assert.ok(!page.includes("['Wallet float'"), 'the liability is no longer called a float');
   assert.match(page, /<FloatTile balancesCents=/);
-  assert.match(page, /\['Money in today', R\(v\.today\?\.moneyInCents\)/);
+  assert.match(page, /\[`Money in, \$\{label\}`, R\(p\?\.moneyInCents\)/, 'the money tiles follow the selected period');
   const metrics = read('../pages/api/admin/metrics.js');
   assert.match(metrics, /accounts,\s*linked,\s*funded,/);
   assert.match(metrics, /balancesCents: floatCents,/);

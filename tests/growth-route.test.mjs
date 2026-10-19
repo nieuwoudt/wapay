@@ -56,7 +56,7 @@ test('the referral travels webhook → processor → getOrCreateUser, and the gr
 });
 
 test('Mission Control: the Growth tab exists and the cron carries the growth steps', () => {
-  assert.match(page, /setTab\('growth'\)/);
+  assert.match(page, /\['growth', 'Valuation Metrics'\]/, 'the tab is called Valuation Metrics since 2026-10-19');
   assert.match(page, /function Growth\(\)/);
   assert.match(page, /\/api\/admin\/growth\?range=/);
   assert.match(cron, /snapshotAdInsights\(\{ prisma, days: 3 \}\)/);

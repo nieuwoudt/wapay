@@ -254,3 +254,27 @@ to be reachable). It is not a bulk rail: one account per call, the account id mu
 - **Flags** (`GET /api/internal/flags`, internal key): commit, business question, launch hold,
   every switch, fuel, withdrawals, ops-alert recipient count, business invites. Use it to
   verify a Vercel env change after the redeploy.
+
+## 10. Six tabs, the inbox and the conversation on every profile (2026-10-19, CHANGELOG 100)
+
+- **Tabs:** `TABS` in `pages/admin/index.js`; `?tab=` and `?customer=` deep links; the Growth
+  tab is called Valuation Metrics. Health carries `OpsHealth`, `AuditPanel` (reads
+  `/api/admin/audit`, shows "being built" until the daily audit's first run), the agent card and
+  `PayoutBooks`; Supplier Floats carries `FloatTile`, `Floats` and `UniFuelPanel`.
+- **Refresh:** every tab's ↻ bumps a `tick` that re-runs its fetches; the ten-minute interval does
+  the same; `FloatTile` takes the tick so the live supplier read (cached about a minute server-side)
+  is re-read too.
+- **Period tiles:** `vitals.period` in `/api/admin/metrics` carries money in, pay-outs and links
+  paid since the range start; the 1-day range shows `vitals.today` (South African day).
+- **Links over time:** `links.daily` (per day: created, paid, open at the end of the day, and the
+  cumulative fee outlook: card fee, PayShap pay-out fees, cash pay-out fees over every link made
+  so far). The page draws two `DailyLines` from it.
+- **The path:** `pathSeries` is all time (cumulative accounts per day from the first onboarding);
+  `PathChart` is linear with the pace projection and the plan point. `ValuationPath` adds the
+  measured-inputs curve (`simulate` on `measuredUsed`) and hover titles. `InsightBox` is rules,
+  not a model: `insightFrom(v, t)`.
+- **Inbox and conversations:** `summariseTurns` (`lib/inbox.js`) derives unanswered (last turn is
+  theirs and older than ten minutes), gate tier and person-asked from the stored `refs`, close
+  asks from the matcher, replies from kind `ops`, and the questions (a question mark or a question
+  word). `/api/admin/inbox` reads at most 300 customers and their last day of context;
+  `/api/admin/customer-turns` reads up to 1,000 turns of one account. Neither logs text.

@@ -35,7 +35,7 @@ const SELLING_LABELS = {
 
 export const config = { maxDuration: 55 };
 
-const RANGES = { '7': 7, '30': 30, '90': 90, all: 3650 };
+const RANGES = { '1': 1, '7': 7, '30': 30, '90': 90, all: 3650 };
 
 async function safe(fn, fallback = null) {
   try {
@@ -154,7 +154,7 @@ export default async function handler(req, res) {
   // then withdrawn by PayShap. Fees from the live schedule; rail costs from docs/COMMERCIALS.md.
   const links = await safe(async () => {
     const rows = await prisma.$queryRaw`
-      SELECT status, "amountCents", "payerRef", ("expiresAt" <= now()) AS expired, ("createdAt" >= ${since}) AS in_range
+      SELECT status, "amountCents", "payerRef", ("expiresAt" <= now()) AS expired, ("createdAt" >= ${since}) AS in_range, "createdAt", "paidAt"
       FROM "payment_requests"`;
     const fee = (c) => { try { return paymentRequestFeeCents(Number(c)); } catch { return 0; } };
     const cardCost = (c) => Math.round((Number(c) * 0.032 + 200) * 1.15); // PayFast credit card, R2.00 + 3.2% ex VAT (COMMERCIALS: Getting paid)
@@ -168,7 +168,31 @@ export default async function handler(req, res) {
     const inRange = all.filter((r) => r.in_range);
     const openFee = sum(open, (r) => fee(r.amountCents));
     const openMargin = sum(open, (r) => Math.max(0, fee(r.amountCents) - (fee(r.amountCents) > 0 ? cardCost(r.amountCents) : 0)));
+    // Over time (founder 2026-10-19: "a graph of how that number is growing"): per day in the period, links
+    // created and paid, the open count at the end of each day, and the fee outlook of everything created so
+    // far if paid by card and then paid out by PayShap or as cash at an Absa or Nedbank ATM.
+    const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
+    const firstDay = all.length ? all.reduce((a, r) => (r.createdAt < a ? r.createdAt : a), all[0].createdAt) : new Date();
+    const start = new Date(Math.max(new Date(firstDay).getTime(), since.getTime()));
+    const series = [];
+    for (let d = new Date(dayKey(start) + 'T00:00:00Z'); d.getTime() <= Date.now(); d = new Date(d.getTime() + 86400000)) {
+      const k = dayKey(d); const end = new Date(d.getTime() + 86400000);
+      const createdToday = all.filter((r) => dayKey(r.createdAt) === k);
+      const paidToday = all.filter((r) => r.paidAt && dayKey(r.paidAt) === k);
+      const createdSoFar = all.filter((r) => new Date(r.createdAt) < end);
+      const openAtEnd = createdSoFar.filter((r) => !(r.paidAt && new Date(r.paidAt) < end) && !(r.status === 'EXPIRED' || r.status === 'CANCELLED') && new Date(r.createdAt).getTime() + 7 * 86400000 > end.getTime());
+      series.push({
+        date: k,
+        created: createdToday.length, createdCents: sum(createdToday, (r) => Number(r.amountCents)),
+        paid: paidToday.length, paidCents: sum(paidToday, (r) => Number(r.amountCents)),
+        open: openAtEnd.length, openCents: sum(openAtEnd, (r) => Number(r.amountCents)),
+        cardFeeCents: sum(createdSoFar, (r) => fee(r.amountCents)),
+        payshapFeeCents: createdSoFar.length * PAYSHAP_FEE_CENTS,
+        cashFeeCents: sum(createdSoFar, (r) => cashoutFeeCents('CASHSEND', Number(r.amountCents))),
+      });
+    }
     return {
+      daily: series,
       created: { n: all.length, cents: sum(all, (r) => Number(r.amountCents)) },
       createdInRange: { n: inRange.length, cents: sum(inRange, (r) => Number(r.amountCents)) },
       paid: { n: paid.length, cents: sum(paid, (r) => Number(r.amountCents)), fromBalance: paidBalance.length, byCard: paidCard.length },
@@ -189,6 +213,23 @@ export default async function handler(req, res) {
       FROM "Account" WHERE "profile"->>'acquisitionSource' = 'paylink'`;
     const r = rows?.[0] || {};
     return { accountsFromLinks: Number(r.onboarded || 0), contactsFromLinks: Number(r.contacts || 0), sendersWhoBroughtAccounts: Number(r.referrers || 0) };
+  });
+  // The same three money figures over the selected period (founder 2026-10-19: the tiles must follow the range).
+  const period = await safe(async () => {
+    const [inRows, outRows, paidRows] = await Promise.all([
+      prisma.$queryRaw`SELECT count(DISTINCT je.id)::int AS n, coalesce(sum(jl."creditCents"), 0)::int AS cents
+                       FROM "JournalLine" jl JOIN "JournalEntry" je ON je.id = jl."entryId"
+                       WHERE je.source LIKE 'LOAD_%' AND jl."accountCode" LIKE 'WALLET:%' AND jl."creditCents" > 0 AND je."createdAt" >= ${since}`,
+      prisma.$queryRaw`SELECT count(*)::int AS n, coalesce(sum((metadata->>'amountCents')::int), 0)::int AS cents FROM "ProviderRequest"
+                       WHERE route = 'ott-payout' AND status = 'SUCCESS' AND "requestTs" >= ${since}`,
+      prisma.$queryRaw`SELECT count(*)::int AS n, coalesce(sum("amountCents"), 0)::int AS cents FROM "payment_requests" WHERE status = 'PAID' AND "paidAt" >= ${since}`,
+    ]);
+    return {
+      days,
+      moneyInCents: Number(inRows?.[0]?.cents || 0), moneyInCount: Number(inRows?.[0]?.n || 0),
+      payoutsCents: Number(outRows?.[0]?.cents || 0), payoutsCount: Number(outRows?.[0]?.n || 0),
+      linksPaidCents: Number(paidRows?.[0]?.cents || 0), linksPaidCount: Number(paidRows?.[0]?.n || 0),
+    };
   });
   // Today's money, South African day: in from outside, out to the rail, and what is waiting to be paid.
   const dayStart = sastDayStart(new Date());
@@ -272,13 +313,18 @@ export default async function handler(req, res) {
       JOIN "JournalLine" jl ON jl."entryId" = je.id AND jl."accountCode" LIKE 'WALLET:%'
       WHERE je."createdAt" > ${since} AND jl."debitCents" > 0
       GROUP BY 1 ORDER BY 2 DESC`;
-    return rows
+    const lines = rows
       .filter((r) => SELLING_LABELS[r.source])
       .map((r) => ({
         category: SELLING_LABELS[r.source],
         cents: typeof r.cents === 'bigint' ? Number(r.cents) : Number(r.cents || 0),
         count: r.n,
       }));
+    // Please-pay-me links are a product too (founder 2026-10-19): the paid ones, by value, in the period.
+    const paidLinks = await prisma.$queryRaw`SELECT count(*)::int AS n, coalesce(sum("amountCents"), 0)::bigint AS cents FROM "payment_requests" WHERE status = 'PAID' AND "paidAt" >= ${since}`;
+    const pl = paidLinks?.[0];
+    if (pl && Number(pl.n) > 0) lines.push({ category: 'Please-pay-me links paid', cents: Number(pl.cents), count: Number(pl.n) });
+    return lines.sort((a, b) => b.cents - a.cents);
   }, []);
 
   // MONEY-ENGINE HEALTH — the tripwires that say whether the numbers above
@@ -372,6 +418,7 @@ export default async function handler(req, res) {
       balancesCents: floatCents,
       walletsAbove20: today?.walletsAbove20 ?? null,
       today,
+      period,
       takeRatePct: gmvCents > 0 ? Math.round((10000 * revenueCents) / gmvCents) / 100 : null,
       activeHolds: holds,
       walletCount: wallets?._count ?? null,

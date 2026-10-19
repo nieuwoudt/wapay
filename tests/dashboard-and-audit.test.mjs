@@ -73,9 +73,9 @@ test('Mission Control: the links card, the path and valuation charts, the ten-mi
   assert.match(page, /\['If every open link is paid by card', R\(l\.ifOpenPaidByCard\.feeCents\)/);
   assert.match(page, /\['If each is then paid out by PayShap', R\(l\.ifThenPaidOut\.feeCents\)/);
   assert.match(page, /\['Accounts from payment links', n0\(vl\.accountsFromLinks\)/);
-  assert.match(page, /function PathChart\(\{ daily, t \}\)/); assert.match(page, /Math\.log10/, 'the path is on a log scale');
-  assert.match(page, /function ValuationPath\(\{ t \}\)/); assert.match(page, /simulate\(preset\('plan'\), budgetFn\(BUDGET_DEFAULT\)\)\.rows\.slice\(0, 13\)/);
-  assert.match(page, /<PathChart daily=\{g\.daily\} t=\{t\} \/>/); assert.match(page, /<ValuationPath t=\{t\} \/>/);
+  assert.match(page, /function PathChart\(\{ series, t \}\)/); assert.ok(!/Math\.log10/.test(page), 'the path is linear and all time now');
+  assert.match(page, /function ValuationPath\(\{ t, v \}\)/); assert.match(page, /simulate\(preset\('plan'\), budgetFn\(BUDGET_DEFAULT\)\)\.rows\.slice\(0, 13\)/); assert.match(page, /simulate\(\{ \.\.\.preset\('plan'\), \.\.\.measuredInputs \}, budgetFn\(BUDGET_DEFAULT\)\)/, 'the measured-inputs curve runs the same model');
+  assert.match(page, /<PathChart series=\{g\.pathSeries\} t=\{t\} \/>/); assert.match(page, /<ValuationPath t=\{t\} v=\{v\} \/>/); assert.match(page, /<InsightBox v=\{v\} t=\{t\} \/>/);
   assert.match(page, /function ReplyBox\(\{ accountId, name \}\)/); assert.match(page, /fetch\('\/api\/admin\/ops-reply', \{ method: 'POST'/);
   assert.match(page, /<ReplyBox accountId=\{c\.account\.id\} name=\{c\.account\.displayName\} \/>/);
   assert.match(page, /slice\(0, 1500\)/, 'the box caps at the route limit');

@@ -307,6 +307,19 @@ export default async function handler(req, res) {
     if (inWindow(a.firstFundedAt)) dayRow(day(a.firstFundedAt)).funded += 1;
   }
   const daily = [...dayMap.values()].sort((x, y) => (x.date < y.date ? -1 : 1)).slice(-Math.min(days, 120));
+  // The path, all time (founder 2026-10-19): cumulative accounts per day from the first one ever to today.
+  const pathSeries = (() => {
+    const byDay = new Map();
+    for (const a of rows) if (a.onboarded && a.onboardedAt) { const k = day(a.onboardedAt); byDay.set(k, (byDay.get(k) || 0) + 1); }
+    const keys = [...byDay.keys()].sort();
+    if (!keys.length) return [];
+    const out = []; let cum = 0;
+    for (let d = new Date(keys[0] + 'T00:00:00Z'); d.getTime() <= now.getTime(); d = new Date(d.getTime() + DAY_MS)) {
+      const k = d.toISOString().slice(0, 10); const n = byDay.get(k) || 0; cum += n;
+      out.push({ date: k, accounts: cum, newAccounts: n });
+    }
+    return out;
+  })();
 
   // ---- which tapped question brought them in (ad arrivals) ----
   const ENTRY_LABELS = { Q1: 'Open my WaPay account', Q2: 'How do I get paid with a link?', Q3: 'What does it cost?', Q4: 'Turn my WhatsApp into a wallet', OPEN: 'Open my account (button)', COST: 'What it costs (button)', HOW: 'How it works (button)', free_text: 'Typed their own message' };
@@ -461,6 +474,7 @@ export default async function handler(req, res) {
     entryBreakdown,
     reminders,
     daily,
+    pathSeries,
     cohorts,
     loop,
     messages: {
