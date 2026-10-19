@@ -12,6 +12,7 @@
 import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
 import { trialBalance, reconcileWallets } from '../../../lib/ledger-post.js';
+import { sastDayStart } from '../../../lib/payout-float.js';
 
 /** Journal source → the customer-facing thing that was sold. */
 const SELLING_LABELS = {
@@ -137,6 +138,33 @@ export default async function handler(req, res) {
         AND je."createdAt" > now() - interval '30 days'`;
     return rows?.[0]?.n ?? null;
   });
+  // Made a link: the step between an account and money in (launch day showed it is where the funnel waits).
+  const linked = await safe(async () => {
+    const rows = await prisma.$queryRaw`SELECT count(DISTINCT "accountId")::int AS n FROM "PaymentRequest"`;
+    return rows?.[0]?.n ?? null;
+  });
+  // Today's money, South African day: in from outside, out to the rail, and what is waiting to be paid.
+  const dayStart = sastDayStart(new Date());
+  const today = await safe(async () => {
+    const [inRows, outRows, paidRows, openAgg, above] = await Promise.all([
+      prisma.$queryRaw`SELECT count(DISTINCT je.id)::int AS n, coalesce(sum(jl."creditCents"), 0)::int AS cents
+                       FROM "JournalLine" jl JOIN "JournalEntry" je ON je.id = jl."entryId"
+                       WHERE je.source LIKE 'LOAD_%' AND jl."accountCode" LIKE 'WALLET:%' AND jl."creditCents" > 0 AND je."createdAt" >= ${dayStart}`,
+      prisma.$queryRaw`SELECT count(*)::int AS n, coalesce(sum((metadata->>'amountCents')::int), 0)::int AS cents FROM "ProviderRequest"
+                       WHERE route = 'ott-payout' AND status = 'SUCCESS' AND "requestTs" >= ${dayStart}`,
+      prisma.$queryRaw`SELECT count(*)::int AS n, coalesce(sum("amountCents"), 0)::int AS cents FROM "PaymentRequest" WHERE status = 'PAID' AND "paidAt" >= ${dayStart}`,
+      prisma.paymentRequest.aggregate({ where: { status: 'PENDING' }, _sum: { amountCents: true }, _count: true }),
+      prisma.wallet.count({ where: { balanceType: 'SPEND', availableCents: { gte: 2000 } } }),
+    ]);
+    return {
+      moneyInCents: Number(inRows?.[0]?.cents || 0), moneyInCount: Number(inRows?.[0]?.n || 0),
+      payoutsCents: Number(outRows?.[0]?.cents || 0), payoutsCount: Number(outRows?.[0]?.n || 0),
+      linksPaidCents: Number(paidRows?.[0]?.cents || 0), linksPaidCount: Number(paidRows?.[0]?.n || 0),
+      openLinksCents: openAgg?._sum?.amountCents || 0, openLinksCount: openAgg?._count || 0,
+      walletsAbove20: above,
+    };
+  });
+
   // Contacts = accounts + captured pay-link payers who never onboarded.
   const capturedPayers = await safe(async () => {
     const rows = await prisma.$queryRaw`
@@ -293,6 +321,10 @@ export default async function handler(req, res) {
       revenueCents,
       revenuePriorCents: rev.prior,
       floatCents,
+      // 2026-10-19: what customers hold is a liability, not a float; the pay-out float is read live by /api/admin/floats.
+      balancesCents: floatCents,
+      walletsAbove20: today?.walletsAbove20 ?? null,
+      today,
       takeRatePct: gmvCents > 0 ? Math.round((10000 * revenueCents) / gmvCents) / 100 : null,
       activeHolds: holds,
       walletCount: wallets?._count ?? null,
@@ -301,6 +333,7 @@ export default async function handler(req, res) {
       contacts: contactsAll != null ? contactsAll + (capturedPayers || 0) : null,
       contactsStarted: contactsAll,
       accounts,
+      linked,
       funded,
       transacting,
       repeat,

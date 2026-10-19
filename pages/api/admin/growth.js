@@ -16,7 +16,7 @@
 
 import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
-import { INPUTS, preset, boundStatus, measuredToInputs, scenarioUrl, SCALE_MODEL_URL } from '../../../lib/scale-model.js';
+import { INPUTS, preset, boundStatus, measuredToInputs, scenarioUrl, SCALE_MODEL_URL, projectionMatrix } from '../../../lib/scale-model.js';
 import { adsConfigured, snapshotAdInsights, lastAdsFetchAt, LAST_FETCH_KEY } from '../../../lib/meta-ads.js';
 import { capiConfigured, capiConfig } from '../../../lib/meta-capi.js';
 
@@ -382,6 +382,10 @@ export default async function handler(req, res) {
   }
   const inputs = measuredToInputs(measuredRaw, { minN: MIN_SAMPLE });
   const scenario = scenarioUrl({ inputs }, process.env.WAPAY_SCALE_MODEL_URL || SCALE_MODEL_URL);
+  // The live valuation matrix (2026-10-19): today's ad spend pace is the trailing seven days of Meta spend, held flat.
+  const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
+  const spend7dCents = (adsDaily || []).filter((r) => new Date(r.d) >= weekAgo).reduce((s, r) => s + num(r.spend), 0);
+  const valuation = projectionMatrix({ inputs, currentMonthlySpend: Math.round(((spend7dCents / 100) / 7) * 30), launchMonth: '2026-10' });
 
   res.setHeader('Cache-Control', 'private, max-age=60');
   return res.status(200).json({
@@ -434,5 +438,6 @@ export default async function handler(req, res) {
     inputs,
     plan,
     scenarioUrl: scenario,
+    valuation,
   });
 }

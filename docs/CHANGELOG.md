@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-10-19 (94) — Operator money-in alerts, the live valuation matrix, and the dashboard's money and float tiles
+
+Founder, day two of the ad: "a trigger as soon as people get paid into their
+accounts so I can fund the pay-out wallet; it is almost instant", and "a live
+version of the valuation dashboard with projections based on current numbers".
+
+- **Operator alerts** (`lib/ops-alerts.js`, `lib/payout-float.js`): the moment money lands
+  from outside (a paid link or a card deposit, PayFast and Adumo paths), a WhatsApp line
+  to `WAPAY_OPS_ALERT_MSISDNS` with the amount and source class, customer balances, the
+  live OTT pay-out float with cover and days at the week's pace, the warn level, open
+  links and today's pay-outs; after a pay-out, a second line only when the float is below
+  its warn level or below what customers hold. Once per event, aggregates only, capped at
+  six seconds, never on the critical path's failure side. Outside a recipient's 24-hour
+  window the line goes through `WAPAY_TEMPLATE_OPS_ALERT` when set (one-parameter utility
+  template), else the direct rail, else it is logged.
+- **The live valuation matrix** (`projectionMatrix` in `lib/scale-model.js`, the growth
+  route's `valuation`, Mission Control's Dashboard and Growth tabs): the Scale Model's
+  plan case next to the same model run on the inputs measured so far (sample of 20 or
+  more; the rest stay at plan), under the plan budget and under today's ad spend held
+  flat, with the great and stop cases; accounts, actives, net revenue, both valuation
+  frames, peak funding and the 100k and 1m milestones at M6, M12, M24 and M36, with
+  calendar months. The repo model is pinned to the artifact's great case to the rand.
+- **Dashboard**: "Wallet float" renamed to "Customer balances" (it is a liability) with the
+  count at or above R20; new tiles for money in today, pay-outs today, open links and the
+  live pay-out float with cover; the funnel gains "Made a link" between Accounts and
+  Funded, where launch day showed the funnel waits.
+- Tests: `tests/valuation-matrix.test.mjs`.
+
+---
+
 ## 2026-10-18 (93) — The master hold, the agent-path guard and the home card's coming-soon line
 
 The founder tested the launch scope from his own number and saw electricity and fuel

@@ -194,6 +194,11 @@ export default async function handler(req, res) {
     );
 
     await markDeposit({ paymentId, status: 'SUCCESS', providerRef: params.pf_payment_id });
+    // Operator alert (2026-10-19): money landed from outside; the pay-out float may need funding before the pay-out that follows.
+    if (!posted?.replayed) {
+      const { opsMoneyIn } = await import('../../../lib/ops-alerts.js');
+      await opsMoneyIn({ amountCents, kind: intent.route === 'deposit' ? 'DEPOSIT' : 'LINK_PAID', accountId, idemKey: intent.idemKey });
+    }
     // Memory: this customer loads by card — but only for their OWN deposits.
     // On a payment request the card belongs to a THIRD PARTY, not the
     // requester being credited (QA 2026-08-21).

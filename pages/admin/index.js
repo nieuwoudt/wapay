@@ -12,6 +12,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Head from 'next/head';
+import { fmtR, fmtN } from '../../lib/scale-model.js';
 
 const R = (c) => 'R' + (Math.round(c || 0) / 100).toLocaleString('en-ZA', { maximumFractionDigits: 2 });
 const Rw = (c) => 'R' + Math.round((c || 0) / 100).toLocaleString('en-ZA');
@@ -588,12 +589,13 @@ function Funnel({ f }) {
   const stages = [
     ['Contacts', f.contacts, 'accounts + captured pay-link payers'],
     ['Accounts', f.accounts, 'onboarded'],
+    ['Made a link', f.linked, 'created a payment link'],
     ['Funded', f.funded, 'first money in'],
     ['Transacting', f.transacting, 'first spend or send'],
     ['Repeat', f.repeat, '2+ money events in 30d'],
   ].filter(([, v]) => v != null);
   const top = stages[0]?.[1] || 1;
-  const shades = ['#6bbf92', '#4dae77', '#31995e', '#1d7a3f', '#14512c'];
+  const shades = ['#6bbf92', '#4dae77', '#3aa36a', '#31995e', '#1d7a3f', '#14512c'];
   return (
     <div>
       {stages.map(([k, v, note], i) => (
@@ -847,10 +849,25 @@ function Dashboard() {
           ['Monthly actives', v.mau ?? '—', 'money event in 30d'],
           ['GMV, period', Rw(v.gmvCents), 'in + spent + transferred'],
           ['Revenue, period', R(v.revenueCents), v.takeRatePct != null ? `take rate ${v.takeRatePct}%` : ''],
-          ['Wallet float', R(v.floatCents), `${v.walletCount ?? '—'} wallets · ${v.activeHolds ?? 0} active holds`],
+          ['Customer balances', R(v.balancesCents ?? v.floatCents), `${v.walletCount ?? '—'} wallets · ${v.walletsAbove20 ?? '—'} at or above R20 · ${v.activeHolds ?? 0} active holds`],
         ].map(([k, val, sub]) => (
           <div className="card" key={k}><div className="k">{k}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>
         ))}
+      </div>
+      <div className="grid kpis" style={{ marginTop: 10 }}>
+        {[
+          ['Money in today', R(v.today?.moneyInCents), `${v.today?.moneyInCount ?? '—'} loads from outside · ${v.today?.linksPaidCount ?? '—'} links paid (${R(v.today?.linksPaidCents)})`],
+          ['Pay-outs today', R(v.today?.payoutsCents), `${v.today?.payoutsCount ?? '—'} paid to the rail`],
+          ['Open links', n0(v.today?.openLinksCount), `${R(v.today?.openLinksCents)} waiting for a payer`],
+        ].map(([k, val, sub]) => (
+          <div className="card" key={k}><div className="k">{k}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>
+        ))}
+        <FloatTile balancesCents={v.balancesCents ?? v.floatCents} payouts7dCents={null} />
+      </div>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Valuation matrix, live</h2>
+        <p className="note">The Scale Model's plan case next to the same model run on what the data has measured so far, under the plan budget and under today's ad spend held flat. Every input without a big enough sample stays at its plan value, so the projection moves as the numbers come in. The full matrix and every input are on the Growth tab.</p>
+        <ValuationMatrix compact />
       </div>
       <div className="card" style={{ marginTop: 14 }}>
         <h2>The funnel</h2>
@@ -935,6 +952,98 @@ function Dashboard() {
   );
 }
 
+
+/* ---------------- The pay-out float tile and the live valuation matrix ---------------- */
+
+function FloatTile({ balancesCents }) {
+  const [f, setF] = useState(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/floats')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setF(d); })
+      .catch(() => { if (!cancelled) setErr(true); });
+    return () => { cancelled = true; };
+  }, []);
+  const row = (f?.floats || []).find((x) => /payout/i.test(String(x.key || '')) || /pay-?out/i.test(String(x.name || '')));
+  const cents = row?.api?.availableCents ?? null;
+  const cover = cents != null && balancesCents > 0 ? Math.round((10 * cents) / balancesCents) / 10 : null;
+  const val = err ? 'unavailable' : !f ? '…' : cents != null ? R(cents) : (row?.api?.configured === false ? 'no credentials' : 'unreadable');
+  const sub = row ? `${row.low ? 'LOW · ' : ''}warn under ${R(row.warnCents)}${cover != null ? ` · ${cover}× of customer balances` : ''}` : 'OTT pay-out rail';
+  return (
+    <div className="card" style={row?.low ? { borderColor: 'var(--crit)' } : undefined}>
+      <div className="k">Pay-out float</div>
+      <div className="v" style={row?.low ? { color: 'var(--crit)' } : undefined}>{val}</div>
+      <div className="vs">{sub}</div>
+    </div>
+  );
+}
+
+const SCENARIO_LABELS = {
+  plan: 'Plan (13 Sep assessment)',
+  now: 'Measured inputs, plan budget',
+  nowCurrentSpend: 'Measured inputs, today\'s spend',
+  great: 'Great case',
+  stop: 'Stop-and-fix case',
+};
+
+function ValuationMatrix({ v: given = null, compact = false }) {
+  const [fetched, setFetched] = useState(null);
+  const [month, setMonth] = useState(12);
+  useEffect(() => {
+    if (given) return undefined;
+    let cancelled = false;
+    fetch('/api/admin/growth?range=30')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setFetched(d.valuation || null); })
+      .catch(() => { if (!cancelled) setFetched(false); });
+    return () => { cancelled = true; };
+  }, [given]);
+  const v = given || fetched;
+  if (v === false) return <div className="empty">Could not load the projection.</div>;
+  if (!v) return <div className="empty">Projecting…</div>;
+  const keys = compact ? ['plan', 'now', 'nowCurrentSpend'] : ['plan', 'now', 'nowCurrentSpend', 'great', 'stop'];
+  const idx = v.months.indexOf(month) >= 0 ? v.months.indexOf(month) : 1;
+  const m = v.months[idx];
+  const ms = (sc, target) => { const x = (sc.milestones || []).find((y) => y.target === target); return x && x.month ? `M${x.month}` : 'beyond M36'; };
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+        <span className="note" style={{ margin: 0 }}>Read at month</span>
+        <div className="tabs">{v.months.map((mm) => (
+          <button key={mm} className={mm === m ? 'on' : ''} onClick={() => setMonth(mm)}>M{mm} · {v.monthLabels?.[mm]}</button>
+        ))}</div>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ minWidth: compact ? 640 : 860 }}>
+          <thead><tr><th>Scenario</th><th className="n">Accounts</th><th className="n">30-day actives</th><th className="n">Net revenue / mo</th><th className="n">Valuation, revenue frame</th><th className="n">Valuation, per active</th>{!compact && <th className="n">Peak funding</th>}{!compact && <th className="n">100k · 1m accounts</th>}</tr></thead>
+          <tbody>
+            {keys.map((k) => {
+              const sc = v.scenarios[k]; const at = sc?.at?.[idx]; if (!at) return null;
+              const strong = k === 'now';
+              return (
+                <tr key={k} style={strong ? { fontWeight: 700 } : undefined}>
+                  <td>{SCENARIO_LABELS[k]}{k === 'nowCurrentSpend' ? <div className="note" style={{ margin: 0 }}>{fmtR(v.currentMonthlySpend)} a month, flat</div> : null}</td>
+                  <td className="n">{fmtN(at.accounts)}</td>
+                  <td className="n">{fmtN(at.actives)}</td>
+                  <td className="n">{fmtR(at.revenueMonthly)}</td>
+                  <td className="n">{fmtR(at.valRev)}</td>
+                  <td className="n">{fmtR(at.valActive)}</td>
+                  {!compact && <td className="n">{fmtR(sc.peakFunding)}</td>}
+                  {!compact && <td className="n">{ms(sc, 100000)} · {ms(sc, 1000000)}</td>}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>
+        Measured so far and used: {(v.measuredUsed || []).length ? v.measuredUsed.map((u) => `${u.label} ${u.unit === '%' ? u.value + '%' : u.unit === 'R' ? 'R' + u.value : u.value} (plan ${u.unit === '%' ? u.plan + '%' : u.unit === 'R' ? 'R' + u.plan : u.plan}, ${u.status})`).join(' · ') : 'nothing yet'}. {v.assumedCount} inputs still at their plan value, the payer step among them: the projection firms up as links get paid.
+      </p>
+    </div>
+  );
+}
 
 /* ---------------- Growth: the Scale Model's inputs, measured ---------------- */
 
@@ -1060,6 +1169,12 @@ function Growth() {
         ].map(([kk, val, sub]) => (
           <div className="card" key={kk}><div className="k">{kk}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>
         ))}
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Valuation matrix, live</h2>
+        <p className="note">Plan = the 13 September assessment. Measured = the same model with every input the data has measured (sample of {g.minSample} or more) in place of its plan value; the rest stay at plan. Two budgets: the plan's phases, and today's ad spend held flat at {fmtR(g.valuation?.currentMonthlySpend)} a month. Great and Stop are the bound cases. Valuation is the revenue frame (multiple on annualised net revenue, growth-adjusted) with the per-active frame beside it.</p>
+        <ValuationMatrix v={g.valuation} />
       </div>
 
       <div className="grid two" style={{ marginTop: 14 }}>

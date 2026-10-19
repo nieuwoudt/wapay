@@ -162,3 +162,28 @@ records its time. Note `/me` for a System User token returns the app-scoped id
 - Ad spend import into the ledger (spend is reported, not booked).
 - A scheduled Claude routine that reads the tab and writes a weekly note: once the
   founder wants it, the route's JSON is the input and this document is the brief.
+
+
+## 7. The live valuation matrix (2026-10-19)
+
+`projectionMatrix` (`lib/scale-model.js`) runs the Scale Model five ways and the growth
+route returns it as `valuation`: **plan** (the 13 September assessment), **measured inputs
+under the plan budget**, **measured inputs under today's spend** (the trailing seven days of
+Meta spend, held flat), **great** and **stop**. A measured input replaces its plan value only
+once its sample reaches 20 (`measuredToInputs`); the matrix lists which were used and how
+many still stand at plan. Each scenario carries accounts, funded, 30-day actives, net
+revenue per month, both valuation frames, cumulative cash at M6, M12, M24 and M36, peak
+funding and the months at which 1k, 10k, 100k and 1m accounts are reached. Model month 1 is
+October 2026. `tests/valuation-matrix.test.mjs` pins the repo model to the artifact's
+great case (M6: 81.6k accounts, 36.8k actives, R920k a month, R265m, R1.11m peak funding,
+1m at M13), so the matrix and the artifact can never disagree.
+
+## 8. Operator alerts (2026-10-19)
+
+`lib/ops-alerts.js`: `opsMoneyIn` after a non-replayed card credit (PayFast ITN and Adumo
+settlement) and `opsPayoutDone` after a pay-out settles. The text is aggregates only:
+amount and source class, customer balances and wallets at or above R20, the live OTT
+pay-out float (`lib/payout-float.js`, 60-second cache) with cover over balances and days
+at the week's pay-out pace, the warn level, open links and today's pay-outs. Recipients
+`WAPAY_OPS_ALERT_MSISDNS`; delivery through `notifyCustomer` (text inside the window, the
+direct rail or `WAPAY_TEMPLATE_OPS_ALERT` outside it). Once per event via ProcessedMessage.
