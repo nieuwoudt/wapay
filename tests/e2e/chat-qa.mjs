@@ -237,7 +237,7 @@ async function run() {
       const g3 = await s.say('Put in my bank account');
       const g4 = await s.say('How much can I withdraw');
       verdict('Lisa 3: the R0 gate reads her situation, explains more the second time, offers a person the third time, never the same line twice', [
-        { level: 'FAIL', ok: has(g1.replyText, /You have R0 to withdraw\. The R350 \w+ sent you today came as a voucher PIN, not as money in your balance/) && has(g1.replyText, /R367 payment link from today was not paid/), what: 'first time: her money, the voucher and the unpaid link, before any minimum' },
+        { level: 'FAIL', ok: has(g1.replyText, /You have R0 to withdraw\. The R350 \w+ sent you today came as a voucher PIN, not as money in your balance/) && has(g1.replyText, /R350 add-money link \(R367 with the card fee\) from today was not paid/), what: 'first time: her money, the voucher and the unpaid link, before any minimum' },
         { level: 'FAIL', ok: !has(g1.replyText, /Withdrawals start at/), what: 'never the old product-fact line' },
         { level: 'FAIL', ok: has(g2.replyText, /Let me explain where your money is/) && has(g2.replyText, /What you can do:/) && has(g2.replyText, /passport or foreign ID works too/), what: 'second time: the picture as bullets, what she can do, a passport works' },
         { level: 'FAIL', ok: has(g3.replyText, /asked a person from the WaPay team|To talk to a person|Here it is once more/) && g3.replyText !== g2.replyText, what: 'third time: a person (or, with no alert channel here, a different wording), never the same line' },
@@ -254,7 +254,7 @@ async function run() {
       verdict('Lisa 4 and 5: "send money" to her own number is refused, never a voucher link; an unpaid link is "not paid", never "still confirming"', [
         { level: 'FAIL', ok: has(s3.replyText, /That is your own number/) && has(s3.replyText, /say \*withdraw\*/), what: 'her own number after "send money" is refused and points to withdraw' },
         { level: 'FAIL', ok: !has(s3.replyText, /Pay the R\d+ difference|button below|Confirm WaPay Voucher/), what: 'no voucher purchase and no payment link' },
-        { level: 'FAIL', ok: has(d1.replyText, /You have not paid your R367 payment link/) && has(d1.replyText, /Ignore it if you did not mean to buy/), what: '"did my payment go through" says the link was not paid' },
+        { level: 'FAIL', ok: has(d1.replyText, /You have not paid your R350 add-money link \(R367 with the card fee\)/) && has(d1.replyText, /Ignore it if you did not mean to buy/), what: '"did my payment go through" says the link was not paid' },
         { level: 'FAIL', ok: !has(d1.replyText, /still confirming|PayFast/), what: 'never "still confirming", no partner named' },
       ], s);
     } finally {
