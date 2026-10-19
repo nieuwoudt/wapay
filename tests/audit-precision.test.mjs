@@ -41,3 +41,11 @@ test('the brief states what the first run misread: open account opening, the pay
   assert.match(b, /A P1 needs a rule and confidence 0\.8 or more/);
   assert.ok(!/[—–]/.test(b), 'no em dashes in the brief');
 });
+
+test('the live-provider minimum never drops below the cash floor; deposits name every PayFast method', async () => {
+  const { minWithdrawCents, truthBlock } = await import('../lib/audit/brief.js');
+  assert.equal(minWithdrawCents([{ method: 'PAYSHAP', minCents: 5000 }, { method: 'NEDCASH', minCents: 1000 }, { method: 'CASHSEND', minCents: 5000 }]), 5000, 'a R10 cardless minimum from the rail does not make the minimum R20');
+  assert.equal(minWithdrawCents([{ method: 'PAYSHAP', minCents: 3000 }]), 3000, 'a bank method takes the rail minimum');
+  assert.equal(minWithdrawCents(null), 5000);
+  assert.match(truthBlock({ providers: null }), /adding money by card, Instant EFT, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, SnapScan or Zapper through PayFast/);
+});
