@@ -12,7 +12,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Head from 'next/head';
-import { fmtR, fmtN } from '../../lib/scale-model.js';
+import { fmtR, fmtN, simulate, preset, budgetFn, BUDGET_DEFAULT } from '../../lib/scale-model.js';
+
+// Mission Control refreshes itself every ten minutes (founder 2026-10-19); the Meta read is throttled server-side to the same cadence.
+const REFRESH_MS = 10 * 60 * 1000;
 
 const R = (c) => 'R' + (Math.round(c || 0) / 100).toLocaleString('en-ZA', { maximumFractionDigits: 2 });
 const Rw = (c) => 'R' + Math.round((c || 0) / 100).toLocaleString('en-ZA');
@@ -804,6 +807,7 @@ function Dashboard() {
   const [range, setRange] = useState('30');
   const [m, setM] = useState(null);
   const [err, setErr] = useState('');
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setErr('');
@@ -812,7 +816,8 @@ function Dashboard() {
       .then((d) => { if (!cancelled) setM(d); })
       .catch(() => { if (!cancelled) setErr('Could not load metrics.'); });
     return () => { cancelled = true; };
-  }, [range]);
+  }, [range, tick]);
+  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), REFRESH_MS); return () => clearInterval(id); }, []);
   if (err) {
     // The floats and UniFuel panels have their own endpoints — a metrics
     // failure must not blank them too (review 2026-08-29).
@@ -864,7 +869,8 @@ function Dashboard() {
         ))}
         <FloatTile balancesCents={v.balancesCents ?? v.floatCents} payouts7dCents={null} />
       </div>
-      <LiveValuation compact />
+      <LinksAndLoop links={m.links} viral={m.viral} generatedAt={m.generatedAt} />
+      <LiveValuation compact tick={tick} />
       <div className="card" style={{ marginTop: 14 }}>
         <h2>The funnel</h2>
         <p className="note">All-time. Contacts include {m.funnel?.capturedPayers ?? 0} captured pay-link payer(s) who have not onboarded yet.</p>
@@ -949,6 +955,106 @@ function Dashboard() {
 }
 
 
+/* ---------------- Payment links as the key figure, and the viral loop (founder 2026-10-19) ---------------- */
+
+function LinksAndLoop({ links: l, viral: vl, generatedAt }) {
+  const stamp = generatedAt ? new Date(generatedAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : null;
+  const tiles = l ? [
+    ['Payment links created', R(l.created.cents), `${n0(l.created.n)} links, all time · ${n0(l.createdInRange.n)} in this period (${R(l.createdInRange.cents)})`],
+    ['Paid', R(l.paid.cents), `${n0(l.paid.n)} paid (${l.paidRatePct ?? '—'}% of links) · ${n0(l.paid.fromBalance)} from a balance, ${n0(l.paid.byCard)} by card or EFT · fees earned ${R(l.feeRealisedCents)}`],
+    ['Open, waiting for a payer', R(l.open.cents), `${n0(l.open.n)} links · ${n0(l.lapsed.n)} lapsed unpaid (${R(l.lapsed.cents)})`],
+    ['If every open link is paid by card', R(l.ifOpenPaidByCard.feeCents), `fee revenue · ${R(l.ifOpenPaidByCard.marginCents)} after the card rail`],
+    ['If each is then paid out by PayShap', R(l.ifThenPaidOut.feeCents), `${n0(l.ifThenPaidOut.n)} × R${(PAYSHAP_FEE_RAND).toFixed(0)} fees · ${R(l.ifThenPaidOut.marginCents)} after the rail`],
+  ] : [];
+  const loop = vl ? [
+    ['Accounts from payment links', n0(vl.accountsFromLinks), `${vl.shareOfAccountsPct ?? '—'}% of all accounts · ${n0(vl.sendersWhoBroughtAccounts)} senders brought them`],
+    ['Payers captured, not yet on WaPay', n0(vl.payersCapturedNotYetOnWaPay), `${n0(vl.contactsFromLinks)} contacts started from a link`],
+  ] : [];
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <h2>Payment links and the viral loop <span className="note" style={{ display: 'inline', fontWeight: 400 }}>{stamp ? `· refreshed ${stamp}, every 10 minutes` : ''}</span></h2>
+      <p className="note">The key figure: the value of the links customers have created, how much of it was paid and how, what is still open, and what the open links are worth in fees if they are paid by card and then paid out. Fees at today's schedule; rail costs from the commercials of record.</p>
+      {!l && <div className="empty">Link figures unavailable.</div>}
+      <div className="grid kpis">
+        {[...tiles, ...loop].map(([k, val, sub]) => (<div className="card" key={k}><div className="k">{k}</div><div className="v">{val}</div><div className="vs">{sub}</div></div>))}
+      </div>
+    </div>
+  );
+}
+const PAYSHAP_FEE_RAND = 8;
+
+/* The path: accounts opened so far and the pace, with today's pace carried forward (founder 2026-10-19, "make it small"). */
+function PathChart({ daily, t }) {
+  if (!t || !daily?.length) return <div className="empty">No days yet.</div>;
+  const W = 560, H = 170, L = 44, Rr = 10, T = 10, B = 22;
+  const days = [...daily].sort((a, b) => (a.date < b.date ? -1 : 1));
+  // Anchor the cumulative series on today's total so it is exact however long the window is.
+  let cum = t.now.accounts; const actual = [];
+  for (let i = days.length - 1; i >= 0; i--) { actual.unshift({ date: days[i].date, v: cum, n: days[i].onboarded || 0 }); cum -= days[i].onboarded || 0; }
+  const launchIdx = actual.findIndex((d) => d.n > 0 || d.v > 0);
+  const series = launchIdx >= 0 ? actual.slice(launchIdx) : actual;
+  const horizonDays = t.monthsAhead * 30;
+  const flat = Array.from({ length: Math.ceil(horizonDays / 7) + 1 }, (_, i) => ({ d: Math.min(horizonDays, i * 7), v: t.now.accounts + t.perDay.accounts * Math.min(horizonDays, i * 7) }));
+  const g = t.weeklyGrowth;
+  const comp = g != null ? flat.map(({ d }, i) => { let acc = t.now.accounts, wk = t.last7.accounts; for (let w = 0; w < i; w++) { wk *= 1 + g; acc += wk; } return { d, v: acc }; }) : null;
+  const maxV = Math.max(10, ...flat.map((p) => p.v), ...(comp || []).map((p) => p.v), t.plan.ahead.accounts);
+  const minV = 1;
+  const logy = (v) => T + (H - T - B) * (1 - (Math.log10(Math.max(minV, v)) - Math.log10(minV)) / (Math.log10(maxV) - Math.log10(minV)));
+  const totalDays = (series.length - 1) + horizonDays;
+  const x = (i) => L + ((W - L - Rr) * i) / Math.max(1, totalDays);
+  const ticks = [1, 10, 100, 1000, 10000, 100000, 1000000].filter((v) => v <= maxV * 1.5);
+  const lbl = (v) => (v >= 1e6 ? `${v / 1e6}m` : v >= 1e3 ? `${v / 1e3}k` : String(v));
+  const actualPath = series.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${logy(p.v).toFixed(1)}`).join('');
+  const off = series.length - 1;
+  const flatPath = flat.map((p, i) => `${i ? 'L' : 'M'}${x(off + p.d).toFixed(1)},${logy(p.v).toFixed(1)}`).join('');
+  const compPath = comp ? comp.map((p, i) => `${i ? 'L' : 'M'}${x(off + p.d).toFixed(1)},${logy(p.v).toFixed(1)}`).join('') : null;
+  const planX = x(off + horizonDays), planY = logy(t.plan.ahead.accounts);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" style={{ width: '100%', height: 'auto' }}>
+      {ticks.map((v) => (<g key={v}><line x1={L} x2={W - Rr} y1={logy(v)} y2={logy(v)} stroke="var(--grid)" strokeDasharray="2 4" /><text x={L - 6} y={logy(v) + 3} textAnchor="end" fontSize="9" fill="var(--ink3)">{lbl(v)}</text></g>))}
+      <path d={flatPath} fill="none" stroke="var(--s1)" strokeWidth={1.5} strokeDasharray="5 4" />
+      {compPath && <path d={compPath} fill="none" stroke="var(--s4)" strokeWidth={1.5} strokeDasharray="2 3" />}
+      <path d={actualPath} fill="none" stroke="var(--good)" strokeWidth={2.2} />
+      {series.map((p, i) => <circle key={p.date} cx={x(i)} cy={logy(p.v)} r={2.2} fill="var(--good)"><title>{`${p.date}: ${p.v.toLocaleString('en-ZA')} accounts (+${p.n})`}</title></circle>)}
+      <circle cx={planX} cy={planY} r={3} fill="none" stroke="var(--ink3)" /><text x={planX - 6} y={planY - 6} textAnchor="end" fontSize="9" fill="var(--ink3)">plan {lbl(Math.round(t.plan.ahead.accounts / 1000) * 1000)}</text>
+      <text x={x(0)} y={H - 6} fontSize="9" fill="var(--ink3)">{series[0]?.date.slice(5)}</text>
+      <text x={x(off)} y={H - 6} textAnchor="middle" fontSize="9" fill="var(--ink3)">today</text>
+      <text x={W - Rr} y={H - 6} textAnchor="end" fontSize="9" fill="var(--ink3)">{t.horizon.label}</text>
+    </svg>
+  );
+}
+
+/* The valuation path: the plan's monthly curve against today's pace, both frames' floor included. */
+function ValuationPath({ t }) {
+  if (!t) return null;
+  const planRows = simulate(preset('plan'), budgetFn(BUDGET_DEFAULT)).rows.slice(0, 13);
+  const months = planRows.map((r) => ({ m: r.m, plan: Math.max(r.valRev, r.valActive) }));
+  // Today's pace held flat: the seven-day revenue rate as a month, funded-per-month as actives, the higher frame, never below the floor.
+  const paceAt = () => {
+    const revMonthRand = (t.perDay.revenueCents * 30) / 100;
+    const actives = Math.max(t.now.actives, t.perDay.funded * 30);
+    return Math.max(t.frames.floorRand, revMonthRand * 12 * t.frames.multiple, actives * t.frames.perActive);
+  };
+  const W = 560, H = 150, L = 48, Rr = 10, T = 10, B = 22;
+  const maxV = Math.max(...months.map((p) => p.plan), paceAt()) * 1.05;
+  const y = (v) => T + (H - T - B) * (1 - v / maxV);
+  const x = (i) => L + ((W - L - Rr) * i) / 12;
+  const planPath = months.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.plan).toFixed(1)}`).join('');
+  const pacePath = months.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(paceAt()).toFixed(1)}`).join('');
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(maxV * f));
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" style={{ width: '100%', height: 'auto' }}>
+      {ticks.map((v) => (<g key={v}><line x1={L} x2={W - Rr} y1={y(v)} y2={y(v)} stroke="var(--grid)" strokeDasharray="2 4" /><text x={L - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fill="var(--ink3)">{fmtR(v)}</text></g>))}
+      <path d={planPath} fill="none" stroke="var(--ink3)" strokeWidth={1.5} strokeDasharray="5 4" />
+      <path d={pacePath} fill="none" stroke="var(--good)" strokeWidth={2.2} />
+      <circle cx={x(0)} cy={y(Math.max(t.now.valRev, t.now.valActive))} r={3} fill="var(--good)" />
+      <text x={x(0)} y={H - 6} fontSize="9" fill="var(--ink3)">{t.now.label}</text>
+      <text x={x(6)} y={H - 6} textAnchor="middle" fontSize="9" fill="var(--ink3)">{t.horizon.label}</text>
+      <text x={W - Rr} y={H - 6} textAnchor="end" fontSize="9" fill="var(--ink3)">month 13</text>
+    </svg>
+  );
+}
+
 /* ---------------- The pay-out float tile and the live valuation matrix ---------------- */
 
 function FloatTile({ balancesCents }) {
@@ -984,17 +1090,17 @@ const SCENARIO_LABELS = {
   stop: 'Stop-and-fix case',
 };
 
-function useValuation(given) {
+function useGrowth(given, tick = 0) {
   const [fetched, setFetched] = useState(null);
   useEffect(() => {
     if (given) return undefined;
     let cancelled = false;
     fetch('/api/admin/growth?range=30')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => { if (!cancelled) setFetched(d.valuation || null); })
+      .then((d) => { if (!cancelled) setFetched(d || null); })
       .catch(() => { if (!cancelled) setFetched(false); });
     return () => { cancelled = true; };
-  }, [given]);
+  }, [given, tick]);
   return given || fetched;
 }
 
@@ -1055,10 +1161,24 @@ function PlanVsNow({ v }) {
 }
 
 /* One fetch for both cards: the plan-vs-now section and the matrix (the Growth tab passes its own data). */
-function LiveValuation({ v: given = null, compact = false, minSample = null }) {
-  const v = useValuation(given);
+function LiveValuation({ g: given = null, compact = false, minSample = null, tick = 0 }) {
+  const g = useGrowth(given, tick);
+  const v = g === false ? false : g ? g.valuation : null;
+  const t = v?.trajectory;
   return (
     <>
+      <div className="grid two" style={{ marginTop: 14 }}>
+        <div className="card">
+          <h2>The path: accounts, actual and at today's pace</h2>
+          <p className="note">Cumulative accounts since launch (solid), today's seven-day pace carried forward (dashed), compounding once two full weeks exist (dotted), the plan's point at the horizon (ring). Log scale.</p>
+          {g === false ? <div className="empty">Could not load.</div> : !t ? <div className="empty">Measuring…</div> : <PathChart daily={g.daily} t={t} />}
+        </div>
+        <div className="card">
+          <h2>Valuation: plan against today's pace</h2>
+          <p className="note">The plan's month-by-month valuation (dashed) against today's pace held flat (solid), the higher of the two frames, never below the floor.</p>
+          {g === false ? <div className="empty">Could not load.</div> : !t ? <div className="empty">Measuring…</div> : <ValuationPath t={t} />}
+        </div>
+      </div>
       <div className="card" style={{ marginTop: 14 }}>
         <h2>The plan, where we are, and where today's pace leads</h2>
         <p className="note">The plan is the 13 September assessment (model month 1 = October 2026; launch day 1 = 18 October). Now is live. The trajectory takes the last seven days as a daily rate and holds it for six months; once two full weeks exist it also compounds at the measured weekly growth. Valuations use the plan's two frames and its floor.</p>
@@ -1212,6 +1332,7 @@ function Growth() {
       .finally(() => setBusy(false));
   }, [range]);
   useEffect(() => { load(false); }, [load]);
+  useEffect(() => { const id = setInterval(() => load(true), REFRESH_MS); return () => clearInterval(id); }, [load]);
   if (err) return <div className="card"><div className="empty">{err}</div></div>;
   if (!g) return <div className="card"><div className="empty">Measuring…</div></div>;
   const k = g.kpis || {}, st = g.status || {}, lp = g.loop || {}, ms = g.messages || {};
@@ -1245,7 +1366,7 @@ function Growth() {
         ))}
       </div>
 
-      <LiveValuation v={g.valuation} minSample={g.minSample} />
+      <LiveValuation g={g} minSample={g.minSample} />
 
       <div className="grid two" style={{ marginTop: 14 }}>
         <div className="card">
@@ -1389,6 +1510,36 @@ function Growth() {
   );
 }
 
+/* A person answers the customer inside their WhatsApp chat (founder 2026-10-19). One text, inside their 24-hour window, remembered by the chat. */
+function ReplyBox({ accountId, name }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const send = useCallback(async () => {
+    if (!text.trim()) return;
+    setBusy(true); setMsg('');
+    try {
+      const r = await fetch('/api/admin/ops-reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, text }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.ok) { setMsg('Sent. The chat remembers it as its own message.'); setText(''); }
+      else if (r.status === 409) setMsg('Their 24-hour window is closed (no message from them in the last day), so a plain text cannot be delivered.');
+      else setMsg(j.error ? `Not sent: ${j.error}` : 'Not sent.');
+    } catch { setMsg('Not sent: network error.'); }
+    setBusy(false);
+  }, [accountId, text]);
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="k">Reply in their WhatsApp chat</div>
+      <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 1500))} rows={4} placeholder={`Hi ${(name || '').split(' ')[0] || 'there'}, this is the WaPay team…`} style={{ width: '100%', marginTop: 6, padding: 10, borderRadius: 8, border: '1px solid var(--grid)', background: 'var(--bg)', color: 'var(--ink)', fontFamily: 'inherit', fontSize: 13 }} />
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+        <button className="searchrow-btn" style={{ padding: '8px 14px', border: 0, borderRadius: 8, background: 'var(--accent)', color: '#fff', cursor: 'pointer' }} disabled={busy || !text.trim()} onClick={send}>{busy ? 'Sending…' : 'Send as WaPay'}</button>
+        <span className="note" style={{ margin: 0 }}>{text.length}/1500 · sent from WaPay's WhatsApp, recorded in their chat</span>
+        {msg && <span className="note" style={{ margin: 0, color: 'var(--ink2)' }}>{msg}</span>}
+      </div>
+    </div>
+  );
+}
+
 function Customer() {
   const [q, setQ] = useState('');
   const [c, setC] = useState(null);
@@ -1512,6 +1663,7 @@ function Customer() {
                 {!kycOn && <span className="note" style={{ margin: 0 }}>Didit not configured yet (3 envs).</span>}
                 {kycMsg && <span className="note" style={{ margin: 0, color: 'var(--ink2)' }}>{kycMsg}</span>}
               </div>
+              <ReplyBox accountId={c.account.id} name={c.account.displayName} />
             </div>
             <div className="card">
               <h2>Balances</h2>

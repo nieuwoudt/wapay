@@ -227,3 +227,30 @@ curl -X POST -H "x-internal-api-key: $KEY" -H "content-type: application/json" \
 Text only, one message of up to 1,500 characters, inside the customer's 24-hour window
 (the route answers 409 `WINDOW_CLOSED` otherwise; `?force=1` overrides for a number known
 to be reachable). It is not a bulk rail: one account per call, the account id must exist.
+
+## 9. Payment links, the viral loop, the path, the refresh and the reply box (2026-10-19, CHANGELOG 97)
+
+- **Links** (`links` in `/api/admin/metrics`): every `payment_requests` row, bucketed into
+  created (all time and in the period), paid (from a balance when `payerRef` starts with
+  `WAPAY:`, otherwise by card or EFT), open (PENDING and not expired) and lapsed. Fees at
+  today's schedule (`paymentRequestFeeCents`); the margin after the card rail uses PayFast's
+  credit-card cost (R2.00 + 3.2% ex VAT); the withdrawal line uses the PayShap fee from
+  `cashoutFeeCents` and OTT's R2.88 incl VAT cost. Both are "if every open link" figures,
+  labelled so.
+- **Viral** (`viral`): accounts with `profile.acquisitionSource = 'paylink'` (stamped at
+  creation when a payer's number is captured), their share of all accounts, distinct
+  `referrerAccountId` senders, and `capturedPayers` (payers with no account yet).
+- **The path** (`PathChart`, both tabs): the cumulative account series is anchored on today's
+  total and walked back through the growth route's `daily.onboarded`, so it is exact for any
+  window; the projection carries the seven-day pace forward (`trajectory.perDay`), the
+  compounding line appears with `weeklyGrowth`, the ring is the plan at the horizon. Log scale.
+  **The valuation path** (`ValuationPath`) runs the plan's `simulate` in the browser (the same
+  model library the matrix uses) and draws today's pace held flat beside it.
+- **Refresh:** `REFRESH_MS` (ten minutes) re-reads metrics and growth on both tabs; the Growth
+  read passes `refresh=1`, which the route throttles to one Meta read per ten minutes.
+- **Reply box** (`ReplyBox`, customer profile): `POST /api/admin/ops-reply { accountId, text }`
+  with the admin session (the internal key also works), one text of up to 1,500 characters
+  inside the customer's 24-hour window, sent through `lib/say.js`.
+- **Flags** (`GET /api/internal/flags`, internal key): commit, business question, launch hold,
+  every switch, fuel, withdrawals, ops-alert recipient count, business invites. Use it to
+  verify a Vercel env change after the redeploy.

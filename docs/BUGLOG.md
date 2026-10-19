@@ -4,6 +4,20 @@
 
 ---
 
+## 121. An amount above the link maximum got the bare question again, twice, and the customer left
+
+- **Symptom (conversation audit 2026-10-19; a customer on 18 Oct 17:01 and 17:02 UTC):** at "How much would you like to request? (R5–R3000)" the customer typed a number that the chat answered with exactly the same question, twice; six minutes later they asked for airtime, then to withdraw, then to deposit R3,000. The number itself is redacted in memory, so the audit could not see it, but the code path shows the cause.
+- **Root cause:** `handleCreatePaymentRequest` (`pages/api/webhooks/message-processor-v2.js`) treated an amount outside R5 to R3000 as "no amount" and re-sent the generic prompt. A customer who wants R5,000 reads that as the chat not understanding, and the never-trap rule says every repeat must add the reason.
+- **Fix (CHANGELOG 97):** above the ceiling the reply names it and the way through ("ask for R3000 now and make another link for the rest, or tell me a smaller amount"); below the floor it names the floor; only a message with no amount at all gets the plain question. Locked in `tests/dashboard-and-audit.test.mjs`.
+- **Lesson:** a re-asked question is a trap unless it says what was wrong with the answer.
+
+## 120. The deposit and payment-link button messages were never remembered, so the chat looked silent and forgot it had sent the link
+
+- **Symptom (conversation audit 2026-10-19):** three customers' transcripts ended with an amount ("R100", "100", "Deposit 3000") and no reply; Cytric's showed two amounts with no reply. Every one had a deposit intent created in the same minute: the customer did get the PayFast button message. The audit scripts and the chat's own memory (and therefore the model, the gate and the person reading the conversation) saw silence.
+- **Root cause:** the two interactive cta_url sends (`sendWhatsAppCtaUrl`, the payment-request card and the deposit card) go through the transport directly, not through `lib/say.js`, which is where outbound turns are recorded.
+- **Fix (CHANGELOG 97):** `rememberSent` in `lib/say.js` records the card's text, button and link as the assistant's turn after a successful interactive send, at both sites. Locked in `tests/dashboard-and-audit.test.mjs`.
+- **Lesson:** every outbound path must leave a turn behind, or the chat's memory lies by omission; the audit's "unanswered last turn" rule now has no blind spot for these two sends.
+
 ## 119. The model told a customer withdrawals run "from R20" and offered an FNB eWallet that production does not have
 
 - **Symptom (Cytric, 19 Oct 09:05 and 09:07 UTC):** "limit" was answered "you can withdraw from *R20* to *R3000*"; "I do not have a bank account" was answered "...a Pick n Pay or Boxer till, or as an FNB eWallet". The live minimum is R50 on every method and the OTT production merchant has Absa and Nedbank cash only (no FNB eWallet, settled 2026-10-08).

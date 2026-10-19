@@ -13,6 +13,12 @@ import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
 import { trialBalance, reconcileWallets } from '../../../lib/ledger-post.js';
 import { sastDayStart } from '../../../lib/payout-float.js';
+import { paymentRequestFeeCents } from '../../../lib/deposits.js';
+import { cashoutFeeCents } from '../../../lib/ledger-core.js';
+
+// PayShap pay-out: the customer pays the flat fee; OTT charges R2.50 ex VAT = R2.88 incl (docs/COMMERCIALS.md, Money out).
+const PAYSHAP_FEE_CENTS = cashoutFeeCents('PAYSHAP', 10000);
+const PAYSHAP_RAIL_COST_CENTS = 288;
 
 /** Journal source → the customer-facing thing that was sold. */
 const SELLING_LABELS = {
@@ -142,6 +148,47 @@ export default async function handler(req, res) {
   const linked = await safe(async () => {
     const rows = await prisma.$queryRaw`SELECT count(DISTINCT "accountId")::int AS n FROM "payment_requests"`;
     return rows?.[0]?.n ?? null;
+  });
+  // Payment links as the key figure (founder 2026-10-19): what was created, what was paid and how,
+  // what is open, the fee revenue realised, and what the open links are worth if paid by card and
+  // then withdrawn by PayShap. Fees from the live schedule; rail costs from docs/COMMERCIALS.md.
+  const links = await safe(async () => {
+    const rows = await prisma.$queryRaw`
+      SELECT status, "amountCents", "payerRef", ("expiresAt" <= now()) AS expired, ("createdAt" >= ${since}) AS in_range
+      FROM "payment_requests"`;
+    const fee = (c) => { try { return paymentRequestFeeCents(Number(c)); } catch { return 0; } };
+    const cardCost = (c) => Math.round((Number(c) * 0.032 + 200) * 1.15); // PayFast credit card, R2.00 + 3.2% ex VAT (COMMERCIALS: Getting paid)
+    const sum = (arr, f) => arr.reduce((a, r) => a + f(r), 0);
+    const all = rows || [];
+    const paid = all.filter((r) => r.status === 'PAID');
+    const paidBalance = paid.filter((r) => String(r.payerRef || '').startsWith('WAPAY:'));
+    const paidCard = paid.filter((r) => !String(r.payerRef || '').startsWith('WAPAY:'));
+    const open = all.filter((r) => r.status === 'PENDING' && !r.expired);
+    const lapsed = all.filter((r) => r.status === 'EXPIRED' || (r.status === 'PENDING' && r.expired));
+    const inRange = all.filter((r) => r.in_range);
+    const openFee = sum(open, (r) => fee(r.amountCents));
+    const openMargin = sum(open, (r) => Math.max(0, fee(r.amountCents) - (fee(r.amountCents) > 0 ? cardCost(r.amountCents) : 0)));
+    return {
+      created: { n: all.length, cents: sum(all, (r) => Number(r.amountCents)) },
+      createdInRange: { n: inRange.length, cents: sum(inRange, (r) => Number(r.amountCents)) },
+      paid: { n: paid.length, cents: sum(paid, (r) => Number(r.amountCents)), fromBalance: paidBalance.length, byCard: paidCard.length },
+      open: { n: open.length, cents: sum(open, (r) => Number(r.amountCents)) },
+      lapsed: { n: lapsed.length, cents: sum(lapsed, (r) => Number(r.amountCents)) },
+      feeRealisedCents: sum(paidCard, (r) => fee(r.amountCents)),
+      ifOpenPaidByCard: { feeCents: openFee, marginCents: openMargin },
+      ifThenPaidOut: { n: open.length, feeCents: open.length * PAYSHAP_FEE_CENTS, marginCents: open.length * (PAYSHAP_FEE_CENTS - PAYSHAP_RAIL_COST_CENTS) },
+      paidRatePct: all.length ? Math.round((1000 * paid.length) / all.length) / 10 : null,
+    };
+  });
+  // The viral loop: accounts whose first contact was paying someone's link (profile.acquisitionSource = paylink, stamped at creation).
+  const viral = await safe(async () => {
+    const rows = await prisma.$queryRaw`
+      SELECT count(*) FILTER (WHERE "onboardingState" = 'S5_COMPLETED')::int AS onboarded,
+             count(*)::int AS contacts,
+             count(DISTINCT "profile"->'attribution'->>'referrerAccountId') FILTER (WHERE "onboardingState" = 'S5_COMPLETED')::int AS referrers
+      FROM "Account" WHERE "profile"->>'acquisitionSource' = 'paylink'`;
+    const r = rows?.[0] || {};
+    return { accountsFromLinks: Number(r.onboarded || 0), contactsFromLinks: Number(r.contacts || 0), sendersWhoBroughtAccounts: Number(r.referrers || 0) };
   });
   // Today's money, South African day: in from outside, out to the rail, and what is waiting to be paid.
   const dayStart = sastDayStart(new Date());
@@ -329,6 +376,8 @@ export default async function handler(req, res) {
       activeHolds: holds,
       walletCount: wallets?._count ?? null,
     },
+    links,
+    viral: viral ? { ...viral, payersCapturedNotYetOnWaPay: capturedPayers ?? null, shareOfAccountsPct: accounts ? Math.round((1000 * viral.accountsFromLinks) / accounts) / 10 : null } : null,
     funnel: {
       contacts: contactsAll != null ? contactsAll + (capturedPayers || 0) : null,
       contactsStarted: contactsAll,

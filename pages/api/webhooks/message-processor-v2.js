@@ -14,6 +14,7 @@ import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, sendWhatsAppReplyButtons, out
 // Every outbound text goes through lib/say.js, which records the assistant
 // side of the turn by construction (docs/AGENT_ARCHITECTURE_V2.md C2).
 import { sendWhatsAppText, recordInbound } from '../../../lib/say.js';
+import { rememberSent } from '../../../lib/say.js';
 import { recentTurns, renderTurns, redactForMemory } from '../../../lib/turns.js';
 import { loadContextPack, renderCustomerRecord, statusCandidates, rankCandidates, preferredKind, formatRands, formatSast, movementBullet } from '../../../lib/context-pack.js';
 import { rescueWithdrawSlots } from '../../../lib/agent/slot-rescue.js';
@@ -3336,8 +3337,18 @@ function matchRequestMoneyAsk(text = '', slots = null) {
 async function handleCreatePaymentRequest({ from, account, amountCents, rawText = '', confirmed = false, adPayerName = null }) {
   if (!Number.isInteger(amountCents) || amountCents < MIN_REQUEST_CENTS || amountCents > MAX_REQUEST_CENTS) {
     await updateConversationState(from, 'REQUEST_MONEY_AMOUNT');
+    // Say WHY (conversation audit 2026-10-19, BUGLOG #121: a customer typed an amount above the
+    // maximum twice, got the bare question twice, and left). Over the top: name the ceiling and
+    // offer the way through; under it: name the floor; nothing parsed: the plain ask.
+    const reason = Number.isInteger(amountCents) && amountCents > MAX_REQUEST_CENTS
+      ? `${randsShort(amountCents)} is more than one payment link can carry. A link can be for R5 up to ${randsShort(MAX_REQUEST_CENTS)}. Ask for ${randsShort(MAX_REQUEST_CENTS)} now and make another link for the rest, or tell me a smaller amount.`
+      : Number.isInteger(amountCents) && amountCents > 0 && amountCents < MIN_REQUEST_CENTS
+        ? `A payment link starts at R5. ${randsShort(amountCents)} is below that, so tell me an amount from R5 up to ${randsShort(MAX_REQUEST_CENTS)}.`
+        : null;
     const askMsg = await localizeOutbound(
-      `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5–R3000)\n\nFor example "R150", or reply "cancel" to stop.`,
+      reason
+        ? `🙏 ${reason}\n\nReply with the amount, for example "R150", or "cancel" to stop.`
+        : `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5–R3000)\n\nFor example "R150", or reply "cancel" to stop.`,
       await userLang(account)
     );
     return await sendWhatsAppText({ to: from, text: askMsg });
@@ -3456,6 +3467,10 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
     buttonText: 'View my payment page',
     url,
   });
+  if (interactive?.ok) {
+    // A button message bypasses say(): remember it, or the chat forgets it sent the link (BUGLOG #120).
+    await rememberSent({ to: from, text: `🙏 *${randsShort(amountCents)} requested*\n\n${introBody}\n\n[button: View my payment page] ${url}`, waMessageId: interactive?.data?.messages?.[0]?.id || null, refs: { request: request.id } });
+  }
   if (!interactive?.ok) {
     await sendWhatsAppText({ to: from, text: await localizeOutbound(`🙏 *Payment request created!*\n\n${introBody}`, await userLang(account)) });
   }
@@ -3927,6 +3942,8 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
     buttonText: `Pay ${randsShort(grossCents)} now`,
     url: checkoutUrl,
   });
+  // A button message bypasses say(): remember it, or the chat forgets it sent the link (BUGLOG #120).
+  if (interactive?.ok) await rememberSent({ to: from, text: `💳 Add money to WaPay\n\n${bodyText}\n\n[button: Pay ${randsShort(grossCents)} now]`, waMessageId: interactive?.data?.messages?.[0]?.id || null, refs: { deposit: paymentId } });
   if (interactive?.ok) return interactive;
 
   logStructured('deposit_cta_fallback', {

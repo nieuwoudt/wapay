@@ -68,8 +68,8 @@ test('the growth route returns the matrix and the admin page renders it on both 
   const page = read('../pages/admin/index.js');
   // One fetch feeds both cards (the plan-vs-now section and the matrix) on the Dashboard; the Growth tab passes its own data.
   assert.equal((page.match(/Valuation matrix, live/g) || []).length, 1, 'one card definition, rendered on both tabs');
-  assert.match(page, /<LiveValuation compact \/>/);
-  assert.match(page, /<LiveValuation v=\{g\.valuation\} minSample=\{g\.minSample\} \/>/);
+  assert.match(page, /<LiveValuation compact tick=\{tick\} \/>/);
+  assert.match(page, /<LiveValuation g=\{g\} minSample=\{g\.minSample\} \/>/);
   assert.match(page, /<PlanVsNow v=\{v\} \/>/);
   assert.match(page, /<ValuationMatrix v=\{v\} compact=\{compact\} \/>/);
   assert.match(page, /The plan, where we are, and where today's pace leads/);

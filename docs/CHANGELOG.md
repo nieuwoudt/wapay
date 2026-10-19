@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-10-19 (97) — Payment links as the key figure, the viral loop, the path and valuation charts, a ten-minute refresh, the reply box, the flags readout, and two audit fixes
+
+Founder, day two of the ad, midday: "every ten minutes update the dashboard"; "give me this
+graph [the path] on the dashboard, small: actual and a projection at the current rate, and the
+valuation"; "the key figure is the value of the payment requests created, how many were paid,
+the potential revenue if they are paid and then withdrawn, and how many links brought a new
+account"; "tell me how I can reply to Cytric"; "make sure the business-question variable is
+working"; and the first conversation audit of every customer chat (348 accounts, 2,498 turns).
+
+- **Payment links and the viral loop** (`links` and `viral` in `/api/admin/metrics`, the
+  "Payment links and the viral loop" card on the Dashboard): links created (count and rand,
+  all time and in the period), paid (count, rand, from a balance or by card, the paid rate,
+  the fees earned at today's schedule), open (count, rand) and lapsed, what the open links
+  are worth in fees if every one is paid by card (and the margin after the PayFast credit-card
+  cost from docs/COMMERCIALS.md) and if each is then withdrawn by PayShap (R8 fees; R2.88 rail
+  cost incl VAT); accounts whose first contact was paying a link, their share of all accounts,
+  the senders who brought them, and payers captured who are not on WaPay yet.
+- **The path** (`PathChart`): cumulative accounts since launch on a log scale, today's
+  seven-day pace carried forward six months, compounding once two full weeks exist, the plan's
+  point at the horizon. **The valuation path** (`ValuationPath`): the plan's month-by-month
+  valuation against today's pace held flat, both from the same model the matrix uses.
+- **Ten-minute refresh** (`REFRESH_MS`): the Dashboard, its valuation cards and the Growth tab
+  re-read themselves every ten minutes (the Meta read keeps its server-side ten-minute
+  throttle); the links card shows when it was refreshed.
+- **The reply box** (`ReplyBox` on the customer profile, `POST /api/admin/ops-reply`): a person
+  answers a customer inside their WhatsApp chat from Mission Control, same rules and code as
+  the internal route (one text, inside the 24-hour window, remembered by the chat).
+- **The flags readout** (`GET /api/internal/flags`, internal key): the commit and the switches
+  production reads at call time (business question, launch hold, each VAS and voucher switch,
+  fuel, withdrawals, ops-alert recipients, business invites), so a Vercel change can be
+  verified without a test sign-up.
+- **Audit fix, BUGLOG #120:** the deposit and payment-link button messages (interactive
+  cta_url) bypassed `say()` and were never recorded, so transcripts looked silent after an
+  amount and the chat could not see it had just sent the link; `rememberSent` in `lib/say.js`
+  records them now.
+- **Audit fix, BUGLOG #121:** an amount above R3,000 (or under R5) at the get-paid step got the
+  bare "How much would you like to request?" again, with no reason; a customer typed it twice
+  and left. The reply now names the ceiling or the floor and the way through.
+
 ## 2026-10-19 (96) — The business question leaves sign-up for the POC: new wallets finish onboarding without it, and "business account" stays invite-only
 
 Founder, day two of the ad, after the Cytric case: "remove the business option from
