@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-10-20 (103) — Pay-link identity: the pay page shows the requester's number tail and tells the payer to check it
+
+BUGLOG #131. The name on a link is the requester's own WhatsApp profile name, so anyone can
+call themselves anything. The page now shows the last three digits of the requester's number
+next to the name, in the link preview title ("Please pay Philly •••567 · R300") and in the
+heading, and carries a check line: "Check the number. This request comes from the WaPay
+account on a number ending •••567. If that is not the person you expect, do not pay."
+Business links name the business and carry no tail. New `requesterNumberTail` and
+`requesterLabelWithTail` in lib/payment-requests.js; the chat-side payer confirmation moves
+to the composed label with the next processor change. Tests: tests/pay-link-identity.test.mjs;
+1180/1180.
+
 ## 2026-10-20 (102) — WhatsApp policy compliance after Meta's "sending spam" notice: nothing WaPay starts, one message per turn, stop for everyone, the quality rating watched daily
 
 BUGLOG #130; the standard is docs/WHATSAPP_POLICY_COMPLIANCE.md. Reminders to ad arrivals are

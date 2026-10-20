@@ -4,6 +4,13 @@
 
 ---
 
+## 131. The pay page named the requester by their self-chosen WhatsApp name alone
+
+- **Symptom:** a link made by any account whose WhatsApp profile name was set to "Nieuwoudt" rendered "Nieuwoudt is requesting R300" with nothing a payer could check against; the founder asked how a scammer using his name would be stopped (2026-10-20).
+- **Root cause:** `maskedRequesterLabel` returns the display name when there is one, and the display name is the WhatsApp profile name the requester sets themselves; the number tail appeared only when no name existed.
+- **Fix:** `requesterNumberTail` (the last three digits, never the middle) is shown next to the name in the link preview title ("Please pay Philly •••567 · R300") and in the heading, and a check line tells the payer to compare the tail with the number they know and not to pay if it is not the person they expect. Business links name the business and carry no tail (registration is invite-only).
+- **Guard:** tests/pay-link-identity.test.mjs locks the tail, the title, the heading, the check line and the business exclusion. The other layers stay: the link reaches the payer from the requester's own WhatsApp, the money can only land in the balance of the Meta-verified number that made the link, pay-outs need a PIN and a traceable rail. KYC on pay-out is the strong gate and is off for the open pilot (founder decision open).
+
 ## 130. Meta flagged the number for "sending spam": quality rating RED after two days of ad reminders and multi-message turns
 
 - **Symptom (2026-10-20, 08:26 SAST):** Meta's e-mail "WhatsApp Business account WaPay has been identified as sending spam… may face restrictions or be disabled"; the Graph API read the number's quality rating as RED (status CONNECTED, throughput STANDARD).

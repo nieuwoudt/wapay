@@ -24,7 +24,7 @@
 import Head from 'next/head';
 import { useRef, useState } from 'react';
 
-import { getPaymentRequest, maskedRequesterLabel } from '../../lib/payment-requests.js';
+import { getPaymentRequest, maskedRequesterLabel, requesterNumberTail } from '../../lib/payment-requests.js';
 import { paymentRequestFeeCents } from '../../lib/deposits.js';
 import prisma from '../../lib/prisma.js';
 
@@ -49,9 +49,15 @@ export async function getServerSideProps({ params, query }) {
   if (!request) return { notFound: true };
 
   let requesterLabel = 'A WaPay user';
+  // Pay-link identity (2026-10-20): the name is the requester's own WhatsApp
+  // profile name, so the page also shows the last three digits of their
+  // number, a second signal the payer can check against the number they
+  // know. Business links name the business instead and carry no tail.
+  let requesterTail = null;
   try {
     const account = await prisma.account.findUnique({ where: { id: request.accountId } });
     requesterLabel = maskedRequesterLabel(account);
+    requesterTail = requesterNumberTail(account);
   } catch {
     // The label is cosmetic — never block the page on it.
   }
@@ -68,6 +74,7 @@ export async function getServerSideProps({ params, query }) {
       const business = await prisma.business.findUnique({ where: { id: request.businessId } });
       if (business?.name && business.status === 'ACTIVE') {
         requesterLabel = business.name;
+        requesterTail = null;
         isBusiness = true;
         // The logo the business uploaded (a small data URL kept in its
         // settings, validated on upload); never anything else from settings.
@@ -97,6 +104,7 @@ export async function getServerSideProps({ params, query }) {
       feeCents: paymentRequestFeeCents(request.amountCents),
       note: request.note ?? null,
       requesterLabel,
+      requesterTail,
       isBusiness,
       businessLogo,
       adumo,
@@ -109,7 +117,7 @@ export async function getServerSideProps({ params, query }) {
   };
 }
 
-export default function PayRequestPage({ code, status, amountCents, feeCents, note, requesterLabel, returned, isBusiness = false, businessLogo = null, adumo = false, declined = null, items = [], reference = null }) {
+export default function PayRequestPage({ code, status, amountCents, feeCents, note, requesterLabel, requesterTail = null, returned, isBusiness = false, businessLogo = null, adumo = false, declined = null, items = [], reference = null }) {
   // Card button lights up the moment a plausible number is typed, and a tap
   // WITHOUT one answers with our own popup instead of a silent browser
   // bounce (founder feedback 2026-08-27). Same shape the input's pattern
@@ -199,8 +207,10 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
   const waLink = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(`Pay request ${code}`)}`;
   const receiptLink = `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(`Receipt ${code}`)}`;
 
+  // The name plus the number tail, unless the label is already a masked number.
+  const shownLabel = requesterTail && !String(requesterLabel).endsWith(requesterTail) ? `${requesterLabel} ${requesterTail}` : requesterLabel;
   const ogTitle = status === 'PENDING'
-    ? `Please pay ${requesterLabel} · ${rands(amountCents)}`
+    ? `Please pay ${shownLabel} · ${rands(amountCents)}`
     : `Please Pay Me™ with WaPay`;
 
   return (
@@ -243,7 +253,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
         ) : status === 'PENDING' ? (
           <>
             {businessLogo && <img src={businessLogo} alt="" width={64} height={64} style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'cover', display: 'block', margin: '0 auto 8px', background: '#fff' }} />}
-            <div style={styles.sub}>{requesterLabel} is requesting</div>
+            <div style={styles.sub}>{shownLabel} is requesting</div>
             <div style={styles.amount}>{rands(amountCents)}</div>
             {isBusiness && (items.length > 0 || reference) ? (
               <div style={{ textAlign: 'left', background: '#f6f9f7', border: '1px solid #e3ebe6', borderRadius: 12, padding: '10px 14px', margin: '10px 0 4px', fontSize: 14, color: '#333' }}>
@@ -320,6 +330,12 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
               />
             </form>
 
+            {requesterTail ? (
+              <div style={{ ...styles.fine, color: '#1f3b2a', background: '#eef6f0', borderRadius: 10, padding: '8px 12px' }}>
+                Check the number. This request comes from the WaPay account on a number ending {requesterTail}.
+                If that is not the person you expect, do not pay.
+              </div>
+            ) : null}
             <div style={styles.fine}>
               No fees for you. You pay exactly {rands(amountCents)}. Card payments are processed
               securely by PayFast{adumo ? ' or Adumo (Nedbank)' : ''}, no WaPay account needed. Your number is used to send your
