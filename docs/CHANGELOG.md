@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-10-20 (107) — Pay-out rules: a R10,000 daily cap for accounts under a week old, KYC by threshold, referrals on the dashboard
+
+Founder decisions after the card-to-cash morning: no hold on card-funded money and no cap
+tied to the funding source; instead `lib/payout-rules.js`: an account younger than seven
+days may pay out R10,000 in any 24 hours (`WAPAY_PAYOUT_NEW_ACCOUNT_DAYS`,
+`WAPAY_PAYOUT_NEW_ACCOUNT_DAILY_CAP_CENTS`), and with `WAPAY_PAYOUT_KYC=threshold` an
+unverified account needs the identity check for a single pay-out of R3,000 or more or for
+more than R10,000 in 24 hours (`WAPAY_PAYOUT_KYC_SINGLE_CENTS`, `WAPAY_PAYOUT_KYC_DAILY_CENTS`);
+`off` and the old everyone-gate are unchanged. Checked at the amount step of the withdraw
+flow (the cap keeps the amount step with the remaining amount; the threshold opens the VERIFY
+step when Didit is configured and says honestly that the check is being switched on when it is
+not) and again in `requestPayout` as the backstop before any ledger move. The amount prompt
+carries the rule note for accounts it can bite. Mission Control: the customer page shows the
+pay-out freeze and a Referrals card (invited, opened, funded, got paid, reward eligible and
+paid); the growth funnel by source knows `referral`. Tests: tests/payout-rules.test.mjs.
+
 ## 2026-10-20 (106) — Per-account pay-out freeze after the first card-funded cash-out pattern
 
 BUGLOG #133. The first R3,000 card-paid link (00:38 UTC) was followed by 23 pay-out attempts

@@ -247,7 +247,7 @@ export default async function handler(req, res) {
   const conversations = (adsWindow || []).reduce((s, r) => s + num(r.conversations), 0);
 
   // ---- funnel by source + per ad ----
-  const sources = ['organic', 'paylink', 'ad', 'partner'];
+  const sources = ['organic', 'paylink', 'ad', 'referral', 'partner'];
   const funnelBySource = sources.map((src) => {
     const rs = rows.filter((a) => a.src === src);
     const onboarded = rs.filter((a) => a.onboarded);

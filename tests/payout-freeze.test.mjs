@@ -61,7 +61,7 @@ test('requestPayout refuses a frozen account before any ledger move or rail call
   process.env.WAPAY_PAYOUT_ENABLED = 'true';
   let railCalls = 0; let ledgerCalls = 0;
   const prisma = { account: { findUnique: async () => ({ profile: { payouts: { frozen: true, reason: 'card check' } } }) }, providerRequest: { findUnique: async () => null, findFirst: async () => null } };
-  const out = await requestPayout({ prisma, ledger: async () => { ledgerCalls += 1; }, client: { createPayout: async () => { railCalls += 1; return {}; } }, account: { id: ID, msisdn: '27600000919' }, intent: { id: 'pi-1', method: 'PAYSHAP', amountCents: 300000, recipient: { mobile: '0760000000', idNumber: '9001015009087' } }, pinProof: { ok: true } });
+  const out = await requestPayout({ prisma, ledger: async () => { ledgerCalls += 1; }, client: { createPayout: async () => { railCalls += 1; return {}; } }, account: { id: ID, msisdn: '27600000919' }, intentId: 'pi-1', method: 'PAYSHAP', amountCents: 300000, recipient: { mobile: '0760000000', idNumber: '9001015009087' }, pinProof: { ok: true } });
   assert.equal(out.ok, false);
   assert.equal(out.error, 'FROZEN');
   assert.equal(out.frozen.reason, 'card check');
