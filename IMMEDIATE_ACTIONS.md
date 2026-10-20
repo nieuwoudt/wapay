@@ -43,7 +43,7 @@
 
 ```
 Name: DATABASE_URL
-Value: postgresql://postgres.ibczmxhgvrmjzijwonwd:Wapay@202508@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+Value: postgresql://postgres.ibczmxhgvrmjzijwonwd:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
 ```
 
 ```
@@ -58,7 +58,7 @@ Value: bld
 
 ```
 Name: BLU_BASIC_PASS
-Value: ornuk3i9vseei125s8qea71kub
+Value: <set in Vercel>
 ```
 
 ```
@@ -79,7 +79,7 @@ Value: 529735...
 
 ```
 Name: META_WEBHOOK_VERIFY_TOKEN
-Value: wapay_webhook_secret_2025
+Value: <set in Vercel>
 ```
 
 ```
@@ -128,7 +128,7 @@ You'll be ready to:
 
 ### Database Migration Issues:
 - **"Can't reach database"**: Use SQL Editor method instead of Prisma CLI
-- **"Permission denied"**: Check password is correct: `Wapay@202508`
+- **"Permission denied"**: Check password is correct: `[YOUR-PASSWORD]`
 - **"Relation already exists"**: ✅ Already done! Skip it.
 
 ### Vercel Issues:

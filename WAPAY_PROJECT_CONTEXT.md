@@ -58,10 +58,10 @@
 
 ### **Environment Variables (Vercel)**
 ```
-WHATSAPP_ACCESS_TOKEN=EAATG3Axub2QBP5x4ymA4MxI1aZBNMltTuwUv... (Production token)
+WHATSAPP_ACCESS_TOKEN=<set in Vercel> (Production token)
 WHATSAPP_PHONE_NUMBER_ID=870272072828461
 WHATSAPP_BUSINESS_ACCOUNT_ID=647978251504290 (WaPay Production WABA)
-WHATSAPP_VERIFY_TOKEN=wapay_webhook_secret_2025
+WHATSAPP_VERIFY_TOKEN=<set in Vercel>
 DATABASE_URL=postgresql://... (Supabase connection pooler)
 ```
 

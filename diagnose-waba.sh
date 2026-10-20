@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # WaPay WABA Diagnostics
-# Replace YOUR_TOKEN_HERE with your actual token from Vercel
+# Export META_WHATSAPP_TOKEN first (the value lives in Vercel); never paste a token into this file
 
-TOKEN="EAATG3Axub2QBP08RipQHc7xh39z1ozgZAA55uVSnoP8UW0tTlcsagDmwtINVu3F9X9ZCLY2Fo4NXlBgSV40aSfIjZCk6JpQicHB7WsyZC9cDxHqqI2hpdxnFfJMTSIONn5xya4KFiSSxq4laOg8bDued08WJsm2jeCmjpkg6ZCxhCpfdjZArdYZA7dpBZA9XoFBNZCDIryft2t5pjN02WVEZBWM81eFZCD9cgUhhItxn2HTtyzx121I3IlJeiPMia5ie5UEvDzabSv3GjtCs29tSGVHwd970wZDZD"
+TOKEN="${META_WHATSAPP_TOKEN:?export META_WHATSAPP_TOKEN first (value in Vercel)}"
 PHONE_ID="870272072828461"
 ENV_WABA_ID="647978251504290"
 

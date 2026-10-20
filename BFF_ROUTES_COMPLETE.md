@@ -370,8 +370,8 @@ Add (if not already added):
 ```bash
 BLU_BASE_URL=https://api.qa.bltelecoms.net/v2/api/trade
 BLU_BASIC_USER=bld
-BLU_BASIC_PASS=ornuk3i9vseei125s8qea71kub
-BLU_API_KEY=e73d6237-0864-4c87-ba40-e520e951b336
+BLU_BASIC_PASS=<set in Vercel>
+BLU_API_KEY=<set in Vercel>
 DATABASE_URL=postgresql://...
 ```
 

@@ -19,8 +19,8 @@
 
 ```bash
 USERNAME: bld
-PASSWORD: ornuk3i9vseei125s8qea71kub
-API_KEY: e73d6237-0864-4c87-ba40-e520e951b336
+PASSWORD: <set in Vercel>
+API_KEY: <set in Vercel>
 ```
 
 ### Auth Method
@@ -29,18 +29,18 @@ API_KEY: e73d6237-0864-4c87-ba40-e520e951b336
 
 ```http
 Authorization: Basic base64(username:password)
-apikey: e73d6237-0864-4c87-ba40-e520e951b336
+apikey: <set in Vercel>
 Content-Type: application/json
 ```
 
 ### Example Auth Header
 
 ```typescript
-const basic = Buffer.from('bld:ornuk3i9vseei125s8qea71kub').toString('base64');
+const basic = Buffer.from(`${process.env.BLU_BASIC_USER}:${process.env.BLU_BASIC_PASS}`).toString('base64');
 
 const headers = {
   'Authorization': `Basic ${basic}`,
-  'apikey': 'e73d6237-0864-4c87-ba40-e520e951b336',
+  'apikey': process.env.BLU_API_KEY,
   'Content-Type': 'application/json'
 };
 ```
@@ -662,8 +662,8 @@ Customer → WhatsApp → NLP → BFF → BluVasClient → Blu API
 # Blu VAS API
 BLU_BASE_URL=https://api.qa.bltelecoms.net/v2/api/trade
 BLU_BASIC_USER=bld
-BLU_BASIC_PASS=ornuk3i9vseei125s8qea71kub
-BLU_API_KEY=e73d6237-0864-4c87-ba40-e520e951b336
+BLU_BASIC_PASS=<set in Vercel>
+BLU_API_KEY=<set in Vercel>
 
 # Feature Flags
 ENABLE_BLU_VAS=true

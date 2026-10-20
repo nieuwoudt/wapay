@@ -21,7 +21,7 @@ The following fixes are now live on Vercel:
 4. Click **Edit**
 5. Paste your new token:
    ```
-   EAATG3Axub2QBP2bEUQZAaKrwXptRg3J1mxstMzHtVdq1ZBfAQahOzKa0ZABFe5gEWTW4v159upyLNIpwDoP8IcXXZBlt5LoEPfLUooDQyyLOM4VSzVqiKuOzEtt5ovx8ZASsmD8FKg2HC5WfpsUN8Dtpd7kpqqzonMABWjJop3ZBgZBDGNbA747HXZC1yXhq9Q0NkiaB9Kr6luKEcFaWPY0t7vCo781yZALLEblpdPoZCZBR2HCgZAHnfb3IKFHdaIXVZCOZAfHIlmpC4tkeLPGpQUmPO4fcDu
+   <the new token from Meta; paste it into Vercel only, never into a file>
    ```
 6. Click **Save**
 

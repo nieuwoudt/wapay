@@ -2,7 +2,7 @@
 
 # Quick template check for WaPay production
 WABA_ID="647978251504290"
-TOKEN="EAATG3Axub2QBP2bEUQZAaKrwXptRg3J1mxstMzHtVdq1ZBfAQahOzKa0ZABFe5gEWTW4v159upyLNIpwDoP8IcXXZBlt5LoEPfLUooDQyyLOM4VSzVqiKuOzEtt5ovx8ZASsmD8FKg2HC5WfpsUN8Dtpd7kpqqzonMABWjJop3ZBgZBDGNbA747HXZC1yXhq9Q0NkiaB9Kr6luKEcFaWPY0t7vCo781yZALLEblpdPoZCZBR2HCgZAHnfb3IKFHdaIXVZCOZAfHIlmpC4tkeLPGpQUmPO4fcDu"
+TOKEN="${META_WHATSAPP_TOKEN:?export META_WHATSAPP_TOKEN first (value in Vercel)}"
 
 echo "🔍 Checking WaPay Production Templates"
 echo "WABA ID: $WABA_ID"

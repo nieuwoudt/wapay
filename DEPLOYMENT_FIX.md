@@ -5,7 +5,7 @@ The code had environment variable mismatches that have been fixed. Now you need 
 
 ## Your Correct WhatsApp Credentials
 ```
-Access Token: IXhp2bUANrQJJNfIJsfDKjDFefhpeY76hJWJX745b51r6mWmSGLk0V3s4xNvpTZBkYuY8wiLWqeYmYB5
+Access Token: <set in Vercel>
 Phone Number ID: 870272072828461
 Business Account ID: 647978251504290
 ```
@@ -15,7 +15,7 @@ Business Account ID: 647978251504290
 Go to your Vercel dashboard and ensure these are set:
 
 1. **META_WHATSAPP_TOKEN**
-   - Value: `IXhp2bUANrQJJNfIJsfDKjDFefhpeY76hJWJX745b51r6mWmSGLk0V3s4xNvpTZBkYuY8wiLWqeYmYB5`
+   - Value: `<set in Vercel>`
    - Environment: Production, Preview, Development
 
 2. **META_WHATSAPP_PHONE_NUMBER_ID**
@@ -27,7 +27,7 @@ Go to your Vercel dashboard and ensure these are set:
    - Environment: Production, Preview, Development
 
 4. **META_WEBHOOK_VERIFY_TOKEN**
-   - Value: `wapay_webhook_secret_2025`
+   - Value: `<set in Vercel>`
    - Environment: Production, Preview, Development
 
 ## Step 2: Redeploy to Vercel

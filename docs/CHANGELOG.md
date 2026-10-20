@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-10-20 (104) — Credentials out of the repository: placeholders in 36 files and a guard that fails the suite on a credential-shaped string
+
+BUGLOG #132. The repository was public with the Supabase database password, Meta WhatsApp
+tokens, the webhook verify token and Blu's QA password and API keys pasted into setup docs
+and scripts. Every value is now a placeholder (`<set in Vercel>`, `[YOUR-PASSWORD]`); the
+diagnostic scripts require the env var instead of carrying a default; the Blu curl examples
+build the Basic header from env; `tests/webhook-wiring.test.mjs` no longer quotes the old
+verify token. New `tests/no-committed-credentials.test.mjs` scans every tracked text file
+(falls back to a tree walk in the fast working copy) with an allowlist by SHA-256 for
+published test values (Adumo staging, OTT's spec key) and by path for provider fixtures.
+History still holds the values: rotation in the Supabase, Meta, Blu and Yoyo dashboards is
+the real fix (founder, in progress); a history rewrite is optional once the repository is
+private.
+
 ## 2026-10-20 (103) — Pay-link identity: the pay page shows the requester's number tail and tells the payer to check it
 
 BUGLOG #131. The name on a link is the requester's own WhatsApp profile name, so anyone can

@@ -83,6 +83,8 @@ A rule that has only a comment is not on this thread.
 
 The PIN proof key and the PIN token secret have none: without the env, nothing is signed. Adumo's published sandbox secret is refused outside the sandbox.
 
+No credential value is committed anywhere in the repository, docs and scripts included: a doc names the variable and says `<set in Vercel>`. `tests/no-committed-credentials.test.mjs` walks every tracked text file and fails the suite on a credential-shaped string; published test values are allowed only by their SHA-256 with the source named (BUGLOG #132).
+
 **Legacy, open:** `PIN_PEPPER` still falls back to a value in source (`packages/auth/src/pin.ts`). Changing it would break every stored PIN hash, so production must set it; `switches.pinPepperSet` on `/api/internal/payout-status` says whether it does. A rehash-on-verify migration is the way off the default.
 
 ## 7. Production switches (read them, never guess)
@@ -110,7 +112,7 @@ These come from the read-only inventory of every money path. Each one needs an o
 | O6 | **Concurrent executes of the same preview** (airtime, data, voucher) can call the supplier twice. The customer is debited once; any loss is WaPay's. | **Closed 2026-10-16:** fuel's atomic PENDING/RECONCILE → EXECUTING flip (`updateMany` on the current status, 409 `IN_PROGRESS` for the loser, stale takeover after 120 s) now runs on airtime, data and voucher execute, after the PIN and before the hold. |
 | O7 | **`pages/api/test-deposit.js` answers in production** (moves nothing), and `apps/api` has an unauthenticated deposit route (deployment unconfirmed). | **Closed 2026-10-16:** both files removed and the scaffold's registration deleted; a test asserts they stay gone. |
 | O8 | **`PIN_PEPPER` default in source** (§6). | **Code closed 2026-10-16, env open:** `pepperCandidates()` tries the current pepper, then `PIN_PEPPER_PREVIOUS`, then the in-source default; a PIN that verifies under an old pepper is rehashed under the current one in the same update. Production logs `pin_pepper_default_in_production` once per instance until the founder sets `PIN_PEPPER` (any 32+ random bytes); no customer is locked out by the change. |
-| O9 | **The leaked supplier and Meta secrets are not rotated yet** (memory `key-rotation-deferred`). | Rotate before launch. |
+| O9 | **The leaked supplier and Meta secrets are not rotated yet** (memory `key-rotation-deferred`). | **Code side closed 2026-10-20 (CHANGELOG 104, BUGLOG #132):** every value in the repository replaced with a placeholder, and the suite fails on a credential-shaped string (§6). **Rotation still open** (founder, in progress): Supabase database password, Meta WhatsApp token and webhook verify token, Blu QA password and API keys, Yoyo client secret; the repository made private. History keeps the old values until they are rotated. |
 | O10 | **KYC is off for every customer** (`WAPAY_PAYOUT_KYC=off`, the founder's open-pilot decision of 2026-10-12). | Revisit with counsel before scale. |
 | O11 | **"Send money" is a wallet-to-wallet transfer since 2026-10-18 (BUGLOG #117).** One customer's balance credits another's, or WaPay holds it for a non-member. That is e-money, not a closed-loop voucher sale. This is the founder's open-pilot stance, like O10. | Take it to counsel with O10 before a public launch. |
 
@@ -118,3 +120,4 @@ These come from the read-only inventory of every money path. Each one needs an o
 
 - 2026-10-16: the thread created; §1 to §7 implemented and tested. The read-only money-path inventory produced §8. BUGLOG #111 to #114.
 - 2026-10-16 (main session, CHANGELOG 89): O3 (two of three), O4, O5, O6, O7 closed in code; O8 closed in code, waiting on the `PIN_PEPPER` env. Open: O1, O2, O9, O10, the IP half of O3.
+- 2026-10-20 (CHANGELOG 104): the repository found public with credentials in setup docs and scripts; values replaced, the no-committed-credentials guard added to §6, O9 closed on the code side, rotation open.

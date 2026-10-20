@@ -9,8 +9,8 @@ All Blu-related environment variables must be set in Vercel for the deployment t
 ```bash
 BLU_BASE_URL="https://api.qa.bltelecoms.net/v2/api/trade"
 BLU_BASIC_USER="bld"
-BLU_BASIC_PASS="ornuk3i9vseei125s8qea71kub"
-BLU_API_KEY="6b58e8ca-1564-462f-8481-c9f39b258a15"
+BLU_BASIC_PASS="<set in Vercel>"
+BLU_API_KEY="<set in Vercel>"
 ```
 
 ### Production Environment (Future)

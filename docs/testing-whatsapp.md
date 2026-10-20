@@ -81,7 +81,7 @@ Add these to your Vercel project:
 
 ```bash
 # Database
-DATABASE_URL=postgresql://postgres.lqkpshowocitirxrmgpy:Wapay%40202508@aws-0-eu-central-1.pooler.supabase.com:6543/postgres
+DATABASE_URL=postgresql://postgres.lqkpshowocitirxrmgpy:[YOUR-PASSWORD]@aws-0-eu-central-1.pooler.supabase.com:6543/postgres
 
 # Blu Voucher (use your actual credentials)
 BLU_BASE_URL=https://api.bluvoucher.com/v1
@@ -99,10 +99,10 @@ YOYO_MERCHANT_ID=your_merchant_id
 FEATURE_ENABLE_YOYO=false
 
 # WhatsApp (Meta) - CONFIGURED ✅
-META_WHATSAPP_TOKEN=EAATG3Axub2QBPxe79MDtaNAZAENUug5lmpP8j4LYVH4qkoHV66BGxp7RBPkRrurl5f4FzsALZASkwOvXjR675ISPe6uzXZCluQzqJhXZBPUPPKIMow6YtnxNcbwDx7o7ThnttBjwDkLqClLAPSQrbHMGELKxZAjjOq0B1PrMy03pOlGlJs9oBZBQpKKAXdYJO9RpSeouZCV5ifl1VFesKLZAfTgQjLDzXM8MZCcaMxn9oOQPwZBwZDZD
+META_WHATSAPP_TOKEN=<set in Vercel>
 META_WHATSAPP_PHONE_NUMBER_ID=856018554259689
 META_WHATSAPP_BUSINESS_ACCOUNT_ID=801970852418258
-META_WEBHOOK_VERIFY_TOKEN=wapay_webhook_secret_2025
+META_WEBHOOK_VERIFY_TOKEN=<set in Vercel>
 ```
 
 ---

@@ -10,7 +10,7 @@
  * - BLU_BASE_URL: API base URL - MUST be set to https://api.qa.bltelecoms.net/v2/trade for QA
  * - BLU_BASIC_USER: Basic auth username (not used for VAS, but kept for voucher compatibility)
  * - BLU_BASIC_PASS: Basic auth password (not used for VAS, but kept for voucher compatibility)
- * - BLU_TRADE_API_KEY: API key for Blu Trade API (e.g., 5135ae7a-3d92-44ff-86bb-89c401722221 for QA)
+ * - BLU_TRADE_API_KEY: API key for Blu Trade API (set in .env / Vercel; never commit the value)
  * - BLU_VAS_STUB_MODE: When 'true', returns simulated success without calling Blu (QA only!)
  * 
  * ⚠️ WARNING: BLU_VAS_STUB_MODE must NEVER be enabled in production with real money.

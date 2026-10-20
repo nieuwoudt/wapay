@@ -59,7 +59,7 @@ const schema = read('../packages/domain/prisma/schema.prisma');
 const migration = read('../packages/domain/prisma/migrations/20260904_business/migration.sql');
 
 const OWNER = '0731234567';
-function armEnv() { process.env.WAPAY_BUSINESS_SESSION_SECRET = 'biz-secret-0123456789abcdef'; delete process.env.WAPAY_BUSINESS_MSISDNS; process.env.WAPAY_BUSINESS_SIGNUPS = 'open'; }
+function armEnv() { process.env.WAPAY_BUSINESS_SESSION_SECRET = 'test-biz-secret-0123456789abcdef'; delete process.env.WAPAY_BUSINESS_MSISDNS; process.env.WAPAY_BUSINESS_SIGNUPS = 'open'; }
 function disarmEnv() { delete process.env.WAPAY_BUSINESS_SESSION_SECRET; delete process.env.WAPAY_ADMIN_SESSION_SECRET; delete process.env.WAPAY_BUSINESS_SIGNUPS; }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +256,7 @@ test('shared otp_codes table: business verify never consumes admin or customer c
 
 test('tokens: tamper/expiry revoke; business and admin tokens are not interchangeable on a shared secret', () => {
   disarmEnv();
-  process.env.WAPAY_ADMIN_SESSION_SECRET = 'shared-secret-0123456789abcdef';
+  process.env.WAPAY_ADMIN_SESSION_SECRET = 'test-shared-secret-0123456789abcdef';
   process.env.WAPAY_ADMIN_MSISDNS = '27731234567';
   const bt = mintBusinessToken({ businessId: 'biz1', accountId: 'acc-owner' });
   assert.equal(verifyBusinessToken(bt).ok, true, 'falls back to the admin secret');

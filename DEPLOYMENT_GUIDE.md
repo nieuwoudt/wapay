@@ -124,7 +124,7 @@ git push origin main
 
 ```bash
 # WhatsApp (Meta)
-META_WEBHOOK_VERIFY_TOKEN=wapay_webhook_secret_2025
+META_WEBHOOK_VERIFY_TOKEN=<set in Vercel>
 META_PHONE_NUMBER_ID=<your_phone_number_id>
 META_ACCESS_TOKEN=<your_meta_access_token>
 
@@ -269,7 +269,7 @@ curl "https://your-app.vercel.app/api/vas/bundles/vodacom"
 
 4. **Set Verify Token**
    ```
-   wapay_webhook_secret_2025
+   <the META_WEBHOOK_VERIFY_TOKEN value from Vercel>
    ```
    (Must match `META_WEBHOOK_VERIFY_TOKEN` in Vercel)
 

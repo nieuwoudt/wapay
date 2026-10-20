@@ -6,14 +6,14 @@
 # ================================
 # DATABASE
 # ================================
-DATABASE_URL="postgresql://postgres.ibczmxhgvrmjzijwonwd:Wapay@202508@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+DATABASE_URL="postgresql://postgres.ibczmxhgvrmjzijwonwd:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
 
 # ================================
 # BLU VOUCHER (QA Environment)
 # ================================
 BLU_BASE_URL="https://api.qa.bltelecoms.net/v2/api/trade"
 BLU_BASIC_USER="bld"
-BLU_BASIC_PASS="ornuk3i9vseei125s8qea71kub"
+BLU_BASIC_PASS="<set in Vercel>"
 BLU_API_KEY="WAITING_FOR_BLU_TO_PROVIDE"
 
 # ================================
@@ -30,7 +30,7 @@ YOYO_MERCHANT_ID="placeholder"
 META_WHATSAPP_TOKEN="YOUR_META_ACCESS_TOKEN_HERE"
 META_WHATSAPP_PHONE_NUMBER_ID="529735..."
 META_WHATSAPP_BUSINESS_ACCOUNT_ID="YOUR_BUSINESS_ACCOUNT_ID"
-META_WEBHOOK_VERIFY_TOKEN="wapay_webhook_secret_2025"
+META_WEBHOOK_VERIFY_TOKEN="<set in Vercel>"
 
 # ================================
 # FEATURE FLAGS
@@ -63,7 +63,7 @@ See `SETUP_DATABASE.md` for instructions.
 #### Database
 ```
 Name: DATABASE_URL
-Value: postgresql://postgres.ibczmxhgvrmjzijwonwd:Wapay@202508@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+Value: postgresql://postgres.ibczmxhgvrmjzijwonwd:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
 Environment: Production, Preview, Development
 ```
 
@@ -78,7 +78,7 @@ Value: bld
 Environment: All
 
 Name: BLU_BASIC_PASS
-Value: ornuk3i9vseei125s8qea71kub
+Value: <set in Vercel>
 Environment: All
 
 Name: BLU_API_KEY
@@ -97,7 +97,7 @@ Value: 529735...
 Environment: All
 
 Name: META_WEBHOOK_VERIFY_TOKEN
-Value: wapay_webhook_secret_2025
+Value: <set in Vercel>
 Environment: All
 ```
 
