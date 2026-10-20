@@ -15,8 +15,9 @@ verify token. New `tests/no-committed-credentials.test.mjs` scans every tracked 
 (falls back to a tree walk in the fast working copy) with an allowlist by SHA-256 for
 published test values (Adumo staging, OTT's spec key) and by path for provider fixtures.
 History still holds the values: rotation in the Supabase, Meta, Blu and Yoyo dashboards is
-the real fix (founder, in progress); a history rewrite is optional once the repository is
-private.
+the real fix (founder, in progress). No force-push and no history rewrite, commits only
+(founder, 2026-10-20): a rewrite would break every working copy and the deploy hook, and the
+values are already public.
 
 ## 2026-10-20 (103) — Pay-link identity: the pay page shows the requester's number tail and tells the payer to check it
 
