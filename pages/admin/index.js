@@ -13,6 +13,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import { fmtR, fmtN, simulate, preset, budgetFn, BUDGET_DEFAULT } from '../../lib/scale-model.js';
+import { Bars, WeeklyFlows, TakeRate, StackBars, DailyBars, DailyLines, PathChart, ValuationPath } from '../../lib/admin-charts.js';
 
 // Mission Control refreshes itself every ten minutes (founder 2026-10-19); the Meta read is throttled server-side to the same cadence.
 const REFRESH_MS = 10 * 60 * 1000;
@@ -92,12 +93,33 @@ td.n,th.n{text-align:right}
 svg{display:block;width:100%}
 svg text{font:500 10.5px Inter,system-ui;fill:var(--ink3)}
 .empty{color:var(--ink3);font-size:12.5px;padding:14px 0}
+.recharts-wrapper svg{width:100%!important}
+.recharts-legend-item-text{color:var(--ink2)!important}
+@media(max-width:700px){
+.wrap{padding:12px 12px 70px}
+header{gap:10px;margin-bottom:12px}
+.tabs{overflow-x:auto;flex-wrap:nowrap;max-width:100%;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{white-space:nowrap;padding:8px 11px;font-size:12px}
+.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.grid{gap:10px}
+.card{padding:14px 14px;border-radius:16px}
+.card h2{font-size:13px}
+.v{font-size:21px}
+.bal{font-size:19px}
+table{font-size:12px}
+th,td{padding:5px 7px 5px 0}
+.idrow{grid-template-columns:1fr}
+.floatrow{grid-template-columns:1fr!important;gap:6px!important}
+.searchrow{flex-wrap:wrap}
+.login{margin-top:4vh}
+}
 
 .ops{display:flex;gap:8px;flex-wrap:wrap}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
 `;
 
-function Bars({ series, color = 'var(--accent)', fmt = (v) => v }) {
+function BarsStatic({ series, color = 'var(--accent)', fmt = (v) => v }) {
   if (!series?.length) return <div className="empty">No data yet.</div>;
   const W = 560, H = 150, L = 8, B = 20, T = 14;
   const mx = Math.max(...series.map((s) => s.v)) || 1;
@@ -141,7 +163,7 @@ function HBars({ rows, fmt = Rw }) {
   );
 }
 
-function WeeklyFlows({ weekly }) {
+function WeeklyFlowsStatic({ weekly }) {
   // Money in / spent / transferred, per week. Grouped bars, one group per week.
   if (!weekly?.length) return <div className="empty">No money movement in this period yet.</div>;
   const wks = [...weekly].sort((a, b) => a.wk.localeCompare(b.wk)).slice(-14);
@@ -181,7 +203,7 @@ function WeeklyFlows({ weekly }) {
   );
 }
 
-function TakeRate({ revenueWeekly, flowsWeekly }) {
+function TakeRateStatic({ revenueWeekly, flowsWeekly }) {
   // Net revenue as a % of the money that moved, per week. One series, so no
   // legend: the heading names it.
   const flowByWk = new Map((flowsWeekly || []).map((f) => [f.wk, (f.in || 0) + (f.spend || 0) + (f.transfer || 0)]));
@@ -261,7 +283,7 @@ function Floats() {
   return (
     <div>
       {(f.floats || []).map((row) => (
-        <div key={row.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.4fr) 1fr 1fr 1.4fr', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--grid)' }}>
+        <div key={row.key} className="floatrow" style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1.4fr) 1fr 1fr 1.4fr', gap: 10, alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--grid)' }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600 }}>{row.name}</div>
             <div style={{ fontSize: 11, color: 'var(--ink3)' }}>{row.note}</div>
@@ -275,6 +297,9 @@ function Floats() {
             <b>{row.ledgerCents != null ? R(row.ledgerCents) : '—'}</b>
           </div>
           <div className="ops" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {row.recon && row.recon.expectedCents != null && pill(row.recon.reconDriftCents == null ? null : Math.abs(row.recon.reconDriftCents) < 500, 'Recon',
+              `${R(row.recon.loadedCents)} loaded in ${row.recon.loads} ${row.recon.loads === 1 ? 'load' : 'loads'} · ${R(row.recon.usageCents)} used · expected ${R(row.recon.expectedCents)}${row.recon.reconDriftCents == null ? '' : row.recon.reconDriftCents === 0 ? ' · matches' : ` · ${R(Math.abs(row.recon.reconDriftCents))} ${row.recon.reconDriftCents > 0 ? 'more at the supplier' : 'short at the supplier'}`}`)}
+            {row.recon && row.recon.expectedCents == null && row.recon.loads > 0 && pill(null, 'Loads', `${R(row.recon.loadedCents)} in ${row.recon.loads}`)}
             {row.low != null && pill(!row.low, row.low ? 'LOW FLOAT' : 'Float ok', `warn under ${R(row.warnCents)}`)}
             {row.driftCents != null && pill(null, 'Drift',
               row.driftCents === 0 ? 'none' : `${R(Math.abs(row.driftCents))} ${row.driftCents > 0 ? 'supplier ahead' : 'ledger ahead'}`)}
@@ -282,6 +307,7 @@ function Floats() {
             {row.api && !row.api.configured && pill(null, 'Awaiting credentials', '')}
             {row.api?.error && pill(false, 'Supplier check failed', row.api.error)}
           </div>
+          <RecordLoad floatKey={row.key} lastLoad={row.recon?.lastLoad || null} onRecorded={() => { setF(null); fetch('/api/admin/floats').then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setF(d); }).catch(() => {}); }} />
         </div>
       ))}
       <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>
@@ -620,7 +646,7 @@ function Funnel({ f }) {
 }
 
 const SRC_COLORS = { organic: 'var(--s1)', paylink: 'var(--s2)', referral: 'var(--s3)' };
-function StackBars({ rows }) {
+function StackBarsStatic({ rows }) {
   // rows: [{wk, src, n}] → stacked weekly bars by acquisition source.
   if (!rows?.length) return <div className="empty">No data yet.</div>;
   const weeks = [...new Set(rows.map((r) => r.wk))].sort().slice(-16);
@@ -886,7 +912,7 @@ function Dashboard() {
         <div className="card">
           <h2>New accounts per week, by source</h2>
           <p className="note">Organic vs pay-link capture (money-backed attribution, stamped at creation).</p>
-          <StackBars rows={m.signupsBySource} />
+          <StackBars rows={m.signupsBySource} colors={SRC_COLORS} />
         </div>
         <div className="card">
           <h2>Revenue by line, this period</h2>
@@ -982,7 +1008,7 @@ function cumulativeLinks(daily) {
 }
 
 /* The path (founder 2026-10-19, "all time, clear"): cumulative accounts from the first one ever, today's pace carried forward, the plan's point. */
-function PathChart({ series, t }) {
+function PathChartStatic({ series, t }) {
   if (!t || !series?.length) return <div className="empty">No accounts yet.</div>;
   const W = 560, H = 190, L = 46, Rr = 14, T = 14, B = 26;
   const horizonDays = t.monthsAhead * 30;
@@ -1033,7 +1059,7 @@ function PathChart({ series, t }) {
 }
 
 /* The valuation path: the plan's monthly curve, the same model on the inputs measured so far, and today's pace held flat; hover any point. */
-function ValuationPath({ t, v }) {
+function ValuationPathStatic({ t, v }) {
   if (!t) return null;
   const planRows = simulate(preset('plan'), budgetFn(BUDGET_DEFAULT)).rows.slice(0, 13);
   const measuredInputs = Object.fromEntries((v?.measuredUsed || []).map((u) => [u.key, u.value]));
@@ -1340,7 +1366,7 @@ function fmtMeasured(m) {
 }
 
 // Bars for one rand series per day (spend), lines for people per day.
-function DailyBars({ rows, pick, fmt }) {
+function DailyBarsStatic({ rows, pick, fmt }) {
   if (!rows?.length) return <div className="empty">No days in this period yet.</div>;
   const W = 560, H = 150, L = 8, B = 20, T = 12;
   const vals = rows.map((r) => pick(r) || 0);
@@ -1362,7 +1388,7 @@ function DailyBars({ rows, pick, fmt }) {
     </svg>
   );
 }
-function DailyLines({ rows, series }) {
+function DailyLinesStatic({ rows, series }) {
   if (!rows?.length) return <div className="empty">No days in this period yet.</div>;
   const W = 560, H = 150, L = 8, Rr = 8, B = 20, T = 12;
   const mx = Math.max(1, ...rows.flatMap((r) => series.map((s) => r[s.key] || 0)));
@@ -1995,6 +2021,46 @@ function FloatsTab() {
         <UniFuelPanel />
       </div>
     </>
+  );
+}
+
+/* Record a float load (2026-10-20): the founder's transfer to a supplier, typed in once it cleared, so the row above reconciles. */
+function RecordLoad({ floatKey, lastLoad = null, onRecorded }) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [ref, setRef] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    const cents = Math.round(Number(String(amount).replace(/[^0-9.]/g, '')) * 100);
+    if (!Number.isInteger(cents) || cents <= 0) { setMsg('Type the amount in rands, like 2500.'); return; }
+    setBusy(true); setMsg('');
+    try {
+      const r = await fetch('/api/admin/float-load', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: floatKey, amountCents: cents, loadedAt: date, reference: ref || null }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) { setMsg(j.error === 'BAD_KEY' ? 'This float does not take loads yet.' : j.error === 'BAD_DATE' ? 'Date must be YYYY-MM-DD.' : 'Could not record the load.'); }
+      else { setMsg(j.replayed ? 'Already recorded (same day, amount and reference).' : `Recorded ${R(cents)} on ${date}.`); setAmount(''); setRef(''); if (onRecorded) onRecorded(); }
+    } catch { setMsg('Could not record the load.'); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ gridColumn: '1 / -1', paddingLeft: 2 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button className="linkish" onClick={() => setOpen((o) => !o)}>{open ? 'Close' : 'Record a load'}</button>
+        {lastLoad && <span className="note" style={{ margin: 0 }}>last load {R(lastLoad.amountCents)} on {lastLoad.loadedAt}{lastLoad.reference ? ` · ${lastLoad.reference}` : ''}</span>}
+        {msg && <span className="note" style={{ margin: 0, color: /Recorded|Already/.test(msg) ? 'var(--good)' : 'var(--crit)' }}>{msg}</span>}
+      </div>
+      {open && (
+        <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+          <input inputMode="decimal" placeholder="Amount in rands" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ width: 150, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--grid)', background: 'var(--glass)', color: 'var(--ink)' }} />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid var(--grid)', background: 'var(--glass)', color: 'var(--ink)' }} />
+          <input placeholder="Bank reference (optional)" value={ref} onChange={(e) => setRef(e.target.value)} style={{ width: 200, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--grid)', background: 'var(--glass)', color: 'var(--ink)' }} />
+          <button type="submit" disabled={busy} className="searchrow-btn" style={{ padding: '8px 14px', border: 0, borderRadius: 8, background: 'var(--accent)', color: '#fff', fontWeight: 650, cursor: 'pointer', fontSize: 12.5 }}>{busy ? 'Recording…' : 'Record'}</button>
+        </form>
+      )}
+    </div>
   );
 }
 

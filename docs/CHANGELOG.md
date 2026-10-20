@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-10-20 (112) — Mission Control on a phone, with interactive charts
+
+Founder: "make sure it's mobile responsive and updated please with live interactive graphs,
+no static graphs." The eight static SVG charts (daily bars, weekly money flows, take rate,
+sign-ups by source, the daily audit bars and lines, the accounts path and the valuation path)
+are rebuilt in `lib/admin-charts.js` on recharts: responsive to their card, a tooltip on hover
+or tap for every point, clickable legends, no animation lag. The old components stay in the
+page as `*Static` for one release. Phone-width rules (≤700px): the tab bar scrolls sideways,
+tiles sit two across, cards and type shrink, the floats row stacks, the record-a-load form
+wraps, the sign-in card sits higher. `recharts` 2.15.4 added to the root package.
+
+## 2026-10-20 (111) — Float loads recorded on the Floats tab, with a reconciliation against the supplier's live balance
+
+Founder: "record a float load recon on the dashboard in the UI card where we show the current
+float levels." Each float row on the Supplier floats card gets "Record a load" (amount, the
+day it cleared, the bank reference) → `POST /api/admin/float-load` → `FLOAT_LOAD` in the
+journal (debit `ASSET:FLOAT:<KEY>`, credit `FUNDING:BANK`, idempotent on key, day, amount and
+reference). The row shows a Recon pill: loads, journal usage (for the OTT pay-out float every
+CASHOUT entry's credit to CLEARING:OTT, amount plus rail cost), expected balance, and the gap
+to the supplier's live figure. The five loads the founder's bank history showed as completed
+(19 Oct R1,000 ×2; 20 Oct R2,500, R1,500, R2,000) are recorded; earlier loads can be added the
+same way so the reconciliation closes from the rail's first day. Tests: tests/float-loads.test.mjs.
+
 ## 2026-10-20 (110) — After the identity check the pay-out continues by itself; Didit sends the customer back to the chat
 
 Founder, after his own KYC test: the Didit page said "You've been verified" and nothing

@@ -20,6 +20,7 @@
  */
 
 import prisma from '../../../lib/prisma.js';
+import { floatRecon } from '../../../lib/float-loads.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
 import { OttClient } from '@wapay/providers-ott';
 import { OttPayoutClient, payoutAmountToCents } from '../../../lib/ott-payout.js';
@@ -115,11 +116,14 @@ export default async function handler(req, res) {
   }
 
   // A ledger query failure is UNKNOWN, never a fake R0 for every supplier.
-  const [positions, ottIssue, ottPayout] = await Promise.all([
+  const [positions, ottIssue, ottPayout, reconPayout, reconIssue] = await Promise.all([
     clearingPositions().catch(() => null),
     ottIssuanceBalance(),
     ottPayoutBalance(),
+    floatRecon({ key: 'OTT_PAYOUT' }).catch(() => null),
+    floatRecon({ key: 'OTT' }).catch(() => null),
   ]);
+  const recons = { OTT_PAYOUT: reconPayout, OTT: reconIssue };
 
   const supplierRow = (key, name, ledgerRail, api, note) => {
     const ledgerCents = ledgerRail && positions ? positions[ledgerRail] ?? 0 : null;
@@ -144,6 +148,11 @@ export default async function handler(req, res) {
       warnCents,
       low: balanceCents != null ? balanceCents < warnCents : null,
       note: note || null,
+      // Float loads recorded by the team (lib/float-loads.js, 2026-10-20): loads minus the
+      // journal's usage is what the supplier should hold; the gap to the live balance is the drift to chase.
+      recon: recons[key]
+        ? { ...recons[key], liveCents: balanceCents, reconDriftCents: balanceCents != null && recons[key].expectedCents != null ? balanceCents - recons[key].expectedCents : null }
+        : null,
     };
   };
 
