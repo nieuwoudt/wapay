@@ -4,9 +4,9 @@
 
 ---
 
-## 2026-10-20 (104) — Credentials out of the repository: placeholders in 36 files and a guard that fails the suite on a credential-shaped string
+## 2026-10-20 (108) — Credentials out of the repository: placeholders in 36 files and a guard that fails the suite on a credential-shaped string
 
-BUGLOG #132. The repository was public with the Supabase database password, Meta WhatsApp
+BUGLOG #134. The repository was public with the Supabase database password, Meta WhatsApp
 tokens, the webhook verify token and Blu's QA password and API keys pasted into setup docs
 and scripts. Every value is now a placeholder (`<set in Vercel>`, `[YOUR-PASSWORD]`); the
 diagnostic scripts require the env var instead of carrying a default; the Blu curl examples
@@ -18,6 +18,104 @@ History still holds the values: rotation in the Supabase, Meta, Blu and Yoyo das
 the real fix (founder, in progress). No force-push and no history rewrite, commits only
 (founder, 2026-10-20): a rewrite would break every working copy and the deploy hook, and the
 values are already public.
+
+## 2026-10-20 (107) — Pay-out rules: a R10,000 daily cap for accounts under a week old, KYC by threshold, referrals on the dashboard
+
+Founder decisions after the card-to-cash morning: no hold on card-funded money and no cap
+tied to the funding source; instead `lib/payout-rules.js`: an account younger than seven
+days may pay out R10,000 in any 24 hours (`WAPAY_PAYOUT_NEW_ACCOUNT_DAYS`,
+`WAPAY_PAYOUT_NEW_ACCOUNT_DAILY_CAP_CENTS`), and with `WAPAY_PAYOUT_KYC=threshold` an
+unverified account needs the identity check for a single pay-out of R3,000 or more or for
+more than R10,000 in 24 hours (`WAPAY_PAYOUT_KYC_SINGLE_CENTS`, `WAPAY_PAYOUT_KYC_DAILY_CENTS`);
+`off` and the old everyone-gate are unchanged. Checked at the amount step of the withdraw
+flow (the cap keeps the amount step with the remaining amount; the threshold opens the VERIFY
+step when Didit is configured and says honestly that the check is being switched on when it is
+not) and again in `requestPayout` as the backstop before any ledger move. The amount prompt
+carries the rule note for accounts it can bite. Mission Control: the customer page shows the
+pay-out freeze and a Referrals card (invited, opened, funded, got paid, reward eligible and
+paid); the growth funnel by source knows `referral`. Tests: tests/payout-rules.test.mjs.
+
+## 2026-10-20 (106) — Per-account pay-out freeze after the first card-funded cash-out pattern
+
+BUGLOG #133. The first R3,000 card-paid link (00:38 UTC) was followed by 23 pay-out attempts
+across three rails, R1,000 gifts to two numbers that opened accounts minutes later and sent
+the money back, and a second account that repeated the shape the same morning (sign-up,
+R3,000 link seven minutes later, card payment, PayShap destination). Pay-outs could only be
+switched off for everyone (`WAPAY_PAYOUT_ENABLED`). Now `lib/payout-freeze.js` keeps a freeze
+on `Account.profile.payouts`; `requestPayout` refuses `FROZEN` before the idempotency replay and
+any ledger move, `startWithdraw` never opens the flow, `sendMoney` refuses a frozen sender (a
+frozen balance cannot hop to another account and leave from there), receiving stays open.
+`POST /api/internal/payout-freeze { accountId, frozen, reason }` sets or lifts it with a masked
+ops alert; the customer profile carries `payoutFreeze`. Customer copy: one honest line, no time
+promise ("Pay-outs on this account are paused while we check a recent payment. Nothing has left
+your balance and your money is safe. A person from WaPay will contact you here"). Never set by
+the model. Tests: tests/payout-freeze.test.mjs.
+
+## 2026-10-20 (105) — Reaching people after 24 hours, the send cap, the agent's reply-only rule, and three internal routes
+
+Founder (2026-10-20): "we shouldn't have that issue where they get stuck, where we can't send
+them information to get unstuck." The ops reply (`lib/ops-reply.js`, Inbox reply box,
+`/api/internal/ops-reply`) now switches rail by itself: text inside the customer's 24-hour
+window, the approved UTILITY template `wapay_support_followup` after it, with the person's
+first name and the operator's text as its two parameters, the turn remembered as before, a
+stopped customer refused on both rails (BUGLOG #132). `POST /api/internal/template-create`
+creates UTILITY or AUTHENTICATION templates through the Graph API and refuses MARKETING.
+`lib/say.js` refuses the ninth text to one number inside twenty seconds (`SEND_CAP`,
+`WAPAY_SEND_CAP`), so no hook, flow or agent can send a storm. The agent prompt gains the
+standing rule "WaPay only answers; one reply to each message; never a promise to message,
+remind or follow up later." `GET /api/internal/ads-breakdown` reads Meta ad insights per ad
+with placement, age, gender, region or device breakdowns for the ads report;
+`GET /api/internal/meta-node` reads one Graph node to tell a WhatsApp account id from a
+business portfolio id. Tests: tests/ops-reply.test.mjs, tests/compliance-batch-2.test.mjs,
+tests/say-send-cap.test.mjs.
+
+## 2026-10-20 (104) — DRAFT: referrals from the chat: "invite" gives one forwardable message with a personal link, the friend's first message stamps the referrer, milestones are counted per member, rewards tracked now and paid later behind a switch
+
+The founder, 20 October: referrals from the WaPay chat. The spec is docs/REFERRALS.md; the
+module is `lib/referrals.js`; `tests/referrals.test.mjs`.
+
+- **The invite.** A member asks in their own words ("Create me a referral link for a friend to
+  share", "referral link", "invite link", "invite a friend", "refer a friend", "share WaPay",
+  "invite"; `matchInviteAsk`, case-insensitive, tolerant of "please", "can you", "me a", "my")
+  and gets ONE message, forwardable as it is, with their
+  personal link `https://pleasepayme.co.za/i/<code>`; only when they ask, once per ask, never a
+  reminder. The code is derived from the account id (`referralCodeFor`: seven characters, no
+  0/O/1/I/L, always letters and a digit, so never a number), stored on `profile.referral.code`
+  the first time it is handed out (`ensureReferralCode`, the next deterministic candidate on a
+  collision). While `WAPAY_REFERRAL_REWARD_CENTS` is 0 the message ends "We are tracking your
+  invites; rewards are coming."; above zero it names the amount, never a date.
+- **The link.** `pages/i/[code].js` redirects to the wa.me deep link with the first message
+  prefilled ("Hi WaPay! A friend invited me. Invite code: <code>", the code only, never the
+  inviter's name) and carries `utm_source=referral&utm_medium=whatsapp&utm_content=<code>` for
+  web analytics; the code in the message is what attributes. No database, no sends.
+- **First contact.** The processor reads the code before the ad flow and the onboarding gate
+  (`handleReferralCodeTurn`, `parseReferralCode` tolerant of the sentence being edited). A new
+  number is stamped (`recordReferredContact`: `attribution.referralCode`, `referredAt`,
+  `referrerAccountId` when none, `acquisitionSource` 'referral' when the account was organic; an
+  ad click or a pay link that came first keeps its source), told who invited them by first name
+  only (memory keeps "A friend" through `recordAs`), and goes straight to the OTP step. A member
+  who sends a code is told once that they already have an account; an unknown code or their own
+  changes nothing. WaPay never writes to the friend first: they wrote in by tapping the link.
+- **Per member, from the data** (`referralStats`; `GET /api/admin/customer` gains `referrals`:
+  code, link, invited, onboarded, funded, paid, rewardEligibleCents, rewardPaidCents): who wrote in
+  with the code, who completed onboarding, who first received money (any credit to the balance
+  except a reward), who first had a link paid, and the reward those milestones would earn at R10
+  each (the switch's value while on) against what the ledger has actually paid. Read-only.
+- **The reward, tracked now, paid later.** `WAPAY_REFERRAL_REWARD_CENTS` (default 0 = track
+  only). Above zero, the first qualifying event per referred account (first money in OR first paid
+  link, whichever comes first) credits the referrer once from `EXPENSE:PROMO:REFERRAL`
+  (`buildReferralReward`, idemKey `referral-reward-<referredAccountId>`, through `postEntry`) and
+  sends ONE receipt, only on a fresh post and never to a member who said stop. The hooks:
+  `onFunded` in `lib/card-settlement.js` and the PayFast ITN after the credit, `onLinkPaid` in
+  `deliverRequestPaidNotifications` (every rail), and `referralCatchUp` on the referred account's
+  own next turn (`growthOnTurn`) for a voucher load, a send from a member or a held gift claimed
+  at join. A milestone reached while the switch was 0 is recorded with rewardCents 0 and is
+  never paid later. Golden thread 2.12.
+- **Surfaces.** `INVITE` in the capability registry (help line `🤝 *Invite a friend*`, home-card
+  line `🤝 *Invite*`, the model prompt names "invite"); `tests/capabilities.test.mjs` updated.
+- **Not done, by design:** no outbound to the invited person, ever; no retroactive payment when
+  the switch turns on (the gap is visible per member as eligible against paid; a backfill is a
+  founder decision); no Growth-tab panel (the profile carries the numbers); no schema change.
 
 ## 2026-10-20 (103) — Pay-link identity: the pay page shows the requester's number tail and tells the payer to check it
 

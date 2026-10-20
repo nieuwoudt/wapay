@@ -1,5 +1,5 @@
 /**
- * No credential is committed to the repository (2026-10-20, BUGLOG #132).
+ * No credential is committed to the repository (2026-10-20, BUGLOG #134).
  *
  * The repository was public with live values pasted into setup docs and
  * scripts: Supabase connection strings carrying the database password, Meta

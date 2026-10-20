@@ -14,6 +14,8 @@
 
 import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
+import { referralStats } from '../../../lib/referrals.js';
+import { freezeState } from '../../../lib/payout-freeze.js';
 
 export const config = { maxDuration: 25 };
 
@@ -96,6 +98,11 @@ export default async function handler(req, res) {
 
   const profile = account.profile && typeof account.profile === 'object' ? account.profile : {};
 
+  // Referrals (docs/REFERRALS.md, 2026-10-20): the member's code and link, who wrote in with it,
+  // who opened an account, was funded, got paid, and the reward tracked against paid. Read-only:
+  // a code is never issued here (a member who never asked is shown the one the command would give).
+  const referrals = await referralStats({ prisma, accountId: account.id }).catch(() => null);
+
   return res.status(200).json({
     account: {
       id: account.id,
@@ -125,6 +132,21 @@ export default async function handler(req, res) {
       debitCents: l.debitCents || 0,
     })),
     vouchers: { sent: sentGifts, received: receivedGifts },
+    payoutFreeze: freezeState(account.profile || null),
+    referrals: referrals
+      ? {
+          code: referrals.code,
+          link: referrals.link,
+          invited: referrals.invited,
+          onboarded: referrals.onboarded,
+          funded: referrals.funded,
+          paid: referrals.paid,
+          rewardEligibleCents: referrals.rewardEligibleCents,
+          rewardPaidCents: referrals.rewardPaidCents,
+          rewardRateCents: referrals.rewardRateCents,
+          rewardsOn: referrals.rewardsOn,
+        }
+      : null,
     requests,
     deposits: deposits.map((d) => ({
       status: d.status,

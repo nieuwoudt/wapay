@@ -1749,6 +1749,11 @@ function Customer({ initialQuery = '' }) {
                 ))}
                 <div><div className="k">Active holds</div><div className="bal">{c.activeHolds?.length || 0}</div></div>
               </div>
+              {c.payoutFreeze && (
+                <p className="note" style={{ marginTop: 10, color: 'var(--red, #b42318)' }}>
+                  ⏸ Pay-outs and outbound sends frozen since {dt(c.payoutFreeze.at)}{c.payoutFreeze.reason ? ` · ${c.payoutFreeze.reason}` : ''}{c.payoutFreeze.by ? ` · by ${c.payoutFreeze.by}` : ''}. Receiving still works. Lift it with POST /api/internal/payout-freeze.
+                </p>
+              )}
               {c.activeHolds?.length > 0 && (
                 <p className="note" style={{ marginTop: 10 }}>
                   Holds: {c.activeHolds.map((h) => `${R(h.amountCents)} (${h.reason || 'no reason'})`).join(' · ')}
@@ -1793,6 +1798,22 @@ function Customer({ initialQuery = '' }) {
                     {!c.vouchers.sent.length && !c.vouchers.received.length && <tr><td colSpan={5} className="empty">No vouchers yet.</td></tr>}
                   </tbody></table>
               </div>
+            </div>
+            <div className="card">
+              <h2>Referrals</h2>
+              <p className="note">The customer asks for the invite in chat; the friend taps the link and writes first. Rewards are tracked now and paid only when the switch is on.</p>
+              {c.referrals ? (
+                <>
+                  <div style={{ display: 'flex', gap: 26, marginTop: 8, flexWrap: 'wrap' }}>
+                    <div><div className="k">Invited</div><div className="bal">{c.referrals.invited || 0}</div></div>
+                    <div><div className="k">Opened an account</div><div className="bal">{c.referrals.onboarded || 0}</div></div>
+                    <div><div className="k">Funded</div><div className="bal">{c.referrals.funded || 0}</div></div>
+                    <div><div className="k">Got paid</div><div className="bal">{c.referrals.paid || 0}</div></div>
+                    <div><div className="k">Reward eligible</div><div className="bal">{R(c.referrals.rewardEligibleCents || 0)}</div><div className="vs">paid {R(c.referrals.rewardPaidCents || 0)} · {c.referrals.rewardsOn ? 'rewards on' : 'tracked only'}</div></div>
+                  </div>
+                  <p className="note" style={{ marginTop: 10 }}>Code {c.referrals.code || 'not asked for yet'}{c.referrals.link ? ` · ${c.referrals.link}` : ''}</p>
+                </>
+              ) : <div className="empty">No referral data for this customer.</div>}
             </div>
             <div className="card">
               <h2>Payment requests &amp; deposits</h2>

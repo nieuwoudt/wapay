@@ -45,7 +45,7 @@ const NEUTRAL = { WAPAY_LAUNCH_HOLD: undefined, WAPAY_PAYOUT_ENABLED: undefined,
 // Every launch switch on, for the world the pre-launch copy locks describe.
 const LAUNCH_ON = { VAS_LIVE_AIRTIME: 'true', VAS_LIVE_DATA: 'true', VAS_LIVE_ELECTRICITY: 'true', VAS_LIVE_BLU_LOAD: 'true', VAS_LIVE_OTT_VOUCHER: 'true', WAPAY_LAUNCH_HOLD: 'off' };
 
-const EXPECTED_IDS = ['BALANCE', 'AIRTIME', 'DATA', 'ELECTRICITY', 'SEND', 'OTT_SELF', 'REQUEST_MONEY', 'DEPOSIT_CARD', 'DEPOSIT_VOUCHER', 'VOUCHER_LOAD', 'WITHDRAW', 'FUEL', 'BUSINESS', 'PIN_RESET'];
+const EXPECTED_IDS = ['BALANCE', 'AIRTIME', 'DATA', 'ELECTRICITY', 'SEND', 'OTT_SELF', 'REQUEST_MONEY', 'DEPOSIT_CARD', 'DEPOSIT_VOUCHER', 'VOUCHER_LOAD', 'WITHDRAW', 'FUEL', 'BUSINESS', 'INVITE', 'PIN_RESET'];
 
 test('every descriptor is complete, ids are unique and the expected set', () => {
   const ids = CAPABILITIES.map((c) => c.id);
@@ -157,6 +157,8 @@ const GET_PAID = `🙏 *Get Paid*: "please pay me R50" → share your link`;
 const DEPOSIT_BLU = `💳 *Deposit*: "deposit R100" or a Blu voucher`;
 const DEPOSIT_CARD = `💳 *Deposit*: "deposit R100" by card or Instant EFT`;
 const HOME_TAIL = `📄 *Transactions* · ⚙️ *Settings*`;
+// Referrals (docs/REFERRALS.md, 2026-10-20): the invite is named once on the card, right before the tail.
+const INVITE = `🤝 *Invite*: "invite" to share WaPay with a friend`;
 const FUEL_ON = `⛽ *Fuel*: "buy fuel" for participating stations`;
 const FUEL_OFF = `⛽ *Fuel vouchers*: coming soon`;
 const WITHDRAW_ON = `🏧 *Withdraw*: "withdraw R200" to your bank, or cash at an ATM`;
@@ -170,11 +172,11 @@ const HOME_HEAD_HOLD = [SEND, GET_PAID, DEPOSIT_CARD];
 test('homeLines equals renderHome for a non-pilot number and for a pilot number', () => {
   // Nothing set (the shipped default, the master hold): no product that is off, one coming-soon line.
   withEnv({ ...NEUTRAL }, () => {
-    assert.deepEqual(homeLines({ waId: OTHER }), [...HOME_HEAD_HOLD, WITHDRAW_OFF, SOON_ALL, HOME_TAIL]);
+    assert.deepEqual(homeLines({ waId: OTHER }), [...HOME_HEAD_HOLD, WITHDRAW_OFF, SOON_ALL, INVITE, HOME_TAIL]);
   });
   // The hold outranks a switch and a tester list left on from an earlier rollout (the founder's own test, 2026-10-18).
   withEnv({ ...NEUTRAL, VAS_LIVE_ELECTRICITY: 'true', VAS_ALLOWLIST_ELECTRICITY: PILOT, WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: PILOT, WAPAY_LAUNCH_HOLD: undefined }, () => {
-    assert.deepEqual(homeLines({ waId: PILOT }), [...HOME_HEAD_HOLD, WITHDRAW_OFF, SOON_ALL, HOME_TAIL]);
+    assert.deepEqual(homeLines({ waId: PILOT }), [...HOME_HEAD_HOLD, WITHDRAW_OFF, SOON_ALL, INVITE, HOME_TAIL]);
   });
   // A single switch on (hold released) shows only that product.
   withEnv({ ...NEUTRAL, WAPAY_LAUNCH_HOLD: 'off', VAS_LIVE_AIRTIME: 'true' }, () => {
@@ -182,12 +184,12 @@ test('homeLines equals renderHome for a non-pilot number and for a pilot number'
   });
   // Launch switches on, pilot lists set: the pilot sees both live, everyone else still sees coming soon.
   withEnv({ ...NEUTRAL, ...LAUNCH_ON, WAPAY_PAYOUT_ENABLED: 'true', WAPAY_PAYOUT_ALLOWLIST: PILOT, WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: PILOT }, () => {
-    assert.deepEqual(homeLines({ waId: PILOT }), [...HOME_HEAD_ON, FUEL_ON, WITHDRAW_ON, SOON_PILOT, HOME_TAIL]);
-    assert.deepEqual(homeLines({ waId: OTHER }), [...HOME_HEAD_ON, WITHDRAW_OFF, SOON_OTHER, HOME_TAIL]);
+    assert.deepEqual(homeLines({ waId: PILOT }), [...HOME_HEAD_ON, FUEL_ON, WITHDRAW_ON, SOON_PILOT, INVITE, HOME_TAIL]);
+    assert.deepEqual(homeLines({ waId: OTHER }), [...HOME_HEAD_ON, WITHDRAW_OFF, SOON_OTHER, INVITE, HOME_TAIL]);
   });
   // Phase 1 (2026-09-16): renderHome prints these lines BY CALLING the registry.
   assert.ok(processorSource.includes("${homeLines({ waId: from, account }).join('\\n')}"), 'renderHome renders homeLines');
-  for (const line of [...HOME_HEAD_ON, ...HOME_HEAD_HOLD, FUEL_ON, FUEL_OFF, WITHDRAW_ON, WITHDRAW_OFF, SOON_ALL, HOME_TAIL]) {
+  for (const line of [...HOME_HEAD_ON, ...HOME_HEAD_HOLD, FUEL_ON, FUEL_OFF, WITHDRAW_ON, WITHDRAW_OFF, SOON_ALL, INVITE, HOME_TAIL]) {
     assert.ok(!processorSource.includes(line) || line === HOME_TAIL, `no hand-written copy of: ${line}`);
   }
 });
@@ -212,23 +214,25 @@ const HELP_HEAD_HOLD = [
 const HELP_WITHDRAW = `🏧 *Withdraw* - "withdraw R200" to your bank or as cash at an ATM`;
 const HELP_FUEL = `⛽ *Fuel* - "buy fuel"`;
 const HELP_TAIL = `🏪 *Business* - "business account" to get paid by your customers`;
+// Referrals (docs/REFERRALS.md, 2026-10-20): the invite line sits between business and the PIN reset.
+const HELP_INVITE = `🤝 *Invite a friend* - "invite" for your link to share`;
 const HELP_PIN = `🔐 *Forgot PIN* - "forgot PIN" to set a new one`;
 
 test('helpLines equals the Help Menu lines, with withdraw and fuel only when live', () => {
   withEnv({ ...NEUTRAL }, () => {
-    assert.deepEqual(helpLines({ waId: OTHER }), [...HELP_HEAD_HOLD, HELP_TAIL, HELP_PIN]);
+    assert.deepEqual(helpLines({ waId: OTHER }), [...HELP_HEAD_HOLD, HELP_TAIL, HELP_INVITE, HELP_PIN]);
   });
   withEnv({ ...NEUTRAL, ...LAUNCH_ON }, () => {
-    assert.deepEqual(helpLines({ waId: OTHER }), [...HELP_HEAD, HELP_TAIL, HELP_PIN]);
+    assert.deepEqual(helpLines({ waId: OTHER }), [...HELP_HEAD, HELP_TAIL, HELP_INVITE, HELP_PIN]);
   });
   withEnv({ ...NEUTRAL, ...LAUNCH_ON, WAPAY_PAYOUT_ENABLED: 'true', WAPAY_PAYOUT_ALLOWLIST: PILOT, WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: PILOT, WAPAY_LAUNCH_HOLD: 'off' }, () => {
-    assert.deepEqual(helpLines({ waId: PILOT }), [...HELP_HEAD, HELP_WITHDRAW, HELP_FUEL, HELP_TAIL, HELP_PIN]);
-    assert.deepEqual(helpLines({ waId: OTHER }), [...HELP_HEAD, HELP_TAIL, HELP_PIN]);
+    assert.deepEqual(helpLines({ waId: PILOT }), [...HELP_HEAD, HELP_WITHDRAW, HELP_FUEL, HELP_TAIL, HELP_INVITE, HELP_PIN]);
+    assert.deepEqual(helpLines({ waId: OTHER }), [...HELP_HEAD, HELP_TAIL, HELP_INVITE, HELP_PIN]);
   });
   // Phase 1 (2026-09-16): the Help Menu prints these lines BY CALLING the registry.
   const helpSrc = processorSource.slice(processorSource.indexOf('const helpMsg = `📋 *WaPay Help Menu*'), processorSource.indexOf('const helpMsg = `📋 *WaPay Help Menu*') + 400);
   assert.ok(helpSrc.includes("${helpLines({ waId: from, account }).join('\\n')}"), 'the help menu renders helpLines');
-  for (const line of [...HELP_HEAD, ...HELP_HEAD_HOLD, HELP_WITHDRAW, HELP_FUEL, HELP_TAIL, HELP_PIN]) {
+  for (const line of [...HELP_HEAD, ...HELP_HEAD_HOLD, HELP_WITHDRAW, HELP_FUEL, HELP_TAIL, HELP_INVITE, HELP_PIN]) {
     assert.ok(!helpSrc.includes(line), `no hand-written copy of: ${line}`);
   }
 });

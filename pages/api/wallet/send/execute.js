@@ -11,6 +11,7 @@
  * WhatsApp message itself.
  */
 import prisma from '../../../../lib/prisma.js';
+import { FROZEN_SEND_COPY } from '../../../../lib/payout-freeze.js';
 import { verifyPIN } from '@wapay/auth';
 import { BALANCE } from '../../../../lib/ledger-core.js';
 import { requireInternalAuth } from '../../../../lib/internal-auth.js';
@@ -48,7 +49,7 @@ export default async function handler(req, res) {
     if (!out.ok) {
       await prisma.providerRequest.update({ where: { id: previewId }, data: { status: 'FAILED', metadata: { ...meta, error: out.error } } }).catch(() => {});
       log('send_execute_refused', { accountId, previewId, error: out.error });
-      return res.status(out.error === 'INSUFFICIENT_FUNDS' ? 400 : out.error === 'NOT_AUTHORISED' ? 401 : 400).json({ error: out.error, message: out.error });
+      return res.status(out.error === 'INSUFFICIENT_FUNDS' ? 400 : out.error === 'NOT_AUTHORISED' ? 401 : out.error === 'FROZEN' ? 423 : 400).json({ error: out.error, message: out.error === 'FROZEN' ? FROZEN_SEND_COPY : out.error });
     }
     const wallet = await prisma.wallet.findFirst({ where: { accountId, balanceType: BALANCE.SPEND } });
     const newBalance = wallet?.availableCents ?? null;

@@ -23,6 +23,8 @@ import { loadContextPack, renderCustomerRecord, statusCandidates, rankCandidates
 import { rescueWithdrawSlots } from '../../../lib/agent/slot-rescue.js';
 import { evaluatePolicy, requirementMessage } from '../../../lib/policy.js';
 import { capabilityById, homeLines, helpLines, welcomeLines, promptLines, fuelLiveFor as registryFuelLiveFor, worksToday, launchScopeFor } from '../../../lib/capabilities.js';
+import { parseReferralCode, recordReferredContact, matchInviteAsk, ensureReferralCode, inviteMessage, referredWelcome, ALREADY_MEMBER_REPLY } from '../../../lib/referrals.js';
+import { FROZEN_SEND_COPY } from '../../../lib/payout-freeze.js';
 import { eraseTurns } from '../../../lib/turns.js';
 import { updateProfile } from '../../../lib/user-profile.js';
 import prisma from '../../../lib/prisma.js';
@@ -1268,6 +1270,18 @@ async function processMessageInner({ from, text, messageId, profile, sharedConta
 
   console.log(`📊 Account state: ${onboardingState} (new: ${isNewUser})`);
 
+  // Referrals (docs/REFERRALS.md, 2026-10-20): a message carrying a member's invite code. A new
+  // number is stamped with who invited them and the contact is counted before anything is said;
+  // a member who sends one is told they already have an account. The friend wrote first, so
+  // everything here is a reply; no model call anywhere in it.
+  {
+    const referralTurn = await handleReferralCodeTurn({ from, account, text, profile, onboardingState }).catch((e) => {
+      logStructured('referral_code_error', { from, error: e?.message });
+      return null;
+    });
+    if (referralTurn) return referralTurn;
+  }
+
   // Ad chat flow (docs/AD_CHAT_FLOW.md, 2026-10-18): a person who tapped a
   // click-to-WhatsApp ad is answered from the brief, deterministically, with
   // no model call. Only ad arrivals ever enter; everything else falls through.
@@ -1960,6 +1974,10 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     const { matchBusinessSignupAsk } = await import('../../../lib/business-chat.js');
     if (matchBusinessSignupAsk(text)) return await handleBusinessSignupAsk({ from, account });
   }
+
+  // INVITE A FRIEND (docs/REFERRALS.md, 2026-10-20): one forwardable message with the member's
+  // own link, only when they ask for it, once per ask. Never a reminder, never a nudge.
+  if (matchInviteAsk(text)) return await handleInviteAsk({ from, account });
 
   // "I forgot my PIN" / "Reset pin" / "Me for my password what to reset": the reset itself,
   // never a model's invented command (founder 2026-10-14; Lisa was told "type reset PIN" four times).
@@ -3102,6 +3120,39 @@ async function sendAdReply({ from, account, reply }) {
 async function startAdOnboarding({ from, account, profile }) {
   const displayName = profile?.name || account.displayName || 'Friend';
   return await startOnboardingFromAd({ accountId: account.id, waId: from, msisdn: account.msisdn || from, displayName });
+}
+
+/**
+ * Referrals (docs/REFERRALS.md, 2026-10-20): the turn of a message that carries a member's
+ * invite code. Returns a result when it answered, null when the normal path should run.
+ * - a member: told they already have an account (their own code, or a friend's);
+ * - a brand-new number: stamped and counted, told who invited them by first name only (memory
+ *   keeps "A friend"), then the OTP step at once, as an ad arrival gets it;
+ * - a number mid-onboarding: stamped silently, the step that is waiting answers;
+ * - an unknown code or the member's own: nothing said about it, the ordinary welcome runs.
+ * No model call anywhere in here.
+ */
+async function handleReferralCodeTurn({ from, account, text, profile, onboardingState }) {
+  const code = parseReferralCode(text);
+  if (!code) return null;
+  if (onboardingState === 'S5_COMPLETED') {
+    logStructured('referral_code_from_member', { accountId: account.id });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(ALREADY_MEMBER_REPLY, await userLang(account)) });
+  }
+  const recorded = await recordReferredContact({ account, code });
+  logStructured('referral_contact', { accountId: account.id, ok: recorded.ok, reason: recorded.reason || null, already: !!recorded.already, referrerAccountId: recorded.referrerAccountId || null, state: onboardingState });
+  if (!recorded.ok || onboardingState !== 'S0_INITIAL') return null;
+  const welcome = referredWelcome({ inviterFirstName: recorded.inviterFirstName });
+  await sendWhatsAppText({ to: from, text: welcome, recordAs: referredWelcome({ inviterFirstName: null }), kind: 'flow' });
+  return await startAdOnboarding({ from, account, profile });
+}
+
+/** "invite" / "refer a friend" / "share WaPay": the one forwardable message with the member's link. */
+async function handleInviteAsk({ from, account }) {
+  const code = await ensureReferralCode({ accountId: account.id });
+  logStructured('referral_invite_ask', { accountId: account.id });
+  const msg = await localizeOutbound(inviteMessage({ code }), await userLang(account));
+  return await sendWhatsAppText({ to: from, text: msg, kind: 'flow' });
 }
 
 /**
@@ -6755,6 +6806,10 @@ async function handleConversationState({ from, text, state, data, account }) {
               return linkResult;
             }
 
+            // A frozen sender (BUGLOG #133): the honest line, no invitation to try again.
+            if (executeData.error === 'FROZEN') {
+              return await sendWhatsAppText({ to: from, text: await localizeOutbound(FROZEN_SEND_COPY, await userLang(account)) });
+            }
             return await sendWhatsAppErrorOnce({
               to: from,
               errorKey: `${previewId || 'vgift'}:${executeData.error || 'ERROR'}`,

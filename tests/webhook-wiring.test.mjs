@@ -74,7 +74,7 @@ test('ordering: verify -> process (AWAITED) -> ACK', async () => {
 test('the leaked hardcoded verify token is gone', async () => {
   const src = await fileText(WEBHOOK);
   // The leaked literal used to be quoted here, which kept it in the repo; it is now caught
-  // repo-wide by tests/no-committed-credentials.test.mjs (BUGLOG #132).
+  // repo-wide by tests/no-committed-credentials.test.mjs (BUGLOG #134).
   assert.ok(
     !/(?:verify_?token|expectedToken)\s*(?:===?|!==?|\|\||\?\?)\s*['"`]/i.test(src),
     'no string literal may stand in for the verify token'
