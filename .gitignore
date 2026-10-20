@@ -20,3 +20,7 @@ out
 # OTT test voucher PINs (bearer codes) — local only
 .ott-test-vouchers.local.json
 .wapay-pii-key.txt
+.wapay-pin-pepper.txt
+.wapay-cron-secret.txt
+# local-only operator secrets kept beside the code (PII key, cron secret); never tracked
+.wapay-*

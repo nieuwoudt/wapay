@@ -35,21 +35,34 @@ const PUBLIC_VALUES = new Map([
 const PUBLIC_PATHS = [/^packages\/providers\/[^/]+\/__tests__\//];
 
 const SKIP_DIRS = new Set(['node_modules', '.next', '.pnpm-store', 'dist', '.git', '.turbo', '.vercel', 'out']);
-const SKIP_FILE = /^\.env|\.log$|^\.ott-test-vouchers\.local\.json$|^\.wapay-pii-key\.txt$|^pnpm-lock\.yaml$/;
+const SKIP_FILE = /^\.env|\.log$|^\.ott-test-vouchers\.local\.json$|^pnpm-lock\.yaml$/;
+// Local-only secret files an operator keeps beside the code (.wapay-pii-key.txt,
+// .wapay-cron-secret.txt, …): skipped ONLY in the tree walk of the fast working
+// copy. On the git listing they are scanned like everything else, so one that
+// was ever committed is caught, not excused by its name.
+const LOCAL_SECRET_FILE = /^\.wapay-[a-z0-9-]+\.(?:txt|json)$/;
 const BINARY = /\.(png|jpe?g|gif|webp|ico|pdf|woff2?|ttf|otf|eot|zip|gz|mp4|mov|mp3|wav)$/i;
 const CODE = /\.(m?js|cjs|jsx|ts|tsx)$/;
 
+/** Every tracked text file. The fast working copy carries a stale, unreadable
+ * .git (its HEAD is a bad object) whose index still answers `git ls-files`
+ * with a third of the tree, so the git listing is trusted only when HEAD
+ * resolves AND the list is the size of a real checkout; otherwise the tree
+ * is walked (2026-10-20, the merge of this guard). */
 function repoFiles() {
   try {
-    return execFileSync('git', ['ls-files', '-z'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] })
+    execFileSync('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] });
+    const listed = execFileSync('git', ['ls-files', '-z'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] })
       .toString().split('\0').filter(Boolean);
+    if (listed.length < 500) throw new Error('git index too small to be the repository');
+    return listed;
   } catch {
     const out = [];
     (function walk(rel) {
       for (const name of readdirSync(path.join(root, rel))) {
         const r = rel ? `${rel}/${name}` : name;
         if (statSync(path.join(root, r)).isDirectory()) { if (!SKIP_DIRS.has(name)) walk(r); }
-        else if (!SKIP_FILE.test(name)) out.push(r);
+        else if (!SKIP_FILE.test(name) && !LOCAL_SECRET_FILE.test(name)) out.push(r);
       }
     })('');
     return out;
