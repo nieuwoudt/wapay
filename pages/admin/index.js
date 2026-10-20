@@ -1881,7 +1881,7 @@ function QualityCard({ tick = 0 }) {
       <h2>WhatsApp number, as Meta sees it</h2>
       <p className="note">The quality rating is built from blocks and reports. While it is not GREEN, WaPay sends nothing a customer did not just ask for: reminders stay off, replies only, one message per turn.</p>
       <div className="grid kpis">
-        <div className="card"><div className="k">Quality rating</div><div className="v" style={{ color: tone }}>{q === false ? 'unavailable' : !q ? '…' : rating || (q.error || 'unknown')}</div><div className="vs">{q && q.messagingLimitTier ? `messaging limit ${q.messagingLimitTier}` : 'read from the Graph API, a minute's cache'}</div></div>
+        <div className="card"><div className="k">Quality rating</div><div className="v" style={{ color: tone }}>{q === false ? 'unavailable' : !q ? '…' : rating || (q.error || 'unknown')}</div><div className="vs">{q && q.messagingLimitTier ? `messaging limit ${q.messagingLimitTier}` : 'read from the Graph API, cached for a minute'}</div></div>
         <div className="card"><div className="k">Number status</div><div className="v">{q && q.status ? q.status : '…'}</div><div className="vs">{q && q.nameStatus ? `display name ${q.nameStatus}` : ''}</div></div>
         <div className="card"><div className="k">Support contact on the profile</div><div className="v" style={{ color: q && q.profile ? (q.profile.hasSupportContact ? 'var(--good)' : 'var(--crit)') : undefined }}>{q && q.profile ? (q.profile.hasSupportContact ? 'yes' : 'missing') : '…'}</div><div className="vs">{q && q.profile ? [q.profile.email, ...(q.profile.websites || [])].filter(Boolean).join(' · ') || 'the Messaging Policy asks for an e-mail or website' : ''}</div></div>
       </div>
