@@ -1,30 +1,20 @@
 # 🔧 Your Correct DATABASE_URL
 
-Based on your Supabase connection string and Vercel password:
+Based on your Supabase connection string and the database password (Supabase → Project Settings → Database, or Vercel). The password is never written in this repository.
 
 ## Format from Supabase:
 ```
 postgres://postgres:[YOUR-PASSWORD]@db.lqkpshowocitirxrmgpy.supabase.co:6543/postgres
 ```
 
-## Your Password (from Vercel):
-`Wapay@20250` (or possibly `Wapay@2025`)
-
 ## URL-Encoded Version:
-Since your password has `@` in it, it needs to be URL-encoded for the connection string:
+If your password has `@` in it, it needs to be URL-encoded for the connection string:
 - `@` becomes `%40`
-- So: `Wapay@20250` becomes `Wapay%4020250`
 
 ## Your Complete DATABASE_URL:
 
-### Option 1 (most likely):
 ```
-postgres://postgres:Wapay%4020250@db.lqkpshowocitirxrmgpy.supabase.co:6543/postgres
-```
-
-### Option 2 (if password is Wapay@2025):
-```
-postgres://postgres:Wapay%402025@db.lqkpshowocitirxrmgpy.supabase.co:6543/postgres
+postgres://postgres:[YOUR-PASSWORD]@db.lqkpshowocitirxrmgpy.supabase.co:6543/postgres
 ```
 
 ## Test It Now:
@@ -32,12 +22,7 @@ postgres://postgres:Wapay%402025@db.lqkpshowocitirxrmgpy.supabase.co:6543/postgr
 ```bash
 cd "/Users/nieuwoudtgresse/Desktop/WaPay /WaPay V1.01"
 
-# Try option 1:
-export DATABASE_URL="postgres://postgres:Wapay%4020250@db.lqkpshowocitirxrmgpy.supabase.co:6543/postgres"
-node test-database-connection.js
-
-# If that fails, try option 2:
-export DATABASE_URL="postgres://postgres:Wapay%402025@db.lqkpshowocitirxrmgpy.supabase.co:6543/postgres"
+export DATABASE_URL="postgres://postgres:[YOUR-PASSWORD]@db.lqkpshowocitirxrmgpy.supabase.co:6543/postgres"
 node test-database-connection.js
 ```
 

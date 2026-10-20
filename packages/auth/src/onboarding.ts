@@ -88,7 +88,7 @@ async function sendPinCreationPrompt(args: { waId: string; displayName: string }
     console.error(`❌ PIN template failed: ${pinResult.error}`);
     await sendWhatsAppText({
       to: waId,
-      text: `✅ Welcome, ${displayName}!\n\n🔐 Now create a 4-6 digit PIN:\n\nExample: 1234\n\n⚠️ Don't use 0000 or 1234`,
+      text: `✅ Welcome, ${displayName}!\n\nStep 2 of 3. 🔐 Create a 4-6 digit PIN:\n\nExample: 1234\n\n⚠️ Don't use 0000 or 1234`,
     });
   }
 }
@@ -157,6 +157,27 @@ export async function handleS0Initial(args: {
 /**
  * S1 → S2: Send OTP
  */
+/**
+ * Start onboarding from a click-to-WhatsApp ad (2026-10-18): Meta has
+ * already greeted the person, so the welcome template is skipped. S0 → S1 is
+ * recorded silently (metadata adEntry) and the OTP step runs at once.
+ */
+export async function startOnboardingFromAd(args: {
+  accountId: string;
+  waId: string;
+  msisdn: string;
+  displayName: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { accountId, waId, msisdn, displayName } = args;
+  try {
+    await transitionState({ accountId, from: 'S0_INITIAL', to: 'S1_WELCOME_SENT', metadata: { adEntry: true, welcomeSkipped: true } });
+  } catch (error) {
+    console.error('❌ startOnboardingFromAd: transition failed', error);
+    return { ok: false, error: 'STATE' };
+  }
+  return handleS1WelcomeSent({ accountId, waId, msisdn, displayName, userMessage: 'continue' });
+}
+
 export async function handleS1WelcomeSent(args: {
   accountId: string;
   waId: string;
@@ -319,7 +340,7 @@ export async function handleS2OtpSent(args: {
       // Fallback to text ONLY if template fails
       await sendWhatsAppText({
         to: waId,
-        text: `✅ Code verified, ${displayName}!\n\n🔐 Now create a 4-6 digit PIN:\n\nExample: 1234\n\n⚠️ Don't use 0000 or 1234`,
+        text: `✅ Code verified, ${displayName}!\n\nStep 2 of 3. 🔐 Create a 4-6 digit PIN:\n\nExample: 1234\n\n⚠️ Don't use 0000 or 1234`,
       });
     } else {
       console.log(`✅ PIN template sent successfully`);
@@ -413,7 +434,7 @@ export async function handleS3OtpVerified(args: {
       // Fallback to text ONLY if template fails
       await sendWhatsAppText({
         to: waId,
-        text: `✅ PIN set!\n\n📋 Almost done, ${displayName}!\n\nAccept our Terms & Privacy Policy.\n\nReply "I accept" to continue.`,
+        text: `✅ PIN set!\n\nStep 3 of 3. 📋 Almost done, ${displayName}!\n\nAccept our Terms & Privacy Policy.\n\nReply "I accept" to continue.`,
       });
     } else {
       console.log(`✅ Consent template sent successfully`);

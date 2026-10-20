@@ -27,6 +27,9 @@ import {
 } from '../lib/spend-catalogue.js';
 import * as catalogueModule from '../lib/spend-catalogue.js';
 
+// The launch scope with every switch on (lib/vas-config.js launchScope): the world these copy locks were written for.
+const ON_SCOPE = { airtime: true, data: true, electricity: true, anyVas: true, allVas: true, bluLoad: true, ottLoad: false, voucher: true };
+
 const processorSource = readFileSync(
   fileURLToPath(new URL('../pages/api/webhooks/message-processor-v2.js', import.meta.url)),
   'utf8'
@@ -69,7 +72,7 @@ test('the Pay persona mandates warmth and emoji in every reply', () => {
 
 test('the engine accepts injected knowledge and threads it into tier-2 prompts', () => {
   assert.match(engineSource, /OrchestrateOptions/);
-  assert.match(engineSource, /agentPrompt\(tier1\.domain, opts\.knowledge, opts\.withdrawLive\)/);
+  assert.match(engineSource, /agentPrompt\(tier1\.domain, opts\.knowledge, opts\.withdrawLive, opts\.scope\)/);
   assert.match(engineSource, /LIVE PRODUCT KNOWLEDGE/);
 });
 
@@ -91,7 +94,7 @@ test('HELP dispatch: question-shaped input gets the spend answer, not the menu',
   assert.match(helpCase, /explicitMenuAsk/, 'the explicit-menu gate exists');
   assert.match(
     helpCase,
-    /buildSpendDestinationsReply\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\) \}\)/,
+    /buildSpendDestinationsReply\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), scope: launchScope\(from\) \}\)/,
     'the fallback answer is the data-driven spend reply, claim-gated per user'
   );
   assert.match(helpCase, /looksLikeReceipt\(reply, knownAmounts\)/, 'a composed reply still passes the receipt guard, with the record as provenance');
@@ -113,7 +116,7 @@ test('HELP dispatch: question-shaped input gets the spend answer, not the menu',
 test('the brain is fed the claim-gated spend knowledge on every AI turn, per user', () => {
   assert.match(
     processorSource,
-    /knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), capabilityLines: promptLines\(\{ waId: from, account \}\) \}\)/
+    /knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), capabilityLines: promptLines\(\{ waId: from, account \}\), scope: launchScope\(from\) \}\)/
   );
   // The helper composes the production flag with the pilot allowlist.
   // 2026-09-16: one gate for every surface, the registry's (lib/capabilities.js).
@@ -201,7 +204,7 @@ test('test mode (flag off): fuel/retail are coming soon, never claimed redeemabl
 });
 
 test('live mode: the founder structure — in-app breakdown, then participating retailers', () => {
-  const reply = buildSpendDestinationsReply({ wicodeLive: true });
+  const reply = buildSpendDestinationsReply({ wicodeLive: true, scope: ON_SCOPE });
   assert.match(reply, /You can also spend at these participating retailers:/);
   assert.match(reply, /participating Shell and Engen stations/);
   assert.ok(!/any station\b/i.test(reply));
@@ -255,7 +258,16 @@ test('cash-out script: coming soon, no dates, and redirects to live spending', (
   const s = cashoutScript();
   assert.match(s, /not available just yet/i);
   assert.match(s, /coming soon/i);
-  assert.match(s, /Airtime and data/i, 'redirects to what works today');
+  assert.match(s, /Send money/i, 'redirects to what works today');
+  assert.doesNotMatch(s, /Airtime and data/i, 'launch scope 2026-10-18: prepaid is off by default, so it is not a destination');
+  const prev = process.env.VAS_LIVE_AIRTIME;
+  try {
+    process.env.VAS_LIVE_AIRTIME = 'true'; process.env.WAPAY_LAUNCH_HOLD = 'off';
+    assert.match(cashoutScript(), /\*Airtime\*/, 'switched on, it is a destination again');
+  } finally {
+    if (prev === undefined) delete process.env.VAS_LIVE_AIRTIME; else process.env.VAS_LIVE_AIRTIME = prev;
+    delete process.env.WAPAY_LAUNCH_HOLD;
+  }
   // The payout partner is never named to customers. "OTT" as the VOUCHER
   // network ("stores that accept OTT vouchers") is existing public copy and
   // allowed; the payout rail must stay a generic "payouts partner".

@@ -16,7 +16,7 @@
 
 import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
-import { INPUTS, preset, boundStatus, measuredToInputs, scenarioUrl, SCALE_MODEL_URL } from '../../../lib/scale-model.js';
+import { INPUTS, preset, boundStatus, measuredToInputs, scenarioUrl, SCALE_MODEL_URL, projectionMatrix, trajectory } from '../../../lib/scale-model.js';
 import { adsConfigured, snapshotAdInsights, lastAdsFetchAt, LAST_FETCH_KEY } from '../../../lib/meta-ads.js';
 import { capiConfigured, capiConfig } from '../../../lib/meta-capi.js';
 
@@ -82,6 +82,9 @@ export default async function handler(req, res) {
              (a."profile"->'attribution'->>'ctwaClid') IS NOT NULL AS attributed,
              (a."profile"->'attribution'->'capi'->>'lead') IS NOT NULL AS capi_lead,
              (a."profile"->'attribution'->'capi'->>'purchase') IS NOT NULL AS capi_purchase,
+             a."profile"->'attribution'->>'entry' AS entry,
+             (a."profile"->'attribution'->>'reminderSentAt') IS NOT NULL AS reminded,
+             coalesce(a."profile"->'attribution'->>'reminderOptOut', 'false') = 'true' AS reminder_opt_out,
              c.onboarded_at, l.first_link_at, l.links_total, l.first_paid_at, f.first_funded_at, m.last_money_at
       FROM "Account" a
       LEFT JOIN (SELECT "accountId", min("grantedAt") AS onboarded_at FROM consents GROUP BY 1) c ON c."accountId" = a.id
@@ -107,6 +110,9 @@ export default async function handler(req, res) {
     attributed: Boolean(r.attributed),
     capiLead: Boolean(r.capi_lead),
     capiPurchase: Boolean(r.capi_purchase),
+    entry: r.entry || null,
+    reminded: Boolean(r.reminded),
+    reminderOptOut: Boolean(r.reminder_opt_out),
     onboardedAt: r.onboarded_at ? new Date(r.onboarded_at) : null,
     firstLinkAt: r.first_link_at ? new Date(r.first_link_at) : null,
     linksTotal: num(r.links_total),
@@ -241,7 +247,7 @@ export default async function handler(req, res) {
   const conversations = (adsWindow || []).reduce((s, r) => s + num(r.conversations), 0);
 
   // ---- funnel by source + per ad ----
-  const sources = ['organic', 'paylink', 'ad', 'partner'];
+  const sources = ['organic', 'paylink', 'ad', 'referral', 'partner'];
   const funnelBySource = sources.map((src) => {
     const rs = rows.filter((a) => a.src === src);
     const onboarded = rs.filter((a) => a.onboarded);
@@ -301,6 +307,28 @@ export default async function handler(req, res) {
     if (inWindow(a.firstFundedAt)) dayRow(day(a.firstFundedAt)).funded += 1;
   }
   const daily = [...dayMap.values()].sort((x, y) => (x.date < y.date ? -1 : 1)).slice(-Math.min(days, 120));
+  // The path, all time (founder 2026-10-19): cumulative accounts per day from the first one ever to today.
+  const pathSeries = (() => {
+    const byDay = new Map();
+    for (const a of rows) if (a.onboarded && a.onboardedAt) { const k = day(a.onboardedAt); byDay.set(k, (byDay.get(k) || 0) + 1); }
+    const keys = [...byDay.keys()].sort();
+    if (!keys.length) return [];
+    const out = []; let cum = 0;
+    for (let d = new Date(keys[0] + 'T00:00:00Z'); d.getTime() <= now.getTime(); d = new Date(d.getTime() + DAY_MS)) {
+      const k = d.toISOString().slice(0, 10); const n = byDay.get(k) || 0; cum += n;
+      out.push({ date: k, accounts: cum, newAccounts: n });
+    }
+    return out;
+  })();
+
+  // ---- which tapped question brought them in (ad arrivals) ----
+  const ENTRY_LABELS = { Q1: 'Open my WaPay account', Q2: 'How do I get paid with a link?', Q3: 'What does it cost?', Q4: 'Turn my WhatsApp into a wallet', OPEN: 'Open my account (button)', COST: 'What it costs (button)', HOW: 'How it works (button)', free_text: 'Typed their own message' };
+  const entryBreakdown = Object.keys(ENTRY_LABELS).map((k) => {
+    const rs = adRows.filter((a) => (a.entry || 'free_text') === k);
+    const onb = rs.filter((a) => a.onboarded);
+    return { entry: k, label: ENTRY_LABELS[k], contacts: rs.length, onboarded: onb.length, activated: onb.filter((a) => a.firstLinkAt).length, funded: onb.filter((a) => a.firstFundedAt).length };
+  }).filter((e) => e.contacts > 0);
+  const reminders = { sent: adRows.filter((a) => a.reminded).length, optedOut: adRows.filter((a) => a.reminderOptOut).length };
 
   // ---- the loop ----
   const adSet = new Set(adRows.map((a) => a.id));
@@ -367,6 +395,45 @@ export default async function handler(req, res) {
   }
   const inputs = measuredToInputs(measuredRaw, { minN: MIN_SAMPLE });
   const scenario = scenarioUrl({ inputs }, process.env.WAPAY_SCALE_MODEL_URL || SCALE_MODEL_URL);
+  // The live valuation matrix (2026-10-19): today's ad spend pace is the trailing seven days of Meta spend, held flat.
+  const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
+  const spend7dCents = (adsDaily || []).filter((r) => new Date(r.d) >= weekAgo).reduce((s, r) => s + num(r.spend), 0);
+  // The funnel inputs are judged on a mature cohort (14 to 44 days old). Until one exists the
+  // matrix would silently keep the plan's paid-link rate while the live evidence says otherwise,
+  // so for the PROJECTION ONLY the young cohort fills in (every onboarded account in the window),
+  // labelled "early read"; the measured table above keeps the mature rule.
+  const young = rows.filter((a) => a.onboarded && inWindow(a.onboardedAt));
+  const youngAct = young.filter((a) => a.firstLinkAt);
+  const youngNoAct = young.filter((a) => !a.firstLinkAt);
+  const earlyRaw = {
+    onbToAct: { value: young.length > 0 ? (100 * youngAct.length) / young.length : null, n: young.length },
+    actToFund: { value: youngAct.length > 0 ? (100 * youngAct.filter((a) => a.firstFundedAt).length) / youngAct.length : null, n: youngAct.length },
+    selfLoad: { value: youngNoAct.length > 0 ? (100 * youngNoAct.filter((a) => a.firstFundedAt).length) / youngNoAct.length : null, n: youngNoAct.length },
+  };
+  const earlyKeys = Object.keys(earlyRaw).filter((k) => (measuredRaw[k]?.n ?? 0) < MIN_SAMPLE && (earlyRaw[k].n ?? 0) >= MIN_SAMPLE);
+  const inputsForMatrix = { ...measuredToInputs(Object.fromEntries(earlyKeys.map((k) => [k, earlyRaw[k]])), { minN: MIN_SAMPLE }), ...inputs };
+  const valuation = projectionMatrix({ inputs: inputsForMatrix, earlyKeys, currentMonthlySpend: Math.round(((spend7dCents / 100) / 7) * 30), launchMonth: '2026-10' });
+  // Where we are and where today's pace leads (founder, 2026-10-19): actual counts, the last seven days as a rate.
+  const d7 = new Date(now.getTime() - 7 * DAY_MS), d14 = new Date(now.getTime() - 14 * DAY_MS), d30 = new Date(now.getTime() - 30 * DAY_MS);
+  const revenueBetween = async (from, to) => safe(async () => {
+    const r = await prisma.$queryRaw`
+      SELECT (sum(coalesce(jl."creditCents", 0)) - sum(coalesce(jl."debitCents", 0)))::bigint AS net
+      FROM "JournalLine" jl JOIN "JournalEntry" je ON je.id = jl."entryId"
+      WHERE jl."accountCode" LIKE 'REVENUE:%' AND je."createdAt" > ${from} AND je."createdAt" <= ${to}`;
+    return num(r?.[0]?.net);
+  }, 0);
+  const [rev7, revPrior7, rev30] = await Promise.all([revenueBetween(d7, now), revenueBetween(d14, d7), revenueBetween(d30, now)]);
+  const between = (f, from, to) => rows.filter((a) => a.onboarded && f(a) && f(a) > from && f(a) <= to).length;
+  const onbAt = (a) => a.onboardedAt, fundAt = (a) => a.firstFundedAt;
+  const priorWeek = { accounts: between(onbAt, d14, d7), funded: between(fundAt, d14, d7), revenueCents: revPrior7 };
+  valuation.trajectory = trajectory({
+    accountsTotal: rows.filter((a) => a.onboarded).length,
+    fundedTotal: rows.filter((a) => a.onboarded && a.firstFundedAt).length,
+    activesNow: mau,
+    revenueMonthCents: rev30,
+    last7: { accounts: between(onbAt, d7, now), funded: between(fundAt, d7, now), revenueCents: rev7 },
+    prior7: priorWeek.accounts > 0 ? priorWeek : null,
+  }, { modelInputs: inputsForMatrix, now });
 
   res.setHeader('Cache-Control', 'private, max-age=60');
   return res.status(200).json({
@@ -404,7 +471,10 @@ export default async function handler(req, res) {
     },
     funnelBySource,
     ads,
+    entryBreakdown,
+    reminders,
     daily,
+    pathSeries,
     cohorts,
     loop,
     messages: {
@@ -417,5 +487,6 @@ export default async function handler(req, res) {
     inputs,
     plan,
     scenarioUrl: scenario,
+    valuation,
   });
 }

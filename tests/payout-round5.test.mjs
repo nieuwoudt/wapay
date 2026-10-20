@@ -73,7 +73,7 @@ test('1. the ID step takes a passport, asks the issuing country, confirms it mas
   assert.ok(!/FN123456/.test(s5.text)); assert.equal(s5.data.idPending ?? null, null);
   const pin = await handleWithdrawReply({ account: lisa, state: s5.state, data: s5.data, text: 'yes' });
   assert.equal(pin.state, 'PAYOUT_PIN');
-  const done = await executeWithdraw({ account: lisa, data: pin.data, deps: d });
+  const done = await executeWithdraw({ account: lisa, data: pin.data, pinProof: proofFor(lisa, pin.data), deps: d });
   const r = d.last.recipient;
   assert.equal(r.id_number, 'FN123456'); assert.equal(r.id_type, 'PASSPORT'); assert.equal(r.country_of_issue, 'ZW'); assert.equal(r.nationality, 'ZW');
   assert.equal(r.firstname, 'Lisa'); assert.equal(r.surname, 'Moyo');
@@ -81,7 +81,7 @@ test('1. the ID step takes a passport, asks the issuing country, confirms it mas
   assert.equal(done.data.recipient.id_type, 'PASSPORT'); assert.equal(done.data.recipient.country_of_issue, 'ZW');
   // The answer to OTT's id_type question is a Vercel change, not a deploy.
   process.env.WAPAY_PAYOUT_PASSPORT_ID_TYPE = 'Passport';
-  await executeWithdraw({ account: lisa, data: pin.data, deps: d });
+  await executeWithdraw({ account: lisa, data: pin.data, pinProof: proofFor(lisa, pin.data), deps: d });
   assert.equal(d.last.recipient.id_type, 'Passport'); assert.equal(passportIdType(), 'Passport');
   delete process.env.WAPAY_PAYOUT_PASSPORT_ID_TYPE;
 });
@@ -92,7 +92,7 @@ test('1. an SA ID still goes without id_type; a 12-digit number from South Afric
   const base = { method: 'CASHSEND', amountCents: 5000, intentId: 'wa-r5-sa', options: ['PAYSHAP', 'CASHSEND', 'NEDCASH'], balanceCents: 35000, fields: { CASHSEND: ['id_number', 'mobile'] }, recipient: { mobile: '27601879361', fullName: 'Lisa Moyo' } };
   const sa = await handleWithdrawReply({ account: lisa, state: 'PAYOUT_ID', data: base, text: '9001015009087' });
   assert.equal(sa.state, 'PAYOUT_CONFIRM'); assert.match(sa.text, /ID number: •••087/);
-  await executeWithdraw({ account: lisa, data: sa.data, deps: d });
+  await executeWithdraw({ account: lisa, data: sa.data, pinProof: proofFor(lisa, sa.data), deps: d });
   assert.equal(d.last.recipient.id_number, '9001015009087');
   assert.ok(!('id_type' in d.last.recipient) && !('country_of_issue' in d.last.recipient) && !('nationality' in d.last.recipient), 'the SA ID wire shape proven since 2026-09-23 is unchanged');
   const twelve = await handleWithdrawReply({ account: lisa, state: 'PAYOUT_ID', data: base, text: '900101500908' });
@@ -120,11 +120,11 @@ test('1. a saved passport skips the ID step and goes on the wire with its countr
   assert.equal(s1.state, 'PAYOUT_CONFIRM', 'name and passport are saved: no name or ID step');
   assert.match(s1.text, /Passport \/ foreign ID: •••456 \(Zimbabwe, saved\)/);
   const pin = await handleWithdrawReply({ account: lisa, state: s1.state, data: s1.data, text: 'yes' });
-  await executeWithdraw({ account: lisa, data: pin.data, deps: d });
+  await executeWithdraw({ account: lisa, data: pin.data, pinProof: proofFor(lisa, pin.data), deps: d });
   assert.equal(base.last.recipient.id_number, 'FN123456'); assert.equal(base.last.recipient.id_type, 'PASSPORT'); assert.equal(base.last.recipient.country_of_issue, 'ZW'); assert.equal(base.last.recipient.nationality, 'ZW');
   // Typed this time and saved on YES: the vault is told the kind and the country.
   const typed = { method: 'NEDCASH', amountCents: 5000, intentId: 'wa-r5-save', recipient: { mobile: '27601879361', fullName: 'Lisa Moyo', id_number: 'FN123456', id_type: 'PASSPORT', country_of_issue: 'ZW' } };
-  const done = await executeWithdraw({ account: lisa, data: typed, deps: { ...d, getIdentity: undefined, loadIdentity: async () => null } });
+  const done = await executeWithdraw({ account: lisa, data: typed, pinProof: proofFor(lisa, typed), deps: { ...d, getIdentity: undefined, loadIdentity: async () => null } });
   const yes = await handleWithdrawReply({ account: lisa, state: 'PAYOUT_SAVE', data: done.data, text: 'yes', deps: d });
   assert.match(yes.text, /your name and passport or ID number ending 456/);
   assert.deepEqual({ idNumber: saved[0].idNumber, idType: saved[0].idType, countryOfIssue: saved[0].countryOfIssue }, { idNumber: 'FN123456', idType: 'PASSPORT', countryOfIssue: 'ZW' });
@@ -259,7 +259,7 @@ test('3. moneySituation reads the balance, the gifts (voucher or already in the 
   assert.equal(empty.availableCents, 0); assert.deepEqual(empty.giftsReceived, []); assert.equal(empty.identity.kind, null);
   assert.deepEqual(situationSentences(s, { now: new Date('2026-10-11T04:23:00Z') }), [
     'The R350 Nieuwoudt sent you yesterday came as a voucher PIN, not as money in your balance, so it cannot be withdrawn.',
-    'Your R367 payment link from yesterday was not paid, so nothing came in from it and nothing was taken.',
+    'Your R350 add-money link (R367 with the card fee) from yesterday was not paid, so nothing came in from it and nothing was taken.',
     'R58 is held for your R50 withdrawal (WPX) until the bank confirms it; if it does not go through, it comes back to your balance.',
   ]);
 });
@@ -276,9 +276,9 @@ test('3. the gate in tiers on Lisa\'s situation: her money and where it is, then
   const lisaAcc = { id: 'acc-lisa', waId: '27601879361', displayName: 'Lisa' };
   const now = new Date('2026-10-10T21:28:00Z');
   const t = [0, 1, 2, 3].map((repeats) => shortGateReply({ account: lisaAcc, balanceCents: 0, needCents: 5800, minCents: 5000, situation: LISA_SITUATION, repeats, personAsked: repeats === 2, now }));
-  assert.equal(t[0].text, '💸 You have R0 to withdraw. The R350 Nieuwoudt sent you today came as a voucher PIN, not as money in your balance, so it cannot be withdrawn. Your R367 payment link from today was not paid, so nothing came in from it and nothing was taken. A withdrawal needs at least R58 in your balance (the R50 minimum plus the R8 PayShap fee). Say *add money* to top up.');
+  assert.equal(t[0].text, '💸 You have R0 to withdraw. The R350 Nieuwoudt sent you today came as a voucher PIN, not as money in your balance, so it cannot be withdrawn. Your R350 add-money link (R367 with the card fee) from today was not paid, so nothing came in from it and nothing was taken. A withdrawal needs at least R58 in your balance (the R50 minimum plus the R8 PayShap fee). Say *add money* to top up.');
   assert.ok(!/Withdrawals start at/.test(t[0].text), 'never a product fact first');
-  assert.match(t[1].text, /^Let me explain where your money is, Lisa:\n\n• Balance you can withdraw: \*R0\*\n• The R350 from Nieuwoudt \(today\): a voucher PIN, not balance\n• Your R367 payment link: not paid, nothing was taken\n\nWhat you can do:\n1️⃣ Add money/);
+  assert.match(t[1].text, /^Let me explain where your money is, Lisa:\n\n• Balance you can withdraw: \*R0\*\n• The R350 from Nieuwoudt \(today\): a voucher PIN, not balance\n• Your R350 add-money link \(R367 with the card fee\): not paid, nothing was taken\n\nWhat you can do:\n1️⃣ Add money/);
   assert.match(t[1].text, /2️⃣ Use the voucher PIN at a shop that takes WaPay vouchers\n3️⃣ Withdraw once your balance is R58 or more: say \*withdraw\*/);
   assert.match(t[1].text, /a passport or foreign ID works too/, 'no ID on file: a passport is named');
   assert.match(t[2].text, /^🙋 I can see this is not working for you, Lisa, so I have asked a person from the WaPay team to look at your account and message you here\. Your money is safe\./);
@@ -303,7 +303,8 @@ test('3. the gate in tiers on Lisa\'s situation: her money and where it is, then
 test('3. startWithdraw at R0: reads the situation, counts the repeats, alerts a person exactly once (the third time), returns the gate id for the stored turn', async () => {
   envOff();
   const alerts = [];
-  const mk = (repeats, ok = true, askedBefore = false) => ({ ...deps(0), moneySituation: async () => LISA_SITUATION, gateHistory: async () => ({ count: repeats, personAsked: askedBefore }), sendOpsAlert: async (a) => { alerts.push(a); return { success: ok }; } });
+  const twins = [];
+  const mk = (repeats, ok = true, askedBefore = false) => ({ ...deps(0), moneySituation: async () => LISA_SITUATION, gateHistory: async () => ({ count: repeats, personAsked: askedBefore }), opsPersonAlert: async (x) => { twins.push(x); return { sent: 0 }; }, sendOpsAlert: async (a) => { alerts.push(a); return { success: ok }; } });
   const first = await startWithdraw({ account: lisa, ask: matchWithdrawAsk('I want you to put in my bank account'), deps: mk(0) });
   assert.equal(first.state, null); assert.match(first.text, /^💸 You have R0 to withdraw\. The R350 Nieuwoudt sent you/); assert.deepEqual(first.refs, { gate: SHORT_GATE, tier: 0 });
   const second = await startWithdraw({ account: lisa, ask: {}, deps: mk(1) });
@@ -311,6 +312,7 @@ test('3. startWithdraw at R0: reads the situation, counts the repeats, alerts a 
   assert.equal(alerts.length, 0, 'no alert before the third time');
   const third = await startWithdraw({ account: lisa, ask: {}, deps: mk(2) });
   assert.match(third.text, /I have asked a person from the WaPay team/); assert.equal(alerts.length, 1); assert.match(alerts[0].subject, /three times/);
+  assert.equal(twins.length, 1, 'the WhatsApp twin goes with the e-mail'); assert.match(twins[0].text, /^🙋 Lisa has asked to withdraw three times and cannot\./); assert.match(twins[0].key, /^acc-lisa:\d{4}-\d{2}-\d{2}$/);
   assert.deepEqual(third.refs, { gate: SHORT_GATE, tier: 2, personAsked: true }, 'the stored reply remembers that a person was asked');
   const fourth = await startWithdraw({ account: lisa, ask: {}, deps: mk(3, true, true) });
   assert.match(fourth.text, /has been asked to help you/); assert.equal(alerts.length, 1, 'one alert, not one per message');
@@ -377,11 +379,11 @@ test('4. a received voucher in the message: recognised, answered from the record
 test('5. an unpaid link: older than 15 minutes is "you have not paid", fresh is "no payment yet"; never "still confirming", no partner, no time promised', () => {
   const now = new Date('2026-10-10T21:25:00Z');
   const old = unpaidLinkAnswer({ intent: { requestTs: new Date('2026-10-10T20:16:54Z'), metadata: { amountCents: 35000, grossCents: 36700 } }, now });
-  assert.equal(old, 'You have not paid your R367 payment link from today: no payment came in for it, so nothing was taken. Ignore it if you did not mean to buy. If money did leave your bank for it, tell me and I will check.');
+  assert.equal(old, 'You have not paid your R350 add-money link (R367 with the card fee) from today: no payment came in for it, so nothing was taken. Ignore it if you did not mean to buy. If money did leave your bank for it, tell me and I will check.');
   const fresh = unpaidLinkAnswer({ intent: { requestTs: new Date('2026-10-10T21:20:00Z'), metadata: { amountCents: 5000, grossCents: 5300 } }, now });
-  assert.equal(fresh, 'I have not received a payment for your R53 payment link yet. If you have just paid, I will message you here as soon as it lands. If you did not pay, nothing was taken.');
+  assert.equal(fresh, 'I have not received a payment for your R50 add-money link (R53 with the card fee) yet. If you have just paid, I will message you here as soon as it lands. If you did not pay, nothing was taken.');
   const bare = unpaidLinkAnswer({ intent: { requestTs: new Date('2026-10-08T10:00:00Z'), metadata: {} }, now });
-  assert.match(bare, /^You have not paid your payment link from on|^You have not paid your payment link from /);
+  assert.match(bare, /^You have not paid your add-money link from on|^You have not paid your add-money link from /);
   for (const t of [old, fresh, bare]) assert.ok(!/still confirming|PayFast|minute|—/i.test(t), t);
 });
 
@@ -463,7 +465,8 @@ test('7. the withdraw copy names only the cash ways on the merchant and the iden
   assert.ok(!/identity check/.test(howItWorksAnswer('withdraw', live)), 'identity checks are off in the open pilot');
   delete process.env.WAPAY_PAYOUT_KYC;
   assert.match(howItWorksAnswer('withdraw', live), /A once-off identity check applies before your first withdrawal\./);
-  assert.match(howItWorksBrief('withdraw', { withdrawLive: true, providers: [], text: 'can I withdraw?' }), /FNB eWallet/, 'with no provider list every way is named');
+  const bare = howItWorksBrief('withdraw', { withdrawLive: true, providers: [], text: 'can I withdraw?' });
+  assert.match(bare, /Absa or Nedbank ATM/); assert.ok(!/FNB eWallet/.test(bare), 'with no provider list the production two are named, never the eWallet (BUGLOG #119)'); assert.match(bare, /Withdrawals start at R50/);
   envOff();
 });
 
@@ -482,6 +485,7 @@ test('8. the gift claim message says the PIN is separate from the balance, never
 // ---------------------------------------------------------------------------
 import { matchNicknameAsk, nicknameLastDestination } from '../lib/payout-nickname.js';
 import { destinationLabel, displayLabelOf, setPayoutDestinationNickname } from '../lib/payout-beneficiaries.js';
+import { proofFor } from './helpers/pin-proof.mjs';
 
 test('9. a bare YES for an account asks for a name once; a name sets it, "no" or "ok" keeps it, anything else passes through; their own number is "Mine" without a question', async () => {
   envOff();

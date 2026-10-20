@@ -20,7 +20,9 @@
     "qa:chat": "node --env-file=.env --experimental-test-module-mocks tests/e2e/chat-qa.mjs",
     "qa:fuel": "node --experimental-test-module-mocks tests/e2e/fuel-e2e.mjs",
     "eval:agent": "node --env-file=.env scripts/eval-agent.mjs --baseline docs/testing/agent-eval-baseline.json",
-    "eval:orchestrator": "node --env-file=.env scripts/eval-orchestrator.mjs"
+    "eval:orchestrator": "node --env-file=.env scripts/eval-orchestrator.mjs",
+    "audit:export": "node --env-file=.env scripts/audit/export-conversations.mjs",
+    "audit:scan": "node scripts/audit/scan-conversations.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.11.0",

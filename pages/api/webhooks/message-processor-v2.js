@@ -6,16 +6,25 @@
  */
 
 import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed, wasErrorSent, markErrorSent } from './user-manager.js';
-import { growthOnTurn, growthOnOnboarded } from '../../../lib/growth-attribution.js';
-import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, outboundSendCount } from '@wapay/whatsapp';
+import { growthOnTurn, growthOnOnboarded, syncCapiForAccount } from '../../../lib/growth-attribution.js';
+import { classifyAdEntry, adEntryReply, firstNameFrom, firstLinkPrompt, parseFirstLinkAsk, firstLinkRetry, firstLinkCreatedCopy, matchesStop, STOP_REPLY, feeExample, isFaqKind, PAYOUT_BUTTON_KINDS, AD_STATES, buttonsAsText } from '../../../lib/ad-flow.js';
+import { markReminderOptOut } from '../../../lib/ad-reminders.js';
+import { mergeProfileSubkeyAtomic } from '../../../lib/profile-merge.js';
+import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, sendWhatsAppReplyButtons, outboundSendCount } from '@wapay/whatsapp';
 // Every outbound text goes through lib/say.js, which records the assistant
 // side of the turn by construction (docs/AGENT_ARCHITECTURE_V2.md C2).
 import { sendWhatsAppText, recordInbound } from '../../../lib/say.js';
+import { rememberSent } from '../../../lib/say.js';
+import { isFirstLinkExample, EXAMPLE_ECHO_REPLY, looksLikeNobodyOwesMe, NOBODY_OWES_ME_REPLY } from '../../../lib/ad-flow.js';
+import { matchCloseAccountAsk, closeAccountReply, closeAccountAlert } from '../../../lib/account-closure.js';
+import { getLatestPendingRequest as latestPendingLink, cancelPaymentRequest as cancelPendingLink } from '../../../lib/payment-requests.js';
 import { recentTurns, renderTurns, redactForMemory } from '../../../lib/turns.js';
 import { loadContextPack, renderCustomerRecord, statusCandidates, rankCandidates, preferredKind, formatRands, formatSast, movementBullet } from '../../../lib/context-pack.js';
 import { rescueWithdrawSlots } from '../../../lib/agent/slot-rescue.js';
 import { evaluatePolicy, requirementMessage } from '../../../lib/policy.js';
-import { capabilityById, homeLines, helpLines, welcomeLines, promptLines, fuelLiveFor as registryFuelLiveFor } from '../../../lib/capabilities.js';
+import { capabilityById, homeLines, helpLines, welcomeLines, promptLines, fuelLiveFor as registryFuelLiveFor, worksToday, launchScopeFor } from '../../../lib/capabilities.js';
+import { parseReferralCode, recordReferredContact, matchInviteAsk, ensureReferralCode, inviteMessage, referredWelcome, ALREADY_MEMBER_REPLY } from '../../../lib/referrals.js';
+import { FROZEN_SEND_COPY } from '../../../lib/payout-freeze.js';
 import { eraseTurns } from '../../../lib/turns.js';
 import { updateProfile } from '../../../lib/user-profile.js';
 import prisma from '../../../lib/prisma.js';
@@ -66,7 +75,10 @@ import {
   MAX_DEPOSIT_CENTS,
   shortfallCents,
 } from '../../../lib/deposits.js';
-import { orchestrate, runAgentTurn, buildAgentSystemPrompt } from '@wapay/ai';
+import { orchestrate, runAgentTurn, buildAgentSystemPrompt, runWithPrivacy, addPrivacyNames } from '@wapay/ai';
+import { privacyNamesFor } from '../../../lib/privacy-names.js';
+import { bareSecretKind, bareSecretReply, nothingPendingLine, privacyBlockedLine, expiredStepText } from '../../../lib/money-truth.js';
+import { sendConfirmText, sendReceiptText } from '../../../lib/send-money.js';
 import { buildToolDefinitions, executeTool } from '../../../lib/agent/tools/index.js';
 import { agentGuard, outputGate } from '../../../lib/agent/guards.js';
 import { recordAgentTurn, agentTurnsInLastHour } from '../../../lib/agent/turn-ledger.js';
@@ -88,7 +100,7 @@ import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
 import { isValidSaMsisdn, normaliseMsisdn, bluCanVendTo } from '../../../lib/msisdn.js';
 import { agentV3For } from '../../../lib/shadow-list.js';
 import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '../../../lib/localize.js';
-import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId } from '../../../lib/vas-config.js';
+import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId, isRailLiveFor, ottLoadConfigured, launchScope, comingSoonReply, comingSoonPhrases, joinAnd } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
 import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders, getLatestPayout, reconcilePayout, reconcileInitPayout, payoutOutcomeMessage, PAYOUT_METHODS } from '../../../lib/payouts.js';
@@ -105,6 +117,7 @@ import {
   handleS3OtpVerified,
   handleS4PinSet,
   handleResendOTP,
+  startOnboardingFromAd,
 } from '@wapay/auth';
 
 /**
@@ -170,16 +183,62 @@ async function sendWhatsAppErrorOnce({ to, errorKey, text }) {
   return res;
 }
 
-function categoryUnavailableMessage(category) {
-  const display = getCategoryDisplayName(category);
-  return `🚧 ${display} is listed, but purchasing is not enabled yet.\n\nYou can still buy airtime, data, or electricity right now.`;
+/**
+ * Launch scope (2026-10-18, lib/vas-config.js): a category that is switched
+ * off is "coming soon" (never a date) followed by what works today for THIS
+ * customer, from the same gates the home card and the model prompt read.
+ */
+const CATEGORY_SUBJECT = {
+  AIRTIME: ['Airtime', false, '📱'],
+  DATA: ['Data bundles', true, '📶'],
+  ELECTRICITY: ['Prepaid electricity', false, '💡'],
+  LIFESTYLE: ['Entertainment vouchers', true, '🎬'],
+  BILLPAY: ['Bill payments', true, '🧾'],
+  GAMING: ['Gaming top-ups', true, '🎮'],
+  REMITTANCE: ['Money transfers', true, '🌍'],
+  FUEL: ['Fuel vouchers', true, '⛽'],
+};
+
+function categoryUnavailableMessage(category, waId = null) {
+  const [subject, plural, emoji] = CATEGORY_SUBJECT[String(category || '').toUpperCase()] || [getCategoryDisplayName(category), false, '🚧'];
+  const scope = launchScopeFor({ waId });
+  return comingSoonReply(subject, { plural, emoji, scope, withdrawLive: scope.withdrawLive, wicodeLive: scope.wicodeLive });
 }
 
-async function replyCategoryUnavailable(to, category) {
+async function replyCategoryUnavailable(to, category, account = null) {
+  const text = categoryUnavailableMessage(category, to);
   return await sendWhatsAppText({
     to,
-    text: categoryUnavailableMessage(category),
+    text: account ? await localizeOutbound(text, await userLang(account)) : text,
+    kind: 'flow',
   });
+}
+
+/** Is any voucher cash-in rail live for this customer (Blu voucher load, or the OTT load rail when configured)? */
+function cashLoadLiveFor(waId) {
+  return isRailLiveFor('BLU_LOAD', waId) || (isRailLiveFor('OTT_LOAD', waId) && ottLoadConfigured());
+}
+
+const CASH_LOAD_SOON = `Cash top-ups with Blu and OTT vouchers are coming soon on WaPay. I will tell you the moment they are live.`;
+
+/** The add-money ask while no voucher rail is live: card and Instant EFT only, the cash position said once. */
+function cardOnlyDepositPrompt() {
+  return (
+    `💳 *Add Money to WaPay*\n\n` +
+    `How much would you like to add? Reply with the amount, for example "R100", and I send you a secure payment link for your card, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan or Zapper.\n\n` +
+    CASH_LOAD_SOON
+  );
+}
+
+async function replyCashLoadComingSoon(from, account) {
+  const text = `🎟️ ${CASH_LOAD_SOON} Keep your voucher safe. For now you can add money by card or Instant EFT: say "deposit R100".\n\n${worksToday({ waId: from, account })}`;
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(text, await userLang(account)), kind: 'flow' });
+}
+
+async function replyVoucherComingSoon(from, account) {
+  const scope = launchScopeFor({ waId: from, account });
+  const text = comingSoonReply('Buying a WaPay (OTT) voucher for yourself', { emoji: '🎟️', scope, withdrawLive: scope.withdrawLive, wicodeLive: scope.wicodeLive });
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(text, await userLang(account)), kind: 'flow' });
 }
 
 function extractMsisdnFromText(text = '') {
@@ -238,6 +297,11 @@ function detectNetworkCodeFromMsisdn(msisdn = '') {
  * enter your meter number").
  */
 async function startElectricityPreviewAndConfirm({ from, account, amountCents, meterNumber, rawText = '' }) {
+  // Launch scope (2026-10-18): the category switch, per customer, before any Blu call.
+  if (!isCategoryEnabledForWaId('ELECTRICITY', from)) {
+    await updateConversationState(from, null);
+    return await replyCategoryUnavailable(from, 'ELECTRICITY', account);
+  }
   if (!/^\d{8,14}$/.test(String(meterNumber || ''))) {
     await updateConversationState(from, 'ELECTRICITY_METER', { amountCents });
     return await sendWhatsAppText({
@@ -416,6 +480,11 @@ function qaCredentialsLine(product) {
 
 
 async function startAirtimePreviewAndConfirm({ from, account, amountCents, msisdn, intent = 'BUY_AIRTIME', rawText = '' }) {
+  // Launch scope (2026-10-18): the category switch, per customer, before any Blu call.
+  if (!isCategoryEnabledForWaId('AIRTIME', from)) {
+    await updateConversationState(from, null);
+    return await replyCategoryUnavailable(from, 'AIRTIME', account);
+  }
   // On Blu's QA credentials only four test numbers can actually be vended to.
   // Saying so HERE costs the customer nothing; finding out after the confirm
   // and the PIN costs them a PIN attempt and tells them their own number is
@@ -521,15 +590,61 @@ function isConversationalEscape(text) {
  */
 /** The ways a gift preview is entered from "send money" (never the explicit self-purchase, which is OTT_VOUCHER_SELF). */
 const SEND_PATH_INTENTS = new Set(['STATE_VOUCHER_GIFT_RECIPIENT', 'STATE_VOUCHER_GIFT_RECIPIENT_BENEFICIARY', 'STATE_VOUCHER_GIFT_AMOUNT', 'ORCHESTRATOR', 'AI_CHAT', 'SMART_PRODUCT_QUERY']);
+/**
+ * A send to another number (BUGLOG #117): quoted by /api/wallet/send/preview
+ * (free, the quote of record), confirmed with the same words whether or not
+ * the number is on WaPay (membership-neutral), then the PIN, then
+ * /api/wallet/send/execute moves the money in the ledger. No rail.
+ */
+async function startSendPreviewAndConfirm({ from, account, amountCents, recipientMsisdn, rawText = '' }) {
+  const previewUrl = apiUrl('/api/wallet/send/preview');
+  logInternalFetchCall({ url: previewUrl, path: '/api/wallet/send/preview' });
+  const previewRes = await fetch(previewUrl, { method: 'POST', headers: withInternalHeaders(), body: JSON.stringify({ accountId: account.id, amountCents, recipientMsisdn }) });
+  await logInternalFetchResponse({ url: previewUrl, res: previewRes });
+  const p = previewRes.headers.get('content-type')?.includes('application/json') ? await previewRes.json() : { ok: false, error: 'NON_JSON' };
+  if (!p.ok) {
+    if (p.error === 'INSUFFICIENT_FUNDS') {
+      const totalCents = Number.isInteger(p.totalCents) ? p.totalCents : amountCents;
+      const availableCents = Number.isInteger(p.availableBalance) ? p.availableBalance : 0;
+      const shortfallCents = Math.max(totalCents - availableCents, MIN_DEPOSIT_CENTS);
+      await sendWhatsAppText({ to: from, text: await localizeOutbound(`💰 To send ${randsShort(totalCents)} you need ${randsShort(totalCents - availableCents)} more: your balance is ${randsShort(availableCents)}.\n\nTop up ${randsShort(shortfallCents)} with the button below and I will finish the send the moment it lands. Or reply "cancel".`, await userLang(account)) });
+      const linkResult = await handleCardDepositLink({ from, account, amountCents: shortfallCents, rawText });
+      await updateConversationState(from, 'RESUME_VOUCHER_PURCHASE', { amountCents, recipientMsisdn });
+      return linkResult;
+    }
+    await updateConversationState(from, null);
+    if (p.error === 'SELF') {
+      const { sendToSelfText } = await import('../../../lib/payout-gate.js');
+      return await sendWhatsAppText({ to: from, text: await localizeOutbound(sendToSelfText({ voucherLive: isRailLiveFor('OTT_VOUCHER', from) }), await userLang(account)) });
+    }
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(`❌ ${p.error === 'USER_INPUT' && p.message ? p.message : 'I could not prepare that send.'} Nothing was sent. Try again with the amount and the number, like "send R50 to 0781234567".`, await userLang(account)) });
+  }
+  logSlotFill({ intent: 'SEND', text: rawText, slots: { amountCents, msisdn: p.recipientMsisdn }, routeDecision: 'SEND_CONFIRM', missing: [], from, accountId: account.id });
+  await updateConversationState(from, 'VOUCHER_GIFT_CONFIRM', { amountCents, feeCents: p.feeCents || 0, totalCents: p.totalCents, recipientMsisdn: p.recipientMsisdn, previewId: p.previewId, send: true });
+  // The FULL number, unmasked, so the sender can catch a wrong destination before the PIN.
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(sendConfirmText({ amountCents, recipientMsisdn: p.recipientMsisdn }), await userLang(account)) });
+}
+
 async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, recipientMsisdn, intent = 'VOUCHER_GIFT', rawText = '' }) {
+  // Launch scope (2026-10-18): the self-purchase is coming soon until VAS_LIVE_OTT_VOUCHER; sends to others are not gated here.
+  if (intent === 'OTT_VOUCHER_SELF' && !isRailLiveFor('OTT_VOUCHER', from)) {
+    await updateConversationState(from, null);
+    return await replyVoucherComingSoon(from, account);
+  }
   // "Send money" to your own number is not a voucher for yourself (founder 2026-10-12, the Lisa
   // case: "send money", R350, her own number, then a R367 link). Only the explicit self-purchase
   // ("buy an OTT voucher", intent OTT_VOUCHER_SELF) or its resume may reach here with the own number.
   if (SEND_PATH_INTENTS.has(intent) && normaliseMsisdn(recipientMsisdn || '') === normaliseMsisdn(account.msisdn || '')) {
-    const { SEND_TO_SELF_TEXT } = await import('../../../lib/payout-gate.js');
+    const { sendToSelfText } = await import('../../../lib/payout-gate.js');
     await updateConversationState(from, null);
     logStructured('send_to_self_refused', { from, accountId: account.id, intent });
-    return await sendWhatsAppText({ to: from, text: await localizeOutbound(SEND_TO_SELF_TEXT, await userLang(account)) });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(sendToSelfText({ voucherLive: isRailLiveFor('OTT_VOUCHER', from) }), await userLang(account)) });
+  }
+  // "Send money" moves balance, never a voucher (founder 2026-10-18, BUGLOG #117): every send to
+  // another number goes through the ledger (lib/send-money.js). Only the explicit self-purchase
+  // (intent OTT_VOUCHER_SELF, or its resume to the own number) keeps the voucher preview below.
+  if (intent !== 'OTT_VOUCHER_SELF' && normaliseMsisdn(recipientMsisdn || '') !== normaliseMsisdn(account.msisdn || '')) {
+    return await startSendPreviewAndConfirm({ from, account, amountCents, recipientMsisdn, rawText });
   }
   const previewUrl = apiUrl('/api/vas/voucher/preview');
   logInternalFetchCall({ url: previewUrl, path: '/api/vas/voucher/preview' });
@@ -566,8 +681,8 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
         to: from,
         text:
           await localizeOutbound(`💰 You need ${randsShort(totalCents)} for this voucher but your balance is ${randsShort(availableCents)}.\n\n` +
-          `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your voucher. 🎟️\n\n` +
-          `(Prefer cash? Buy a Blu Voucher at any till and send me the code.)`, await userLang(account)),
+          `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your voucher. 🎟️` +
+          (isRailLiveFor('BLU_LOAD', from) ? `\n\n(Prefer cash? Buy a Blu Voucher at any till and send me the code.)` : ''), await userLang(account)),
       });
       const linkResult = await handleCardDepositLink({
         from,
@@ -626,12 +741,11 @@ async function startVoucherGiftPreviewAndConfirm({ from, account, amountCents, r
       `\n` +
       `Your voucher PIN will be delivered right here. Spend it online at any store that accepts OTT vouchers.\n\n` +
       `Reply *YES* to confirm or *NO* to cancel.`
-    : `🎁 *Confirm WaPay Voucher*\n\n` +
-      `Voucher: ${randsShort(amountCents)}\n` +
-      `Fee: ${randsShort(feeCents)}\n` +
-      `Total: ${randsShort(totalCents)}\n` +
+    : `💸 *Confirm send*\n\n` +
+      `Amount: ${randsShort(amountCents)}\n` +
+      (feeCents > 0 ? `Fee: ${randsShort(feeCents)}\nTotal: ${randsShort(totalCents)}\n` : `No fee.\n`) +
       `To: ${normalisedRecipient}\n\n` +
-      `Please check the number carefully. They'll get a WaPay voucher they can spend online at any store that accepts OTT vouchers.\n\n` +
+      `Please check the number carefully. It moves from your WaPay balance to theirs; if they are not on WaPay yet, it waits for them.\n\n` +
       `Reply *YES* to confirm or *NO* to cancel.`, await userLang(account));
 
   return await sendWhatsAppText({ to: from, text: confirmMsg });
@@ -824,7 +938,7 @@ function waIdFromMsisdn(msisdn = '') {
  *   window, so the approved template is tried FIRST; free text is only a
  *   fallback for recipients with an open session.
  */
-async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCents }) {
+async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCents, delivered = null }) {
   try {
     const buyerMsisdn = normaliseMsisdn(account?.msisdn || '');
     const targetMsisdn = normaliseMsisdn(recipientMsisdn || '');
@@ -841,6 +955,7 @@ async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCe
       senderMsisdn: account?.msisdn,
       product,
       amountCents,
+      delivered,
     });
     const to = waIdFromMsisdn(targetMsisdn);
 
@@ -885,12 +1000,11 @@ async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCe
   }
 }
 
-async function sendPostTransactionCta(to) {
-  // Founder call (2026-08-31): no menu after a successful transaction —
-  // the receipt is the moment; a bullet list under it reads as clutter.
-  // One warm line, nothing else.
-  const cta = `💚 If you have any questions or get stuck anywhere, just tell me. I am right here.`;
-  return await sendWhatsAppText({ to, text: cta });
+async function sendPostTransactionCta() {
+  // 2026-10-20 (Meta "sending spam" notice, quality RED, BUGLOG #130): the receipt is the last
+  // message of a transaction. A second line that adds nothing is a second message the customer
+  // did not ask for, and every extra message is a chance to be reported. Nothing is sent.
+  return { ok: true, skipped: 'NO_TRAILER' };
 }
 
 /**
@@ -929,11 +1043,12 @@ async function renderHome({ from, account }) {
   const vouchers = await voucherBalanceSummary(account);
 
   // Quick actions (best-effort). Prefer last successful VAS if available.
-  let quickActions = [
-    'Buy airtime',
-    'Buy data',
-    'Check balance',
-  ];
+  // Launch scope (2026-10-18): never suggest a product that is off for this customer.
+  const scope = launchScope(from);
+  let quickActions = ['Please pay me', 'Deposit', 'Check balance'];
+  if (scope.airtime && scope.data) quickActions = ['Buy airtime', 'Buy data', 'Check balance'];
+  else if (scope.airtime) quickActions = ['Buy airtime', 'Please pay me', 'Check balance'];
+  else if (scope.data) quickActions = ['Buy data', 'Please pay me', 'Check balance'];
 
   try {
     const last = await prisma.providerRequest.findFirst({
@@ -946,7 +1061,7 @@ async function renderHome({ from, account }) {
     });
 
     const meta = last?.metadata || {};
-    if (last?.route === 'airtime-execute' && meta?.amountCents && meta?.msisdn) {
+    if (last?.route === 'airtime-execute' && scope.airtime && meta?.amountCents && meta?.msisdn) {
       const amt = (meta.amountCents / 100).toFixed(0);
       quickActions = [
         `Buy R${amt} airtime again`,
@@ -1113,9 +1228,14 @@ async function userLang(account) {
 }
 
 /**
- * Process incoming WhatsApp message
+ * Process incoming WhatsApp message. Every model call this message causes
+ * runs inside its privacy scope: the names learned along the way never reach
+ * a model (@wapay/ai boundary.ts, BUGLOG #111).
  */
 export async function processMessage({ from, text, messageId, profile, sharedContact, referral = null }) {
+  return runWithPrivacy([profile?.name], () => processMessageInner({ from, text, messageId, profile, sharedContact, referral }));
+}
+async function processMessageInner({ from, text, messageId, profile, sharedContact, referral = null }) {
   // Log incoming message
   logStructured('whatsapp_inbound', {
     from,
@@ -1129,6 +1249,7 @@ export async function processMessage({ from, text, messageId, profile, sharedCon
 
   // Get or create user
   const { account, isNewUser } = await getOrCreateUser(from, profile, { referral });
+  addPrivacyNames(privacyNamesFor({ account }));
 
   // De-duplicate inbound message IDs to prevent repeated replies if Meta retries delivery
   if (messageId && (await wasMessageProcessed(from, messageId))) {
@@ -1148,6 +1269,29 @@ export async function processMessage({ from, text, messageId, profile, sharedCon
   const onboardingState = await getOnboardingState(account.id);
 
   console.log(`📊 Account state: ${onboardingState} (new: ${isNewUser})`);
+
+  // Referrals (docs/REFERRALS.md, 2026-10-20): a message carrying a member's invite code. A new
+  // number is stamped with who invited them and the contact is counted before anything is said;
+  // a member who sends one is told they already have an account. The friend wrote first, so
+  // everything here is a reply; no model call anywhere in it.
+  {
+    const referralTurn = await handleReferralCodeTurn({ from, account, text, profile, onboardingState }).catch((e) => {
+      logStructured('referral_code_error', { from, error: e?.message });
+      return null;
+    });
+    if (referralTurn) return referralTurn;
+  }
+
+  // Ad chat flow (docs/AD_CHAT_FLOW.md, 2026-10-18): a person who tapped a
+  // click-to-WhatsApp ad is answered from the brief, deterministically, with
+  // no model call. Only ad arrivals ever enter; everything else falls through.
+  {
+    const adTurn = await handleAdEntryTurn({ from, account, text, profile, referral, onboardingState }).catch((e) => {
+      logStructured('ad_entry_error', { from, error: e?.message });
+      return null;
+    });
+    if (adTurn) return adTurn;
+  }
 
   // "Receipt PRXXXXXX" — the wa.me deep link from the pay page. Answered
   // for EVERY sender BEFORE the onboarding gate: a card payer's first-ever
@@ -1258,7 +1402,7 @@ async function handleSharedContact({ from, account, sharedContact }) {
   const msg = await localizeOutbound(
     `💸 *Send money to ${label}*\n\n` +
     `How much would you like to send? For example "R50".\n\n` +
-    `They'll get a WaPay voucher they can spend online at any store that accepts OTT vouchers. Reply "cancel" to stop.`,
+    `It lands in their WaPay balance, free; if they are not on WaPay yet, it waits for them. Reply "cancel" to stop.`,
     await userLang(account)
   );
   return await sendWhatsAppText({ to: from, text: msg });
@@ -1329,7 +1473,15 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
       // the auth package's state machine is untouched, and a failure here can
       // never undo the completed onboarding.
       if (done?.ok && (await getOnboardingState(account.id)) === 'S5_COMPLETED') {
-        await askAccountType({ from, account }).catch((e) => logStructured('business_signup_ask_failed', { from, error: e?.message }));
+        if (isAdAcquired(account)) {
+          // Ad arrival (docs/AD_CHAT_FLOW.md section 8): nothing in front of the first link.
+          await sendWhatsAppText({ to: from, text: firstLinkPrompt(firstNameFrom(profile?.name || account.displayName)), kind: 'ad' }).catch((e) => logStructured('ad_first_link_prompt_failed', { from, error: e?.message }));
+          await updateConversationState(from, AD_STATES.FIRST_LINK, { stateSetAt: new Date().toISOString() }).catch(() => {});
+        } else if ((await import('../../../lib/business-chat.js')).businessQuestionEnabled()) {
+          // Founder 2026-10-19: off by default for the POC (no business sign-up from onboarding);
+          // WAPAY_ONBOARDING_BUSINESS_QUESTION=on restores the question.
+          await askAccountType({ from, account }).catch((e) => logStructured('business_signup_ask_failed', { from, error: e?.message }));
+        }
         // Growth: remember the moment and tell Meta (LeadSubmitted) if an ad brought them.
         await growthOnOnboarded({ account }).catch((e) => logStructured('growth_onboarded_hook_failed', { from, error: e?.message }));
       }
@@ -1352,6 +1504,12 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
  * guide; everything else is the OTT online voucher. Bearer rules for both:
  * verbatim English, never localized, never logged.
  */
+/** A sender's WhatsApp label shown to someone else: no markdown or control characters, 40 at most (memory cross-user-actions-need-consent-gate). */
+function sanitizeSenderName(raw) {
+  const t = String(raw || '').normalize('NFKC').replace(/[\u0000-\u001f\u007f*_~`>\[\]()]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  return t || null;
+}
+
 function giftClaimText(gift, senderName = null) {
   if (gift.rail === 'YOYO') {
     return buildWicodeClaimMessage({
@@ -1514,6 +1672,27 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     if (!reconError?.skipHook) logStructured('payout_reconcile_hook_failed', { from, error: reconError?.message });
   }
 
+  // Money someone SENT this number while it was not on WaPay (rail WAPAY,
+  // BUGLOG #117) becomes their balance now, once: the claim posts
+  // gift-claim-balance-<giftId> (idempotent) and the row flips DELIVERED under
+  // a guard, so a second message claims nothing. One line per gift; the
+  // sender's name is sanitised (it is the sender's own WhatsApp label).
+  try {
+    const { claimHeldGiftsToBalance } = await import('../../../lib/pending-gifts.js');
+    const held = await claimHeldGiftsToBalance({ account });
+    for (const g of held) {
+      let who = null;
+      try {
+        const sender = await prisma.account.findUnique({ where: { id: g.senderAccountId }, select: { displayName: true } });
+        who = sanitizeSenderName(sender?.displayName);
+      } catch { /* the name is cosmetic */ }
+      await sendWhatsAppText({ to: from, text: await localizeOutbound(`🎁 ${who || 'Someone'} sent you ${randsShort(g.amountCents)}. It is in your WaPay balance: spend it here or say *withdraw* to move it to your bank.`, await userLang(account)), kind: 'receipt' });
+      logStructured('held_gift_claimed', { from, accountId: account.id, giftId: g.giftId, amountCents: g.amountCents });
+    }
+  } catch (heldError) {
+    logStructured('held_gift_claim_failed', { from, accountId: account.id, error: heldError?.message });
+  }
+
   // A claim marks the gift DELIVERED before anything is sent, so every path
   // out of this block that did not send must put it back: a bearer PIN must
   // never strand. The send-failure branch has always done that; a THROW
@@ -1578,6 +1757,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
 
   // Check if user is in a conversation state (e.g., entering voucher PIN)
   let { state, data } = await getConversationState(from);
+  addPrivacyNames(privacyNamesFor({ data }));
 
   // The customer's side of the turn, recorded once per inbound message
   // (escapes re-enter this function without a messageId and must not record
@@ -1593,6 +1773,8 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       // A bank account number or an ID number typed bare in the withdraw
       // flow keeps no digits in memory either.
       secretInput: /^PAYOUT_(ACCOUNT|ID)$/.test(String(state || '')),
+      // The account holder's name typed at the name step is kept as "[name]" (BUGLOG #111).
+      nameInput: state === 'PAYOUT_NAME',
     });
   }
 
@@ -1600,9 +1782,39 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     // Idle expiry (founder 2026-09-15): a flow nobody finished for WAPAY_STATE_IDLE_MINUTES
     // (default 30) is over. The next message starts fresh, so "hello" goes home instead of
     // "Just the amount". A state without a stamp (set before this shipped) expires too.
+    // An ad arrival's first-link ask (docs/AD_CHAT_FLOW.md section 8) still
+    // counts when it comes late: an amount typed within WAPAY_AD_FIRST_LINK_RESUME_HOURS
+    // (24) of the prompt makes the link instead of reading as a timed-out
+    // secret or a fresh turn. Only in that exact state; past the cap it expires.
+    if (state === AD_STATES.FIRST_LINK && parseFirstLinkAsk(text)) {
+      const promptedAt = Date.parse(data?.stateSetAt || '') || 0;
+      const resumeMs = Number(process.env.WAPAY_AD_FIRST_LINK_RESUME_HOURS ?? 24) * 3600 * 1000;
+      if (promptedAt && Date.now() - promptedAt <= resumeMs) data = { ...(data || {}), stateSetAt: new Date().toISOString() };
+    }
     const setAt = Date.parse(data?.stateSetAt || '') || 0;
     const idleMs = Number(process.env.WAPAY_STATE_IDLE_MINUTES ?? 30) * 60 * 1000;
-    if (!setAt || Date.now() - setAt > idleMs) {
+    // The next message after the expiry is never handed to the AI as new when
+    // it answers the step that expired (BUGLOG #111, Lisa 2026-10-15: her ID
+    // and then her PIN went to the AI, which asked for the PIN and said the
+    // pay-out was being confirmed): a withdrawal carries on, is confirmed
+    // again, or is said to have stopped; any other flow's late PIN or ID is
+    // told the step timed out.
+    const expired = !setAt || Date.now() - setAt > idleMs;
+    const late = expired && setAt && /^PAYOUT_/.test(String(state)) && !isHomeTrigger(text)
+      ? await (await import('../../../lib/payout-chat.js')).resumeLateWithdraw({ account, state, data, text, setAt: data?.stateSetAt }).catch(() => null)
+      : null;
+    if (late?.resume) {
+      logStructured('state_resumed_late', { from, state, idleMinutes: Math.round((Date.now() - setAt) / 60000) });
+      await updateConversationState(from, state, late.data);
+      data = { ...late.data, stateSetAt: new Date().toISOString() };
+    } else if (late) {
+      logStructured('state_expired_late_answer', { from, state, next: late.state || null, idleMinutes: Math.round((Date.now() - setAt) / 60000) });
+      return await deliverPayoutStep({ from, account, step: late });
+    } else if (expired && bareSecretKind(text)) {
+      logStructured('state_expired_secret', { from, state, kind: bareSecretKind(text) });
+      await updateConversationState(from, null);
+      return await sendWhatsAppText({ to: from, text: await localizeOutbound(expiredStepText(), await userLang(account)), kind: 'guard' });
+    } else if (expired) {
       logStructured('state_expired', { from, state, idleMinutes: setAt ? Math.round((Date.now() - setAt) / 60000) : null });
       await updateConversationState(from, null);
       state = null; data = null;
@@ -1745,6 +1957,16 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     // Not a business owner (and not invited): route normally, say nothing.
   }
 
+  // STOP for everyone (WhatsApp Business Messaging Policy; 2026-10-20, BUGLOG #130): the word opts the customer
+  // out of every message WaPay would start. Replies to what they write still come. Never inside a PIN or confirm step.
+  if (matchesStop(text)) {
+    const { state: stopState } = await getConversationState(from);
+    if (!/_PIN$|PIN_RESEND_AUTH|AWAITING_VOUCHER_PIN|^PIN_RESET_|CONFIRM/.test(String(stopState || ''))) return await handleStopAsk({ from, account });
+  }
+
+  // CLOSE MY ACCOUNT (audit 2026-10-19, BUGLOG #125): a person does it; the chat says so once and raises the alert, never a "secure step".
+  if (matchCloseAccountAsk(text)) return await handleCloseAccountAsk({ from, account });
+
   // BUSINESS SIGN-UP from the chat (founder ask 2026-09-06): "business
   // account" / "register my business" starts the two-question flow for an
   // existing wallet; a brand-new wallet is asked right after onboarding.
@@ -1752,6 +1974,10 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     const { matchBusinessSignupAsk } = await import('../../../lib/business-chat.js');
     if (matchBusinessSignupAsk(text)) return await handleBusinessSignupAsk({ from, account });
   }
+
+  // INVITE A FRIEND (docs/REFERRALS.md, 2026-10-20): one forwardable message with the member's
+  // own link, only when they ask for it, once per ask. Never a reminder, never a nudge.
+  if (matchInviteAsk(text)) return await handleInviteAsk({ from, account });
 
   // "I forgot my PIN" / "Reset pin" / "Me for my password what to reset": the reset itself,
   // never a model's invented command (founder 2026-10-14; Lisa was told "type reset PIN" four times).
@@ -1871,7 +2097,8 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     // know how this customer pays. A successful card deposit or voucher
     // redemption records the preference; after that, straight to their rail.
     const depositProfile = await getProfile({ accountId: account.id });
-    if (!depositProfile.preferredDepositMethod) {
+    // Launch scope (2026-10-18): the cash-or-card question exists only while the Blu rail is live.
+    if (!depositProfile.preferredDepositMethod && isRailLiveFor('BLU_LOAD', from)) {
       await updateConversationState(from, 'AWAITING_DEPOSIT_METHOD', { amountCents: cardDepositCents });
       return await sendWhatsAppText({
         to: from,
@@ -1999,6 +2226,8 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   // listing (observed live 2026-08-20). Redemption-ish phrasings ("redeem /
   // load / I have an OTT voucher") stay out — that's the future deposit path.
   if (matchOttVoucherSelfRequest(text, slots)) {
+    // Launch scope (2026-10-18): buying an OTT voucher for yourself is coming soon until VAS_LIVE_OTT_VOUCHER.
+    if (!isRailLiveFor('OTT_VOUCHER', from)) return await replyVoucherComingSoon(from, account);
     logSlotFill({
       intent: 'OTT_VOUCHER_SELF',
       text,
@@ -2019,7 +2248,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       });
     }
     await updateConversationState(from, 'VOUCHER_GIFT_AMOUNT', { recipientMsisdn: account.msisdn, self: true });
-    const askMsg = `🎟️ *OTT Voucher*\n\nHow much would you like your voucher for? (R10–R1000)\n\nFor example "R50", or reply "cancel" to stop.`;
+    const askMsg = `🎟️ *OTT Voucher*\n\nHow much would you like your voucher for? (R10 to R1000)\n\nFor example "R50", or reply "cancel" to stop.`;
     return await sendWhatsAppText({ to: from, text: askMsg });
   }
 
@@ -2116,7 +2345,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           return await handleListLifestyleProducts({ from, account });
           
         case 'ELECTRICITY':
-          if (!isCategoryLive('ELECTRICITY')) {
+          if (!isCategoryEnabledForWaId('ELECTRICITY', from)) {
             return await replyCategoryUnavailable(from, 'ELECTRICITY');
           }
           // Electricity purchase flow - start it
@@ -2144,6 +2373,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           
         case 'AIRTIME':
           // Airtime flow - start it
+          if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
           if (amount) {
             logSlotFill({
               intent: 'CONTEXT_AWARE',
@@ -2292,6 +2522,12 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
         });
 
       case 'REDEEM_VOUCHER':
+        // Launch scope (2026-10-18): with no voucher rail live, "add money" is the card / EFT amount ask.
+        if (!cashLoadLiveFor(from)) {
+          logSlotFill({ intent: 'REDEEM_VOUCHER', text, slots, routeDecision: 'DEPOSIT_CARD_AMOUNT', missing: ['amountCents'], from, accountId: account.id });
+          await updateConversationState(from, 'DEPOSIT_CARD_AMOUNT');
+          return await sendWhatsAppText({ to: from, text: await localizeOutbound(cardOnlyDepositPrompt(), await userLang(account)) });
+        }
         // Explicit: "redeem voucher"
         logSlotFill({
           intent: 'REDEEM_VOUCHER',
@@ -2308,11 +2544,13 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           text: buildDepositPrompt(),
         });
       case 'VOUCHER_PIN':
+        if (!cashLoadLiveFor(from)) return await replyCashLoadComingSoon(from, account);
         await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
         return await handleVoucherRedemption({ from, pin: detection.voucherPin || text, account });
 
       case 'BUY_AIRTIME':
         // User wants to buy airtime - start airtime flow
+        if (!isCategoryEnabledForWaId('AIRTIME', from)) return await replyCategoryUnavailable(from, 'AIRTIME', account);
         logStructured('vas_airtime_flow_start', {
           from,
           accountId: account.id,
@@ -2394,7 +2632,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           entities: detection.entities,
         });
 
-        if (!isCategoryLive('DATA')) {
+        if (!isCategoryEnabledForWaId('DATA', from)) {
           return await replyCategoryUnavailable(from, 'DATA');
         }
 
@@ -2854,10 +3092,152 @@ async function deliverBusinessStep({ from, account, step }) {
   const msg = step.raw ? step.text : await localizeOutbound(step.text, await userLang(account));
   return await sendWhatsAppText({ to: from, text: msg });
 }
+/* ---------------- Ad chat flow (docs/AD_CHAT_FLOW.md, 2026-10-18) ---------------- */
+
+function isAdAcquired(account) {
+  return account?.profile?.acquisitionSource === 'ad';
+}
+
+function adLooksLikeQuestion(text) {
+  const t = String(text || '').trim();
+  return /\?$/.test(t) || /^(can|could|how|do|does|is|are|what|which|where|when|why|will|would)\b/i.test(t);
+}
+
+/** Text with reply buttons; falls back to a numbered text line; keeps the line in memory. */
+async function sendAdReply({ from, account, reply }) {
+  if (!reply.buttons?.length) return await sendWhatsAppText({ to: from, text: reply.text, kind: 'ad' });
+  const sent = await sendWhatsAppReplyButtons({ to: from, bodyText: reply.text, buttons: reply.buttons });
+  if (!sent?.ok) return await sendWhatsAppText({ to: from, text: `${reply.text}\n\n${buttonsAsText(reply.buttons)}`, kind: 'ad' });
+  try {
+    const { recordTurn } = await import('../../../lib/turns.js');
+    await recordTurn({ prisma, accountId: account.id, role: 'assistant', text: reply.text, kind: 'ad', waMessageId: sent?.data?.messages?.[0]?.id });
+  } catch {
+    // Memory is best-effort; the message was delivered.
+  }
+  return sent;
+}
+
+async function startAdOnboarding({ from, account, profile }) {
+  const displayName = profile?.name || account.displayName || 'Friend';
+  return await startOnboardingFromAd({ accountId: account.id, waId: from, msisdn: account.msisdn || from, displayName });
+}
+
+/**
+ * Referrals (docs/REFERRALS.md, 2026-10-20): the turn of a message that carries a member's
+ * invite code. Returns a result when it answered, null when the normal path should run.
+ * - a member: told they already have an account (their own code, or a friend's);
+ * - a brand-new number: stamped and counted, told who invited them by first name only (memory
+ *   keeps "A friend"), then the OTP step at once, as an ad arrival gets it;
+ * - a number mid-onboarding: stamped silently, the step that is waiting answers;
+ * - an unknown code or the member's own: nothing said about it, the ordinary welcome runs.
+ * No model call anywhere in here.
+ */
+async function handleReferralCodeTurn({ from, account, text, profile, onboardingState }) {
+  const code = parseReferralCode(text);
+  if (!code) return null;
+  if (onboardingState === 'S5_COMPLETED') {
+    logStructured('referral_code_from_member', { accountId: account.id });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(ALREADY_MEMBER_REPLY, await userLang(account)) });
+  }
+  const recorded = await recordReferredContact({ account, code });
+  logStructured('referral_contact', { accountId: account.id, ok: recorded.ok, reason: recorded.reason || null, already: !!recorded.already, referrerAccountId: recorded.referrerAccountId || null, state: onboardingState });
+  if (!recorded.ok || onboardingState !== 'S0_INITIAL') return null;
+  const welcome = referredWelcome({ inviterFirstName: recorded.inviterFirstName });
+  await sendWhatsAppText({ to: from, text: welcome, recordAs: referredWelcome({ inviterFirstName: null }), kind: 'flow' });
+  return await startAdOnboarding({ from, account, profile });
+}
+
+/** "invite" / "refer a friend" / "share WaPay": the one forwardable message with the member's link. */
+async function handleInviteAsk({ from, account }) {
+  const code = await ensureReferralCode({ accountId: account.id });
+  logStructured('referral_invite_ask', { accountId: account.id });
+  const msg = await localizeOutbound(inviteMessage({ code }), await userLang(account));
+  return await sendWhatsAppText({ to: from, text: msg, kind: 'flow' });
+}
+
+/**
+ * The ad arrival's turn. Returns a result when it answered, null when the
+ * normal path should run. No model call anywhere in here.
+ */
+async function handleAdEntryTurn({ from, account, text, profile, referral, onboardingState }) {
+  const adAcquired = isAdAcquired(account);
+  if (!referral && !adAcquired) return null;
+  const { state: convState } = await getConversationState(from);
+  // Section 10: "stop" opts out of the one reminder. Never inside a PIN, a
+  // PIN reset or a confirm step, where the flow owns every word.
+  const protectedState = /_PIN$|PIN_RESEND_AUTH|AWAITING_VOUCHER_PIN|^PIN_RESET_|CONFIRM/.test(String(convState || ''));
+  if (adAcquired && !protectedState && matchesStop(text)) {
+    await markReminderOptOut({ accountId: account.id }).catch(() => {});
+    if (convState === AD_STATES.ENTRY || convState === AD_STATES.FIRST_LINK) await updateConversationState(from, null);
+    await sendWhatsAppText({ to: from, text: STOP_REPLY, kind: 'ad' });
+    return { ok: true, adStop: true };
+  }
+  const kind = classifyAdEntry(text);
+  const firstName = firstNameFrom(profile?.name || account.displayName);
+  const fee = feeExample(paymentRequestFeeCents);
+  const hasAccount = onboardingState === 'S5_COMPLETED';
+  // Section 12: which question brought them in. An id, never their words.
+  if (referral && !account.profile?.attribution?.entry) {
+    await mergeProfileSubkeyAtomic({ accountId: account.id, key: 'attribution', patch: { entry: kind } }).catch(() => {});
+  }
+  if (!hasAccount) {
+    if (onboardingState !== 'S0_INITIAL') return null; // the OTP, PIN or consent step answers
+    if (!referral && convState !== AD_STATES.ENTRY) return null; // not an ad entry turn
+    const reply = adEntryReply(kind, { firstName, fee, hasAccount: false });
+    if (reply.startOnboarding || PAYOUT_BUTTON_KINDS.includes(kind)) {
+      if (reply.startOnboarding) await sendWhatsAppText({ to: from, text: reply.text, kind: 'ad' });
+      await updateConversationState(from, null);
+      logStructured('ad_onboarding_started', { from, accountId: account.id, entry: kind });
+      return await startAdOnboarding({ from, account, profile });
+    }
+    await sendAdReply({ from, account, reply });
+    await updateConversationState(from, AD_STATES.ENTRY, { kind, stateSetAt: new Date().toISOString() });
+    return { ok: true, adEntry: kind };
+  }
+  // An existing account arriving from the ad: straight to the first link (section 7).
+  if (referral && !convState) {
+    await sendWhatsAppText({ to: from, text: firstLinkPrompt(firstName), kind: 'ad' });
+    await updateConversationState(from, AD_STATES.FIRST_LINK, { stateSetAt: new Date().toISOString() });
+    return { ok: true, adFirstLink: true };
+  }
+  if (convState) return null; // a flow is running: it owns the turn
+  if (isFaqKind(kind) && adLooksLikeQuestion(text)) {
+    await sendAdReply({ from, account, reply: adEntryReply(kind, { firstName, fee, hasAccount: true }) });
+    return { ok: true, adFaq: kind };
+  }
+  if (PAYOUT_BUTTON_KINDS.includes(kind)) {
+    // The pay-out flow at its first step; it ends at its own PIN step.
+    return await handleWithdrawStart({ from, account, ask: { amountCents: null }, text: 'withdraw' });
+  }
+  return null;
+}
+
 async function askAccountType({ from, account }) {
   const { accountTypeQuestion } = await import('../../../lib/business-chat.js');
   logStructured('business_signup_question', { accountId: account.id });
   return await deliverBusinessStep({ from, account, step: accountTypeQuestion() });
+}
+const STOP_ALL_REPLY = 'Okay. WaPay will not message you unless you write first. Your account and balance stay as they are, and you can say *hi* any time.';
+async function handleStopAsk({ from, account }) {
+  await markReminderOptOut({ accountId: account.id }).catch(() => {});
+  await mergeProfileSubkeyAtomic({ accountId: account.id, key: 'messaging', patch: { optOut: true, optOutAt: new Date().toISOString() } }).catch(() => {});
+  await updateConversationState(from, null).catch(() => {});
+  logStructured('messaging_opt_out', { accountId: account.id });
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(STOP_ALL_REPLY, await userLang(account)) });
+}
+async function handleCloseAccountAsk({ from, account }) {
+  const { opsPersonAlert } = await import('../../../lib/ops-alerts.js');
+  const { sendOpsAlert } = await import('../../../lib/email.js');
+  const alert = closeAccountAlert({ account });
+  const day = new Date().toISOString().slice(0, 10);
+  const [wa, mail] = await Promise.all([
+    opsPersonAlert({ text: alert.text, key: `close:${account.id}:${day}` }).catch(() => ({ sent: 0 })),
+    sendOpsAlert({ subject: alert.subject, detailsHtml: alert.detailsHtml }).catch(() => ({ success: false })),
+  ]);
+  const alerted = !!((wa && wa.sent) || (mail && mail.success));
+  logStructured('account_closure_asked', { accountId: account.id, alerted });
+  await updateConversationState(from, null);
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(closeAccountReply({ alerted }), await userLang(account)) });
 }
 async function handleBusinessSignupAsk({ from, account }) {
   const { startBusinessSignup } = await import('../../../lib/business-chat.js');
@@ -2893,7 +3273,7 @@ async function deliverPayoutStep({ from, account, step }) {
   return await sendWhatsAppText({ to: from, text: msg, ...(step.refs ? { refs: step.refs } : {}) });
 }
 function howItWorksContext(from) {
-  return { wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), fuelPartners: advertisedFuelPartners().map((p) => p.name), ottFacts: ottAcceptedFacts() };
+  return { wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), scope: launchScope(from), waId: from, fuelPartners: advertisedFuelPartners().map((p) => p.name), ottFacts: ottAcceptedFacts() };
 }
 async function howItWorksContextLive(from, text) {
   const providers = payoutEnabled() && payoutConfigured() ? await resolveProviders({}).catch(() => []) : [];
@@ -2914,7 +3294,7 @@ async function handleHowItWorks({ from, account, topic, text }) {
 }
 async function handleFeeAsk({ from, account, topic, text }) {
   logStructured('fee_ask', { accountId: account.id, topic });
-  const msg = await localizeOutbound(feeAnswer(topic, feeAskAmountCents(text), { withdrawLive: payoutAllowedFor(from) }), await userLang(account));
+  const msg = await localizeOutbound(feeAnswer(topic, feeAskAmountCents(text), { withdrawLive: payoutAllowedFor(from), scope: launchScope(from) }), await userLang(account));
   return await sendWhatsAppText({ to: from, text: msg });
 }
 async function handleWithdrawStart({ from, account, ask, text }) {
@@ -3038,14 +3418,46 @@ function matchRequestMoneyAsk(text = '', slots = null) {
  * The link page offers BOTH legs: pay from a WaPay balance (free, deep
  * links back into chat) or card/EFT via PayFast (payer covers the fee).
  */
-async function handleCreatePaymentRequest({ from, account, amountCents, rawText = '', confirmed = false }) {
+async function handleCreatePaymentRequest({ from, account, amountCents, rawText = '', confirmed = false, adPayerName = null }) {
   if (!Number.isInteger(amountCents) || amountCents < MIN_REQUEST_CENTS || amountCents > MAX_REQUEST_CENTS) {
     await updateConversationState(from, 'REQUEST_MONEY_AMOUNT');
+    // Say WHY (conversation audit 2026-10-19, BUGLOG #121: a customer typed an amount above the
+    // maximum twice, got the bare question twice, and left). Over the top: name the ceiling and
+    // offer the way through; under it: name the floor; nothing parsed: the plain ask.
+    const reason = Number.isInteger(amountCents) && amountCents > MAX_REQUEST_CENTS
+      ? `${randsShort(amountCents)} is more than one payment link can carry. A link can be for R5 up to ${randsShort(MAX_REQUEST_CENTS)}. Ask for ${randsShort(MAX_REQUEST_CENTS)} now and make another link for the rest, or tell me a smaller amount.`
+      : Number.isInteger(amountCents) && amountCents > 0 && amountCents < MIN_REQUEST_CENTS
+        ? `A payment link starts at R5. ${randsShort(amountCents)} is below that, so tell me an amount from R5 up to ${randsShort(MAX_REQUEST_CENTS)}.`
+        : null;
     const askMsg = await localizeOutbound(
-      `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5–R3000)\n\nFor example "R150", or reply "cancel" to stop.`,
+      reason
+        ? `🙏 ${reason}\n\nReply with the amount, for example "R150", or "cancel" to stop.`
+        : `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5 to R3000)\n\nFor example "R150", or reply "cancel" to stop.`,
       await userLang(account)
     );
     return await sendWhatsAppText({ to: from, text: askMsg });
+  }
+
+  // The ad prompt's example typed back word for word (audit 2026-10-19, BUGLOG #126): ask for the real one, mint nothing.
+  if (isFirstLinkExample(rawText)) {
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(EXAMPLE_ECHO_REPLY, await userLang(account)), kind: 'ad' });
+  }
+  // A link made minutes ago (audit 2026-10-19, BUGLOG #124): the same amount again is that link, not a second one;
+  // its grossed-up amount is "option 2" of that link, so the first is replaced rather than compounded.
+  if (!confirmed) {
+    const recent = await latestPendingLink({ accountId: account.id }).catch(() => null);
+    const recentAgeMs = recent ? Date.now() - new Date(recent.createdAt).getTime() : Infinity;
+    if (recent && recentAgeMs < 15 * 60 * 1000) {
+      if (recent.amountCents === amountCents) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`That link is already live for ${randsShort(amountCents)}: ${paymentRequestUrl(recent.id)}\n\nForward it to the person who owes you. They do not need to open it for you, and you do not need to open it yourself. For a different amount, tell me the amount.`, await userLang(account)) });
+      }
+      if (amountCents <= MAX_REQUEST_CENTS && grossedUpRequestCents(recent.amountCents) === amountCents) {
+        await cancelPendingLink({ code: recent.id, accountId: account.id }).catch(() => null);
+        await sendWhatsAppText({ to: from, text: await localizeOutbound(`I cancelled your ${randsShort(recent.amountCents)} link and made the ${randsShort(amountCents)} one instead, so there is only one link.`, await userLang(account)) });
+        return await handleCreatePaymentRequest({ from, account, amountCents, rawText, confirmed: true, adPayerName });
+      }
+    }
   }
 
   // CONFIRM BEFORE CREATE (founder 2026-08-27): when a card fee exists, the
@@ -3055,11 +3467,14 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
   // have no fee and nothing to choose, so they still create in one step.
   const quoteFeeCents = paymentRequestFeeCents(amountCents);
   if (!confirmed && quoteFeeCents > 0) {
-    const askCents = grossedUpRequestCents(amountCents);
+    // At the ceiling the card fee cannot be added on top (audit 2026-10-19, BUGLOG #123): no option 2, said plainly.
+    const grossCents = grossedUpRequestCents(amountCents);
+    const askCents = grossCents <= MAX_REQUEST_CENTS ? grossCents : null;
     await updateConversationState(from, 'REQUEST_MONEY_CONFIRM', {
       amountCents,
       askCents,
       rawText,
+      adPayerName,
     });
     const chooseMsg = await localizeOutbound(
       `🙏 *Get paid ${randsShort(amountCents)}*
@@ -3072,10 +3487,13 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
         `or ${randsShort(amountCents - quoteFeeCents)} if they pay by card (${randsShort(quoteFeeCents)} card cost).
 
 ` +
-        `2️⃣ Link for *${randsShort(askCents)}*. You receive at least ${randsShort(amountCents)} however they pay.
+        (askCents
+          ? `2️⃣ Link for *${randsShort(askCents)}*. You receive at least ${randsShort(amountCents)} however they pay.
 
-` +
-        `Reply *1* or *2*, or "cancel".`,
+Reply *1* or *2*, or "cancel".`
+          : `The most a link can carry is ${randsShort(MAX_REQUEST_CENTS)}, so the card fee cannot be added on top at this amount.
+
+Reply *1* to make it, tell me a smaller amount, or "cancel".`),
       await userLang(account)
     );
     return await sendWhatsAppText({ to: from, text: chooseMsg });
@@ -3119,6 +3537,17 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
 
   logStructured('payrequest_created', { from, accountId: account.id, code: request.id, amountCents });
 
+  // Ad arrival (docs/AD_CHAT_FLOW.md section 8): one short, forwardable message
+  // with the link in it, and QualifiedLead told to Meta now rather than next turn.
+  if (isAdAcquired(account)) {
+    await sendWhatsAppText({ to: from, text: firstLinkCreatedCopy({ amountCents, url, payerName: adPayerName }), kind: 'ad' });
+    await Promise.race([
+      syncCapiForAccount({ accountId: account.id }).catch(() => null),
+      new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
+    ]);
+    return { ok: true, adLink: request.id };
+  }
+
   // COMPOSE-TIME QUOTE (founder feedback 2026-08-27). The requester typed the
   // amount, so it is their anchor — landing under it later reads as a loss.
   // Tell them what they NET before the link goes out, and offer the ask that
@@ -3149,6 +3578,10 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
     buttonText: 'View my payment page',
     url,
   });
+  if (interactive?.ok) {
+    // A button message bypasses say(): remember it, or the chat forgets it sent the link (BUGLOG #120).
+    await rememberSent({ to: from, text: `🙏 *${randsShort(amountCents)} requested*\n\n${introBody}\n\n[button: View my payment page] ${url}`, waMessageId: interactive?.data?.messages?.[0]?.id || null, refs: { request: request.id } });
+  }
   if (!interactive?.ok) {
     await sendWhatsAppText({ to: from, text: await localizeOutbound(`🙏 *Payment request created!*\n\n${introBody}`, await userLang(account)) });
   }
@@ -3620,6 +4053,8 @@ async function handleCardDepositLink({ from, account, amountCents, rawText = '' 
     buttonText: `Pay ${randsShort(grossCents)} now`,
     url: checkoutUrl,
   });
+  // A button message bypasses say(): remember it, or the chat forgets it sent the link (BUGLOG #120).
+  if (interactive?.ok) await rememberSent({ to: from, text: `💳 Add money to WaPay\n\n${bodyText}\n\n[button: Pay ${randsShort(grossCents)} now]`, waMessageId: interactive?.data?.messages?.[0]?.id || null, refs: { deposit: paymentId } });
   if (interactive?.ok) return interactive;
 
   logStructured('deposit_cta_fallback', {
@@ -4188,7 +4623,8 @@ async function handleConversationState({ from, text, state, data, account }) {
         }
         return await sendWhatsAppText({ to: from, text: await localizeOutbound(`Please enter your 4-digit WaPay PIN, or reply "cancel" to stop.`, await userLang(account)) });
       }
-      const pinResult = await verifyPIN({ accountId: account.id, pin: text.trim() });
+      // A correct PIN returns a proof bound to this intent and amount; executeWithdraw refuses without it (BUGLOG #112).
+      const pinResult = await verifyPIN({ accountId: account.id, pin: text.trim(), approves: { intentId: data?.intentId, amountCents: data?.amountCents } });
       if (!pinResult.ok) {
         // The withdrawal waits in both cases; "forgot PIN" resumes it after a reset (2026-10-14).
         const { wrongPinText, lockedPinText } = await import('../../../lib/pin-reset.js');
@@ -4202,7 +4638,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       // requestPayout is idempotent on the intent id regardless.
       await updateConversationState(from, null);
       const { executeWithdraw } = await import('../../../lib/payout-chat.js');
-      const step = await executeWithdraw({ account, data });
+      const step = await executeWithdraw({ account, data, pinProof: pinResult.proof || null });
       logStructured('withdraw_executed', { accountId: account.id, done: !!step.done });
       return await deliverPayoutStep({ from, account, step: { ...step, raw: true } });
     }
@@ -4212,6 +4648,10 @@ async function handleConversationState({ from, text, state, data, account }) {
       if (/^(cancel|stop|no|home|menu|back|exit)$/i.test(trimmed)) {
         await updateConversationState(from, null);
         return await renderHome({ from, account });
+      }
+      if (looksLikeNobodyOwesMe(text)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(NOBODY_OWES_ME_REPLY, await userLang(account)), kind: 'ad' });
       }
       const filled = parseSlots(text, { waId: from, accountId: account.id });
       if (!filled.amountCents) {
@@ -4227,6 +4667,37 @@ async function handleConversationState({ from, text, state, data, account }) {
       return await handleCreatePaymentRequest({ from, account, amountCents: filled.amountCents, rawText: text });
     }
 
+    case 'AD_FIRST_LINK': {
+      // Ad arrival, right after onboarding: "R250 from Thandi for the birthday gift".
+      // Audit 2026-10-19: the example typed back gets an ask, not a link; "nobody owes me" gets the truth, not the prompt again.
+      if (isFirstLinkExample(text)) return await sendWhatsAppText({ to: from, text: EXAMPLE_ECHO_REPLY, kind: 'ad' });
+      if (looksLikeNobodyOwesMe(text)) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: NOBODY_OWES_ME_REPLY, kind: 'ad' });
+      }
+      const ask = parseFirstLinkAsk(text);
+      if (ask) {
+        await updateConversationState(from, null);
+        return await handleCreatePaymentRequest({ from, account, amountCents: ask.amountCents, rawText: text, adPayerName: ask.payerName || null });
+      }
+      const faq = classifyAdEntry(text);
+      if (faq === 'FAQ_PAY_SOMEONE' && !adLooksLikeQuestion(text)) {
+        // A tapped "Send Money" is an action, not a question (audit 2026-10-19): the send flow, not the FAQ line.
+        await updateConversationState(from, null);
+        return await handlePostOnboarding({ account, from, text });
+      }
+      if (isFaqKind(faq)) {
+        // A section-2 question keeps the first-link prompt waiting.
+        return await sendAdReply({ from, account, reply: adEntryReply(faq, { firstName: firstNameFrom(account.displayName), fee: feeExample(paymentRequestFeeCents), hasAccount: true }) });
+      }
+      if (data?.retried || isConversationalEscape(text) || isHomeTrigger(text)) {
+        await updateConversationState(from, null);
+        return await handlePostOnboarding({ account, from, text });
+      }
+      await updateConversationState(from, AD_STATES.FIRST_LINK, { ...(data || {}), retried: true, stateSetAt: data?.stateSetAt || new Date().toISOString() });
+      return await sendWhatsAppText({ to: from, text: firstLinkRetry(), kind: 'ad' });
+    }
+
     case 'REQUEST_MONEY_CONFIRM': {
       const pick = text.trim().toLowerCase();
       if (/^(cancel|stop|no|home|menu|back|exit)$/i.test(pick)) {
@@ -4239,7 +4710,10 @@ async function handleConversationState({ from, text, state, data, account }) {
       // "1" = link for the amount asked; "2" = grossed-up link that nets it.
       // Amount echoes ("R380" / "R390") count as picking that option.
       const one = /^(1|1️⃣|one|first)$/i.test(pick) || parseSlots(text, {}).amountCents === data.amountCents;
-      const two = /^(2|2️⃣|two|second|full)$/i.test(pick) || parseSlots(text, {}).amountCents === data.askCents;
+      const two = !!data.askCents && (/^(2|2️⃣|two|second|full)$/i.test(pick) || parseSlots(text, {}).amountCents === data.askCents);
+      if (!data.askCents && /^(2|2️⃣|two|second|full)$/i.test(pick)) {
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`The most a link can carry is ${randsShort(MAX_REQUEST_CENTS)}, so the card fee cannot be added on top at this amount. Reply *1* for the ${randsShort(data.amountCents)} link, tell me a smaller amount, or "cancel".`, await userLang(account)) });
+      }
       if (one || two) {
         await updateConversationState(from, null);
         return await handleCreatePaymentRequest({
@@ -4248,6 +4722,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           amountCents: one ? data.amountCents : data.askCents,
           rawText: data.rawText || '',
           confirmed: true,
+          adPayerName: data.adPayerName || null,
         });
       }
       if (isConversationalEscape(text)) {
@@ -4256,7 +4731,9 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
       return await sendWhatsAppText({
         to: from,
-        text: await localizeOutbound(`Please reply *1* (link for ${randsShort(data.amountCents)}) or *2* (link for ${randsShort(data.askCents)}, you receive at least ${randsShort(data.amountCents)}), or "cancel".`, await userLang(account)),
+        text: await localizeOutbound(data.askCents
+          ? `Please reply *1* (link for ${randsShort(data.amountCents)}) or *2* (link for ${randsShort(data.askCents)}, you receive at least ${randsShort(data.amountCents)}), or "cancel".`
+          : `Please reply *1* (link for ${randsShort(data.amountCents)}), tell me a smaller amount, or "cancel".`, await userLang(account)),
       });
     }
 
@@ -4346,9 +4823,9 @@ async function handleConversationState({ from, text, state, data, account }) {
             to: from,
             text:
               await localizeOutbound(`💰 You need ${randsShort(request.amountCents)} but your balance is R${balance}.\n\n` +
-              `Top up and try again:\n` +
-              `1️⃣ *Cash*: buy a Blu Voucher at any till and send me the code\n` +
-              `2️⃣ *Card / bank*: reply "deposit ${randsShort(shortfallCents)}" for a secure PayFast link`, await userLang(account)),
+              (isRailLiveFor('BLU_LOAD', from)
+                ? `Top up and try again:\n1️⃣ *Cash*: buy a Blu Voucher at any till and send me the code\n2️⃣ *Card / bank*: reply "deposit ${randsShort(shortfallCents)}" for a secure PayFast link`
+                : `Top up and try again: reply "deposit ${randsShort(shortfallCents)}" for a secure payment link by card or Instant EFT.`), await userLang(account)),
           });
         }
         logStructured('payrequest_pay_error', { from, accountId: account.id, code: data.code, error: error?.message });
@@ -4457,6 +4934,11 @@ async function handleConversationState({ from, text, state, data, account }) {
     case 'AWAITING_VOUCHER_PIN':
       // User entered voucher PIN - single-step flow
       {
+        // Launch scope: a PIN step parked before the switch flipped is released.
+        if (!cashLoadLiveFor(from)) {
+          await updateConversationState(from, null);
+          return await replyCashLoadComingSoon(from, account);
+        }
         const normalized = text.trim().toLowerCase();
 
         // "home"/"menu" must always be an exit — being trapped in a state
@@ -4542,6 +5024,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'AIRTIME_AMOUNT':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
       // User is entering airtime amount
       {
         const normalized = text.trim().toLowerCase();
@@ -4598,6 +5082,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'AIRTIME_MSISDN':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
       // User is entering phone number for airtime
       {
         const normalized = text.trim().toLowerCase();
@@ -4745,6 +5231,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'AIRTIME_CONFIRM':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
       // User is confirming airtime purchase
       {
         const normalized = text.trim().toLowerCase();
@@ -4826,6 +5314,8 @@ async function handleConversationState({ from, text, state, data, account }) {
     // DATA PURCHASE FLOW (slot-filled)
     // =================================================================
     case 'DATA_MSISDN':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('DATA', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'DATA', account); }
       {
         const normalized = text.trim().toLowerCase();
         if (/^(cancel|stop|no|reset|restart|back)$/i.test(normalized)) {
@@ -4862,6 +5352,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'DATA_NETWORK':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('DATA', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'DATA', account); }
       {
         const normalized = text.trim().toLowerCase();
         if (/^(cancel|stop|no|reset|restart|back)$/i.test(normalized)) {
@@ -4887,6 +5379,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'DATA_PERIOD':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('DATA', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'DATA', account); }
       {
         const normalized = text.trim().toLowerCase();
         if (/^(cancel|stop|no|reset|restart|back)$/i.test(normalized)) {
@@ -4908,6 +5402,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'DATA_CONFIRM':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('DATA', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'DATA', account); }
       {
         const normalized = text.trim().toLowerCase();
         if (/^(no|cancel|stop|not now|later|reset|restart|start over)$/i.test(normalized)) {
@@ -4975,6 +5471,11 @@ async function handleConversationState({ from, text, state, data, account }) {
 
     case 'DATA_PIN':
       {
+        // Launch scope: a flow parked before the switch flipped never vends.
+        if (!isCategoryEnabledForWaId('DATA', from)) {
+          await updateConversationState(from, null);
+          return await replyCategoryUnavailable(from, 'DATA', account);
+        }
         const normalized = text.trim().toLowerCase();
         if (/^(cancel|stop|no|reset|restart)$/i.test(normalized)) {
           await updateConversationState(from, null);
@@ -5059,6 +5560,11 @@ async function handleConversationState({ from, text, state, data, account }) {
     case 'AIRTIME_PIN':
       // User entering PIN to complete airtime purchase
       {
+        // Launch scope: a flow parked before the switch flipped never vends.
+        if (!isCategoryEnabledForWaId('AIRTIME', from)) {
+          await updateConversationState(from, null);
+          return await replyCategoryUnavailable(from, 'AIRTIME', account);
+        }
         const normalized = text.trim();
         
         // Cancel keywords - be more permissive
@@ -5214,7 +5720,7 @@ async function handleConversationState({ from, text, state, data, account }) {
 
       await updateConversationState(from, null);
       if (state === 'AI_DATA_PURCHASE') {
-        if (!isCategoryLive('DATA')) {
+        if (!isCategoryEnabledForWaId('DATA', from)) {
           return await replyCategoryUnavailable(from, 'DATA');
         }
         return await handleListDataBundles({ from, account, entities: data || {} });
@@ -5231,6 +5737,8 @@ async function handleConversationState({ from, text, state, data, account }) {
     // ELECTRICITY PURCHASE FLOW
     // =================================================================
     case 'ELECTRICITY_AMOUNT':
+      // Launch scope (2026-10-18): a step parked before the switch flipped is released, never continued.
+      if (!isCategoryEnabledForWaId('ELECTRICITY', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'ELECTRICITY', account); }
       // User needs to provide amount for electricity
       {
         const normalized = text.trim().toLowerCase();
@@ -5284,6 +5792,7 @@ async function handleConversationState({ from, text, state, data, account }) {
       }
 
     case 'ELECTRICITY_METER': {
+      if (!isCategoryEnabledForWaId('ELECTRICITY', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'ELECTRICITY', account); }
       const normalized = text.trim().toLowerCase();
       if (/^(cancel|stop|no|reset|restart|quit|exit|back)$/i.test(normalized)) {
         await updateConversationState(from, null);
@@ -5445,7 +5954,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           await updateConversationState(from, null);
           return await sendWhatsAppText({
             to: from,
-            text: await localizeOutbound(`⚡ Electricity is coming soon. You'll be able to complete purchases once it's enabled for your account.`, await userLang(account)),
+            text: await localizeOutbound(categoryUnavailableMessage('ELECTRICITY', from), await userLang(account)),
           });
         }
 
@@ -5588,6 +6097,11 @@ async function handleConversationState({ from, text, state, data, account }) {
         await updateConversationState(from, null);
         return await renderHome({ from, account });
       }
+      // Launch scope (2026-10-18): with the Blu rail off there is only the card; a parked choice goes straight to it.
+      if (!isRailLiveFor('BLU_LOAD', from) && Number.isInteger(data?.amountCents)) {
+        await updateConversationState(from, null);
+        return await handleCardDepositLink({ from, account, amountCents: data.amountCents, rawText: text });
+      }
       const methodAmount = data?.amountCents;
       if (/^(2|card|bank|payfast|eft)\b/i.test(normalized) && Number.isInteger(methodAmount)) {
         await updateConversationState(from, null);
@@ -5727,7 +6241,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       const balanceCents = Math.round(parseFloat(balance) * 100) || 0;
       const resumeRecipient = data?.recipientMsisdn || account.msisdn;
       const resumeIsSelf = normaliseMsisdn(resumeRecipient) === normaliseMsisdn(account.msisdn || '');
-      const resumeNeededCents = resumeAmountCents + (resumeIsSelf ? 0 : 300);
+      // A send to another number is free since 2026-10-18 (BUGLOG #117); the self-purchase never had a fee.
+      const resumeNeededCents = resumeAmountCents;
 
       if (balanceCents >= resumeNeededCents) {
         await updateConversationState(from, null);
@@ -5779,7 +6294,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         if (amountCents < 1000 || amountCents > 100000) {
           return await sendWhatsAppText({
             to: from,
-            text: await localizeOutbound(`Voucher amount must be between R10 and R1000.\n\nPlease enter a valid amount.`, await userLang(account)),
+            text: await localizeOutbound(`A send must be between R10 and R1000.\n\nTell me the amount, for example "R50", or "cancel" to stop.`, await userLang(account)),
           });
         }
 
@@ -5799,7 +6314,7 @@ async function handleConversationState({ from, text, state, data, account }) {
         await updateConversationState(from, 'VOUCHER_GIFT_RECIPIENT', { amountCents });
         return await sendWhatsAppText({
           to: from,
-          text: await localizeOutbound(`🎁 *${randsShort(amountCents)} WaPay Voucher*\n\nWhich number should I send it to?\n\nReply with the recipient's cellphone number (e.g., 0781234567) or "cancel" to stop.`, await userLang(account)),
+          text: await localizeOutbound(`💸 *Send ${randsShort(amountCents)}*\n\nWhich number should I send it to?\n\nReply with the recipient's cellphone number (e.g., 0781234567) or "cancel" to stop.`, await userLang(account)),
         });
       }
 
@@ -6107,7 +6622,7 @@ async function handleConversationState({ from, text, state, data, account }) {
 
         if (/^(no|cancel|stop|not now|later|reset|restart|start over)$/i.test(normalized)) {
           await updateConversationState(from, null);
-          await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Voucher gift cancelled.`, await userLang(account)) });
+          await sendWhatsAppText({ to: from, text: await localizeOutbound(data?.send ? `👍 Cancelled. Nothing was sent.` : `👍 Voucher gift cancelled.`, await userLang(account)) });
           return await renderHome({ from, account });
         }
 
@@ -6149,6 +6664,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           amountCents,
           feeCents,
           recipientMsisdn,
+          ...(data?.send ? { send: true } : {}),
         });
 
         logStructured('vas_voucher_gift_pin_requested', {
@@ -6162,7 +6678,9 @@ async function handleConversationState({ from, text, state, data, account }) {
         return await sendWhatsAppText({
           to: from,
           text:
-            await localizeOutbound(normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')
+            await localizeOutbound(data?.send
+              ? `🔐 *Enter your WaPay PIN* to send ${randsShort(amountCents)} to ${recipientMsisdn}.`
+              : normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')
               ? `🔐 *Enter Your PIN*\n\nTo buy your ${randsShort(amountCents)} OTT voucher${feeCents > 0 ? ` (total ${randsShort(amountCents + feeCents)} incl. fee)` : ''}, please enter your WaPay PIN.`
               : `🔐 *Enter Your PIN*\n\nTo send the ${randsShort(amountCents)} WaPay voucher to ${recipientMsisdn} (total ${randsShort(amountCents + (feeCents || 0))} incl. fee), please enter your WaPay PIN.`, await userLang(account)),
         });
@@ -6175,7 +6693,7 @@ async function handleConversationState({ from, text, state, data, account }) {
 
         if (/^(cancel|stop|no|reset|restart)$/i.test(normalized.toLowerCase())) {
           await updateConversationState(from, null);
-          await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Voucher gift cancelled.`, await userLang(account)) });
+          await sendWhatsAppText({ to: from, text: await localizeOutbound(data?.send ? `👍 Cancelled. Nothing was sent.` : `👍 Voucher gift cancelled.`, await userLang(account)) });
           return await renderHome({ from, account });
         }
 
@@ -6217,17 +6735,16 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
 
-        await sendWhatsAppText({
-          to: from,
-          text:
-            await localizeOutbound(normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')
-              ? `⏳ Generating your OTT voucher...`
-              : `⏳ Sending your WaPay voucher...`, await userLang(account)),
-        });
-
+        // No "Sending..." interim message for a send (2026-10-20, BUGLOG #130): the receipt follows within
+        // seconds, and one message per customer turn is the rule now. The self-purchase keeps its one
+        // interstitial because the voucher mint can take longer (founder 2026-08: "generating, not sending").
+        if (!data?.send && normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')) {
+          await sendWhatsAppText({ to: from, text: await localizeOutbound(`⏳ Generating your OTT voucher...`, await userLang(account)) });
+        }
         try {
-          const executeUrl = apiUrl('/api/vas/voucher/execute');
-          logInternalFetchCall({ url: executeUrl, path: '/api/vas/voucher/execute' });
+          // A send moves money in the ledger (BUGLOG #117); only the self-purchase calls the voucher route.
+          const executeUrl = apiUrl(data?.send ? '/api/wallet/send/execute' : '/api/vas/voucher/execute');
+          logInternalFetchCall({ url: executeUrl, path: data?.send ? '/api/wallet/send/execute' : '/api/vas/voucher/execute' });
           const executeRes = await fetch(executeUrl, {
             method: 'POST',
             headers: withInternalHeaders(),
@@ -6270,9 +6787,9 @@ async function handleConversationState({ from, text, state, data, account }) {
               await sendWhatsAppText({
                 to: from,
                 text:
-                  await localizeOutbound(`💰 You need ${randsShort(totalCents)} for this voucher but your balance is R${balance}.\n\n` +
-                  `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your voucher. 🎟️\n\n` +
-                  `(Prefer cash? Buy a Blu Voucher at any till and send me the code.)`, await userLang(account)),
+                  await localizeOutbound(`💰 You need ${randsShort(totalCents)} for this ${data?.send ? 'send' : 'voucher'} but your balance is R${balance}.\n\n` +
+                  `Pay the ${randsShort(shortfallCents)} difference with the button below. The moment it lands, I'll finish your ${data?.send ? 'send' : 'voucher'}. 🎟️` +
+                  (isRailLiveFor('BLU_LOAD', from) ? `\n\n(Prefer cash? Buy a Blu Voucher at any till and send me the code.)` : ''), await userLang(account)),
               });
               const linkResult = await handleCardDepositLink({
                 from,
@@ -6289,11 +6806,26 @@ async function handleConversationState({ from, text, state, data, account }) {
               return linkResult;
             }
 
+            // A frozen sender (BUGLOG #133): the honest line, no invitation to try again.
+            if (executeData.error === 'FROZEN') {
+              return await sendWhatsAppText({ to: from, text: await localizeOutbound(FROZEN_SEND_COPY, await userLang(account)) });
+            }
             return await sendWhatsAppErrorOnce({
               to: from,
               errorKey: `${previewId || 'vgift'}:${executeData.error || 'ERROR'}`,
-              text: `❌ ${executeData.message || 'Voucher gift failed.'}\n\nPlease try again later.`,
+              text: data?.send
+                ? `❌ That send did not go through, so nothing left your balance. Say "send R${Math.round((amountCents || 0) / 100)} to ${recipientMsisdn}" to try again.`
+                : `❌ ${executeData.message || 'Voucher gift failed.'}\n\nPlease try again later.`,
             });
+          }
+
+          // A send: the same receipt whether or not they are on WaPay (membership-neutral);
+          // the recipient's informational line says where the money is (BUGLOG #117).
+          if (data?.send) {
+            logStructured('send_execute_success', { from, accountId: account.id, previewId, delivered: executeData.delivered, amountCents: executeData.amountCents ?? amountCents, recipientMasked: maskMsisdn(recipientMsisdn) });
+            await sendWhatsAppText({ to: from, text: await localizeOutbound(sendReceiptText({ amountCents: executeData.amountCents ?? amountCents, recipientMsisdn, newBalanceCents: executeData.newBalance || 0 }), await userLang(account)), kind: 'receipt' });
+            await notifyGiftRecipient({ account, recipientMsisdn, product: 'MONEY', amountCents: executeData.amountCents ?? amountCents, delivered: executeData.delivered });
+            return await sendPostTransactionCta(from);
           }
 
           // Success! Sender receipt — never the voucher PIN (the recipient
@@ -6548,11 +7080,14 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   // Bearer inputs and codes never reach the model: the existing flows take them.
   // The parked clarify intent tells the guard what a bare number means: a
   // 12-digit answer to "which meter?" is the meter, not a voucher PIN (2026-10-06).
-  const guard = agentGuard(text, { pendingIntent });
+  const guard = agentGuard(text, { pendingIntent, scope: launchScopeFor({ waId: from, account }) });
   if (guard) {
     logStructured('agent_guard', { from, accountId: account.id, kind: guard.kind });
     let handled;
-    if (guard.kind === 'VOUCHER_PIN') {
+    if (guard.kind === 'COMING_SOON') {
+      // Launch scope (2026-10-18): the flow's own coming-soon reply, never the model.
+      handled = await replyCategoryUnavailable(from, guard.category, account);
+    } else if (guard.kind === 'VOUCHER_PIN') {
       await updateConversationState(from, 'AWAITING_VOUCHER_PIN');
       handled = await handleVoucherRedemption({ from, pin: guard.pin, account });
     } else if (guard.kind === 'PAY_REQUEST_CODE') {
@@ -6562,6 +7097,16 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
     }
     await ledger({ path: 'guard', outcome: guard.kind });
     return handled;
+  }
+
+  // A bare PIN, ID or passport number never reaches the model (BUGLOG #111).
+  // While a clarify is pending a 4-digit answer may be its amount, so only the ID kinds then.
+  const secretKind = bareSecretKind(text);
+  if (secretKind && !(pendingIntent && secretKind === 'PIN')) {
+    logStructured('secret_not_sent_to_model', { from, accountId: account.id, kind: secretKind, path: 'agent' });
+    const sent = await deliver({ to: from, text: await localizeOutbound(bareSecretReply(secretKind), await userLang(account)), kind: 'guard' });
+    await ledger({ path: 'guard', outcome: 'BARE_SECRET' });
+    return sent;
   }
 
   // Per-customer budget of model turns: a bored customer cannot burn model
@@ -6615,7 +7160,7 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   }
   const system = buildAgentSystemPrompt({
     registryLines: promptLines({ waId: from, account }),
-    feesBlock: feeFacts({ withdrawLive }),
+    feesBlock: feeFacts({ withdrawLive, scope: launchScope(from) }),
     customerRecord,
     focusKnowledge: null,
     language: profile?.language || null,
@@ -6628,12 +7173,16 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   const ctx = { prisma, account, waId: from, pack, now: new Date() };
   // 6 s per model call, two rounds at most: the whole turn stays well
   // inside Meta's retry window even with a tool round.
-  const result = await runAgentTurn({ system, messages, tools, executeTool: (name, args) => executeTool({ name, args, ctx }), timeoutMs: 6000 });
+  const names = privacyNamesFor({ account, pack });
+  addPrivacyNames(names);
+  const result = await runAgentTurn({ system, messages, tools, executeTool: (name, args) => executeTool({ name, args, ctx }), timeoutMs: 6000, names });
   const base = { path: 'agent', model: result.model, toolCalls: result.toolCalls, inputTokens: result.usage?.inputTokens, outputTokens: result.usage?.outputTokens };
   logStructured('agent_turn', { from, accountId: account.id, outcome: result.outcome, tools: (result.toolCalls || []).map((c) => c.name), ms: result.timings?.totalMs, error: result.error || null });
 
   if (result.outcome === 'error') {
-    const sent = await deliver({ to: from, text: await fallback(), kind: 'fallback' });
+    // The model boundary's refusal is said as what it is; the ledger row keeps the reason (BUGLOG #111).
+    const text = result.error === 'AI_PRIVACY_BLOCK' ? await localizeOutbound(privacyBlockedLine(), await userLang(account)) : await fallback();
+    const sent = await deliver({ to: from, text, kind: 'fallback' });
     await ledger({ ...base, outcome: 'error', error: result.error, gatesFired });
     return sent;
   }
@@ -6653,7 +7202,7 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
   // A reply or a clarifying question: the output gates, then one message.
   let out = sanitizeUserText(result.text || '') || '';
   let blocked = false;
-  const gate = outputGate(out, { withdrawLive });
+  const gate = outputGate(out, { withdrawLive, payoutPending: !!pack?.pendingPayout });
   if (gate.rule) gatesFired.push(gate.rule);
   if (!gate.ok) {
     logStructured('agent_reply_blocked', { from, accountId: account.id, rule: gate.rule });
@@ -6672,7 +7221,7 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
     blocked = true;
   }
   if (!blocked && !out.trim()) blocked = true;
-  if (blocked) out = await fallback();
+  if (blocked) out = (gate.rule === 'PIN_ASK' || gate.rule === 'MONEY_CLAIM') ? await localizeOutbound(nothingPendingLine(pack?.balances?.spendCents || 0), await userLang(account)) : await fallback();
   // The same loop breaker as the two-tier path (2026-10-14).
   if (!blocked) { const broken = await breakEchoLoop({ from, account, reply: out, inbound: text, source: 'agent' }); if (broken) { out = broken; gatesFired.push('ECHO_LOOP'); } }
   const sent = await deliver({ to: from, text: out, kind: blocked ? 'fallback' : 'agent' });
@@ -6684,6 +7233,14 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
 }
 async function handleAIChat({ from, text, account, messageId = null }) {
   console.log('🤖 Routing to AI chat:', redactBearerDigits(text));
+
+  // A bare PIN, ID or passport number with no step waiting for it never
+  // reaches the model (BUGLOG #111): the answer is deterministic.
+  const secretKind = bareSecretKind(text);
+  if (secretKind) {
+    logStructured('secret_not_sent_to_model', { from, accountId: account.id, kind: secretKind, path: 'two-tier' });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(bareSecretReply(secretKind), await userLang(account)), kind: 'guard' });
+  }
 
   // Check if OpenAI is configured
   if (!process.env.OPENAI_API_KEY) {
@@ -6725,9 +7282,13 @@ async function handleAIChat({ from, text, account, messageId = null }) {
     // The brain gets the live, data-driven spend catalogue every turn —
     // claims pre-gated on the wiCode production flag so the model can never
     // promise redemption that is not live (v1.3 amendment 2).
+    const names = privacyNamesFor({ account, pack });
+    addPrivacyNames(names);
     const result = await orchestrate(text, contextString, {
-      knowledge: buildBrainKnowledge({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), capabilityLines: promptLines({ waId: from, account }) }),
+      knowledge: buildBrainKnowledge({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), capabilityLines: promptLines({ waId: from, account }), scope: launchScope(from) }),
       withdrawLive: payoutAllowedFor(from),
+      scope: launchScope(from),
+      names,
     });
 
     // Memory writes: deterministic, best-effort, never blocking the reply.
@@ -6760,7 +7321,11 @@ async function handleAIChat({ from, text, account, messageId = null }) {
 
     let fallbackMessage = `😅 Sorry, I didn't quite catch that. Could you say it another way? Or type "help" to see everything I can do.`;
 
-    if (error.message === 'AI_QUOTA_EXCEEDED') {
+    if (error.message === 'AI_PRIVACY_BLOCK') {
+      // The model boundary refused: a secret in the message (BUGLOG #111). Kinds only in the log.
+      logStructured('model_boundary_refused_turn', { from, accountId: account.id, path: 'two-tier', kinds: error.kinds || null });
+      fallbackMessage = privacyBlockedLine();
+    } else if (error.message === 'AI_QUOTA_EXCEEDED') {
       fallbackMessage = `😴 I'm taking a quick breather. Please try again in a moment, or type "help" to see what I can do.`;
     } else if (error.message === 'AI_CONFIG_ERROR') {
       fallbackMessage = `🔧 Something's not wired up right on my side. Please try again soon, or type "help" for the basics.`;
@@ -6820,9 +7385,10 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
   // customer's model reply, not only the shadow list (review 2026-09-17).
   // A blocked reply becomes the fact line from the record, never a menu.
   const rawReply = sanitizeUserText(result.reply || '');
-  const replyGate = rawReply ? outputGate(rawReply, { withdrawLive: payoutAllowedFor(from) }) : { ok: true, text: rawReply, rule: null };
+  const replyGate = rawReply ? outputGate(rawReply, { withdrawLive: payoutAllowedFor(from), payoutPending: !!pack?.pendingPayout }) : { ok: true, text: rawReply, rule: null };
   if (!replyGate.ok) logStructured('reply_blocked', { from, accountId: account.id, action: result.action, rule: replyGate.rule });
-  const reply = replyGate.ok ? replyGate.text : agentFallbackLine(pack);
+  // A model that asked for the PIN or claimed a pay-out gets the truth instead (BUGLOG #111).
+  const reply = replyGate.ok ? replyGate.text : (replyGate.rule === 'PIN_ASK' || replyGate.rule === 'MONEY_CLAIM') ? nothingPendingLine(pack?.balances?.spendCents || 0) : agentFallbackLine(pack);
 
   switch (result.action) {
     case 'CHECK_BALANCE': {
@@ -6852,6 +7418,15 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
     }
 
     case 'REDEEM_VOUCHER': {
+      // Launch scope (2026-10-18): no voucher rail live → the honest answer, or the card / EFT ask.
+      if (!cashLoadLiveFor(from)) {
+        if (looksLikeQuestion(text)) {
+          const notYet = `Not yet. ${CASH_LOAD_SOON} For now you can top up by card or Instant EFT: say "deposit R100" and I send you a secure payment link.`;
+          return await sendWhatsAppText({ to: from, text: await localizeOutbound(notYet, await userLang(account)), kind: 'agent' });
+        }
+        await updateConversationState(from, 'DEPOSIT_CARD_AMOUNT');
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(cardOnlyDepositPrompt(), await userLang(account)) });
+      }
       // A question ("can I deposit via an OTT voucher?") is answered in words
       // (founder review 5, 2026-10-06); only a request to do it opens the PIN step.
       if (looksLikeQuestion(text)) {
@@ -6864,6 +7439,7 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
     }
 
     case 'BUY_AIRTIME': {
+      if (!isCategoryEnabledForWaId('AIRTIME', from)) return await replyCategoryUnavailable(from, 'AIRTIME', account);
       if (amountCents && msisdn) {
         return await startAirtimePreviewAndConfirm({
           from,
@@ -6885,7 +7461,7 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
     }
 
     case 'BUY_DATA': {
-      if (!isCategoryLive('DATA')) {
+      if (!isCategoryEnabledForWaId('DATA', from)) {
         return await replyCategoryUnavailable(from, 'DATA');
       }
       await updateConversationState(from, null);
@@ -6924,6 +7500,7 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
     }
 
     case 'BUY_ELECTRICITY': {
+      if (!isCategoryEnabledForWaId('ELECTRICITY', from)) return await replyCategoryUnavailable(from, 'ELECTRICITY', account);
       // The meter the customer typed (or the proposal's cleaned one) goes to
       // the flow, which re-validates it exactly as if typed: shape here,
       // Blu's lookup before any confirm; the confirm and the PIN are minted
@@ -6952,6 +7529,7 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
     }
 
     case 'SEND_VOUCHER': {
+      if (result.slots?.self && !isRailLiveFor('OTT_VOUCHER', from)) return await replyVoucherComingSoon(from, account);
       // A named person ("send R50 to Philly") resolves through saved
       // beneficiaries — people this account has sent to or shared as a
       // contact card. The full number still shows at confirm, so a
@@ -7042,7 +7620,7 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
         if (reply && !looksLikeReceipt(reply, knownAmounts)) {
           return await sendWhatsAppText({ to: from, text: reply });
         }
-        const spendMsg = buildSpendDestinationsReply({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from) });
+        const spendMsg = buildSpendDestinationsReply({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), scope: launchScope(from) });
         const localizedSpend = await localizeOutbound(spendMsg, await userLang(account));
         return await sendWhatsAppText({ to: from, text: localizedSpend });
       }
@@ -7220,6 +7798,8 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
     
     // If user clearly mentions electricity-related terms, it's electricity
     if (hasElectricityIntent) {
+      // Launch scope (2026-10-18): the switch, per customer, before any ask.
+      if (!isCategoryEnabledForWaId('ELECTRICITY', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'ELECTRICITY', account); }
       // Check if they want to BUY (have amount) or just LIST
       const amountMatch = lowerText.match(/r\s?(\d+)/i);
       const meterMatch = lowerText.match(/\b(\d{10,14})\b/); // Meter numbers are typically 10-14 digits
@@ -7264,6 +7844,7 @@ async function handleSmartProductQuery({ from, account, text, slots: incomingSlo
     const hasAirtimeIntent = airtimeIndicators.some(k => lowerText.includes(k));
     
     if (hasAirtimeIntent && !lowerText.includes('data') && !lowerText.includes('bundle')) {
+      if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
       // Check if they want to BUY
       const amountMatch = lowerText.match(/r\s?(\d+)/i);
       
@@ -7673,6 +8254,7 @@ async function showCategoryProducts({ from, account, category, text }) {
  * Handle listing airtime options
  */
 async function handleListAirtimeBundles({ from, account, networkCode }) {
+  if (!isCategoryEnabledForWaId('AIRTIME', from)) { await updateConversationState(from, null); return await replyCategoryUnavailable(from, 'AIRTIME', account); }
   logStructured('vas_airtime_fetch_call', {
     from,
     accountId: account.id,
@@ -7765,7 +8347,7 @@ async function handleListDataBundles({ from, account, entities }) {
     networkConfidence,
   });
 
-  if (!isCategoryLive('DATA')) {
+  if (!isCategoryEnabledForWaId('DATA', from)) {
     return await replyCategoryUnavailable(from, 'DATA');
   }
 
@@ -7867,6 +8449,11 @@ async function handleListDataBundles({ from, account, entities }) {
 }
 
 async function handleDataPurchaseFromSlots({ from, account, slots, rawText = '' }) {
+  // Launch scope (2026-10-18): the category switch, per customer, before any Blu call.
+  if (!isCategoryEnabledForWaId('DATA', from)) {
+    await updateConversationState(from, null);
+    return await replyCategoryUnavailable(from, 'DATA', account);
+  }
   const { msisdn, dataMb } = slots;
   // Same supplier limit as airtime: say so before the confirm and the PIN.
   if (!bluCanVendTo(msisdn)) {
@@ -7960,7 +8547,7 @@ async function handleListElectricityProducts({ from, account }) {
     intent: 'LIST_ELECTRICITY',
   });
 
-  if (!isCategoryLive('ELECTRICITY')) {
+  if (!isCategoryEnabledForWaId('ELECTRICITY', from)) {
     return await replyCategoryUnavailable(from, 'ELECTRICITY');
   }
 
@@ -8321,23 +8908,27 @@ async function handleListVasProducts({ from, account }) {
 
     // 2026-09-13: open with the catalogue-built list (vouchers, send, get
     // paid, withdraw when live, fuel when live), then the prepaid categories.
-    let message = `🛍️ *Here is everything your WaPay money can do right now*\n\n${spendDestinationLines({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from) })}\n\n🛒 *Prepaid products you can buy here:*\n\n`;
-    
-    for (const cat of categoryCounts) {
-      if (!isCategoryLive(cat.category)) continue;
-      const info = categoryNames[cat.category];
-      if (info) {
+    // Launch scope (2026-10-18): with every prepaid category off, the card
+    // says so once and never prints a product menu or a "buy airtime" tip.
+    const scope = launchScope(from);
+    const liveCategories = categoryCounts.filter((cat) => isCategoryLive(cat.category) && isCategoryEnabledForWaId(cat.category, from) && categoryNames[cat.category]);
+    let message = `🛍️ *Here is everything your WaPay money can do right now*\n\n${spendDestinationLines({ wicodeLive: fuelLiveFor(from), withdrawLive: payoutAllowedFor(from), scope })}\n\n`;
+    if (liveCategories.length) {
+      message += `🛒 *Prepaid products you can buy here:*\n\n`;
+      for (const cat of liveCategories) {
+        const info = categoryNames[cat.category];
         message += `${info.name}\n   _${info.desc}_\n\n`;
       }
+      const tips = { AIRTIME: `• "Buy R50 airtime"`, DATA: `• "Show me Vodacom bundles"\n• "Weekly MTN bundles"`, ELECTRICITY: `• "Buy R100 electricity"` };
+      message += `━━━━━━━━━━━━━━━━━━\n\n*How to use:*\n`;
+      message += liveCategories.map((cat) => tips[cat.category]).filter(Boolean).join('\n') + `\n`;
+      if (isRailLiveFor('BLU_LOAD', from)) message += `• "Redeem voucher"\n`;
+      message += `\nJust tell me what you need! 🎉`;
+    } else {
+      const soon = comingSoonPhrases(scope, { wicodeLive: fuelLiveFor(from) });
+      if (soon.length) message += `🔜 *Coming soon:* ${joinAnd(soon)}.\n\n`;
+      message += `Just tell me what you need! 🎉`;
     }
-    
-    message += `━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `*How to use:*\n`;
-    message += `• "Show me Vodacom bundles"\n`;
-    message += `• "Buy R50 airtime"\n`;
-    message += `• "Weekly MTN bundles"\n`;
-    message += `• "Redeem voucher"\n\n`;
-    message += `Just tell me what you need! 🎉`;
 
     logStructured('vas_list_vas_products_result', {
       from,
@@ -8395,6 +8986,7 @@ async function handleListAllProducts({ from, account }) {
  */
 async function attemptOttRedemption({ from, pin, account }) {
   if (!process.env.OTT_MERCHANT_API_KEY) return false; // rail not configured
+  if (!isRailLiveFor('OTT_LOAD', from)) return false; // launch scope: the OTT load rail is switched off
 
   const pinHash = crypto.createHash('sha256').update(String(pin)).digest('hex');
   // 'x' every 8 hex chars: a long digit run in a hash trips the ledger's
@@ -8539,6 +9131,12 @@ async function attemptOttRedemption({ from, pin, account }) {
  * Handle voucher redemption
  */
 async function handleVoucherRedemption({ from, pin, account }) {
+  // Launch scope (2026-10-18): with the Blu load rail off only the OTT rail (when live) may take the PIN.
+  if (!isRailLiveFor('BLU_LOAD', from)) {
+    if (isRailLiveFor('OTT_LOAD', from) && ottLoadConfigured() && await attemptOttRedemption({ from, pin, account })) return { ok: true };
+    await updateConversationState(from, null);
+    return await replyCashLoadComingSoon(from, account);
+  }
   console.log('🎟️ Processing voucher redemption:', { from, pin: '***' });
 
   // Send "processing" message

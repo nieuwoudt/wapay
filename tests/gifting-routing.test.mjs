@@ -49,14 +49,14 @@ test('routing: bare "Send R30 to <number>" becomes a VOUCHER_GIFT, never a money
   assert.equal(r.product, 'VOUCHER');
 });
 
-test('routing: "send money" with no slots asks for the amount with voucher copy', () => {
+test('routing: "send money" with no slots asks for the amount with balance copy', () => {
   const slots = parseSlots('send money');
   assert.equal(slots.productHint, 'SEND_MONEY');
 
   const r = resolveGift({ slots, senderMsisdn: '27830012300' });
   assert.equal(r.kind, 'NEEDS_AMOUNT');
   assert.equal(r.ok, false);
-  assert.match(r.message, /WaPay voucher/);
+  assert.match(r.message, /from your WaPay balance to theirs, free/);
 });
 
 test('routing: waId <-> local msisdn normalisation is symmetric for buyer/target compare', () => {

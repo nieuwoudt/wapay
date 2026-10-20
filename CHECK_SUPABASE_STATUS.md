@@ -62,7 +62,7 @@ If the project is gone:
 ## Your Current Connection String (Save This)
 
 ```
-postgresql://postgres.lqkpshowocitirxrmgpy:Wapay%40202508@aws-1-eu-north-1.pooler.supabase.com:6543/postgres
+postgresql://postgres.lqkpshowocitirxrmgpy:[YOUR-PASSWORD]@aws-1-eu-north-1.pooler.supabase.com:6543/postgres
 ```
 
 This is the correct format - you just need to make sure the Supabase project is running!

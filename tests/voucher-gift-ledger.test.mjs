@@ -209,3 +209,14 @@ test('rejects timestamp-based idemKeys (the Date.now() bug)', () => {
     /timestamp-based/
   );
 });
+
+test('a held send nobody collected goes back to its sender: balanced, replay-safe on the gift id, no rail (BUGLOG #117)', async () => {
+  const { buildGiftRefund, GIFT_PENDING, validateBalanced } = await import('../lib/ledger-core.js');
+  const e = buildGiftRefund({ senderAccountId: 'acc-a', amountCents: 3000, giftId: 'gift-p1', recipientMsisdn: '0821234567' });
+  assert.equal(e.idemKey, 'gift-refund-gift-p1');
+  assert.equal(e.source, 'GIFT_REFUND');
+  validateBalanced(e.postings);
+  assert.deepEqual(e.postings.map((p) => [p.accountCode, p.debitCents || 0, p.creditCents || 0]), [[GIFT_PENDING, 3000, 0], ['WALLET:acc-a:SPEND', 0, 3000]]);
+  assert.equal(e.meta.recipientMasked, '082•••567');
+  assert.ok(!e.postings.some((p) => /CLEARING/.test(p.accountCode)), 'no rail is owed anything');
+});

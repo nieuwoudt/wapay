@@ -10,7 +10,7 @@ When testing the redemption endpoint, we receive 401 Unauthorized errors.
 WHAT WE HAVE:
 ✅ Test credentials email received
 ✅ Username: bld
-✅ Password: ornuk3i9vseei125s8qea71kub
+✅ Password: <set in Vercel>
 ✅ Test voucher: Serial BL010O530EF57706, PIN 5608644555612212
 ✅ Swagger UI access
 
@@ -44,5 +44,5 @@ WaPay Team
 ---
 Technical Contact: [YOUR EMAIL]
 Phone: [YOUR PHONE]
-UUID from your email: 6b58e8ca-1564-462f-8481-c9f39b258a15
+UUID from your email: [the API key Blu issued; kept out of the repository]
 

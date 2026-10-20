@@ -585,3 +585,22 @@ below is updated on every ship.
 | 1.9 | 2026-10-04 | `5249fd3` | Re-baseline after eleven quiet days: the pilot week restarted on 4 October (14 clean turns, day 1 of 7); the first customer withdrawal completed (Nedbank cardless R20, OTT 126382) and the product table's withdrawal row moves from F to C; the pay-out wire format (BUGLOG #80, #82) and the Adumo reporting/reconcile work (23 and 29 September) recorded as rail work outside this architecture; three side threads opened (Blu VAS, payouts + commercials, Money Map) with the main session as the architecture owner; the beneficiary record design (encrypted tables outside the profile, labels and masks into the pack) approved for section 13 when it lands. Map Version 13. |
 | 1.10 | 2026-10-04 | `a2c3912` | Map Version 14, the same afternoon: C6 carries saved pay-out details (labels and masks) in the record; C19’s pay-outs half lands as the Pay-out reconciliation card (seven checks across provider row, hold and journal, probed green against production data); C3/C12 gain the clarify-step slot rescue on the payouts thread’s parser (BUGLOG #83). The payouts thread’s remembered beneficiaries, compound answers and commercial model landed in 24d07f8 with the migration applied; the Money Map (3355df3, b9e1366) is the fee source of truth the registry will read from. |
 | 1.11 | 2026-10-06 | `bafa652` | Map Version 15 after founder review 5: composition policy rewritten in both brains (ways questions list every live way incl. cash; yes/no answered first, never started; two-or-more items are bullets, enforced by `normaliseLists`; best value with the balance in view; one history shape via `movementBullet`; start-command endings); the dispatcher answers a question in words for REDEEM_VOUCHER and DEPOSIT_START; the Mission Control reconciliation card carries parked electricity sales (7a0c232); the shortfall pattern recorded as the standing shape (Blu thread, RESUME_* states on the voucher precedent). Pilot week day 3 of 7, no money gate fired. |
+
+- 2026-10-16, the model boundary and the golden thread (changelog 88, BUGLOG
+  #111 to #114). **C4 grows a structural half:** besides the code guards, a
+  message that is only a PIN, an SA ID or a passport number never reaches a
+  model on either brain (`lib/money-truth.js` `bareSecretKind`, before the
+  agent's budget), and the idle-expiry branch never hands a flow's late answer
+  to a model (a withdrawal resumes, re-confirms or says it stopped). **"The
+  model never sees a PIN turn" is now enforced below every caller:**
+  `packages/ai/src/boundary.ts` sits inside `callStructured` and the agent's
+  `callModel`, tokenises names, phones, e-mails and our own references, and
+  refuses a call carrying a secret with `AI_PRIVACY_BLOCK` (the turn takes the
+  deterministic line; `agent_turns.error` records it); the translator and the
+  embeddings client cross the same boundary. **C11 gains two output gates on
+  both reply sites:** `PIN_ASK` (a model never asks for the wallet PIN) and
+  `MONEY_CLAIM` (never a pay-out under way unless the pack has one pending).
+  Money-out authorisation moved from the edges to the door: `requestPayout`
+  demands a PIN proof (`@wapay/auth/pin-proof`) bound to account, intent and
+  amount. The rules, their enforcing code and their tests are kept in
+  `docs/GOLDEN_THREAD.md`.

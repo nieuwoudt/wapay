@@ -14,8 +14,8 @@ Copy these to Vercel → Settings → Environment Variables
 ### 🗄️ **Database (Supabase)**
 
 ```bash
-DATABASE_URL="postgresql://postgres:Wapay@202508@db.lqkpshowocitirxrmgpy.supabase.co:5432/postgres"
-DIRECT_URL="postgresql://postgres:Wapay@202508@db.lqkpshowocitirxrmgpy.supabase.co:5432/postgres"
+DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.lqkpshowocitirxrmgpy.supabase.co:5432/postgres"
+DIRECT_URL="postgresql://postgres:[YOUR-PASSWORD]@db.lqkpshowocitirxrmgpy.supabase.co:5432/postgres"
 ```
 
 ---
@@ -25,8 +25,8 @@ DIRECT_URL="postgresql://postgres:Wapay@202508@db.lqkpshowocitirxrmgpy.supabase.
 ```bash
 BLU_BASE_URL="https://api.qa.bltelecoms.net/v2/api/trade"
 BLU_BASIC_USER="bld"
-BLU_BASIC_PASS="ornuk3i9vseei125s8qea71kub"
-BLU_API_KEY="e73d6237-0864-4c87-ba40-e520e951b336"
+BLU_BASIC_PASS="<set in Vercel>"
+BLU_API_KEY="<set in Vercel>"
 ```
 
 **Status**: ✅ API Key Received!
@@ -50,7 +50,7 @@ YOYO_MERCHANT_ID="[PENDING]"
 ```bash
 META_PHONE_NUMBER_ID="[YOUR_PHONE_NUMBER_ID]"
 META_ACCESS_TOKEN="[YOUR_ACCESS_TOKEN]"
-META_WEBHOOK_VERIFY_TOKEN="wapay_webhook_secret_2025"
+META_WEBHOOK_VERIFY_TOKEN="<set in Vercel>"
 META_BUSINESS_ACCOUNT_ID="[YOUR_BUSINESS_ACCOUNT_ID]"
 ```
 
@@ -77,7 +77,7 @@ https://vercel.com/finfy-ai/wapay/settings/environment-variables
 ### **Step 2: Add Variables**
 1. Click "Add New"
 2. Paste variable name (e.g., `BLU_API_KEY`)
-3. Paste value (e.g., `e73d6237-0864-4c87-ba40-e520e951b336`)
+3. Paste value (from the provider; never commit it to the repository)
 4. Select "Production", "Preview", "Development"
 5. Click "Save"
 6. Repeat for all variables

@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { OttPayoutClient, wireRecipient, isProblemDetails, problemPaths, payoutHash, plainAmountString, DEFAULT_HASH_STYLE } from '../lib/ott-payout.js';
 import { requestPayout, cleanRecipient } from '../lib/payouts.js';
 import { executeWithdraw } from '../lib/payout-chat.js';
+import { proofFor } from './helpers/pin-proof.mjs';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const API_KEY = 'ace4e782-e953-45d5-9f2a-aa1498c830ed';
@@ -103,7 +104,7 @@ test('requestPayout on REQUEST_INVALID: released, money back, FAILED row keeps t
   };
   const c = { async performPayout() { return { httpStatus: 400, status: null, outcome: 'REQUEST_INVALID', settlement: 'RELEASE', retriable: false, paymentReference: null, body: problem400, errors: ['purchase', '$.recipient.bank_id'] }; } };
   const providers = [{ method: 'NEDCASH', providerCode: '4', providerName: 'Nedbank Cardless Withdrawal', requiredFields: ['firstname', 'surname', 'id_number', 'mobile'] }];
-  const r = await requestPayout({ prisma, ledger, client: c, account: { id: 'acc-1', profile: {} }, intentId: 'intent-9001', method: 'NEDCASH', amountCents: 5000, recipient: { firstname: 'A', surname: 'B', id_number: '9001185079083', mobile: '0787051175' }, providers });
+  const r = await requestPayout({ prisma, ledger, client: c, account: { id: 'acc-1', profile: {} }, intentId: 'intent-9001', method: 'NEDCASH', amountCents: 5000, recipient: { firstname: 'A', surname: 'B', id_number: '9001185079083', mobile: '0787051175' }, providers, authorization: proofFor({ id: 'acc-1', profile: {} }, { intentId: 'intent-9001', amountCents: 5000 }) });
   assert.equal(r.ok, false); assert.equal(r.error, 'REQUEST_INVALID');
   assert.ok(calls.includes('releaseHold') && calls.includes('BALANCE_DOWNGRADE'), 'released and moved back');
   assert.equal(spend, 10000, 'the customer is whole'); assert.equal(cash, 0);
@@ -113,7 +114,7 @@ test('requestPayout on REQUEST_INVALID: released, money back, FAILED row keeps t
 });
 
 test('the customer hears that the fault is ours, and nothing left the balance', async () => {
-  const out = await executeWithdraw({ account: { id: 'acc-1', displayName: 'Nieuwoudt Gresse', profile: {} }, data: { intentId: 'wa-x', method: 'NEDCASH', amountCents: 2000, recipient: {} }, deps: { requestPayout: async () => ({ ok: false, status: 'FAILED', error: 'REQUEST_INVALID', reference: 'WPX' }) } });
+  const out = await executeWithdraw({ account: { id: 'acc-1', displayName: 'Nieuwoudt Gresse', profile: {} }, data: { intentId: 'wa-x', method: 'NEDCASH', amountCents: 2000, recipient: {} }, pinProof: proofFor({ id: 'acc-1', displayName: 'Nieuwoudt Gresse', profile: {} }, { intentId: 'wa-x', method: 'NEDCASH', amountCents: 2000, recipient: {} }), deps: { requestPayout: async () => ({ ok: false, status: 'FAILED', error: 'REQUEST_INVALID', reference: 'WPX' }) } });
   assert.match(out.text, /could not read our request \(our side, not yours\)/);
   assert.match(out.text, /Nothing has left your balance/);
 });

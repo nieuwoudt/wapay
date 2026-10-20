@@ -63,7 +63,8 @@ export default async function handler(req, res) {
     if (body.action === 'request') {
       if (!payoutEnabled()) return res.status(503).json({ ok: false, error: 'DISABLED' });
       const source = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
-      const step = await verifyStepUp({ business, msisdn: account.msisdn || account.waId, currentPassword: body.currentPassword, code: body.code, source });
+      // The fresh factor approves THIS intent and amount; requestPayout refuses without its proof (BUGLOG #112).
+      const step = await verifyStepUp({ business, msisdn: account.msisdn || account.waId, currentPassword: body.currentPassword, code: body.code, source, approves: { intentId: body.intentId, amountCents: Number(body.amountCents) } });
       if (!step.ok) return res.status(step.error === 'LOCKED_OUT' ? 429 : 403).json({ ok: false, error: step.error, needs: business.passwordHash ? 'currentPassword' : 'code' });
       const out = await requestPayout({
         account,
@@ -72,6 +73,7 @@ export default async function handler(req, res) {
         amountCents: Number(body.amountCents),
         recipient: body.recipient || {},
         businessId: business.id,
+        authorization: step.proof || null,
       });
       const status = out.ok ? 200 : out.error === 'KYC_REQUIRED' ? 403 : out.error === 'INSUFFICIENT_FUNDS' ? 402 : ['DISABLED', 'NOT_CONFIGURED', 'NO_PROVIDER'].includes(out.error) ? 503 : 400;
       console.log(JSON.stringify({ type: 'business_payout', businessId: business.id, via: step.via, ok: out.ok, status: out.status || out.error, reference: out.reference || null }));

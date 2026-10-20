@@ -8,7 +8,7 @@
 | `WHATSAPP_ACCESS_TOKEN` | `EAATG3Axub2QB...` | ✅ SET |
 | `WHATSAPP_PHONE_NUMBER_ID` | `870272072828461` | ✅ SET |
 | `WHATSAPP_BUSINESS_ACCOUNT_ID` | `647978251504290` | ✅ SET |
-| `WHATSAPP_VERIFY_TOKEN` | `wapay_webhook_secret_2025` | ✅ SET |
+| `WHATSAPP_VERIFY_TOKEN` | `<set in Vercel>` | ✅ SET |
 
 **Note:** Your phone number ID `870272072828461` is different from the one in your earlier screenshot (`856018554259689`). This is correct if you've updated it.
 

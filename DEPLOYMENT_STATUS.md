@@ -96,7 +96,7 @@ This will:
 1. **Configure Webhook URL**
    - Go to: https://developers.facebook.com/apps/YOUR_APP_ID/whatsapp-business/wa-settings/
    - Set Callback URL: `https://wapay-api.vercel.app/api/webhooks/whatsapp`
-   - Set Verify Token: `wapay_webhook_secret_2025`
+   - Set Verify Token: `<set in Vercel>`
    - Subscribe to: `messages`
 
 2. **Test Message Flow**

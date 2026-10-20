@@ -8,9 +8,12 @@
  *   an embeddings failure never fails the cron response)
  * - sweep PENDING/INIT pay-outs and tell finalised customers (best-effort;
  *   the Hobby plan allows one cron, so this is the sweep's daily floor)
+ * - the daily conversation audit (docs/audits/DAILY_AUDIT.md): the day's
+ *   conversations swept and reviewed, findings stored, the ops summary sent
+ *   (best-effort, 25 s cap; never fails the cron)
  *
  * Auth:
- * - Vercel Cron header: x-vercel-cron=1 (preferred)
+ * - Authorization: Bearer CRON_SECRET (what Vercel sends when the env is set; lib/cron-auth.js)
  * - or query token: ?key=${CRON_SECRET}
  */
 
@@ -20,12 +23,12 @@ import { sweepPayoutsAndNotify } from '../../../lib/payouts.js';
 import { purgeOldTurns } from '../../../lib/turns.js';
 import { checkWalletIntegrity } from '../../../lib/ledger-integrity.js';
 import prisma from '../../../lib/prisma.js';
+// Golden thread O4 (2026-10-16): Bearer CRON_SECRET only; no header trust, no query token.
+import { isCronAuthed } from '../../../lib/cron-auth.js';
 
-function isCronAuthed(req) {
-  if (req.headers['x-vercel-cron'] === '1') return true;
-  const key = req.query?.key;
-  return process.env.CRON_SECRET && key === process.env.CRON_SECRET;
-}
+
+// The audit step at the end needs more than the default budget (2026-10-20: the 02:00 run read 3 of 5 chunks in 25 s).
+export const config = { maxDuration: 60 };
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -38,6 +41,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    const cronStartedMs = Date.now();
     const out = await syncBluDataCatalogue();
     console.log(JSON.stringify({ type: 'cron_daily_vas_sync', ...out, timestamp: new Date().toISOString() }));
 
@@ -82,6 +86,17 @@ export default async function handler(req, res) {
       payoutSweep = { error: e?.message || String(e) };
     }
 
+    // Held sends nobody collected in 30 days go back to their senders, each told
+    // once (BUGLOG #117; Hobby plan, so it rides this daily cron like the pay-out
+    // sweep). Best-effort: never changes this route's answer or status.
+    try {
+      const { refundHeldGiftsAndNotify } = await import('../../../lib/send-money.js');
+      const heldRefund = await refundHeldGiftsAndNotify({});
+      console.log(JSON.stringify({ type: 'cron_held_gift_refund', ...heldRefund, timestamp: new Date().toISOString() }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_held_gift_refund_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
     // Conversation memory retention (docs/AGENT_ARCHITECTURE_V2.md C14): turns
     // older than 30 days are deleted; best-effort, never fails the cron.
     let turnsPurged = null;
@@ -112,7 +127,12 @@ export default async function handler(req, res) {
       const { capiSweep } = await import('../../../lib/growth-attribution.js');
       const ads = await snapshotAdInsights({ prisma, days: 3 });
       const capi = await capiSweep({ prisma, limit: 50, deadlineMs: 15 * 1000 });
-      growth = { ads, capi };
+      // The ad arrival's one reminder (docs/AD_CHAT_FLOW.md section 8), sent on
+      // the customer's own 24h window through notifyCustomer.
+      const { sendAdReminders } = await import('../../../lib/ad-reminders.js');
+      const { notifyCustomer } = await import('../../../lib/notify.js');
+      const reminders = await sendAdReminders({ prisma, limit: 20, send: ({ to, text, kind }) => notifyCustomer({ to, text, kind }) });
+      growth = { ads, capi, reminders };
       // Logged, not returned: tests/payout-reconcile.test.mjs pins the response literal.
       console.log(JSON.stringify({ type: 'cron_growth', ...growth, timestamp: new Date().toISOString() }));
     } catch (e) {
@@ -184,6 +204,49 @@ export default async function handler(req, res) {
       console.log(JSON.stringify({ type: 'cron_jobs_drained', ...jobs, timestamp: new Date().toISOString() }));
     } catch (e) {
       console.error(JSON.stringify({ type: 'cron_jobs_drain_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
+    // Meta's quality rating (2026-10-20, BUGLOG #130): read once a day, alert ops while it is not GREEN. Logged, never returned.
+    try {
+      const { qualityCheck } = await import('../../../lib/whatsapp-quality.js');
+      await Promise.race([qualityCheck(), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 8000))]);
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_whatsapp_quality_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
+    // The daily conversation audit (docs/audits/DAILY_AUDIT.md, 2026-10-19):
+    // the conversations since the last run swept by the rules and read by the
+    // reviewer, findings stored with their recurrence, the ops summary sent.
+    // One call, its own try/catch, a hard cap of 45 s (less when the steps
+    // above used the function's budget): it can never fail or delay the cron's
+    // answer, and it is logged, never returned (the response literal below is
+    // pinned by tests/payout-reconcile.test.mjs).
+    try {
+      const { runDailyAudit } = await import('../../../lib/audit/run.js');
+      const auditCapMs = Math.max(5 * 1000, Math.min(45 * 1000, 57 * 1000 - (Date.now() - cronStartedMs)));
+      let auditTimer = null;
+      const audit = await Promise.race([
+        runDailyAudit({ prisma, deadlineMs: auditCapMs - 3 * 1000 }),
+        new Promise((resolve) => { auditTimer = setTimeout(() => resolve({ ok: false, skipped: 'TIMEOUT' }), auditCapMs); }),
+      ]);
+      if (auditTimer) clearTimeout(auditTimer);
+      console.log(JSON.stringify({
+        type: 'cron_daily_audit',
+        ok: audit?.ok ?? false,
+        skipped: audit?.skipped || audit?.review?.skipped || null,
+        error: audit?.error || null,
+        runId: audit?.runId || null,
+        accounts: audit?.accounts ?? null,
+        turns: audit?.turns ?? null,
+        p1: audit?.counts?.p1 ?? null,
+        p2: audit?.counts?.p2 ?? null,
+        p3: audit?.counts?.p3 ?? null,
+        reviewed: audit?.reviewed ?? null,
+        capMs: auditCapMs,
+        timestamp: new Date().toISOString(),
+      }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_daily_audit_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
     }
 
     return res.status(200).json({ ...out, turnsPurged, integrity: integrity ? { checked: integrity.checked, mismatches: integrity.mismatches.length } : null, embeddings, payoutSweep, jobs });

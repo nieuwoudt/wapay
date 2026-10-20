@@ -73,9 +73,11 @@ test('ordering: verify -> process (AWAITED) -> ACK', async () => {
 
 test('the leaked hardcoded verify token is gone', async () => {
   const src = await fileText(WEBHOOK);
+  // The leaked literal used to be quoted here, which kept it in the repo; it is now caught
+  // repo-wide by tests/no-committed-credentials.test.mjs (BUGLOG #134).
   assert.ok(
-    !src.includes('wapay_webhook_secret_2025'),
-    'hardcoded fallback verify token must not appear'
+    !/(?:verify_?token|expectedToken)\s*(?:===?|!==?|\|\||\?\?)\s*['"`]/i.test(src),
+    'no string literal may stand in for the verify token'
   );
   // No other string fallback either: the expected token must come only from env.
   assert.match(

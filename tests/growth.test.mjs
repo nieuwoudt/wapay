@@ -263,3 +263,13 @@ test('compactCapiResponse keeps what an operator needs and nothing else', async 
   assert.equal(bad.ok, false); assert.equal(bad.error.subcode, 2804087); assert.equal(bad.error.fbtrace_id, 'Af2'); assert.equal(bad.meta, null);
   assert.doesNotMatch(JSON.stringify(bad), /never|access_token/);
 });
+
+test('pay-link referrer lookup orders by requestTs (ProviderRequest has no createdAt) and returns the requester', async () => {
+  const { findPayLinkReferrer } = await import('../lib/growth-attribution.js');
+  const calls = [];
+  const prisma = { providerRequest: { async findFirst(args) { calls.push(args); if (args.orderBy && 'createdAt' in args.orderBy) throw new Error('Unknown argument `createdAt`'); return { metadata: { payerMsisdn: '0600000902', accountId: 'acc-requester' } }; } } };
+  const out = await findPayLinkReferrer({ prisma, waId: '27600000902' });
+  assert.deepEqual(out, { paidBefore: true, referrerAccountId: 'acc-requester' });
+  assert.deepEqual(calls[0].orderBy, { requestTs: 'desc' });
+  assert.equal(await findPayLinkReferrer({ prisma, waId: 'not-a-number' }), null);
+});

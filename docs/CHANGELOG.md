@@ -4,7 +4,26 @@
 
 ---
 
-## 2026-10-16 (89) — Cards: the route is PayCentral (Paymentology direct needs 30,000 cards); plan rewritten for a pre-funded card (docs only)
+## 2026-10-20 (111) — Cards: PayCentral's NDA reviewed and filled, the product deck read; the cards branch brought up to main (docs only)
+
+PayCentral sent its standard NDA and product deck and told the founder WaPay can start issuing
+virtual and physical cards. `docs/CARDS.md` §0.8 records:
+- the NDA's terms: mutual, perpetual, uncapped mutual indemnity, AFSA arbitration in
+  Johannesburg, changes only by hand signature, advisors allowed, no exclusivity, not a POPIA
+  agreement;
+- what was filled in for WaPay. The filled PDF is not in the repo;
+- the deck's facts: Bank Zero now listed beside Standard Bank; seven products including
+  FuelCentral; physical cards dispatched in bulk to the client; cardholders assigned with ID or
+  passport; PayCentral-branded SMS alerts, app and support;
+- four new open questions, and a no-code pilot through the portal with company money.
+
+CAPABILITIES' PayCentral row updated. The branch merged `main` (the credentials scrub and
+pay-out rules). This branch's entries were renumbered after main's as 109 and 110 (they were
+88 and 89 on the branch), the same way the scrub's were.
+
+---
+
+## 2026-10-16 (110) — Cards: the route is PayCentral (Paymentology direct needs 30,000 cards); plan rewritten for a pre-funded card (docs only)
 
 On the founder's call Paymentology set a 30,000-card minimum for direct work and referred
 WaPay to PayCentral. PayCentral is a South African programme manager on Paymentology's
@@ -26,7 +45,7 @@ is search-sourced and labelled.
 
 ---
 
-## 2026-10-15 (88) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
+## 2026-10-15 (109) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
 
 The founder asked whether WaPay can issue customers virtual cards through Paymentology,
 how it maps onto the product, and what to send Paymentology's sales form.
@@ -50,6 +69,581 @@ how it maps onto the product, and what to send Paymentology's sales form.
 follow-up email. Paymentology's sites were blocked by this session's network policy, so their
 pages were read through search extracts and every fact carries its source. CAPABILITIES lists
 Paymentology as discovery. No code changed.
+
+---
+
+## 2026-10-20 (108) — Credentials out of the repository: placeholders in 36 files and a guard that fails the suite on a credential-shaped string
+
+BUGLOG #134. The repository was public with the Supabase database password, Meta WhatsApp
+tokens, the webhook verify token and Blu's QA password and API keys pasted into setup docs
+and scripts. Every value is now a placeholder (`<set in Vercel>`, `[YOUR-PASSWORD]`); the
+diagnostic scripts require the env var instead of carrying a default; the Blu curl examples
+build the Basic header from env; `tests/webhook-wiring.test.mjs` no longer quotes the old
+verify token. New `tests/no-committed-credentials.test.mjs` scans every tracked text file
+(falls back to a tree walk in the fast working copy) with an allowlist by SHA-256 for
+published test values (Adumo staging, OTT's spec key) and by path for provider fixtures.
+History still holds the values: rotation in the Supabase, Meta, Blu and Yoyo dashboards is
+the real fix (founder, in progress). No force-push and no history rewrite, commits only
+(founder, 2026-10-20): a rewrite would break every working copy and the deploy hook, and the
+values are already public.
+
+## 2026-10-20 (107) — Pay-out rules: a R10,000 daily cap for accounts under a week old, KYC by threshold, referrals on the dashboard
+
+Founder decisions after the card-to-cash morning: no hold on card-funded money and no cap
+tied to the funding source; instead `lib/payout-rules.js`: an account younger than seven
+days may pay out R10,000 in any 24 hours (`WAPAY_PAYOUT_NEW_ACCOUNT_DAYS`,
+`WAPAY_PAYOUT_NEW_ACCOUNT_DAILY_CAP_CENTS`), and with `WAPAY_PAYOUT_KYC=threshold` an
+unverified account needs the identity check for a single pay-out of R3,000 or more or for
+more than R10,000 in 24 hours (`WAPAY_PAYOUT_KYC_SINGLE_CENTS`, `WAPAY_PAYOUT_KYC_DAILY_CENTS`);
+`off` and the old everyone-gate are unchanged. Checked at the amount step of the withdraw
+flow (the cap keeps the amount step with the remaining amount; the threshold opens the VERIFY
+step when Didit is configured and says honestly that the check is being switched on when it is
+not) and again in `requestPayout` as the backstop before any ledger move. The amount prompt
+carries the rule note for accounts it can bite. Mission Control: the customer page shows the
+pay-out freeze and a Referrals card (invited, opened, funded, got paid, reward eligible and
+paid); the growth funnel by source knows `referral`. Tests: tests/payout-rules.test.mjs.
+
+## 2026-10-20 (106) — Per-account pay-out freeze after the first card-funded cash-out pattern
+
+BUGLOG #133. The first R3,000 card-paid link (00:38 UTC) was followed by 23 pay-out attempts
+across three rails, R1,000 gifts to two numbers that opened accounts minutes later and sent
+the money back, and a second account that repeated the shape the same morning (sign-up,
+R3,000 link seven minutes later, card payment, PayShap destination). Pay-outs could only be
+switched off for everyone (`WAPAY_PAYOUT_ENABLED`). Now `lib/payout-freeze.js` keeps a freeze
+on `Account.profile.payouts`; `requestPayout` refuses `FROZEN` before the idempotency replay and
+any ledger move, `startWithdraw` never opens the flow, `sendMoney` refuses a frozen sender (a
+frozen balance cannot hop to another account and leave from there), receiving stays open.
+`POST /api/internal/payout-freeze { accountId, frozen, reason }` sets or lifts it with a masked
+ops alert; the customer profile carries `payoutFreeze`. Customer copy: one honest line, no time
+promise ("Pay-outs on this account are paused while we check a recent payment. Nothing has left
+your balance and your money is safe. A person from WaPay will contact you here"). Never set by
+the model. Tests: tests/payout-freeze.test.mjs.
+
+## 2026-10-20 (105) — Reaching people after 24 hours, the send cap, the agent's reply-only rule, and three internal routes
+
+Founder (2026-10-20): "we shouldn't have that issue where they get stuck, where we can't send
+them information to get unstuck." The ops reply (`lib/ops-reply.js`, Inbox reply box,
+`/api/internal/ops-reply`) now switches rail by itself: text inside the customer's 24-hour
+window, the approved UTILITY template `wapay_support_followup` after it, with the person's
+first name and the operator's text as its two parameters, the turn remembered as before, a
+stopped customer refused on both rails (BUGLOG #132). `POST /api/internal/template-create`
+creates UTILITY or AUTHENTICATION templates through the Graph API and refuses MARKETING.
+`lib/say.js` refuses the ninth text to one number inside twenty seconds (`SEND_CAP`,
+`WAPAY_SEND_CAP`), so no hook, flow or agent can send a storm. The agent prompt gains the
+standing rule "WaPay only answers; one reply to each message; never a promise to message,
+remind or follow up later." `GET /api/internal/ads-breakdown` reads Meta ad insights per ad
+with placement, age, gender, region or device breakdowns for the ads report;
+`GET /api/internal/meta-node` reads one Graph node to tell a WhatsApp account id from a
+business portfolio id. Tests: tests/ops-reply.test.mjs, tests/compliance-batch-2.test.mjs,
+tests/say-send-cap.test.mjs.
+
+## 2026-10-20 (104) — DRAFT: referrals from the chat: "invite" gives one forwardable message with a personal link, the friend's first message stamps the referrer, milestones are counted per member, rewards tracked now and paid later behind a switch
+
+The founder, 20 October: referrals from the WaPay chat. The spec is docs/REFERRALS.md; the
+module is `lib/referrals.js`; `tests/referrals.test.mjs`.
+
+- **The invite.** A member asks in their own words ("Create me a referral link for a friend to
+  share", "referral link", "invite link", "invite a friend", "refer a friend", "share WaPay",
+  "invite"; `matchInviteAsk`, case-insensitive, tolerant of "please", "can you", "me a", "my")
+  and gets ONE message, forwardable as it is, with their
+  personal link `https://pleasepayme.co.za/i/<code>`; only when they ask, once per ask, never a
+  reminder. The code is derived from the account id (`referralCodeFor`: seven characters, no
+  0/O/1/I/L, always letters and a digit, so never a number), stored on `profile.referral.code`
+  the first time it is handed out (`ensureReferralCode`, the next deterministic candidate on a
+  collision). While `WAPAY_REFERRAL_REWARD_CENTS` is 0 the message ends "We are tracking your
+  invites; rewards are coming."; above zero it names the amount, never a date.
+- **The link.** `pages/i/[code].js` redirects to the wa.me deep link with the first message
+  prefilled ("Hi WaPay! A friend invited me. Invite code: <code>", the code only, never the
+  inviter's name) and carries `utm_source=referral&utm_medium=whatsapp&utm_content=<code>` for
+  web analytics; the code in the message is what attributes. No database, no sends.
+- **First contact.** The processor reads the code before the ad flow and the onboarding gate
+  (`handleReferralCodeTurn`, `parseReferralCode` tolerant of the sentence being edited). A new
+  number is stamped (`recordReferredContact`: `attribution.referralCode`, `referredAt`,
+  `referrerAccountId` when none, `acquisitionSource` 'referral' when the account was organic; an
+  ad click or a pay link that came first keeps its source), told who invited them by first name
+  only (memory keeps "A friend" through `recordAs`), and goes straight to the OTP step. A member
+  who sends a code is told once that they already have an account; an unknown code or their own
+  changes nothing. WaPay never writes to the friend first: they wrote in by tapping the link.
+- **Per member, from the data** (`referralStats`; `GET /api/admin/customer` gains `referrals`:
+  code, link, invited, onboarded, funded, paid, rewardEligibleCents, rewardPaidCents): who wrote in
+  with the code, who completed onboarding, who first received money (any credit to the balance
+  except a reward), who first had a link paid, and the reward those milestones would earn at R10
+  each (the switch's value while on) against what the ledger has actually paid. Read-only.
+- **The reward, tracked now, paid later.** `WAPAY_REFERRAL_REWARD_CENTS` (default 0 = track
+  only). Above zero, the first qualifying event per referred account (first money in OR first paid
+  link, whichever comes first) credits the referrer once from `EXPENSE:PROMO:REFERRAL`
+  (`buildReferralReward`, idemKey `referral-reward-<referredAccountId>`, through `postEntry`) and
+  sends ONE receipt, only on a fresh post and never to a member who said stop. The hooks:
+  `onFunded` in `lib/card-settlement.js` and the PayFast ITN after the credit, `onLinkPaid` in
+  `deliverRequestPaidNotifications` (every rail), and `referralCatchUp` on the referred account's
+  own next turn (`growthOnTurn`) for a voucher load, a send from a member or a held gift claimed
+  at join. A milestone reached while the switch was 0 is recorded with rewardCents 0 and is
+  never paid later. Golden thread 2.12.
+- **Surfaces.** `INVITE` in the capability registry (help line `🤝 *Invite a friend*`, home-card
+  line `🤝 *Invite*`, the model prompt names "invite"); `tests/capabilities.test.mjs` updated.
+- **Not done, by design:** no outbound to the invited person, ever; no retroactive payment when
+  the switch turns on (the gap is visible per member as eligible against paid; a backfill is a
+  founder decision); no Growth-tab panel (the profile carries the numbers); no schema change.
+
+## 2026-10-20 (103) — Pay-link identity: the pay page shows the requester's number tail and tells the payer to check it
+
+BUGLOG #131. The name on a link is the requester's own WhatsApp profile name, so anyone can
+call themselves anything. The page now shows the last three digits of the requester's number
+next to the name, in the link preview title ("Please pay Philly •••567 · R300") and in the
+heading, and carries a check line: "Check the number. This request comes from the WaPay
+account on a number ending •••567. If that is not the person you expect, do not pay."
+Business links name the business and carry no tail. New `requesterNumberTail` and
+`requesterLabelWithTail` in lib/payment-requests.js; the chat-side payer confirmation moves
+to the composed label with the next processor change. Tests: tests/pay-link-identity.test.mjs;
+1180/1180.
+
+## 2026-10-20 (102) — WhatsApp policy compliance after Meta's "sending spam" notice: nothing WaPay starts, one message per turn, stop for everyone, the quality rating watched daily
+
+BUGLOG #130; the standard is docs/WHATSAPP_POLICY_COMPLIANCE.md. Reminders to ad arrivals are
+off unless `WAPAY_AD_REMINDERS=on` (`adRemindersEnabled`); the post-transaction trailer and the
+"Sending…" interim message are gone; "stop" from any customer outside a PIN step records
+`profile.messaging.optOut`, answers once and starts nothing again, and the ops reply routes
+refuse a stopped customer until they write again; `lib/whatsapp-quality.js` reads Meta's
+quality rating, messaging limit, number status and the profile's support contact, the cron
+alerts ops while the rating is not GREEN, `GET /api/admin/whatsapp-quality` feeds the Health
+tab's first card, and the flags readout carries it. `tests/whatsapp-compliance.test.mjs`.
+
+## 2026-10-20 (101) — The pay-out float is checked before every pay-out; the rail's "insufficient funds" is named as ours; the operator is alerted; the customer hears the truth
+
+The morning the first R3,000 link was paid (BUGLOG #129): 23 pay-outs rejected for our
+empty float, the chat blaming the bank, no alert. Now `requestPayout` refuses honestly before
+any ledger move when the live float cannot cover the amount plus the rail's cost, records
+`FLOAT_SHORT`, and `floatShortAlert` tells ops by WhatsApp and e-mail once per ten minutes; the
+rail's own "insufficient funds" answer is classified the same way after the hold is released;
+`lib/payout-chat.js` says "our pay-out account is being topped up, nothing has left your
+balance". `tests/payout-float-short.test.mjs`.
+
+## 2026-10-19 (100) — Mission Control: six tabs, a refresh button and a 1-day range, period money tiles, the support inbox, the conversation on every profile, links over time and the fee outlook, the path all time, the valuation path with hover, the insight box
+
+Founder, 19 October, from seven annotated screenshots. Everything below is on the admin host.
+
+- **Tabs:** Dashboard, Valuation Metrics (the old Growth tab, with the plan-vs-now block, the
+  matrix, the path and valuation charts and the insight), Inbox, Customers, Health
+  (money-engine health, the daily conversation audit, the Pay agent card, pay-out
+  reconciliation) and Supplier Floats (the pay-out float tile next to customer balances, every
+  supplier float, UniFuel). Deep links: `/admin?tab=…` and `/admin?customer=<number>` opens one
+  customer on its own page; the ↗ next to each name in the list does that in a new tab.
+- **Refresh and the range:** a ↻ Refresh button on the Dashboard, Health, Supplier Floats and
+  Inbox, the 1-day range, and the three money tiles follow the selected period ("Money in, last
+  30 days"), with the pay-out float tile re-read on every refresh and every ten minutes.
+- **Links over time:** on the links card, cumulative value created and paid with the open count
+  per day, and the fee outlook of every link made so far if paid by card and then paid out by
+  PayShap or as cash at an Absa or Nedbank ATM (`links.daily` in `/api/admin/metrics`, cash fees
+  from `cashoutFeeCents`). Paid please-pay-me links appear in "What's being sold".
+- **The path, all time:** cumulative accounts from the first one ever (`pathSeries` in
+  `/api/admin/growth`), linear, with a legend, today's total, today's pace carried forward and
+  the plan's point. **The valuation path:** the plan, the same model on the inputs measured so
+  far, and today's pace, every point with a hover title.
+- **The insight box:** rules on the measured inputs and the plan to date: the biggest finding
+  (the input furthest below its stop line), what to work on, the most promising figure, with
+  red, yellow and green chips as the matrix measures them.
+- **Inbox** (`/api/admin/inbox`, `lib/inbox.js`): every customer who wrote in the window, newest
+  first, with the last thing they said and the flags an operator needs (unanswered, close
+  account, person asked, gate tier, replied by us), filters, the conversation and the reply box.
+  **Conversation on every profile** (`/api/admin/customer-turns`): both sides of the chat, the
+  questions they asked, the same flags.
+
+## 2026-10-19 (99) — DRAFT: the daily conversation audit loop: the first audit's sweep and review run every night, findings stored with their recurrence, a Health feed for Mission Control, a checker that reads today's switches
+
+The founder, after the first audit by hand (docs/audits/conversation-audit-2026-10-19.md, 93
+problems across 348 customers): every day, without anyone asking. Built to
+docs/audits/DAILY_AUDIT_BRIEF.md; the manual is docs/audits/DAILY_AUDIT.md.
+
+- **`lib/audit/export.js`** ports the export script's redaction (six or more digits, the
+  account-name line, the full-name answer by position) into `exportTurns`: accounts with a
+  turn since the last run, ten turns of context each, the shard header's facts, account ids
+  only; the display name travels apart for the model boundary and the quote masks.
+- **`lib/audit/rules.js`** ports the deterministic sweep as pure functions over that export
+  (eWallet, R20, date, betting, em dash, internal names, error lines, a live product called
+  coming soon) and adds the coming-soon purchase started against today's scope, the first-link
+  example answered with a link, the unanswered last message, loops, clarification runs and
+  long replies as findings, with the pattern counts.
+- **`lib/audit/brief.js`** GENERATES "what is true today" from the registries (`worksToday`,
+  `launchScopeFor`, `comingSoonPhrases`, `feeSchedule`, the pay-out methods read from the
+  rail with the production list as the fallback) so a switch flipped in Vercel changes what
+  the reviewer judges against the same night; then the rubric, the correct-behaviour list and
+  the hand-maintained docs/audits/PROCESS_CHECKS.md (created: onboarding, pay links, send, add
+  money, withdraw, ad flow, business, close account, balance and PIN, language).
+- **`lib/audit/review.js`** chunks the transcripts (about 25 accounts or 60k characters) and
+  reads them four at a time, each once, through **`callStructuredOnce`**, a new export of
+  `packages/ai/src/orchestrator.ts` that reuses `callStructured` (the same boundary, strict
+  JSON, a per-request timeout, the tokens left in the answer so nothing stored carries a
+  name). Parsed tolerantly; skipped without `OPENAI_API_KEY` (`reviewed:false`).
+- **`lib/audit/store.js`** + migration `20261019_audit_loop`: `audit_runs` and
+  `audit_findings` keyed by `sha1(category + normalised title)`; open = first seen in the
+  latest run, recurring = seen in two or more runs, resolved = not seen in the last two runs
+  with conversations, or by hand; a resolved finding seen again reopens as recurring.
+- **`lib/audit/run.js`** `runDailyAudit`: export → rules → review → upsert → run row → trend
+  → one ops summary by WhatsApp (`opsPersonAlert`) and e-mail (`sendOpsAlert`) with counts,
+  the top recurring titles and the Mission Control link; `dry:true` writes and sends nothing.
+- **Routes:** `POST /api/internal/audit-run` (internal key; `?since=ISO`, `?dry=1`),
+  `POST /api/internal/audit-resolve { fingerprint, note }`, `GET /api/admin/audit`
+  (requireAdmin) with the Health tab's contract: `{ latestRun, counts, trend, findings,
+  recurring }`.
+- **Cron:** one capped call in `daily-vas-sync.js`, logged as `cron_daily_audit`, never in
+  the response.
+- Tests `tests/audit-loop.test.mjs`; env `WAPAY_AUDIT_MAX_ACCOUNTS` (400),
+  `WAPAY_AUDIT_REVIEW_MODEL` (the fast tier by default), `WAPAY_AUDIT_REVIEW_CONCURRENCY`,
+  `WAPAY_ADMIN_URL`. Apply the migration before deploying. Dry run on production 2026-10-19:
+  296 accounts and about 1,400 turns in a day, 7 distinct rule findings, every chunk through
+  the boundary without a refusal.
+
+- **Precision gate (same day, after the first real run):** the brief states the four facts the reviewer misread (account opening is open to anyone, the payer's methods, who carries the card fee with worked arithmetic, the scripted ad answers); the schema carries `rule` and `confidence`; `gateFinding` drops coming-soon and invite-list misreadings and demotes an uncited or unsure P1 to "Verify:" P3. `tests/audit-precision.test.mjs`.
+
+- **After the first scheduled run (2026-10-20):** the cron declares a 60-second budget and gives the audit up to 45 seconds; `KNOWN_CORRECT_TEMPLATES` drops wrong-fact findings that quote a fixed template; the known-titles list no longer invites a re-report; the get-paid and voucher range prompts say "R5 to R3000" instead of an en dash (the sweep counted the dash 30 times).
+
+## 2026-10-19 (98) — The first conversation audit's fixes: the send flow speaks balance, the request ceiling and re-link rules, a real answer to "close my account", the example echo and "nobody owes me", the Send tap, add-money links named as such; the business question asks only on "ask"
+
+Four review agents read every customer conversation (348 accounts, 2,498 turns, redacted
+export) against docs/audits/REVIEW_BRIEF.md; the deterministic sweep ran first. The report
+is docs/audits/conversation-audit-2026-10-19.md. Fixed here:
+
+- **BUGLOG #122** the send flow's prompts and confirmation still said "a WaPay voucher they
+  can spend online where OTT vouchers are accepted" after the ledger send shipped; they now
+  say it moves from the sender's balance to theirs, free, and waits for a non-member. The
+  own-number refusal names "buy a voucher" only while that is live (`sendToSelfText`).
+- **BUGLOG #123** `grossedUpRequestCents` stopped after 64 steps and offered R3,064 for R3,000,
+  which nets R2,933 by card; it now loops until the net covers the ask, and at the link
+  ceiling the chooser offers no option 2 and says why.
+- **BUGLOG #124** a request for the amount of a link made minutes ago is that link ("already
+  live", with the link, no second one); a request for its grossed-up amount is option 2 of
+  it, so the first is cancelled and replaced instead of compounded (R150 → R159 → R169).
+- **BUGLOG #125** "close my account" was answered by the model with a "secure final step"
+  that does not exist, seven times; `lib/account-closure.js` matches it, says a person does
+  it, raises the person alert (WhatsApp twin and e-mail) once a day, and the product truth
+  forbids inventing a step.
+- **BUGLOG #126** the first-link example typed back word for word made links for nobody (ten
+  customers); it now gets "That was my example, who really owes you?". "Nobody owes me" and
+  its kin get the truth (WaPay does not pay you; it collects what you are owed) instead of
+  the prompt again, in the first-link state and at the get-paid amount step. A tapped
+  "Send Money" in the first-link state starts the flow instead of the FAQ line, and that FAQ
+  line now states the ledger truth without the section-11 words.
+- **BUGLOG #127** the withdraw gate and the unpaid-link answer called a card add-money link
+  "your R211 payment link"; `addMoneyLinkLabel` names it "R200 add-money link (R211 with the
+  card fee)".
+- **BUGLOG #128** the product truth told the model to say "withdraw R<amount>", which one
+  customer received three times in Sesotho as a raw placeholder; both texts now give a real
+  example.
+- **The business question** asks only on `WAPAY_ONBOARDING_BUSINESS_QUESTION=ask`: the
+  founder set the variable to "on" meaning "the removal is on", and production's flags showed
+  the question back at sign-up for an hour and a half.
+- Audit tooling in the repo: `scripts/audit/` (redacted export, deterministic sweep, README)
+  and `docs/audits/` (the brief, the reports). The export now redacts the full-name step by
+  position (finding S2-14).
+
+## 2026-10-19 (97) — Payment links as the key figure, the viral loop, the path and valuation charts, a ten-minute refresh, the reply box, the flags readout, and two audit fixes
+
+Founder, day two of the ad, midday: "every ten minutes update the dashboard"; "give me this
+graph [the path] on the dashboard, small: actual and a projection at the current rate, and the
+valuation"; "the key figure is the value of the payment requests created, how many were paid,
+the potential revenue if they are paid and then withdrawn, and how many links brought a new
+account"; "tell me how I can reply to Cytric"; "make sure the business-question variable is
+working"; and the first conversation audit of every customer chat (348 accounts, 2,498 turns).
+
+- **Payment links and the viral loop** (`links` and `viral` in `/api/admin/metrics`, the
+  "Payment links and the viral loop" card on the Dashboard): links created (count and rand,
+  all time and in the period), paid (count, rand, from a balance or by card, the paid rate,
+  the fees earned at today's schedule), open (count, rand) and lapsed, what the open links
+  are worth in fees if every one is paid by card (and the margin after the PayFast credit-card
+  cost from docs/COMMERCIALS.md) and if each is then withdrawn by PayShap (R8 fees; R2.88 rail
+  cost incl VAT); accounts whose first contact was paying a link, their share of all accounts,
+  the senders who brought them, and payers captured who are not on WaPay yet.
+- **The path** (`PathChart`): cumulative accounts since launch on a log scale, today's
+  seven-day pace carried forward six months, compounding once two full weeks exist, the plan's
+  point at the horizon. **The valuation path** (`ValuationPath`): the plan's month-by-month
+  valuation against today's pace held flat, both from the same model the matrix uses.
+- **Ten-minute refresh** (`REFRESH_MS`): the Dashboard, its valuation cards and the Growth tab
+  re-read themselves every ten minutes (the Meta read keeps its server-side ten-minute
+  throttle); the links card shows when it was refreshed.
+- **The reply box** (`ReplyBox` on the customer profile, `POST /api/admin/ops-reply`): a person
+  answers a customer inside their WhatsApp chat from Mission Control, same rules and code as
+  the internal route (one text, inside the 24-hour window, remembered by the chat).
+- **The flags readout** (`GET /api/internal/flags`, internal key): the commit and the switches
+  production reads at call time (business question, launch hold, each VAS and voucher switch,
+  fuel, withdrawals, ops-alert recipients, business invites), so a Vercel change can be
+  verified without a test sign-up.
+- **Audit fix, BUGLOG #120:** the deposit and payment-link button messages (interactive
+  cta_url) bypassed `say()` and were never recorded, so transcripts looked silent after an
+  amount and the chat could not see it had just sent the link; `rememberSent` in `lib/say.js`
+  records them now.
+- **Audit fix, BUGLOG #121:** an amount above R3,000 (or under R5) at the get-paid step got the
+  bare "How much would you like to request?" again, with no reason; a customer typed it twice
+  and left. The reply now names the ceiling or the floor and the way through.
+
+## 2026-10-19 (96) — The business question leaves sign-up for the POC: new wallets finish onboarding without it, and "business account" stays invite-only
+
+Founder, day two of the ad, after the Cytric case: "remove the business option from
+signing up for an account for now; let this person keep his; don't allow other accounts to
+sign up as a business account".
+
+- **`businessQuestionEnabled()`** (`lib/business-chat.js`), off by default: the S5 block of
+  the processor asks "is this account for you, or for a business?" only when
+  `WAPAY_ONBOARDING_BUSINESS_QUESTION=on`. Everything else stands: the typed command
+  ("business account", "register my business") still answers through the invite gate
+  (`mayRegister`: `WAPAY_BUSINESS_MSISDNS` or `WAPAY_BUSINESS_SIGNUPS=open`), so a wallet
+  that is not invited gets the honest waitlist line and no business row; the portal,
+  existing businesses and the interest list (`profile.businessInterestAt`, which is what
+  Cytric holds) are untouched. Ad arrivals never had the question (AD_CHAT_FLOW section 8).
+- **The ops reply** (`lib/ops-reply.js`, `POST /api/internal/ops-reply { accountId, text }`,
+  internal key): a person from the WaPay team answers a customer in their chat. Text only, one
+  message of up to 1,500 characters, inside the customer's 24-hour window (`?force=1`
+  overrides), sent through `lib/say.js` so the turn is recorded as the assistant's and the
+  chat remembers what the person said. First use: the follow-up to Cytric.
+- **The model's withdrawal knowledge** (BUGLOG #119): "from R50 up to R3000, cash in R50
+  steps", Absa or Nedbank ATM or a Pick n Pay / Boxer till, and "there is NO FNB eWallet
+  option", in `buildBrainKnowledge` and the product truth; the how-it-works brief and
+  steps quote the live methods' minimum or production's R50 floor (never the bare R20
+  config), `cashWays` without a provider list names the production two, an eWallet ask is
+  answered "not available on WaPay" plus the cash ways unless the rail lists it, and the
+  fee line and the generic collection steps name no FNB ATM.
+- Tests: `tests/launch-scope.test.mjs` (the flag in both worlds; the S5 block's shape; the
+  typed command's gate; the knowledge lines), `tests/ops-reply.test.mjs`,
+  `tests/how-it-works.test.mjs`. Docs: ONBOARDING.md, BUSINESS_PORTAL.md, CAPABILITIES.md,
+  GROWTH_DASHBOARD.md §8, env.template.
+
+## 2026-10-19 (95) — The plan, where we are, and where today's pace leads; the ops e-mail's WhatsApp twin; the gate's add-money line follows the Blu switch
+
+Founder, day two of the ad: "make sure this plan is measured and the valuation figure is
+clear on the dashboard: what the plan was, where we are now, the actual inputs, the
+trajectory if we continue at this rate, and what the valuation is and could be in six
+months' time"; and "I'd like to get these [ops] messages on WhatsApp so I can reply quickly".
+
+- **The plan-vs-now section** (`trajectory` in `lib/scale-model.js`; `valuation.trajectory`
+  in the growth route; `PlanVsNow` on Mission Control's Dashboard and Growth tabs, above the
+  matrix, one fetch for both): four tiles (valuation today, in six months at today's pace,
+  the plan in six months, compounding or the model on measured inputs) and a table of
+  accounts, funded, 30-day actives, net revenue a month and both valuation frames across
+  the plan by today (month 1 pro rata by launch day), now, the plan at the horizon, today's
+  pace held flat (the last seven days as a daily rate), compounding (only once two full
+  weeks exist, from 1 November; clamped to ±50% a week; the revenue multiple's growth uplift
+  applied as in the model) and the model on the measured inputs. Under it, the actual
+  inputs: the last seven days in accounts, funded and net revenue per day, 30-day actives,
+  net revenue over 30 days, the weekly growth or when it starts, and the frames
+  (10× annualised net revenue or R1,800 per active, floor R15m). Launch day 1 = 18 October,
+  model month 1 = October 2026, the horizon is April 2027.
+- **The ops e-mail's WhatsApp twin** (`opsPersonAlert` in `lib/ops-alerts.js`): the
+  third-tier withdraw alert ("X has asked to withdraw three times and cannot") now also
+  goes as one WhatsApp message to `WAPAY_OPS_ALERT_MSISDNS`, same references and masks as
+  the e-mail, once per account and day, and the chat counts a person as asked when either
+  channel arrived. The money alerts stay aggregates only.
+- **The withdraw gate's add-money line** (`lib/payout-gate.js`) names "a cash voucher bought
+  at a till" only while `BLU_LOAD` is live for that number; under the hold it says "card or
+  bank" (BUGLOG #118; the Cytric case, 19 October, read it the old way).
+- Tests: `tests/valuation-matrix.test.mjs` (trajectory arithmetic, floors, the plan rows
+  equal the matrix's simulate, the person alert and both channels in `payout-chat.js`),
+  `tests/launch-scope.test.mjs` (the gate line in both worlds), `tests/payout-round5.test.mjs`
+  (the twin fires with the e-mail at the third tier).
+
+## 2026-10-19 (94) — Operator money-in alerts, the live valuation matrix, and the dashboard's money and float tiles
+
+Founder, day two of the ad: "a trigger as soon as people get paid into their
+accounts so I can fund the pay-out wallet; it is almost instant", and "a live
+version of the valuation dashboard with projections based on current numbers".
+
+- **Operator alerts** (`lib/ops-alerts.js`, `lib/payout-float.js`): the moment money lands
+  from outside (a paid link or a card deposit, PayFast and Adumo paths), a WhatsApp line
+  to `WAPAY_OPS_ALERT_MSISDNS` with the amount and source class, customer balances, the
+  live OTT pay-out float with cover and days at the week's pace, the warn level, open
+  links and today's pay-outs; after a pay-out, a second line only when the float is below
+  its warn level or below what customers hold. Once per event, aggregates only, capped at
+  six seconds, never on the critical path's failure side. Outside a recipient's 24-hour
+  window the line goes through `WAPAY_TEMPLATE_OPS_ALERT` when set (one-parameter utility
+  template), else the direct rail, else it is logged.
+- **The live valuation matrix** (`projectionMatrix` in `lib/scale-model.js`, the growth
+  route's `valuation`, Mission Control's Dashboard and Growth tabs): the Scale Model's
+  plan case next to the same model run on the inputs measured so far (sample of 20 or
+  more; the rest stay at plan), under the plan budget and under today's ad spend held
+  flat, with the great and stop cases; accounts, actives, net revenue, both valuation
+  frames, peak funding and the 100k and 1m milestones at M6, M12, M24 and M36, with
+  calendar months. The repo model is pinned to the artifact's great case to the rand.
+- **Dashboard**: "Wallet float" renamed to "Customer balances" (it is a liability) with the
+  count at or above R20; new tiles for money in today, pay-outs today, open links and the
+  live pay-out float with cover; the funnel gains "Made a link" between Accounts and
+  Funded, where launch day showed the funnel waits.
+- Tests: `tests/valuation-matrix.test.mjs`.
+
+---
+
+## 2026-10-18 (93) — The master hold, the agent-path guard and the home card's coming-soon line
+
+The founder tested the launch scope from his own number and saw electricity and fuel
+open (his number sits on two tester allowlists from earlier rollouts, with their
+switches still on in Vercel) and the Pay agent improvise "I can help you buy airtime".
+
+- `WAPAY_LAUNCH_HOLD` (unset = hold, `off` releases): while it holds, every launch-scope
+  product and fuel are off for everyone, whatever the per-product switches and allowlists
+  say (`lib/vas-config.js` `launchHold()`, honoured by `VAS_LIVE`, the rails and
+  `isWicodeLive`). The code default now wins over any switch left behind.
+- The agent path: `agentGuard` gains `comingSoonCommand`; a purchase command for an off
+  product ("Buy airtime", "Buy fuel", a bare "data") gets the flow's coming-soon reply
+  before the model; questions still reach the model, whose capability list now ends with
+  a coming-soon line it must not offer or start (`promptLines`).
+- Home card (founder's ask): no product line for anything off; one line, `🔜 *Coming
+  soon*: airtime, data, electricity, fuel vouchers, cash deposits with a Blu or OTT
+  voucher and a virtual card`. The welcome list and the catalogue reply use the same
+  phrases. The withdraw line is unchanged.
+- Tests: `tests/launch-scope.test.mjs` (the hold outranks switches and lists, five release
+  spellings, the guard's yes and no cases, the processor wiring); the registry, agent-tool
+  and harness locks updated.
+
+---
+
+## 2026-10-18 (92) — "Send money" moves balance, never a voucher: a member is paid at once, anyone else's money waits for them, free, no rail
+
+The founder's decision of 18 Oct, built (BUGLOG #117):
+
+- **A member** (onboarding complete) is paid balance to balance at once (P2P_SEND).
+- **Anyone else's money** is held as WaPay's liability and lands in their balance on their first message after joining, once.
+- **Unclaimed after 30 days**, it goes back to the sender, who is told (the daily cron).
+- **Every send** is free and touches no rail.
+- **The sender** reads the same words whether or not the number is on WaPay.
+
+Built:
+
+- `lib/send-money.js`;
+- `pages/api/wallet/send/{preview,execute}.js`;
+- `lib/pending-gifts.js` (`createHeldGift`, `claimHeldGiftsToBalance`, `refundExpiredHeldGifts`; voucher claims exclude rail WAPAY);
+- `buildGiftRefund` in `lib/ledger-core.js` (additive);
+- the processor (send routing, PIN step, receipt, recipient line, claim on join, the parked send's fee);
+- `lib/gifting.js` (money notice, sanitised sender label);
+- the cron fold-in;
+- the copy (registry, fee facts, how it works, model truth);
+- migration `20261018_pending_gift_held`, applied to production first;
+- golden thread rule 2.11.
+
+---
+
+## 2026-10-18 (91) — Launch scope: airtime, data, electricity, voucher loads and the OTT self-purchase read "coming soon" for every customer
+
+The founder, on the day the first Click-to-WhatsApp ad went into Meta's review: these
+are not live for customers, say coming soon, keep building in the background; "send
+money" stays on. `docs/LAUNCH_SCOPE.md` is the page of record.
+
+- `lib/vas-config.js`: the switches read `process.env` at call time (getters), so a
+  flag flip needs no cold start and a test process can exercise both worlds; AIRTIME,
+  DATA and ELECTRICITY default **off**; three rails with the same idiom,
+  `VAS_LIVE_BLU_LOAD`, `VAS_LIVE_OTT_LOAD`, `VAS_LIVE_OTT_VOUCHER` (each narrowed by
+  `VAS_ALLOWLIST_<KEY>`); `launchScope(waId)` and the shared coming-soon copy
+  (`comingSoonReply`, `worksTodaySentence`, `comingSoonPhrases`).
+- Every customer surface reads the scope: the registry (`DEPOSIT_VOUCHER`, `VOUCHER_LOAD`,
+  `OTT_SELF` gated; home, help, welcome and prompt lines; a Get paid help line),
+  how-it-works (off topics answer coming soon and what works, the deposit ways lose the
+  cash bullet), fee facts, the spend catalogue and the brain knowledge (a COMING SOON
+  block), the orchestrator's product truth (built from the scope; withdraw line
+  byte-identical), the Pay agent's tool offers.
+- The processor gates every entry point of an off product, including the previously
+  ungated airtime path and the three PIN steps; "add money" goes straight to the card /
+  EFT ask while no voucher rail is live; a typed voucher PIN is answered, never
+  redeemed; the OTT self-purchase is coming soon at its three entries; the send flow to a
+  number is untouched.
+- Tests: `tests/launch-scope.test.mjs` (both worlds, every gate, no dates); the registry,
+  agent-tool, fee, how-it-works and wiring locks updated to pass the scope; harness
+  scenario 6e runs the shipped default end to end. The first full harness run found four
+  more ways into the airtime and electricity asks (the smart product query, the
+  context-aware airtime case, the orchestrator's electricity case, the parked ask states);
+  gated, then 16/16 in the standalone rerun of 6e plus the two legacy VAS scenarios;
+  unit suite 1106/1106.
+- BUGLOG #116. Under-18: no rule to build (founder): anyone with a WhatsApp account may
+  open an account, a nominal 16 and above, not enforced.
+
+---
+
+## 2026-10-18 (90) — The ad chat flow: how the bot answers a person who tapped a Click-to-WhatsApp ad
+
+Baked in from the founder's brief of 18 October (the 224-line revision), spec of
+record `docs/AD_CHAT_FLOW.md`. An ad arrival (the referral on the first message,
+or an account already stamped `acquisitionSource = ad`) is answered
+deterministically, with no model call (`lib/ad-flow.js`): the four suggested
+questions and the three reply buttons, exact then loose; a first name from the
+profile only when it reads as one; Q1 and Q4 go straight into onboarding
+without the welcome template (`startOnboardingFromAd` in `packages/auth`,
+S0 to S1 recorded silently, OTP at once); Q2 and Q3 answer with reply buttons
+(`sendWhatsAppReplyButtons` in `packages/whatsapp`, numbered text when buttons
+cannot be delivered); the five section-2 questions (how people pay, money out,
+cash top-up, airtime, pay someone) are answered from the brief's "what WaPay
+can do today" list, with coming-soon features always coming soon. On
+completion an ad arrival is asked for its first link instead of the business
+question (state `AD_FIRST_LINK`; "R250 from Thandi for the birthday gift"
+parsed; the existing please-pay-me creation runs, and the created-link
+message is the short forwardable shape; `QualifiedLead` sent at once); a late
+amount counts within 24 hours in that exact state. The paid message for an ad
+arrival is the short shape. One reminder, ever (`lib/ad-reminders.js`: 20 to
+23.5 hours after the customer's last message, mid-onboarding or no link,
+locked before the send; "stop" opts out and is answered once, never inside a
+PIN, reset or confirm step), run by the daily cron and on demand by
+`POST /api/internal/ad-reminders`. The entry question is stored as an id on the
+account (`attribution.entry`) and the Growth tab shows which question converts.
+PIN and consent prompts now say "Step 2 of 3" and "Step 3 of 3". Tests:
+`tests/ad-flow.test.mjs` (every string the module produces passes the section
+11 word rules), route locks in `tests/growth-route.test.mjs`, harness
+scenario 7 (two ad arrivals on a fresh QA number).
+
+---
+
+## 2026-10-16 (89) — Golden thread section 8: six of the money-path findings closed in the main session's files
+
+From the read-only inventory behind `docs/GOLDEN_THREAD.md` §8. **O4** cron
+routes: `lib/cron-auth.js` accepts only `Authorization: Bearer CRON_SECRET`
+(timing-safe; closed and logged when the secret is unset); the spoofable
+`x-vercel-cron` header and the query-string token are gone from all three
+routes; `payout-status` reports `cronSecretSet`. **O3** PayFast webhook: in
+production the notification must carry our `merchant_id` and the passphrase
+must be configured, both refused (with the raw ITN kept) before `verifyItn`;
+source IP stays warn-only because PayFast's live ranges exceed the published
+CIDRs (2026-08-21). **O5** Blu stub mode: `assertBluStubAllowed` throws in
+production at every stub site and in the electricity route, before any hold.
+**O6** the atomic claim: fuel's PENDING/RECONCILE → EXECUTING flip, 409 for the
+loser and a 120 s stale takeover, now on airtime, data and voucher execute,
+after the PIN and before the hold. **O7** `pages/api/test-deposit.js` and the
+scaffold's unauthenticated deposit route are removed. **O8** the PIN pepper
+migrates by rehash: current pepper, then `PIN_PEPPER_PREVIOUS`, then the
+in-source default; a verify under an old pepper rewrites the hash under the
+current one in the same update; production logs once until `PIN_PEPPER` is
+set. Tests: `tests/golden-thread-hardening.test.mjs`; the three cron locks
+and the Blu route-gate lock updated. Founder: confirm `CRON_SECRET` in Vercel,
+then set `PIN_PEPPER`.
+
+## 2026-10-16 (88) — The golden thread: no personal data to any AI model, no money out without the customer's proof, bank and ID details sealed in flight, a timed-out withdrawal never handed to the AI
+
+Lisa's 2026-10-15 withdrawal (BUGLOG #111): the flow timed out at the ID
+step, her ID and her PIN went to the two-tier AI, which asked for the PIN and
+said "Your payout is being confirmed now"; nothing was sent. The founder asked
+for it to be structural. Shipped:
+
+- **The model boundary** `packages/ai/src/boundary.ts`: the one door for every
+  provider call (two-tier `callStructured`, the agent's `callModel`, the
+  translator, product embeddings). Names, phones, e-mails and our own
+  references become `[[N1]]`/`[[P1]]`/`[[E1]]`/`[[S1]]` tokens and are restored
+  on the way out; a secret in the customer's message refuses the call
+  (`AI_PRIVACY_BLOCK`) with a deterministic answer and kinds-only logs. A
+  per-message privacy scope (`runWithPrivacy` around `processMessage`) carries
+  every name the request learns. A read-only scan of every production
+  account's AI context: no false refusal.
+- **Bare secrets before the model** (`lib/money-truth.js`), both brains.
+- **Output gate** `PIN_ASK` and `MONEY_CLAIM` (`lib/agent/guards.js`), both
+  reply sites, with `payoutPending` from the record.
+- **Late answers** (`resumeLateWithdraw`): carry on, confirm again, or say it
+  stopped; any other flow's late PIN or ID is told the step timed out.
+- **The PIN proof** (`@wapay/auth/pin-proof`, BUGLOG #112): `verifyPIN` and
+  the business step-up issue it; `executeWithdraw` and `requestPayout` demand
+  it before any row, cent, hold or rail call.
+- **Flow data sealed** (`lib/flow-seal.js`, BUGLOG #113) under `WAPAY_PII_KEY`;
+  account-holder names out of memory.
+- **Adumo callbacks** refuse an empty or public secret (BUGLOG #114).
+- **PIN reset:** its own words inside a running reset stay in it.
+- `/api/internal/payout-status` reports the safeguards' switches.
+- `docs/GOLDEN_THREAD.md` (new), linked from `CLAUDE.md` and
+  `docs/HANDOVER_V1.3.md`; `next.config.js` aliases `@wapay/auth/pin-proof`.
+
+Tests: `tests/model-boundary.test.mjs`, `tests/money-out-safeguards.test.mjs`,
+`tests/payout-timeout.test.mjs` (new), payout tests carry real proofs
+(`tests/helpers/pin-proof.mjs`), source locks moved with the anchors; harness
+scenario 6f.
 
 ---
 

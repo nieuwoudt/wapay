@@ -10,7 +10,7 @@
  * - BLU_BASE_URL: API base URL - MUST be set to https://api.qa.bltelecoms.net/v2/trade for QA
  * - BLU_BASIC_USER: Basic auth username (not used for VAS, but kept for voucher compatibility)
  * - BLU_BASIC_PASS: Basic auth password (not used for VAS, but kept for voucher compatibility)
- * - BLU_TRADE_API_KEY: API key for Blu Trade API (e.g., 5135ae7a-3d92-44ff-86bb-89c401722221 for QA)
+ * - BLU_TRADE_API_KEY: API key for Blu Trade API (set in .env / Vercel; never commit the value)
  * - BLU_VAS_STUB_MODE: When 'true', returns simulated success without calling Blu (QA only!)
  * 
  * ⚠️ WARNING: BLU_VAS_STUB_MODE must NEVER be enabled in production with real money.
@@ -31,6 +31,27 @@ import { requireEnv } from '@wapay/utils';
 // ============================================================================
 // Blu QA Test MSISDNs - Only work with Blu QA environment
 // ============================================================================
+
+/**
+ * Golden thread O5 (2026-10-16): BLU_VAS_STUB_MODE is a QA switch and nothing
+ * else. In production it does not stub, it REFUSES: a stubbed vend would
+ * debit the customer and deliver nothing, and a silent fall-through to the
+ * real supplier would spend real money on a test. The route gets a typed
+ * error before any hold is reserved, logs it, and answers "unavailable".
+ */
+export function assertBluStubAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.BLU_VAS_STUB_MODE !== 'true') return false;
+  const isProd = env.NODE_ENV === 'production' || env.VERCEL_ENV === 'production';
+  if (isProd) {
+    console.error(JSON.stringify({ type: 'blu_stub_forbidden_in_production', timestamp: new Date().toISOString() }));
+    throw Object.assign(new Error('BLU_STUB_FORBIDDEN_IN_PRODUCTION'), { code: 'BLU_STUB_FORBIDDEN_IN_PRODUCTION' });
+  }
+  return true;
+}
+function bluStubModeRequested(): boolean {
+  return assertBluStubAllowed();
+}
+
 export const BLU_QA_TEST_MSISDNS = {
   CELLC: '0840012300',
   VODACOM: '0720012345',
@@ -299,7 +320,7 @@ export class BluVasClient {
     // STUB MODE - For QA testing when Blu rejects phone numbers
     // ⚠️ WARNING: Must NEVER be enabled in production with real money!
     // =========================================================================
-    if (process.env.BLU_VAS_STUB_MODE === 'true') {
+    if (bluStubModeRequested()) {
       console.warn('⚠️ BLU_VAS_STUB_MODE enabled - returning stub response for airtime purchase');
       console.log(JSON.stringify({
         type: 'blu_vas_stub_airtime',
@@ -407,7 +428,7 @@ export class BluVasClient {
     // STUB MODE - For QA testing when Blu rejects phone numbers
     // ⚠️ WARNING: Must NEVER be enabled in production!
     // =========================================================================
-    if (process.env.BLU_VAS_STUB_MODE === 'true') {
+    if (bluStubModeRequested()) {
       console.warn('⚠️ BLU_VAS_STUB_MODE enabled - returning stub network detection');
       
       // Simulate network detection based on prefix
@@ -552,7 +573,7 @@ export class BluVasClient {
     // STUB MODE - For QA testing when Blu rejects phone numbers
     // ⚠️ WARNING: Must NEVER be enabled in production with real money!
     // =========================================================================
-    if (process.env.BLU_VAS_STUB_MODE === 'true') {
+    if (bluStubModeRequested()) {
       console.warn('⚠️ BLU_VAS_STUB_MODE enabled - returning stub response for data purchase');
       console.log(JSON.stringify({
         type: 'blu_vas_stub_data',

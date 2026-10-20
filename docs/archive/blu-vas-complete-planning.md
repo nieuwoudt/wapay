@@ -424,8 +424,8 @@ Base URL: https://api.qa.bltelecoms.net/v2/api/trade
 Swagger: https://api.qa.bltelecoms.net/swagger-ui.html
 
 Username: bld
-Password: ornuk3i9vseei125s8qea71kub
-API Key: e73d6237-0864-4c87-ba40-e520e951b336
+Password: <set in Vercel>
+API Key: <set in Vercel>
 ```
 
 **Verify**:

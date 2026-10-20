@@ -29,6 +29,9 @@ import { BALANCE, RAIL, buildVoucherGift } from '../../../../lib/ledger-core.js'
 import { reserveHold, settleHold, releaseHold, ensureWallet } from '../../../../lib/ledger-post.js';
 import { createPendingGift } from '../../../../lib/pending-gifts.js';
 import { requireInternalAuth } from '../../../../lib/internal-auth.js';
+
+/** An EXECUTING row older than this has lost its invocation; the next caller may take it over. */
+const EXEC_TAKEOVER_MS = 120_000;
 // IMPORTANT: This API route must NEVER send WhatsApp messages directly.
 // User-facing messages are orchestrated by `message-processor-v2` to guarantee exactly-once delivery.
 
@@ -139,7 +142,15 @@ export default async function handler(req, res) {
       where: { id: previewId },
     });
 
-    if (!preview || preview.status !== 'PENDING') {
+    // Golden thread O6 (2026-10-16), fuel's shape: PENDING and RECONCILE rows may
+    // run; an EXECUTING row is another invocation's unless it went stale (its
+    // owner stamps executingAt and the function cannot live past 120 s).
+    const execMeta = preview?.metadata || {};
+    const staleExecuting = preview?.status === 'EXECUTING' && Date.now() - (Date.parse(execMeta.executingAt || '') || 0) > EXEC_TAKEOVER_MS;
+    if (preview?.status === 'EXECUTING' && !staleExecuting) {
+      return res.status(409).json({ error: 'IN_PROGRESS', message: 'That purchase is already being processed. One moment please.' });
+    }
+    if (!preview || !(['PENDING', 'RECONCILE'].includes(preview.status) || staleExecuting)) {
       logStructured('vas_voucher_execute_result', {
         previewId,
         accountId,
@@ -213,6 +224,18 @@ export default async function handler(req, res) {
       });
     }
 
+
+    // The concurrency gate (golden thread O6): exactly one invocation may own
+    // this purchase. A second PIN-correct call for the same preview, a Meta
+    // redelivery or a double tap all stop here with 409, before any hold.
+    const flipped = await prisma.providerRequest.updateMany({
+      where: { id: previewId, status: preview.status },
+      data: { status: 'EXECUTING', metadata: { ...metadata, executingAt: new Date().toISOString() } },
+    });
+    if (flipped.count !== 1) {
+      logStructured('vas_voucher_execute_result', { previewId, accountId, success: false, error: 'IN_PROGRESS' });
+      return res.status(409).json({ error: 'IN_PROGRESS', message: 'That purchase is already being processed. One moment please.' });
+    }
 
     // =========================================================================
     // Get Account (the SPEND wallet is ensured below, not required to pre-exist)

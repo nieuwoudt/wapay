@@ -13,7 +13,7 @@ Blu Voucher provides a Variable Voucher API for issuing and redeeming vouchers. 
 ### Credentials (QA Environment)
 ```bash
 USERNAME: bld
-PASSWORD: ornuk3i9vseei125s8qea71kub
+PASSWORD: <set in Vercel>
 ```
 
 ### Auth Method
@@ -43,7 +43,7 @@ Content-Type: application/json
 **Request Example**:
 ```bash
 curl -X GET "https://api.qa.bltelecoms.net/v2/api/trade/voucher/variable/vouchers?token=8276%208409%204119%201701" \
-  -H "Authorization: Basic YmxkOm9ybnVrM2k5dnNlZWkxMjVzOHFlYTcxa3Vi" \
+  -H "Authorization: Basic $(printf '%s:%s' "$BLU_BASIC_USER" "$BLU_BASIC_PASS" | base64)" \
   -H "apikey: YOUR_API_KEY"
 ```
 
@@ -78,7 +78,7 @@ curl -X GET "https://api.qa.bltelecoms.net/v2/api/trade/voucher/variable/voucher
 **Request Example**:
 ```bash
 curl -X POST "https://api.qa.bltelecoms.net/v2/api/trade/voucher/variable/redemptions" \
-  -H "Authorization: Basic YmxkOm9ybnVrM2k5dnNlZWkxMjVzOHFlYTcxa3Vi" \
+  -H "Authorization: Basic $(printf '%s:%s' "$BLU_BASIC_USER" "$BLU_BASIC_PASS" | base64)" \
   -H "apikey: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -253,7 +253,7 @@ console.log({ pin: fullPin }); // "8276 8409 4119 1701"
 ```bash
 # Test with curl (once we have API key)
 curl -X POST "https://api.qa.bltelecoms.net/v2/api/trade/voucher/variable/redemptions" \
-  -H "Authorization: Basic YmxkOm9ybnVrM2k5dnNlZWkxMjVzOHFlYTcxa3Vi" \
+  -H "Authorization: Basic $(printf '%s:%s' "$BLU_BASIC_USER" "$BLU_BASIC_PASS" | base64)" \
   -H "apikey: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{

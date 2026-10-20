@@ -22,7 +22,7 @@ Use port **5432** for migrations:
 postgresql://postgres:[YOUR-PASSWORD]@db.lqkpshowocitirxrmgpy.supabase.co:5432/postgres
 ```
 
-Your password: `Wapay@202508`
+Your password: `[YOUR-PASSWORD]`
 
 ---
 
@@ -40,7 +40,7 @@ Your password: `Wapay@202508`
 
 ```bash
 cd packages/domain
-export DATABASE_URL="postgresql://postgres:Wapay@202508@db.lqkpshowocitirxrmgpy.supabase.co:5432/postgres"
+export DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.lqkpshowocitirxrmgpy.supabase.co:5432/postgres"
 pnpm prisma migrate deploy
 ```
 
@@ -78,7 +78,7 @@ pnpm prisma generate
 
 Create `.env` in the repo root:
 ```bash
-DATABASE_URL="postgresql://postgres.ibczmxhgvrmjzijwonwd:Wapay@202508@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+DATABASE_URL="postgresql://postgres.ibczmxhgvrmjzijwonwd:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
 ```
 
 ### For Vercel (Next Step):

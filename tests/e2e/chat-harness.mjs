@@ -54,6 +54,12 @@ mock.module('@wapay/whatsapp', {
       outbox.push({ kind: 'template', to, text: `[template:${templateName}:${language?.code || language || ''}]`, templateName });
       return { ok: true, data: { id: `qa-${outbox.length}` } };
     },
+    sendWhatsAppReplyButtons: async ({ to, bodyText, buttons }) => {
+      outbox.push({ kind: 'buttons', to, text: `${bodyText}\n${(buttons || []).map((b) => `[${b.title}]`).join(' ')}`, buttons });
+      qaSends += 1;
+      return { ok: true, data: { id: `qa-${outbox.length}` } };
+    },
+    buildReplyButtonsPayload: (args) => args,
     sendWhatsAppCtaUrl: async ({ to, bodyText, buttonText, url }) => {
       outbox.push({ kind: 'cta', to, text: `${bodyText}\n[button:${buttonText} -> ${url}]`, url });
       return { ok: true, data: { id: `qa-${outbox.length}` } };
@@ -208,10 +214,10 @@ export function createSession(waId = QA_WA_ID) {
     waId,
     transcript: [],
     /** Send one user message; resolve with the bot's replies for it. */
-    async say(text, { messageId } = {}) {
+    async say(text, { messageId, referral = null, profile } = {}) {
       const before = outbox.length;
       const id = messageId || `chatqa-${process.pid}-${++turn}`;
-      const res = await processMessage({ from: waId, text, messageId: id });
+      const res = await processMessage({ from: waId, text, messageId: id, ...(profile ? { profile } : {}), ...(referral ? { referral } : {}) });
       const replies = outbox.slice(before).filter((m) => m.to === waId);
       const replyText = replies.map((r) => r.text).join('\n···\n');
       this.transcript.push({ user: text, bot: replyText || '(no reply)', meta: res });

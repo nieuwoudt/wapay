@@ -11,7 +11,29 @@ import { TOPICS, matchHowItWorksAsk, howItWorksAnswer, howItWorksFacts, looksLik
 import { buildBrainKnowledge } from '../lib/spend-catalogue.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
-const ctx = { withdrawLive: true, wicodeLive: false, fuelPartners: ['Shell', 'Engen'], ottFacts: 'OTT vouchers are accepted online at partner platforms.' };
+const ON_SCOPE = { airtime: true, data: true, electricity: true, anyVas: true, allVas: true, bluLoad: true, ottLoad: false, voucher: true };
+const ctx = { withdrawLive: true, wicodeLive: false, fuelPartners: ['Shell', 'Engen'], ottFacts: 'OTT vouchers are accepted online at partner platforms.', scope: ON_SCOPE };
+// No scope in ctx and no switch set: the shipped default (launch scope 2026-10-18).
+const holdCtx = { withdrawLive: true, wicodeLive: false, fuelPartners: ['Shell', 'Engen'], ottFacts: 'OTT vouchers are accepted online at partner platforms.' };
+
+test('launch scope: an off topic answers coming soon and what works today, never the steps', () => {
+  for (const id of ['airtime', 'data', 'electricity']) {
+    const a = howItWorksAnswer(id, holdCtx);
+    assert.match(a, /coming soon on WaPay/, id);
+    assert.match(a, /Right now you can get paid with a "please pay me" link/, id);
+    assert.doesNotMatch(a, /R10 to R5000|buy R50 airtime|show MTN bundles/, `${id}: no steps while off`);
+    assert.doesNotMatch(a, /\b(january|february|march|april|may|june|july|august|september|october|november|december|20\d\d)\b/i, `${id}: no date promise`);
+  }
+  const dep = howItWorksAnswer('deposit', holdCtx);
+  assert.match(dep, /Cash at a till \(Blu or OTT voucher\):\* coming soon/);
+  assert.doesNotMatch(dep, /ask any major retailer for a \*Blu Voucher\*/);
+  assert.match(howItWorksAnswer('ott', holdCtx), /WaPay \(OTT\) vouchers are coming soon/);
+  assert.doesNotMatch(howItWorksAnswer('ott', holdCtx), /Say "buy an OTT voucher for R100"/);
+  assert.match(howItWorksAnswer('send', holdCtx), /It is free and lands in their WaPay balance/, 'send stays live (founder, 2026-10-18)');
+  assert.doesNotMatch(howItWorksAnswer('send', holdCtx), /spend it on airtime/, 'with airtime off, a recipient is never told to spend on it');
+  assert.match(howItWorksAnswer('fuel', holdCtx), /coming to WaPay soon/);
+  assert.doesNotMatch(howItWorksAnswer('fuel', holdCtx), /airtime, data, electricity, vouchers/, 'the fuel redirect names only what works');
+});
 
 test('the founder sentences route to the right topic', () => {
   assert.equal(matchHowItWorksAsk('Can I buy electricity?'), 'electricity');
@@ -36,7 +58,7 @@ test('answers carry the steps, the real limits and the words to start, and follo
   const e = howItWorksAnswer('electricity', ctx);
   assert.match(e, /R10 to R5000/); assert.match(e, /buy R100 electricity/); assert.match(e, /meter number/);
   const w = howItWorksAnswer('withdraw', ctx);
-  assert.match(w, /withdraw R200/); assert.match(w, /R8 fee/); assert.match(w, /Absa or Nedbank ATM/); assert.match(w, /FNB eWallet/); assert.match(w, /SA ID number or passport/); assert.match(w, /between R20 and R3000/);
+  assert.match(w, /withdraw R200/); assert.match(w, /R8 fee/); assert.match(w, /Absa or Nedbank ATM/); assert.ok(!/eWallet/.test(w), 'no eWallet unless the rail lists it (BUGLOG #119)'); assert.match(howItWorksAnswer('withdraw', { ...ctx, providers: [{ method: 'PAYSHAP' }, { method: 'CASHSEND' }, { method: 'EWALLET' }] }), /FNB eWallet/); assert.match(w, /SA ID number or passport/); assert.match(w, /between R50 and R3000/, 'no live list: the production floor, never the bare R20 config (BUGLOG #119)');
   assert.match(howItWorksAnswer('withdraw', { ...ctx, withdrawLive: false }), /coming soon/);
   const o = howItWorksAnswer('ott', ctx);
   assert.match(o, /12-digit PIN/); assert.match(o, /Checkers, Shoprite, Pick n Pay/); assert.match(o, /cannot be exchanged for cash/); assert.match(o, /36 months/);
@@ -45,7 +67,7 @@ test('answers carry the steps, the real limits and the words to start, and follo
   assert.match(howItWorksAnswer('ott', { ...ctx, text: 'can I use it on Talk360?' }), /Yes, Talk360 takes OTT vouchers/);
   assert.equal(matchHowItWorksAsk('Is it accepted at Checkers?'), 'ott'); assert.equal(matchHowItWorksAsk('does takealot take it?'), 'ott'); assert.equal(matchHowItWorksAsk('can I pay netflix with it'), 'ott');
   const s = howItWorksAnswer('send', ctx);
-  assert.match(s, /lands in their WaPay balance and it is free/); assert.match(s, /withdraw it to their own bank account/); assert.ok(!/instantly|in minutes|within (?:seconds|a minute)/.test(s), "no time promised (2026-10-12)");
+  assert.match(s, /It is free and lands in their WaPay balance/); assert.match(s, /straight away if they use WaPay, or when they join/); assert.doesNotMatch(s, /voucher PIN|R3/); assert.match(s, /withdraw it to their own bank account/); assert.ok(!/instantly|in minutes|within (?:seconds|a minute)/.test(s), "no time promised (2026-10-12)");
   assert.match(howItWorksAnswer('send', { ...ctx, withdrawLive: false }), /Cash withdrawals are coming soon/);
   assert.match(howItWorksAnswer('fuel', ctx), /coming to WaPay soon/); assert.match(howItWorksAnswer('fuel', { ...ctx, wicodeLive: true }), /Shell and Engen/);
   assert.match(howItWorksAnswer('deposit', ctx), /R20 costs R24/);

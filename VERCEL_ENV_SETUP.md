@@ -12,18 +12,18 @@ Add these environment variables (copy-paste the values):
 
 ### Database (Supabase)
 ```
-DATABASE_URL=postgresql://postgres:Wapay@202508@db.lqkpshowocitirxrmgpy.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.lqkpshowocitirxrmgpy.supabase.co:5432/postgres
 ```
 
 ### WhatsApp (Meta)
 ```
-META_WHATSAPP_TOKEN=EAATG3Axub2QBPxe79MDtaNAZAENUug5lmpP8j4LYVH4qkoHV66BGxp7RBPkRrurl5f4FzsALZASkwOvXjR675ISPe6uzXZCluQzqJhXZBPUPPKIMow6YtnxNcbwDx7o7ThnttBjwDkLqClLAPSQrbHMGELKxZAjjOq0B1PrMy03pOlJs9oBZBQpKKAXdYJO9RpSeouZCV5ifl1VFesKLZAfTgQjLDzXM8MZCcaMxn9oOQPwZBwZDZD
+META_WHATSAPP_TOKEN=<set in Vercel>
 
 META_WHATSAPP_PHONE_NUMBER_ID=856018554259689
 
 META_WHATSAPP_BUSINESS_ACCOUNT_ID=801970852418258
 
-META_WEBHOOK_VERIFY_TOKEN=wapay_webhook_secret_2025
+META_WEBHOOK_VERIFY_TOKEN=<set in Vercel>
 ```
 
 ### Blu Voucher (Stub values for now - replace with real credentials when available)

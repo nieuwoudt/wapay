@@ -4,6 +4,194 @@
 
 ---
 
+## 134. Credentials sat in clear text in a public repository: setup docs and scripts carried the database password, WhatsApp tokens and Blu's keys
+
+- **Symptom (2026-10-20):** the GitHub repository `nieuwoudt/wapay` was public (API: `"private": false`) and 36 tracked files held live-looking values: the Supabase database password in connection strings for project `lqkpshowocitirxrmgpy` and the older `ibczmxhgvrmjzijwonwd` (raw, URL-encoded and in prose); four Meta WhatsApp access tokens, a truncated fifth and an 80-character access token in `DEPLOYMENT_FIX.md`; the webhook verify token; Blu's QA basic-auth password (also base64-encoded in four `Authorization: Basic` headers) and three Blu API keys. Among the 36: `env.template`, a doc comment in `packages/providers/blu/src/vas.ts`, shell defaults in `test-blu-aligned.sh`, and an assertion in `tests/webhook-wiring.test.mjs` that quoted the leaked verify token in order to check it was gone. Every value is in the repository's first commit (`c2bc9dc`, 2026-10-06); the full history holds no credential beyond these (scanned with the guard's rules, all 52 commits). The Yoyo client secret entries were placeholders (`your_…`); no real Yoyo, OpenAI, OTT, PayFast or Meta app-secret value is in the history.
+- **Root cause:** values were pasted from `.env` and Vercel into setup notes, how-to docs and diagnostic scripts as "your correct values", the scripts carried them as defaults, and nothing checked tracked files for credential shapes. A public repository turns each of those into a disclosure.
+- **Fix (CHANGELOG 108):** every value replaced with a placeholder (`<set in Vercel>`; `[YOUR-PASSWORD]` inside connection strings; empty with a "never commit" note in `env.template`). The scripts refuse to run without the variable (`${META_WHATSAPP_TOKEN:?…}`, `${BLU_PASS:?…}`); the curl examples build the Basic header from `BLU_BASIC_USER`/`BLU_BASIC_PASS`; the webhook-wiring assertion now checks that no literal stands in for the verify token instead of quoting it. Three test fixtures got a `test-` prefix so they read as fixtures.
+- **Guard:** `tests/no-committed-credentials.test.mjs` walks every tracked text file (`git ls-files`; in the fast working copy, which has no `.git`, the tree minus the rsync excludes and every `.env` file). It fails on postgres URLs with a password, Meta `EAA…` tokens, provider key prefixes (`sk-`, `sk_live_`, `re_`, `ghp_`, `xox`, `AKIA`, `AIza`), private keys, JWTs, `NAME=value` where the name ends in key, secret, token, password or pass, shell `${VAR:-secret}` defaults, `Buffer.from('user:pass')`, precomputed `Basic` headers (decoded), UUIDs right after "API key", "secret" or "token", and any 32+ character token mixing upper case, lower case and digits. Placeholders pass. Published test values (Adumo's staging JWT and client secrets, OTT's spec example key) are allowed by SHA-256 with their source; provider fixtures under `packages/providers/*/__tests__` by path. Failures name file, line and rule, never the value. Against the pre-fix tree it reports 99 findings in 36 files; against the fixed tree, none. Limit: it reads shapes, so a secret with no key name near it and no recognisable shape (the verify token quoted bare inside a test) is not caught.
+- **Still open:** git history keeps every value, and any clone or fork taken while the repository was public keeps them too, so **rotation is the real fix**: the founder is making the repository private and rotating the Supabase database password (and retiring or rotating `ibczmxhgvrmjzijwonwd` if it still exists), the Meta WhatsApp token and the webhook verify token, Blu's QA password and API keys, and the Yoyo client secret, in the provider dashboards. **No force-push and no history rewrite; commits only** (founder, 2026-10-20): a rewrite would break the iCloud repo, the fast copy, every peer session and the deploy hook at once, and it would not protect the values, which are already public; only rotation closes that. Possible link: Blu reported unusually high traffic from our credentials on the night of 13 October (CHANGELOG 85, BUGLOG #110). #110 closed the public bundles route and named the QA credentials in the repository as the second possible source; they were public from 6 October, so rotating them closes that source too.
+- **Lesson:** a value that works belongs in Vercel and `.env`, and a doc names the variable, never the value; a test that proves a secret is gone must not quote it.
+
+## 133. Money could leave one suspicious account only by switching pay-outs off for everyone
+
+- **Symptom:** 2026-10-20: a R3,000 card-paid link was followed within hours by 23 pay-out attempts on three rails, three R1,000 gifts to numbers that opened accounts minutes later and sent the money back, and a second fresh account with the same shape (R3,000 link seven minutes after sign-up, card-paid, PayShap destination). The only brake was `WAPAY_PAYOUT_ENABLED=false`, which stops every customer.
+- **Root cause:** no per-account control existed on the two paths money leaves a balance (`requestPayout`, `sendMoney`); the open pilot has KYC off and no settlement delay on card-funded balances.
+- **Fix:** `lib/payout-freeze.js` + `POST /api/internal/payout-freeze`; the freeze is read fresh before any ledger move in `requestPayout`, in `startWithdraw` (the flow never opens) and in `sendMoney`; receiving is untouched; a masked ops alert on every change; `payoutFreeze` on the customer profile.
+- **Guard:** tests/payout-freeze.test.mjs (state shape, refusal before any rail or ledger call, the chat copy with no time promise, the route's auth and alert). Open decisions for the founder: a settlement hold on card-funded balances before pay-out, KYC above a cumulative pay-out amount, and PayFast's view of the two card payments.
+
+## 132. A customer who asked for help and went quiet for a day could not be reached at all
+
+- **Symptom:** two people from 19 October (one asked to close their account, one went quiet after a question) were past their 24-hour window on 20 October; the ops reply route answered WINDOW_CLOSED and there was no approved support template, so WaPay had no permitted way to write to them.
+- **Root cause:** every template on the account was a transactional or onboarding template; nobody had created a utility follow-up for support, and the ops reply knew only the free-form rail.
+- **Fix:** `wapay_support_followup` (UTILITY) created through the new `/api/internal/template-create`; `lib/ops-reply.js` falls back to it after the window with the first name and the text as parameters; the Inbox reply box inherits the fallback.
+- **Guard:** tests/ops-reply.test.mjs locks the rail switch, the parameter sanitiser (Meta refuses newlines in parameters), the stop refusal on both rails and the 502 on a template failure; docs/WHATSAPP_POLICY_COMPLIANCE.md names the template as the only way WaPay writes first.
+
+## 131. The pay page named the requester by their self-chosen WhatsApp name alone
+
+- **Symptom:** a link made by any account whose WhatsApp profile name was set to "Nieuwoudt" rendered "Nieuwoudt is requesting R300" with nothing a payer could check against; the founder asked how a scammer using his name would be stopped (2026-10-20).
+- **Root cause:** `maskedRequesterLabel` returns the display name when there is one, and the display name is the WhatsApp profile name the requester sets themselves; the number tail appeared only when no name existed.
+- **Fix:** `requesterNumberTail` (the last three digits, never the middle) is shown next to the name in the link preview title ("Please pay Philly •••567 · R300") and in the heading, and a check line tells the payer to compare the tail with the number they know and not to pay if it is not the person they expect. Business links name the business and carry no tail (registration is invite-only).
+- **Guard:** tests/pay-link-identity.test.mjs locks the tail, the title, the heading, the check line and the business exclusion. The other layers stay: the link reaches the payer from the requester's own WhatsApp, the money can only land in the balance of the Meta-verified number that made the link, pay-outs need a PIN and a traceable rail. KYC on pay-out is the strong gate and is off for the open pilot (founder decision open).
+
+## 130. Meta flagged the number for "sending spam": quality rating RED after two days of ad reminders and multi-message turns
+
+- **Symptom (2026-10-20, 08:26 SAST):** Meta's e-mail "WhatsApp Business account WaPay has been identified as sending spam… may face restrictions or be disabled"; the Graph API read the number's quality rating as RED (status CONNECTED, throughput STANDARD).
+- **Root cause:** in the two days after the ad launch WaPay started conversations with 54 ad arrivals who had gone quiet (the one reminder, hourly loop plus the 02:00 cron), inside their windows but unasked for, to the exact people most likely to block; the bot also sent two or three messages per customer turn (receipt plus a trailer line, an interim "Sending…", prompt plus a coming-soon line), and "stop" was honoured only for ad arrivals' reminders. Blocks and reports feed the rating.
+- **Fix (CHANGELOG 102):** reminders off unless `WAPAY_AD_REMINDERS=on`; the trailer and the interim message removed; "stop" honoured for everyone with `profile.messaging.optOut` and refused human replies until they write again; `lib/whatsapp-quality.js` reads the rating daily, alerts ops while it is not GREEN, and shows on the Health tab and the flags readout; `docs/WHATSAPP_POLICY_COMPLIANCE.md` is the standard. Locked in `tests/whatsapp-compliance.test.mjs`.
+- **Lesson:** inside the window is not the same as wanted; a message the customer did not just ask for is a report waiting to happen, and the rating must be watched like the float.
+
+## 129. The pay-out float ran dry: 23 pay-outs rejected in two and a half hours while the chat blamed the customer's bank
+
+- **Symptom (2026-10-20, 03:34 to 05:52 UTC):** the first R3,000 link paid by card landed R2,871.70 in a customer's balance; after two withdrawals the OTT pay-out float (R872.80 at midnight) was empty, and every further attempt, 23 across three accounts and three methods, came back from the rail as "Insufficient funds for this transaction". The chat said "the bank rail declined it (PAYOUT_REJECTED)"; the customer retried fifteen times, moved the money between numbers, and only got it out after the founder's top-up landed at 05:53. The float-low alert never fired because it only fires after a SUCCESS.
+- **Root cause:** no float check before a pay-out, no reading of the rail's own "insufficient funds", a customer line that named the bank, and an alert wired to the wrong event.
+- **Fix (CHANGELOG 101):** `requestPayout` reads the live float before any ledger move and refuses with `FLOAT_SHORT` when it cannot cover the amount plus the rail's cost (nothing moves, nothing is held); the rail's "insufficient funds" is recorded as `FLOAT_SHORT` too; both raise `floatShortAlert` (WhatsApp and e-mail, once per ten minutes); the chat says "our pay-out account is being topped up, nothing has left your balance", naming a person only when the alert went. Locked in `tests/payout-float-short.test.mjs`. The three customers were messaged by hand the same morning.
+- **Lesson:** a liability that can be withdrawn within minutes needs the float checked at the moment of the request, not reported after the fact; and a rejection must name whose fault it is.
+
+## 128. The model was told to say "withdraw R<amount>" and a customer received the placeholder three times
+
+- **Symptom (audit 2026-10-19, shard 4):** a customer writing Sesotho asked to withdraw three ways and three times got a line ending in `withdraw R<amount>`, angle brackets included, HTML-escaped by the localiser.
+- **Root cause:** the product truth (`packages/ai/src/orchestrator.ts`) and the knowledge line (`lib/spend-catalogue.js`) instructed the model with a template placeholder; the model copied it out.
+- **Fix (CHANGELOG 98):** both say "type withdraw and the amount, for example withdraw R100 (never angle-bracket placeholders)". Locked in `tests/dashboard-and-audit.test.mjs`.
+- **Lesson:** anything in an instruction to the model can come out of its mouth; examples, never placeholders.
+
+## 127. The withdraw gate called a customer's card add-money link "your R211 payment link"
+
+- **Symptom (audit 2026-10-19, shard 4):** at a R0 balance the gate said "Your R211 payment link from today was not paid"; the customer had never made a R211 link, he had asked to add R200 (R211 with the card fee). His real please-pay-me link was not mentioned.
+- **Root cause:** `moneySituation.pendingLinks` holds the customer's own PayFast add-money intents, and `shortGateReply`, `situationSentences` and `unpaidLinkAnswer` all called them "payment link" with the gross amount.
+- **Fix (CHANGELOG 98):** `addMoneyLinkLabel` names them "R200 add-money link (R211 with the card fee)" everywhere. Locked in `tests/dashboard-and-audit.test.mjs` and `tests/payout-round5.test.mjs`.
+
+## 126. The first-link example typed back made links for nobody; "nobody owes me" got the prompt again
+
+- **Symptom (audit 2026-10-19, all shards):** at least ten customers typed "R250 from Thandi for the birthday gift" word for word and got a real link; others wrote "nobody owes me", "who must pay me", "I need money now" and got the get-paid prompt again. A tapped "Send Money" in the first-link state got the FAQ line and the next amount became a request.
+- **Root cause:** the prompt reads as an instruction; the state treated every unparsed sentence as a retry; the FAQ classifier saw the tap as a question.
+- **Fix (CHANGELOG 98):** `isFirstLinkExample` → "That was my example"; `looksLikeNobodyOwesMe` → the truth about what WaPay does, in the first-link state and at the amount step; the Send tap starts the flow. Locked in `tests/dashboard-and-audit.test.mjs`.
+
+## 125. "Close my account" was answered with a "secure final step" that does not exist, seven times
+
+- **Symptom (audit 2026-10-19, shard 3):** a customer asked to close their account seven times within three minutes and was promised a secure final step each time, with hearts and sparkles; nothing happened and nobody was told.
+- **Root cause:** no handler existed, so the model improvised a process.
+- **Fix (CHANGELOG 98):** `lib/account-closure.js`: the ask is matched plainly, the reply says a person does it and that the balance stays theirs, the person alert goes out (WhatsApp twin and e-mail) once a day, and the product truth forbids inventing a step. Closure itself is still manual (settle, mark closed, confirm from the inbox).
+- **Lesson:** every request the product cannot fulfil needs a deterministic answer, or the model will invent one.
+
+## 124. Asking again after a fresh link made a second link, and asking for "option 2" compounded the fee
+
+- **Symptom (audit 2026-10-19, shards 2 and 3):** "I want number 2" after a R150 link re-ran the flow with R159 as the principal and offered R159 or R169; "make a fresh link for the same R1047" re-grossed to R1096; "you owed me" made a second identical link.
+- **Root cause:** `handleCreatePaymentRequest` never looked at the link just made; the model passed the last link's gross as the new amount.
+- **Fix (CHANGELOG 98):** within 15 minutes of a pending link, the same amount is answered "that link is already live" with the link and no second one; its grossed-up amount cancels the first and mints option 2 once, saying so. Locked in `tests/dashboard-and-audit.test.mjs`.
+
+## 123. The R3,000 request offered a R3,064 link "so you receive at least R3,000", which nets R2,933 by card
+
+- **Symptom (audit 2026-10-19, shard 4):** the chooser's option 2 at the maximum promised a net the link cannot deliver.
+- **Root cause:** `grossedUpRequestCents` gave up after 64 one-rand steps and returned the last tried value; the real gross-up (R3,134) is above the link maximum anyway.
+- **Fix (CHANGELOG 98):** the loop runs until the net covers the ask; at the ceiling the chooser offers no option 2 and says the fee cannot be added on top. Locked in `tests/dashboard-and-audit.test.mjs`.
+
+## 122. The send flow still promised "a WaPay voucher they can spend online where OTT vouchers are accepted"
+
+- **Symptom (audit 2026-10-19, shards 1, 2 and 4):** on 18 and 19 October the send flow's amount and number prompts, the confirmation and the range message all spoke of a voucher, one minute after another path gave the correct ledger-send wording; the own-number refusal pointed at "buy a voucher", which the next turn called coming soon.
+- **Root cause:** CHANGELOG 92 moved the money to the ledger but four prompts kept the old copy.
+- **Fix (CHANGELOG 98):** all four say it moves from the sender's balance to theirs, free, and waits for a non-member; `sendToSelfText` names the voucher only while buying one is live. Locked in `tests/dashboard-and-audit.test.mjs`, `tests/gifting.test.mjs`, `tests/gifting-routing.test.mjs`, `tests/voucher-gift-routing.test.mjs`.
+
+## 121. An amount above the link maximum got the bare question again, twice, and the customer left
+
+- **Symptom (conversation audit 2026-10-19; a customer on 18 Oct 17:01 and 17:02 UTC):** at "How much would you like to request? (R5–R3000)" the customer typed a number that the chat answered with exactly the same question, twice; six minutes later they asked for airtime, then to withdraw, then to deposit R3,000. The number itself is redacted in memory, so the audit could not see it, but the code path shows the cause.
+- **Root cause:** `handleCreatePaymentRequest` (`pages/api/webhooks/message-processor-v2.js`) treated an amount outside R5 to R3000 as "no amount" and re-sent the generic prompt. A customer who wants R5,000 reads that as the chat not understanding, and the never-trap rule says every repeat must add the reason.
+- **Fix (CHANGELOG 97):** above the ceiling the reply names it and the way through ("ask for R3000 now and make another link for the rest, or tell me a smaller amount"); below the floor it names the floor; only a message with no amount at all gets the plain question. Locked in `tests/dashboard-and-audit.test.mjs`.
+- **Lesson:** a re-asked question is a trap unless it says what was wrong with the answer.
+
+## 120. The deposit and payment-link button messages were never remembered, so the chat looked silent and forgot it had sent the link
+
+- **Symptom (conversation audit 2026-10-19):** three customers' transcripts ended with an amount ("R100", "100", "Deposit 3000") and no reply; Cytric's showed two amounts with no reply. Every one had a deposit intent created in the same minute: the customer did get the PayFast button message. The audit scripts and the chat's own memory (and therefore the model, the gate and the person reading the conversation) saw silence.
+- **Root cause:** the two interactive cta_url sends (`sendWhatsAppCtaUrl`, the payment-request card and the deposit card) go through the transport directly, not through `lib/say.js`, which is where outbound turns are recorded.
+- **Fix (CHANGELOG 97):** `rememberSent` in `lib/say.js` records the card's text, button and link as the assistant's turn after a successful interactive send, at both sites. Locked in `tests/dashboard-and-audit.test.mjs`.
+- **Lesson:** every outbound path must leave a turn behind, or the chat's memory lies by omission; the audit's "unanswered last turn" rule now has no blind spot for these two sends.
+
+## 119. The model told a customer withdrawals run "from R20" and offered an FNB eWallet that production does not have
+
+- **Symptom (Cytric, 19 Oct 09:05 and 09:07 UTC):** "limit" was answered "you can withdraw from *R20* to *R3000*"; "I do not have a bank account" was answered "...a Pick n Pay or Boxer till, or as an FNB eWallet". The live minimum is R50 on every method and the OTT production merchant has Absa and Nedbank cash only (no FNB eWallet, settled 2026-10-08).
+- **Root cause:** the model's knowledge (`buildBrainKnowledge` in `lib/spend-catalogue.js`) and the product truth (`packages/ai/src/orchestrator.ts`) carried a static sentence listing every method in the code, eWallet included, with the configured R20 floor; the chat flow and the how-it-works answers had been fixed for Lisa on 2026-10-10 (`cashWays` reads the live list) but these two lines had not, and `cashWays` with no provider list still named all three.
+- **Fix (CHANGELOG 96):** both lines name Absa or Nedbank ATM or a Pick n Pay / Boxer till, "from R50 up to R3000, cash in R50 steps", and say there is no FNB eWallet. In `lib/how-it-works.js` the quoted minimum is the live methods' minimum or production's R50 floor when no list is at hand (never the bare R20 config), `cashWays` without a list names the production two, and a customer who asks for an eWallet is told it is not on WaPay and what the cash ways are unless the rail lists it. The fee line (`lib/fee-facts.js`) and the generic collection steps (`lib/payout-collection.js`) no longer name an FNB ATM. Locked in `tests/launch-scope.test.mjs`, `tests/how-it-works.test.mjs` and `tests/payout-round5.test.mjs`.
+- **Lesson:** every sentence the model reads about a rail must be built from the live list or say less than the flow; grep the knowledge for a method's name whenever a rail is added or found absent.
+
+## 118. The withdraw gate offered "a cash voucher bought at a till" while cash deposits were coming soon
+
+- **Symptom (Cytric, 19 Oct 08:30 UTC, day two of the ad):** at R0 the second gate reply listed "Add money to your balance: say *add money* (card, bank or a cash voucher bought at a till)" although the launch hold has Blu voucher loads off and the home card says cash deposits are coming soon.
+- **Root cause:** `shortGateReply` (`lib/payout-gate.js`) had the parenthetical as a literal; the launch scope (CHANGELOG 91/93) gated every other add-money surface but not this one.
+- **Fix (CHANGELOG 95):** the line reads `isRailLiveFor('BLU_LOAD', account.waId)` at call time: "card or bank" under the hold or when the number is not on the tester list, the till voucher only when the rail is live for them. Locked in `tests/launch-scope.test.mjs`.
+- **Lesson:** a copy string that names a product is a gate; grep every surface for the product's words when a switch is added ("till", "voucher", "cash").
+
+## 117. "Send money" bought a voucher: the recipient got a PIN, not money, while the copy promised "it lands in their balance"
+
+- **Symptom (Lisa, 12 Oct; the founder's decision, 18 Oct):**
+  - Every send went to `/api/vas/voucher/execute`, which bought an OTT voucher for the recipient. A WaPay member got a voucher PIN instead of money in their balance; Lisa's R350 came as a PIN on OTT's test host, and her balance stayed R0.
+  - The registry, the how-it-works answer and the model's product truth all said "if they are on WaPay it lands in their balance and it is free".
+  - The one send that did move balance (`buildSend`) only paid payment requests.
+- **Root cause:** the send flow was built as a voucher sale (the closed-loop posture of August); the member case was never wired, and the copy described a product that did not exist.
+- **Fix (founder 18 Oct: send stays on, through the ledger; free; member = onboarding complete; unclaimed after 30 days goes back to the sender):**
+  - **The money:** `lib/send-money.js` `sendMoney`. A member gets `buildSend`, P2P_SEND, idemKey `send-<previewId>`, free. Anyone else gets `buildGiftHeld`, free, and a `pending_gifts` row (`rail 'WAPAY'`, no PIN) in one transaction.
+  - **The routes:** `/api/wallet/send/preview` and `/api/wallet/send/execute`. Internal key; the PIN is verified inside, approving this preview and amount; `sendMoney` checks the proof before any write (golden thread 2.11); fuel's EXECUTING claim; no rail client.
+  - **Joining:** the recipient's first message after joining calls `claimHeldGiftsToBalance` (guarded flip, `gift-claim-balance-<giftId>`, a second claim is a no-op) and gets one line.
+  - **The fake-PIN trap:** `claimPendingGifts` now defaults to the voucher rails. The fuel and OTT self-purchase sweeps used to hand every waiting gift out as a PIN, so a held gift would have gone out as one.
+  - **The refund:** the daily cron refunds held money after 30 days (`buildGiftRefund`, `gift-refund-<giftId>`) and tells the sender once.
+  - **Membership-neutral copy:** the confirm and the receipt read the same for a member and a non-member ("straight away if they use WaPay, or when they join"). The recipient's line says where the money is, never a PIN.
+  - **The situation copy:** `money-situation` and `payout-gate` describe a held gift as balance on its way, never a voucher PIN.
+  - **Fees:** the voucher-gift fee no longer applies to a send, the parked top-up needs no fee, and the copy is updated on every surface.
+  - **Migration** `20261018_pending_gift_held` (`voucherPin` nullable), applied to production before the deploy.
+- **Guard:** `tests/send-money.test.mjs`:
+  - a member transfer, a held gift, a claim once, the voucher sweeps blind to held gifts, the refund once, no proof means nothing moves;
+  - the copy is identical for both, with no rail in the path;
+  - the chat wiring order.
+
+  `tests/voucher-gift-ledger.test.mjs` pins `buildGiftRefund`. The wording locks moved in capabilities, fee-facts, how-it-works, orchestrator-routing and payout-chat. Harness scenario 6g runs both sends, the join, the second message and no rail through the real processor, with the send routes served in-process.
+- **Still to confirm:** a member send and a non-member send on production with the founder's own number and a second pilot number (his run sheet). The recipient template `wapay_voucher_received` reads "{{1}} sent you {{2}} with WaPay", which stays true for money; a money-specific template would be clearer and needs Meta approval.
+
+ advertised airtime while refusing a category, the VAS flags were frozen at import, and two voucher rails had no switch at all
+
+- **Symptom (read on 2026-10-18 while implementing the launch scope):** `categoryUnavailableMessage` ended with "You can still buy airtime, data, or electricity right now" whatever was live; `VAS_LIVE` was computed once at import, so a Vercel flag flip only reached a cold function and no test process could exercise both worlds; the Blu voucher load and the OTT self-purchase could not be switched off at all; airtime had no gate anywhere (the only VAS category without one), so `VAS_LIVE_AIRTIME=false` would have left "buy airtime" working.
+- **Root cause:** the flags predated the registry; each category gate was added by hand where someone had looked.
+- **Fix:** call-time getters, defaults off for the launch scope, three rails, one coming-soon reply built from the same gates as the home card, airtime gated at its four entry points, PIN-step gates for the three categories (`docs/LAUNCH_SCOPE.md`).
+- **Guard:** `tests/launch-scope.test.mjs` asserts every gate by source and the default world by behaviour.
+
+---
+
+## 115. Every new account since 10 October was stamped "organic": the pay-link referrer lookup ordered by a column that does not exist
+
+- **Symptom (seen in the ad-flow harness run, 2026-10-18 07:16 UTC):** `growth_referrer_lookup_error … Unknown argument \`createdAt\`` on every account creation. `findPayLinkReferrer` caught the error and returned null, so `newAccountProfile` fell back to `organic` and the pay-link loop (payer who later onboards, with the requester as referrer) was never recorded. Since commit `b93ee70` (2026-10-10).
+- **Root cause:** `ProviderRequest` has `requestTs`, not `createdAt`; the lookup added `orderBy: { createdAt: 'desc' }` to the earlier `findFirst` that had no ordering. Best-effort error handling hid it.
+- **Fix:** `orderBy: { requestTs: 'desc' }`. No data to repair: no card payer has onboarded since 10 October (8 accounts, none pay-link acquired).
+- **Guard:** `tests/growth.test.mjs` (a stub that throws on `createdAt`, and asserts the requester comes back).
+
+---
+
+## 114. A forged card callback could have credited an account if the Adumo signing secret was empty
+
+- **Symptom (the read-only money-path inventory of 2026-10-16; nothing happened):** `verifyJwtHs256` accepted any secret, the empty string included (Node signs and verifies with an empty HMAC key), and `verifyAdumoResponse` compared the token's merchant and application ids with the configured ones by a case-insensitive equality that treats two empty values as equal. With `ADUMO_JWT_SECRET` unset (or set to Adumo's published sandbox secret, which is in our source), anyone could create a payment request, open checkout and POST a self-signed token to `/api/webhooks/adumo`, and `settleCardPayment` would credit the requester.
+- **Root cause:** the verifier trusted its configuration instead of demanding it; neither Adumo handler checks `adumoEnabled()`.
+- **Fix:** `verifyJwtHs256` refuses an empty secret (`NO_SECRET`); `verifyAdumoResponse` approves nothing without the whole configuration (`NOT_CONFIGURED`) and never with the published sandbox secret or merchant id outside the sandbox (`PUBLIC_TEST_SECRET`).
+- **Guard:** `tests/money-out-safeguards.test.mjs` (empty, partial and public configurations), `tests/adumo.test.mjs` (a token forged with the empty key). `docs/GOLDEN_THREAD.md` rule 2.9.
+- **Still to confirm:** that production sets `ADUMO_JWT_SECRET` to the live value (the handlers are reachable whether or not Adumo is enabled).
+
+## 113. A bank account number and an ID number typed mid-withdrawal sat in plain JSON in the account row for as long as the flow lived
+
+- **Symptom (Lisa, 2026-10-15):** her Capitec account number (10:14 SAST) and the ID step's data lived in `Account.conversationData` in clear until the next message four hours later; saved details were encrypted (`lib/pii-vault.js`), details in flight were not. The founder, 2026-10-16: "even the bank information needs to be securely stored, and the IDs, all of that".
+- **Root cause:** encryption was a property of the "save for next time" feature, not of storage: the state store wrote whatever the flow handed it.
+- **Fix:** `lib/flow-seal.js`: `updateConversationState` seals `recipient.account_number`, `recipient.id_number` and `idPending` (AES-256-GCM under `WAPAY_PII_KEY`, key versioned) on every write; `getConversationState` opens them on every read, so no flow changes. Without the key nothing is sealed (as before) and rows written before the key still read; a sealed row that cannot be opened makes the flow start fresh, never half-read. Also: the name typed at the withdrawal's name step is kept in memory as "[name]", and our confirmation's "Name on the account" line too.
+- **Guard:** `tests/payout-timeout.test.mjs` (no plaintext at rest with the key; plain without; old rows read; another key = start fresh; memory redaction). `docs/GOLDEN_THREAD.md` rules 3.2 and 1.5.
+
+## 112. The rail paid out for any caller: the PIN was checked in the chat, not where the money moves
+
+- **Symptom (the money-path inventory of 2026-10-16; nothing happened):** `requestPayout` (lib/payouts.js), the function that moves a customer's money to OTT, trusted its caller. The chat checked the PIN in the processor before calling `executeWithdraw`; the business portal checked a step-up before calling `requestPayout`; nothing in the money path itself demanded that the customer had approved this pay-out. A future caller, a refactor that moved the PIN check, or a code path that reached `executeWithdraw` another way would have paid out with no PIN.
+- **Root cause:** authorisation lived at the edges, by convention, not at the door.
+- **Fix:** the PIN proof (`packages/auth/src/pin-proof.ts`, exported as `@wapay/auth/pin-proof`): `verifyPIN` issues it on a correct PIN when told what the PIN approves ({ intentId, amountCents }); the business step-up issues the same proof on a correct password or code. It is an HMAC over the account, the intent, the exact amount, the time and a nonce, valid for two minutes, keyed by a deployment secret with no default in source. `executeWithdraw` checks it before it decrypts a saved destination, and `requestPayout` checks it again before it writes a row, moves a cent, reserves a hold or calls the rail: no proof, a stale one, or one for another amount or intent is `NOT_AUTHORISED` with nothing touched. Single use through the intent's idempotency. Also: the unused PIN JWT lost its secret default from source.
+- **Guard:** `tests/money-out-safeguards.test.mjs` (the proof's bindings and expiry; fail closed without a secret; the rail refuses and touches nothing; source order proof → row → cent → hold → rail; only `verifyPIN` and `verifyStepUp` issue proofs; no stand-in verifier; both callers pass it); every payout test now carries a real proof (`tests/helpers/pin-proof.mjs`). `docs/GOLDEN_THREAD.md` rules 2.1 to 2.4.
+
+## 111. Lisa's withdrawal timed out at the ID step; her ID and then her PIN went to the AI, which asked for the PIN and said "Your payout is being confirmed now" with nothing sent
+
+- **Symptom (Lisa, account in the name Ruth Mahlangu, 2026-10-15, SAST):** 11:36 "I want to withdraw cash in my account"; by 12:15 the amount (R342 PayShap), the Capitec account, the bank and the name; then "The bank needs your ID number…". She typed her ID at 16:32. The AI answered "Thanks. Now enter your WaPay PIN to confirm the payout 💰"; she typed her PIN at 16:37; the AI answered "Thanks 💰 Your payout is being confirmed now." No pay-out existed, nothing reached OTT, her R350 stayed in her balance, and she waited for money that was never sent. The founder, 2026-10-16: "you can never leak personal information to the AI, ever".
+- **Root cause (four layers):** (1) the 30-minute idle expiry dropped the flow silently and handed its next message to the normal router as new, so an answer to "type your ID" became a free-text turn; (2) the two-tier engine sent the customer's raw text to the model (the agent path redacted, the two-tier did not), so her ID and her PIN reached OpenAI; (3) nothing between the model and the customer stopped a reply that asked for the wallet PIN or said a pay-out was under way; (4) the translator sent our own copy, names and passport numbers included, to the model for customers who chat in another language. Also: a reset-like sentence inside a running PIN reset started a second reset with a second code.
+- **Fix, structural:** (a) the **model boundary** `packages/ai/src/boundary.ts`, the one door for every provider call (two-tier, agent, translator, embeddings): names, phones, e-mails and our own references are tokens before the call and values after; a secret in the customer's message (ID, passport, account number, a PIN bare or named, any 7+ digit run) refuses the call with `AI_PRIVACY_BLOCK`, a deterministic answer and kinds-only logs; a last assertion before the client refuses anything that slipped; names come from a per-message privacy scope opened in `processMessage`. (b) A bare PIN, ID or passport with no step waiting is answered deterministically on both brains (`lib/money-truth.js`), before the agent's budget. (c) The output gate's `PIN_ASK` and `MONEY_CLAIM` rules on both brains: a model never asks for the wallet PIN, and never says a pay-out is under way unless the record has one pending; the replacement says the truth with the balance. (d) The idle-expiry branch: a late answer to a withdrawal's details step carries the flow on, a late YES or PIN is confirmed again and never used, the money read fresh (`resumeLateWithdraw`, 24 hours, `WAPAY_PAYOUT_RESUME_HOURS`); older, it says it stopped; any other flow's late PIN or ID is told the step timed out. (e) "Let's set a new PIN" inside a running reset stays in it. (f) The safeguards' switches on `/api/internal/payout-status` (booleans and numbers only). All of it written into `docs/GOLDEN_THREAD.md`, linked from the constitution and the v1.3 loop.
+- **Guard:** `tests/model-boundary.test.mjs` (her shapes refused; tokens in, values out; the agent's provider never called on a secret; only the four files call a provider), `tests/payout-timeout.test.mjs` (the late answers; her two exact sentences blocked; the reset step), `tests/phase2.test.mjs` and `tests/phase2-review.test.mjs` (both reply sites, the guard order); harness scenario 6f (her path through the real processor, both brains). A read-only scan of every production account's AI context through the boundary: 8 of 8 pass with no refusal, 9 names and 6 references tokenised.
+
 ## 110. A public catalogue route proxied every request to Blu, so a crawler looked like WaPay load testing
 
 - **Symptom (Blue Label, 2026-10-14 morning):** "We have observed unusually high volumes of traffic originating from your credentials" for the night of 13 October, with a request to confirm whether WaPay had run load testing. WaPay's records for the whole window: no vends, no previews, no voucher checks, no inbound chat, no jobs.

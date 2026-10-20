@@ -56,7 +56,10 @@ const nextConfig = {
       '@wapay/whatsapp': require.resolve('./packages/whatsapp/dist/index.js'),
       '@wapay/nlp': require.resolve('./packages/nlp/dist/index.js'),
       '@wapay/ai': require.resolve('./packages/ai/dist/index.js'),
-      '@wapay/auth': require.resolve('./packages/auth/dist/index.js'),
+      // The PIN proof is imported on its own (crypto only, no argon2 or Prisma) by the
+      // money modules; the package root stays an exact match ($) so the subpath resolves (BUGLOG #112).
+      '@wapay/auth/pin-proof': require.resolve('./packages/auth/dist/pin-proof.js'),
+      '@wapay/auth$': require.resolve('./packages/auth/dist/index.js'),
       '@wapay/providers-blu': require.resolve('./packages/providers/blu/dist/index.js'),
       '@wapay/providers-yoyo': require.resolve('./packages/providers/yoyo/dist/index.js'),
     };

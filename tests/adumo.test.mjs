@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 /**
  * Adumo Online rail (lib/adumo.js + routes): the JWT is the only thing that
  * can approve money; the form carries exactly what the hosted page needs;
@@ -29,6 +30,12 @@ test('JWT HS256: round trip, tamper, wrong secret, expiry', () => {
   assert.equal(verifyJwtHs256(none, 's3cret').error, 'BAD_ALG', 'alg=none is never accepted');
   const old = signJwtHs256({ exp: Math.floor(Date.now() / 1000) - 5 }, 's3cret');
   assert.equal(verifyJwtHs256(old, 's3cret').error, 'EXPIRED');
+  // An empty secret verifies nothing, not even a token signed with the empty key (BUGLOG #114).
+  const fh = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const fp = Buffer.from(JSON.stringify({ mref: 'PRABCDEF-1', amount: 38, exp: Math.floor(Date.now() / 1000) + 60 })).toString('base64url');
+  const forged = `${fh}.${fp}.${crypto.createHmac('sha256', '').update(`${fh}.${fp}`).digest('base64url')}`;
+  assert.equal(verifyJwtHs256(forged, '').error, 'NO_SECRET');
+  assert.equal(verifyJwtHs256(forged, undefined).error, 'NO_SECRET');
 });
 
 test('checkout form: staging vs live action, every mandatory field, signed claims match the form', () => {

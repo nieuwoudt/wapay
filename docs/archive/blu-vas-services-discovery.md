@@ -14,7 +14,7 @@
 ### Credentials (QA Environment)
 ```bash
 USERNAME: bld
-PASSWORD: ornuk3i9vseei125s8qea71kub
+PASSWORD: <set in Vercel>
 API_KEY: [PENDING - Need from Blu support]
 ```
 
@@ -354,7 +354,7 @@ Please explore and document:
    - Visit: https://api.qa.bltelecoms.net/swagger-ui.html
    - Login with browser Basic Auth:
      - Username: `bld`
-     - Password: `ornuk3i9vseei125s8qea71kub`
+     - Password: `<set in Vercel>`
    - Look for VAS/Airtime/Data endpoints
    - Take screenshots or copy endpoint details
 

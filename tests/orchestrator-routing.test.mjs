@@ -52,8 +52,10 @@ test('processor free-text path uses orchestrate, not the legacy single call', ()
   // 2026-09-16: gated per CUSTOMER (the pilot allowlist), not the global switch.
   assert.match(
     processorSource,
-    /await orchestrate\(text, contextString, \{\s*knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), capabilityLines: promptLines\(\{ waId: from, account \}\) \}\),\s*withdrawLive: payoutAllowedFor\(from\),\s*\}\)/
+    /await orchestrate\(text, contextString, \{\s*knowledge: buildBrainKnowledge\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), capabilityLines: promptLines\(\{ waId: from, account \}\), scope: launchScope\(from\) \}\),\s*withdrawLive: payoutAllowedFor\(from\),\s*scope: launchScope\(from\),\s*names,\s*\}\)/
   );
+  // 2026-10-16 (BUGLOG #111): the names the record holds go to the model boundary as tokens, never as names.
+  assert.match(processorSource, /const names = privacyNamesFor\(\{ account, pack \}\);\s*addPrivacyNames\(names\);\s*const result = await orchestrate\(/);
   // 2026-09-16: the customer record (pack) rides along for the provenance guard and the policy gate.
   assert.match(processorSource, /dispatchOrchestratorAction\(\{ from, text, account, result, pack \}\)/);
 });
@@ -136,7 +138,9 @@ test('engine: prompts carry the money-truth rules and the honest product list', 
   assert.match(engineSource, /SPEND-ONLY/, 'withdrawals honestly unavailable');
   assert.match(engineSource, /CANNOT be exchanged for cash/, 'the OTT written answer is baked in');
   assert.ok(!/PayShap/.test(engineSource), 'no PayShap cash-out claim survives in prompts');
-  assert.match(engineSource, /R3 fee/, 'send-money fee is stated');
+  // A send is free and moves balance to balance (BUGLOG #117); the model never says who is on WaPay.
+  assert.match(engineSource, /It moves from their WaPay balance to the recipient's WaPay balance, free, R10 to R1000/, 'send-money truth is stated');
+  assert.match(engineSource, /Never say whether a particular number is on WaPay/);
 });
 
 test('engine: all 11 official languages are declared', () => {

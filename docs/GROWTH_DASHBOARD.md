@@ -162,3 +162,119 @@ records its time. Note `/me` for a System User token returns the app-scoped id
 - Ad spend import into the ledger (spend is reported, not booked).
 - A scheduled Claude routine that reads the tab and writes a weekly note: once the
   founder wants it, the route's JSON is the input and this document is the brief.
+
+
+## 7. The live valuation matrix (2026-10-19)
+
+`projectionMatrix` (`lib/scale-model.js`) runs the Scale Model five ways and the growth
+route returns it as `valuation`: **plan** (the 13 September assessment), **measured inputs
+under the plan budget**, **measured inputs under today's spend** (the trailing seven days of
+Meta spend, held flat), **great** and **stop**. A measured input replaces its plan value only
+once its sample reaches 20 (`measuredToInputs`); the matrix lists which were used and how
+many still stand at plan. Each scenario carries accounts, funded, 30-day actives, net
+revenue per month, both valuation frames, cumulative cash at M6, M12, M24 and M36, peak
+funding and the months at which 1k, 10k, 100k and 1m accounts are reached. Model month 1 is
+October 2026. `tests/valuation-matrix.test.mjs` pins the repo model to the artifact's
+great case (M6: 81.6k accounts, 36.8k actives, R920k a month, R265m, R1.11m peak funding,
+1m at M13), so the matrix and the artifact can never disagree.
+
+### 7b. The plan, where we are, and where today's pace leads (2026-10-19, CHANGELOG 95)
+
+`trajectory` (`lib/scale-model.js`) takes the actual counts the growth route reads (onboarded
+accounts, funded accounts, 30-day actives, net revenue over the trailing 30 days, and the
+last seven days and the seven before as accounts, funded and net revenue) and returns, with
+the valuation on both plan frames at each point: **now** (with the launch day; day 1 =
+18 October), **the plan to date** (the plan's month 1 pro rata by launch day), **the plan at
+the horizon** (six months ahead, model month 7 = April 2027), **today's pace held flat** (the
+seven-day rate × 180 days; actives = funded per month at that pace, never below today's),
+**compounding** (only once the prior seven days hold 20 or more accounts, i.e. from
+1 November; week-over-week growth clamped to ±50%, compounded weekly; the revenue multiple's
+growth uplift applied as in `simulate`), and **the model on the measured inputs** (the same
+`simulate` the matrix uses, at month 1 and the horizon). The growth route returns it as
+`valuation.trajectory`; `PlanVsNow` renders it on the Dashboard and Growth tabs above the
+matrix (one fetch feeds both cards). The valuation tile shows the higher of the two frames
+and says when it is the floor. Nothing here is a forecast of behaviour: it is arithmetic on
+the last seven days, labelled as such, next to the plan and the model.
+
+## 8. Operator alerts (2026-10-19)
+
+`lib/ops-alerts.js`: `opsMoneyIn` after a non-replayed card credit (PayFast ITN and Adumo
+settlement) and `opsPayoutDone` after a pay-out settles. The text is aggregates only:
+amount and source class, customer balances and wallets at or above R20, the live OTT
+pay-out float (`lib/payout-float.js`, 60-second cache) with cover over balances and days
+at the week's pay-out pace, the warn level, open links and today's pay-outs. Recipients
+`WAPAY_OPS_ALERT_MSISDNS`; delivery through `notifyCustomer` (text inside the window, the
+direct rail or `WAPAY_TEMPLATE_OPS_ALERT` outside it). Once per event via ProcessedMessage.
+
+**The person alert (CHANGELOG 95).** The third-tier withdraw e-mail (`stuckAlert` in
+`lib/payout-gate.js`, sent through `ALERT_EMAIL`) now has a WhatsApp twin: `opsPersonAlert`
+sends the same content (account id, masked WhatsApp tail, display name, usable balance,
+the smallest withdrawal, the situation lines, what to do) to `WAPAY_OPS_ALERT_MSISDNS`,
+once per account and day. The chat tells the customer a person was asked when either
+channel arrived. A reply to that WhatsApp reaches the bot, not the customer: answer them
+from the business inbox.
+
+**Answering a customer by hand (CHANGELOG 96).** When the person alert names an account,
+reply inside the customer's own chat with the ops route, which sends through `lib/say.js`
+so the chat remembers what was said:
+
+```
+curl -X POST -H "x-internal-api-key: $KEY" -H "content-type: application/json" \
+  -d '{"accountId":"<account id from the alert>","text":"Hi ..., this is the WaPay team ..."}' \
+  https://wapay-api.vercel.app/api/internal/ops-reply
+```
+
+Text only, one message of up to 1,500 characters, inside the customer's 24-hour window
+(the route answers 409 `WINDOW_CLOSED` otherwise; `?force=1` overrides for a number known
+to be reachable). It is not a bulk rail: one account per call, the account id must exist.
+
+## 9. Payment links, the viral loop, the path, the refresh and the reply box (2026-10-19, CHANGELOG 97)
+
+- **Links** (`links` in `/api/admin/metrics`): every `payment_requests` row, bucketed into
+  created (all time and in the period), paid (from a balance when `payerRef` starts with
+  `WAPAY:`, otherwise by card or EFT), open (PENDING and not expired) and lapsed. Fees at
+  today's schedule (`paymentRequestFeeCents`); the margin after the card rail uses PayFast's
+  credit-card cost (R2.00 + 3.2% ex VAT); the withdrawal line uses the PayShap fee from
+  `cashoutFeeCents` and OTT's R2.88 incl VAT cost. Both are "if every open link" figures,
+  labelled so.
+- **Viral** (`viral`): accounts with `profile.acquisitionSource = 'paylink'` (stamped at
+  creation when a payer's number is captured), their share of all accounts, distinct
+  `referrerAccountId` senders, and `capturedPayers` (payers with no account yet).
+- **The path** (`PathChart`, both tabs): the cumulative account series is anchored on today's
+  total and walked back through the growth route's `daily.onboarded`, so it is exact for any
+  window; the projection carries the seven-day pace forward (`trajectory.perDay`), the
+  compounding line appears with `weeklyGrowth`, the ring is the plan at the horizon. Log scale.
+  **The valuation path** (`ValuationPath`) runs the plan's `simulate` in the browser (the same
+  model library the matrix uses) and draws today's pace held flat beside it.
+- **Refresh:** `REFRESH_MS` (ten minutes) re-reads metrics and growth on both tabs; the Growth
+  read passes `refresh=1`, which the route throttles to one Meta read per ten minutes.
+- **Reply box** (`ReplyBox`, customer profile): `POST /api/admin/ops-reply { accountId, text }`
+  with the admin session (the internal key also works), one text of up to 1,500 characters
+  inside the customer's 24-hour window, sent through `lib/say.js`.
+- **Flags** (`GET /api/internal/flags`, internal key): commit, business question, launch hold,
+  every switch, fuel, withdrawals, ops-alert recipient count, business invites. Use it to
+  verify a Vercel env change after the redeploy.
+
+## 10. Six tabs, the inbox and the conversation on every profile (2026-10-19, CHANGELOG 100)
+
+- **Tabs:** `TABS` in `pages/admin/index.js`; `?tab=` and `?customer=` deep links; the Growth
+  tab is called Valuation Metrics. Health carries `OpsHealth`, `AuditPanel` (reads
+  `/api/admin/audit`, shows "being built" until the daily audit's first run), the agent card and
+  `PayoutBooks`; Supplier Floats carries `FloatTile`, `Floats` and `UniFuelPanel`.
+- **Refresh:** every tab's ↻ bumps a `tick` that re-runs its fetches; the ten-minute interval does
+  the same; `FloatTile` takes the tick so the live supplier read (cached about a minute server-side)
+  is re-read too.
+- **Period tiles:** `vitals.period` in `/api/admin/metrics` carries money in, pay-outs and links
+  paid since the range start; the 1-day range shows `vitals.today` (South African day).
+- **Links over time:** `links.daily` (per day: created, paid, open at the end of the day, and the
+  cumulative fee outlook: card fee, PayShap pay-out fees, cash pay-out fees over every link made
+  so far). The page draws two `DailyLines` from it.
+- **The path:** `pathSeries` is all time (cumulative accounts per day from the first onboarding);
+  `PathChart` is linear with the pace projection and the plan point. `ValuationPath` adds the
+  measured-inputs curve (`simulate` on `measuredUsed`) and hover titles. `InsightBox` is rules,
+  not a model: `insightFrom(v, t)`.
+- **Inbox and conversations:** `summariseTurns` (`lib/inbox.js`) derives unanswered (last turn is
+  theirs and older than ten minutes), gate tier and person-asked from the stored `refs`, close
+  asks from the matcher, replies from kind `ops`, and the questions (a question mark or a question
+  word). `/api/admin/inbox` reads at most 300 customers and their last day of context;
+  `/api/admin/customer-turns` reads up to 1,000 turns of one account. Neither logs text.

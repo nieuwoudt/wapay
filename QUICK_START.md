@@ -39,7 +39,7 @@ Could you please provide:
 
 Our QA credentials:
 - Username: bld
-- Password: ornuk3i9vseei125s8qea71kub
+- Password: <set in Vercel>
 - Base URL: https://api.qa.bltelecoms.net/v2/api/trade
 
 Thank you!
@@ -58,7 +58,7 @@ WaPay Team
 
 **Quick steps**:
 1. Go to: https://api.qa.bltelecoms.net/swagger-ui.html
-2. Login: `bld` / `ornuk3i9vseei125s8qea71kub`
+2. Login: `bld` / `<set in Vercel>`
 3. Look for: "Airtime", "Data", "VAS" sections
 4. Document: Endpoint paths, request/response formats
 5. Share with me!

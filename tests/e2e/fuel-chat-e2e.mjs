@@ -18,6 +18,7 @@ if (!/schema=wapay_qa_e2e_v13/.test(process.env.DATABASE_URL || '')) {
 }
 process.env.APP_BASE_URL = 'http://localhost:3400';
 process.env.WAPAY_INTERNAL_API_KEY = 'e2e-internal-key';
+process.env.WAPAY_LAUNCH_HOLD = 'off'; // the master hold (2026-10-18) would otherwise keep fuel off in-process
 process.env.WAPAY_WICODE_LIVE = 'true';
 process.env.UNIFUEL_API_BASE_URL = 'http://localhost:3300';
 process.env.UNIFUEL_PARTNER_SECRET = 'wapay-e2e-secret-491a1a32';
@@ -27,6 +28,8 @@ mock.module('@wapay/whatsapp', {
   namedExports: {
     sendWhatsAppText: async ({ to, text }) => { outbox.push({ to, text }); return { ok: true }; },
     sendWhatsAppTemplate: async ({ to, name }) => { outbox.push({ to, text: `[template:${name}]` }); return { ok: true }; },
+    sendWhatsAppReplyButtons: async ({ to, bodyText, buttons }) => { outbox.push({ to, text: `${bodyText}\n${(buttons || []).map((b) => `[${b.title}]`).join(' ')}` }); return { ok: true }; },
+    buildReplyButtonsPayload: (a) => a,
     sendWhatsAppCtaUrl: async ({ to, bodyText, url }) => { outbox.push({ to, text: `${bodyText}\n[button -> ${url}]` }); return { ok: true }; },
     seedWhatsappTemplates: async () => ({}),
     buildCatalog: async () => ({}),
@@ -59,20 +62,15 @@ const wallet = async () => {
 console.log('LEG A: coming-soon gate');
 process.env.WAPAY_WICODE_LIVE = 'false';
 {
-  // Both the raw flag map AND the derived config are computed at import
-  // time — flip both for this in-process leg (prod flips via env+deploy).
-  const { VAS_LIVE, VAS_CATEGORY_CONFIG } = await import('../../lib/vas-config.js');
-  VAS_LIVE.FUEL = false;
-  VAS_CATEGORY_CONFIG.FUEL.enabled = false;
+  // Since 2026-10-18 the flag map reads process.env at call time (lib/vas-config.js),
+  // so the env flip above is the whole in-process switch.
   const a = await say('buy fuel');
   ok(/coming/i.test(a), 'flag off: "buy fuel" gets the coming-soon reply');
   const home = await say('hi');
-  ok(/Fuel vouchers\*?: coming soon/i.test(home), 'home screen teases fuel as coming soon');
+  ok(/Coming soon\*?:.*fuel vouchers/i.test(home), 'home screen names fuel as coming soon');
   // The same turn may legitimately deliver a leftover claimable wiCode from
   // the money E2E — only the purchase FLOW must not start.
   ok(!/Confirm Fuel Voucher|Enter Your PIN|How much fuel/i.test(a), 'flag off: no purchase flow starts');
-  VAS_LIVE.FUEL = true;
-  VAS_CATEGORY_CONFIG.FUEL.enabled = true;
 }
 process.env.WAPAY_WICODE_LIVE = 'true';
 

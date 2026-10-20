@@ -128,7 +128,7 @@ DATABASE_URL=postgresql://postgres:PASSWORD@db.xxx.supabase.co:5432/postgres
 # Blu Voucher
 BLU_BASE_URL=https://blu-qa.example.com
 BLU_BASIC_USER=bld
-BLU_BASIC_PASS=ornuk3i9vseei125s8qea71kub
+BLU_BASIC_PASS=<set in Vercel>
 BLU_API_KEY=your-api-key-here
 
 # Blu VAS

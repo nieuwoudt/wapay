@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 import { requestPayout, reconcilePayout, reconcilePendingPayouts, reconcileInitPayout, sweepPayoutsAndNotify, getLatestPayout, payoutOutcomeMessage, payoutReference } from '../lib/payouts.js';
 import { matchDepositStatusRequest } from '../lib/deposits.js';
+import { proofFor } from './helpers/pin-proof.mjs';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
@@ -86,7 +87,7 @@ function client(perform, statusScript) {
   };
 }
 async function parked({ prisma, ledger, c, intentId = 'intent-7000' }) {
-  const r = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId, method: 'PAYSHAP', amountCents: 5000, recipient, providers });
+  const r = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId, method: 'PAYSHAP', amountCents: 5000, recipient, providers, authorization: proofFor(kycd, { intentId: intentId, amountCents: 5000 }) });
   assert.equal(r.status, 'PENDING');
   return r;
 }
@@ -340,7 +341,7 @@ test('sweepPayoutsAndNotify reconciles PENDING + INIT rows and tells each finali
 
 test('static: the cron route is cron/secret/internal-key gated, calls the sweep, never a pay-out; daily-vas-sync sweeps best-effort', () => {
   const cron = read('../pages/api/cron/payout-reconcile.js');
-  assert.match(cron, /x-vercel-cron'\] === '1'/); assert.match(cron, /process\.env\.CRON_SECRET && key === process\.env\.CRON_SECRET/);
+  assert.match(cron, /import \{ isCronAuthed \} from '..\/..\/..\/lib\/cron-auth.js'/); assert.doesNotMatch(cron, /x-vercel-cron|query\?\.key/);
   assert.match(cron, /requireInternalAuth\(req, res\)/); assert.match(cron, /import \{ requireInternalAuth \} from '\.\.\/\.\.\/\.\.\/lib\/internal-auth\.js'/);
   assert.match(cron, /if \(!isAuthed\(req, res\)\) return;/);
   assert.match(cron, /await sweepPayoutsAndNotify\(\{ olderThanMs, initOlderThanMs, limit \}\)/);

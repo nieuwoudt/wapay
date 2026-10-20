@@ -43,7 +43,7 @@ const { deliverRequestPaidNotifications } = await import('../../lib/request-noti
 
 const OWNER = { waId: '27600000911', msisdn: '0600000911', displayName: 'Lerato (QA owner)' };
 const PAYER = { waId: '27600000912', msisdn: '0600000912', displayName: 'Thabo (QA payer)' };
-const PASSWORD = 'laundry-portal-2026';
+const PASSWORD = 'test-laundry-portal-2026';
 const results = [];
 const step = async (name, fn) => {
   try { await fn(); results.push(['PASS', name]); console.log(`✔ ${name}`); } catch (e) { results.push(['FAIL', name, e.message]); console.log(`✖ ${name}\n   ${e.message}`); }

@@ -241,7 +241,7 @@ Response:
 1. Go to: https://api.qa.bltelecoms.net/swagger-ui.html
 2. Login with:
    - Username: `bld`
-   - Password: `ornuk3i9vseei125s8qea71kub`
+   - Password: `<set in Vercel>`
 3. Look for sections like:
    - "Airtime Controller"
    - "Data Controller"

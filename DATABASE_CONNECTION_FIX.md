@@ -110,8 +110,8 @@ If your password has special characters like `@`, `#`, `%`, etc., they must be U
 - `%` becomes `%25`
 
 Example:
-- Password: `MyP@ss#123`
-- Encoded: `MyP%40ss%23123`
+- Password: `your@pass#word`
+- Encoded: `your%40pass%23word`
 
 ### Issue 3: Wrong Database Name
 Make sure the database name at the end is correct:

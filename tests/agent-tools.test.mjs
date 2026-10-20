@@ -24,6 +24,13 @@ import { TOPICS } from '../lib/how-it-works.js';
 const TOOLS_DIR = fileURLToPath(new URL('../lib/agent/tools/', import.meta.url));
 const PILOT = '27787051175';
 const OTHER = '27600000001';
+// Launch scope (2026-10-18): the prepaid and voucher switches, on, for the tests written for the pre-launch world.
+const LAUNCH_ON = { VAS_LIVE_AIRTIME: 'true', VAS_LIVE_DATA: 'true', VAS_LIVE_ELECTRICITY: 'true', VAS_LIVE_BLU_LOAD: 'true', VAS_LIVE_OTT_VOUCHER: 'true', WAPAY_LAUNCH_HOLD: 'off' };
+function setLaunch(on) {
+  const prev = {};
+  for (const [k, v] of Object.entries(LAUNCH_ON)) { prev[k] = process.env[k]; if (on) process.env[k] = v; else delete process.env[k]; }
+  return () => { for (const [k, v] of Object.entries(prev)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } };
+}
 const NOW = new Date('2026-09-16T10:00:00Z'); // 12:00 SAST
 
 function withEnv(env, fn) {
@@ -149,7 +156,7 @@ function assertStrict(schema, path) {
 }
 
 test('every tool definition is an OpenAI strict function tool', () => {
-  const defs = withEnv({ WAPAY_PAYOUT_ENABLED: 'true', WAPAY_PAYOUT_ALLOWLIST: undefined, WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: undefined },
+  const defs = withEnv({ ...LAUNCH_ON, WAPAY_PAYOUT_ENABLED: 'true', WAPAY_PAYOUT_ALLOWLIST: undefined, WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: undefined, WAPAY_LAUNCH_HOLD: 'off' },
     () => buildToolDefinitions({ waId: PILOT, account: ACCOUNT }));
   assert.ok(defs.length >= READ_TOOLS.length + PROPOSAL_TOOLS.length + 2);
   for (const d of defs) {
@@ -178,7 +185,7 @@ test('read tools are always offered and the reply tool always present; the how_i
 });
 
 test('tool text never carries a betting word, an em dash or the pay-out partner name', () => {
-  const text = JSON.stringify(withEnv({ WAPAY_PAYOUT_ENABLED: 'true', WAPAY_WICODE_LIVE: 'true' }, () => buildToolDefinitions({ waId: PILOT })));
+  const text = JSON.stringify(withEnv({ WAPAY_PAYOUT_ENABLED: 'true', WAPAY_WICODE_LIVE: 'true', WAPAY_LAUNCH_HOLD: 'off' }, () => buildToolDefinitions({ waId: PILOT })));
   assert.doesNotMatch(text, /\b(bet|betting|wager|casino|odds|gamble|hollywoodbets|betway|supabets)\b/i);
   assert.doesNotMatch(text, /[—–]/);
 });
@@ -204,18 +211,31 @@ test('start_fuel is offered only when wiCode is live and the fuel allowlist pass
   withEnv({ WAPAY_WICODE_LIVE: undefined, VAS_ALLOWLIST_FUEL: undefined }, () => {
     assert.ok(!names(buildToolDefinitions({ waId: PILOT })).includes('start_fuel'));
   });
-  withEnv({ WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: PILOT }, () => {
+  withEnv({ WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: PILOT, WAPAY_LAUNCH_HOLD: 'off' }, () => {
     assert.ok(names(buildToolDefinitions({ waId: PILOT })).includes('start_fuel'));
     assert.ok(!names(buildToolDefinitions({ waId: OTHER })).includes('start_fuel'));
   });
-  withEnv({ WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: undefined }, () => {
+  withEnv({ WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: undefined, WAPAY_LAUNCH_HOLD: 'off' }, () => {
     assert.ok(names(buildToolDefinitions({ waId: OTHER })).includes('start_fuel'));
   });
 });
 
 test('the always-live proposals are offered to every customer', () => {
   const seen = names(withEnv({ WAPAY_PAYOUT_ENABLED: undefined, WAPAY_WICODE_LIVE: undefined }, () => buildToolDefinitions({ waId: OTHER })));
-  for (const n of ['start_send', 'start_pay_link', 'start_deposit', 'start_voucher_load', 'show_home', 'show_help']) assert.ok(seen.includes(n), n);
+  for (const n of ['start_send', 'start_pay_link', 'start_deposit', 'show_home', 'show_help']) assert.ok(seen.includes(n), n);
+});
+
+test('launch scope (2026-10-18): the prepaid and voucher-load proposals follow their switches', () => {
+  const restore = setLaunch(false);
+  try {
+    const off = names(buildToolDefinitions({ waId: OTHER }));
+    for (const n of ['start_buy_airtime', 'start_buy_data', 'start_buy_electricity', 'start_voucher_load']) assert.ok(!off.includes(n), `${n} off by default`);
+    assert.ok(off.includes('start_send'), 'send money stays live');
+  } finally { restore(); }
+  const on = names(withEnv({ ...LAUNCH_ON }, () => buildToolDefinitions({ waId: OTHER })));
+  for (const n of ['start_buy_airtime', 'start_buy_data', 'start_buy_electricity', 'start_voucher_load']) assert.ok(on.includes(n), `${n} on with the switch`);
+  const tester = names(withEnv({ VAS_LIVE_AIRTIME: 'true', VAS_ALLOWLIST_AIRTIME: PILOT, WAPAY_LAUNCH_HOLD: 'off' }, () => buildToolDefinitions({ waId: OTHER })));
+  assert.ok(!tester.includes('start_buy_airtime'), 'a tester allowlist keeps everyone else out');
 });
 
 test('the same registry state yields byte-identical definitions across turns', () => {
@@ -370,7 +390,7 @@ test('get_pay_links returns the open links and the recent settled ones from the 
 test('how_it_works answers from the knowledge base with the per-customer gates, and refuses an unknown topic', async () => {
   const off = await withEnv({ WAPAY_WICODE_LIVE: undefined }, () => executeTool({ name: 'how_it_works', args: { topic: 'fuel' }, ctx: { waId: PILOT } }));
   assert.match(off.result.text, /coming to WaPay soon/);
-  const on = await withEnv({ WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: undefined }, () => executeTool({ name: 'how_it_works', args: { topic: 'fuel' }, ctx: { waId: PILOT } }));
+  const on = await withEnv({ WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: undefined, WAPAY_LAUNCH_HOLD: 'off' }, () => executeTool({ name: 'how_it_works', args: { topic: 'fuel' }, ctx: { waId: PILOT } }));
   assert.match(on.result.text, /say "buy fuel"/);
   const withdraw = await withEnv({ WAPAY_PAYOUT_ENABLED: undefined }, () => executeTool({ name: 'how_it_works', args: { topic: 'withdraw' }, ctx: { waId: PILOT } }));
   assert.equal(withdraw.ok, true);
@@ -470,7 +490,9 @@ test('start_withdraw proposes WITHDRAW with the amount and method the customer n
   assert.deepEqual(closed, { ok: false, error: 'NOT_LIVE' });
 });
 
-test('every proposal tool maps to its action and normalises slots the way the dispatcher validates', async () => {
+test('every proposal tool maps to its action and normalises slots the way the dispatcher validates', async (t) => {
+  const restore = setLaunch(true);
+  t.after(restore);
   const ctx = { waId: PILOT, account: ACCOUNT };
   const expect = {
     start_buy_airtime: 'BUY_AIRTIME', start_buy_data: 'BUY_DATA', start_buy_electricity: 'BUY_ELECTRICITY', start_send: 'SEND_VOUCHER',
@@ -496,7 +518,9 @@ test('every proposal tool maps to its action and normalises slots the way the di
   assert.equal(elec.proposal.slots.meterNumber, '012345678901');
 });
 
-test('start_voucher_load never carries a PIN, and no proposal accepts a secret argument', async () => {
+test('start_voucher_load never carries a PIN, and no proposal accepts a secret argument', async (t) => {
+  const restore = setLaunch(true);
+  t.after(restore);
   const ctx = { waId: PILOT, account: ACCOUNT };
   const out = await executeTool({ name: 'start_voucher_load', args: { pin: '1234567890123456', voucherPin: '1234', code: '9999' }, ctx });
   assert.equal(out.ok, true);

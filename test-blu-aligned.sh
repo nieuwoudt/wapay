@@ -12,8 +12,8 @@ echo ""
 # Configuration
 BLU_BASE_URL="${BLU_BASE_URL:-https://api.qa.bltelecoms.net/v2/trade}"
 BLU_USER="${BLU_USER:-bld}"
-BLU_PASS="${BLU_PASS:-ornuk3i9vseei125s8qea71kub}"
-BLU_API_KEY="${BLU_API_KEY:-6b58e8ca-1564-462f-8481-c9f39b258a15}"
+BLU_PASS="${BLU_PASS:?export BLU_PASS first (value in Vercel)}"
+BLU_API_KEY="${BLU_API_KEY:?export BLU_API_KEY first (value in Vercel)}"
 
 # Test voucher PINs from Blu (replace with actual test PINs)
 TEST_PIN_1="${TEST_PIN_1:-8078880588211693}"

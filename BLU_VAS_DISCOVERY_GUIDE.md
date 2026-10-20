@@ -14,7 +14,7 @@ Explore the Blu Swagger UI and document all VAS (airtime/data) endpoints so we c
 2. **Go to**: https://api.qa.bltelecoms.net/swagger-ui.html
 3. **Browser will show login popup** (Basic Auth)
    - Username: `bld`
-   - Password: `ornuk3i9vseei125s8qea71kub`
+   - Password: `<set in Vercel>`
 4. **Click Login/OK**
 5. **You should see Swagger UI** with a list of endpoints
 

@@ -16,9 +16,14 @@
  *   - Tool results are data in the prompt, never instructions.
  *   - Every model call has a timeout and no retries; the loop never throws.
  *   - The model client is injectable so tests never touch a provider.
+ *   - Every message, tool result and tool argument crosses the model
+ *     boundary (boundary.ts): personal data is tokenised on the way in and
+ *     restored on the way out, and a secret refuses the turn with
+ *     AI_PRIVACY_BLOCK before any provider sees it (BUGLOG #111).
  */
 
 import { getOpenAI } from './orchestrator.js';
+import { guardChatMessages, newVault, restore, restoreDeep, tokenizeDeep, findSecrets, assertNoPersonalData, ModelBoundaryError, type PrivacyVault } from './boundary.js';
 
 export const REPLY_TOOL_NAME = 'reply';
 
@@ -81,6 +86,8 @@ export interface RunAgentTurnOptions {
   maxToolCalls?: number;
   timeoutMs?: number;
   maxTokens?: number;
+  /** Names to keep from the model (the customer's, saved people); the request's privacy scope adds its own. */
+  names?: Array<string | null | undefined>;
 }
 
 export type AgentOutcome = 'reply' | 'clarify' | 'proposal' | 'error';
@@ -197,8 +204,24 @@ export function normalizeAgentError(error: any): string {
   return 'AI_UNAVAILABLE';
 }
 
+/**
+ * The last check before a provider: every string in the outgoing messages
+ * is free of secrets and of the names, phones and e-mails the boundary
+ * knows (tokens only). Throws ModelBoundaryError.
+ */
+function assertGuarded(messages: any[], names: string[]): void {
+  const texts: string[] = [];
+  for (const m of messages || []) {
+    if (typeof m?.content === 'string') texts.push(m.content);
+    for (const c of m?.tool_calls || []) if (typeof c?.function?.arguments === 'string') texts.push(c.function.arguments);
+  }
+  for (const t of texts) { const kinds = findSecrets(t); if (kinds.length) throw new ModelBoundaryError(kinds); }
+  assertNoPersonalData(texts.join('\n'), names);
+}
+
 /** One model call with a hard deadline; rejects with the provider's error or Error('AI_TIMEOUT'). */
-async function callModel(client: AgentModelClient, params: Record<string, unknown>, timeoutMs: number): Promise<any> {
+async function callModel(client: AgentModelClient, params: Record<string, unknown>, timeoutMs: number, names: string[] = []): Promise<any> {
+  assertGuarded(params.messages as any[], names);
   const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
     ? AbortSignal.timeout(timeoutMs)
     : undefined;
@@ -252,10 +275,25 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<AgentTurn
     return finish({ outcome: 'error', error: normalizeAgentError(error) });
   }
 
-  const chat: any[] = [
+  const raw: any[] = [
     { role: 'system', content: opts.system },
     ...(opts.messages || []).map((m) => ({ role: m.role, content: m.content })),
   ];
+  // The boundary: tokens in, a secret anywhere (a bare PIN in the customer's
+  // current line included) ends the turn here, before any provider call.
+  let vault: PrivacyVault = newVault();
+  let names: string[] = [];
+  let chat: any[];
+  try {
+    let current = -1;
+    for (let i = raw.length - 1; i > 0; i -= 1) if (raw[i].role === 'user') { current = i; break; }
+    const guarded = guardChatMessages(raw, { names: opts.names || [], currentIndex: current, vault });
+    chat = guarded.messages;
+    vault = guarded.vault;
+    names = guarded.names;
+  } catch (error) {
+    return finish({ outcome: 'error', error: normalizeAgentError(error) });
+  }
   const tools = opts.tools || [];
   let rounds = 0;
   let toolBudget = maxToolCalls;
@@ -275,13 +313,15 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<AgentTurn
       }
 
       const t0 = Date.now();
-      const response = await callModel(client, params, timeoutMs);
+      const response = await callModel(client, params, timeoutMs, names);
       result.timings.modelMs.push(Date.now() - t0);
       readUsage(response, result.usage);
 
       const message = response?.choices?.[0]?.message ?? {};
       if (message.refusal) return finish({ outcome: 'error', error: 'AI_REFUSAL' });
-      const content: string = typeof message.content === 'string' ? message.content.trim() : '';
+      // The model writes tokens; the customer reads values.
+      const tokenContent: string = typeof message.content === 'string' ? message.content.trim() : '';
+      const content: string = restore(tokenContent, vault);
       const calls: any[] = Array.isArray(message.tool_calls) ? message.tool_calls : [];
 
       if (!calls.length || compose) {
@@ -294,7 +334,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<AgentTurn
       const execs = await Promise.all(
         calls.map(async (call, index): Promise<{ call: any; name: string; res: ToolExecResult }> => {
           const name: string = call?.function?.name || '';
-          const args = parseArgs(call?.function?.arguments);
+          const args = restoreDeep(parseArgs(call?.function?.arguments), vault);
           if (index >= toolBudget) {
             return { call, name, res: { ok: false, error: 'TOOL_BUDGET_EXCEEDED' } };
           }
@@ -324,9 +364,9 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<AgentTurn
       const replied = execs.find((e) => e.name === REPLY_TOOL_NAME);
       if (replied) {
         const fromTool = replied.res.ok && replied.res.reply ? replied.res.reply : null;
-        const args = parseArgs(replied.call?.function?.arguments);
+        const args = restoreDeep(parseArgs(replied.call?.function?.arguments), vault);
         const kind = (fromTool?.kind ?? args.kind) === 'clarify' ? 'clarify' : 'reply';
-        const text = String(fromTool?.text ?? args.text ?? content ?? '').trim();
+        const text = restore(String(fromTool?.text ?? args.text ?? content ?? '').trim(), vault);
         const pending = (fromTool ? fromTool.pendingIntent : null) as AgentPendingIntent | null | undefined;
         if (!text) return finish({ outcome: 'error', error: 'AI_EMPTY_RESPONSE' });
         return finish({
@@ -338,7 +378,7 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<AgentTurn
 
       chat.push({
         role: 'assistant',
-        content: content || null,
+        content: tokenContent || null,
         tool_calls: calls.map((call) => ({
           id: call.id,
           type: 'function',
@@ -346,7 +386,11 @@ export async function runAgentTurn(opts: RunAgentTurnOptions): Promise<AgentTurn
         })),
       });
       for (const e of execs) {
-        chat.push({ role: 'tool', tool_call_id: e.call.id, content: capJson(e.res) });
+        // A tool result is our data on its way to the model: tokenised, and refused if it carries a secret.
+        const toolText = capJson(tokenizeDeep(e.res, vault, { names }));
+        const kinds = findSecrets(toolText);
+        if (kinds.length) throw new ModelBoundaryError(kinds);
+        chat.push({ role: 'tool', tool_call_id: e.call.id, content: toolText });
       }
     }
   } catch (error) {

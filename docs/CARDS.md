@@ -182,6 +182,82 @@ To confirm for the virtual card:
 - **What we need to read their API.** Allow `paycentral.co.za`, `help.paycentral.co.za` and
   `api.paycentral.co.za` in this environment's network settings, or paste the API reference.
 
+### 0.8 The NDA and the product deck (2026-10-20)
+
+PayCentral sent its standard NDA and its "Full Product Deck 2026". They told the founder WaPay
+can start issuing virtual and physical cards whenever it is ready. Neither document is in the
+repo: the filled NDA stays with the founder.
+
+**NDA (8 pages, mutual): signable.** WaPay's details were filled in on 2026-10-20:
+- **Clause 1.2:** WAPAY Proprietary Limited, registration 2025/759220/07.
+- **Clause 12.2.2:** arbitration in Johannesburg.
+- **Clause 13.1:** WeWork, 80 Strand Street, Cape Town City Centre, Cape Town, 8001;
+  niev@wapay.co.za; Nieuwoudt Gresse (Director).
+- **Page 8:** WaPay signs in the block labelled "For the Supplier".
+
+The founder signs by hand.
+
+Terms worth knowing:
+- **No commercial strings:** no exclusivity, no non-compete, no non-solicit.
+- **Duration:** obligations last forever (clause 9).
+- **Indemnity:** mutual and uncapped, including attorney-and-client costs (clause 6).
+- **Disputes:** 10 business days to remedy a breach (clause 11), then AFSA arbitration.
+- **Advisors:** information may be shown to advisors on a need-to-know basis (5.2), so counsel
+  can see it.
+- **Changes after signing:** need a handwritten pen signature, never a data message (15.1).
+- **Purpose (3.1):** the template's generic text ("a prepaid card online portal which includes
+  gift cards, virtual cards and international cards") was left unchanged. The definition of
+  Confidential Information (2.2.4) covers anything about the negotiations whatever 3.1 says,
+  so the risk is low. The cover email records our reading: card issuing to WaPay customers
+  and API integration.
+- **Not a POPIA agreement.** No cardholder personal data goes to PayCentral until the main
+  agreement exists.
+- **Our obligation:** reasonable care for their information (5.1, 7.3). That is why the repo
+  went private on 2026-10-20, before any PayCentral pricing or API document arrives.
+
+**Product deck (9 slides).**
+- **Partners:** Standard Bank, Mastercard **and Bank Zero**. Ask which bank issues WaPay's
+  cards.
+- **"Motivate People" range:**
+  - GiftCentral and GiftCentral+ (gift cards);
+  - DigiCentral (virtual);
+  - BeyondCentral (international gift card).
+- **"Pay People" range:**
+  - CashCentral and CashCentral+ (physical, cash at ATMs and selected tills);
+  - FuelCentral, a fuel card. It is worth a look as an alternative to the wiCode fuel product
+    that is still waiting on Yoyo.
+- **Client journey:**
+  1. Onboard through PayCentral's eKYC.
+  2. Order cards against an invoice. Physical cards are dispatched within 48 hours **to the
+     client's door**, so in bulk to WaPay, not to each cardholder.
+  3. Assign each card with the cardholder's details and **ID or passport**, so passport holders
+     can get cards.
+  4. Fund the profile by EFT, then load cards instantly from it.
+
+  This confirms the pre-funded model in 0.2 and 0.3.
+- **Cardholder journey:**
+  - purchases in person or online, local or international depending on the card;
+  - cash at ATMs or tills;
+  - opt-in SMS alerts from PayCentral;
+  - balance and transactions on getmybalance.co.za or the PayCentral app;
+  - PayCentral's own support (phone, after hours, WhatsApp).
+
+  The cardholder therefore sees PayCentral's brand unless those channels can carry WaPay's
+  brand or be switched off.
+- **Not in the deck:** the API, pricing and branding.
+
+**What this adds to the open questions:**
+1. Which bank (Standard Bank or Bank Zero) issues our cards.
+2. Courier to each cardholder for physical cards, or WaPay distributes them.
+3. Whether PayCentral's SMS alerts, app and balance site can be WaPay-branded or switched off.
+4. Who supports WaPay's cardholders: lost cards, disputes, chargebacks.
+
+**Pilot without code (proposed).** Order a few DigiCentral cards in the portal for the founder
+and two or three testers, fund them with company money by EFT, and load them from the portal.
+Then test online purchases, 3DS, the SMS alerts and how card details arrive. No customer
+wallet is involved, so the ledger is untouched. The WhatsApp integration waits for the API
+docs and sandbox.
+
 ---
 
 ## Paymentology direct (2026-10-15; the route at 30,000 cards)

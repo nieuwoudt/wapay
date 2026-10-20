@@ -61,7 +61,7 @@ test('happy path PayShap: menu → 1 → amount → account → bank → confirm
   assert.match(conf.text, /Withdraw \*R200\* to account 62012345678 at FNB by PayShap/); assert.match(conf.text, /Total leaving your balance: \*R208\* \(R200 \+ R8 fee\)/); assert.match(conf.text, /Balance after: \*R792\*/);
   const pin = await handleWithdrawReply({ account: verified, state: 'PAYOUT_CONFIRM', data: conf.data, text: 'yes' });
   assert.equal(pin.state, 'PAYOUT_PIN'); assert.match(pin.text, /PIN/);
-  const done = await executeWithdraw({ account: verified, data: pin.data, deps: d });
+  const done = await executeWithdraw({ account: verified, data: pin.data, pinProof: proofFor(verified, pin.data), deps: d });
   assert.equal(done.done, true); assert.match(done.text, /Done\./); assert.match(done.text, /WPTEST/);
   assert.equal(d.last.intentId, menu.data.intentId, 'the intent minted at the start is the idempotency key');
   assert.equal(d.last.recipient.firstname, 'Lerato'); assert.equal(d.last.recipient.surname, 'Mokoena', 'the KYC name goes to the bank, never a typed one');
@@ -87,17 +87,17 @@ test('bank transfer: account → bank name → confirm; ATM cash: number typed; 
   assert.equal(ok.state, 'PAYOUT_CONFIRM'); assert.equal(ok.data.recipient.mobile, '0821112222'); assert.equal(ok.data.feeCents, 1800);
   assert.equal((await handleWithdrawReply({ account: verified, state: 'PAYOUT_CONFIRM', data: ok.data, text: 'cancel' })).cancelled, true);
   assert.equal((await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: c.data, text: 'stop' })).state, null);
-  const pending = await executeWithdraw({ account: verified, data: ok.data, deps: deps(100000, { ok: true, status: 'PENDING', reference: 'WPPEND', amountCents: 30000, feeCents: 1600, outcome: 'PENDING_FINALISATION' }) });
+  const pending = await executeWithdraw({ account: verified, data: ok.data, pinProof: proofFor(verified, ok.data), deps: deps(100000, { ok: true, status: 'PENDING', reference: 'WPPEND', amountCents: 30000, feeCents: 1600, outcome: 'PENDING_FINALISATION' }) });
   assert.match(pending.text, /In progress\./); assert.match(pending.text, /handed to the bank rail/); assert.match(pending.text, /WPPEND/); assert.ok(!/within minutes/.test(pending.text), 'no time promise (BUGLOG #82)');
   // A transport timeout is not a hand-over: nothing is claimed, the held money is named, no "Sent" (BUGLOG #82).
   for (const outcome of ['TRANSPORT_INDETERMINATE', 'UNKNOWN', 'HTTP_502', undefined]) {
-    const unsure = await executeWithdraw({ account: verified, data: ok.data, deps: deps(100000, { ok: true, status: 'PENDING', reference: 'WPUNK', amountCents: 30000, feeCents: 1600, outcome }) });
+    const unsure = await executeWithdraw({ account: verified, data: ok.data, pinProof: proofFor(verified, ok.data), deps: deps(100000, { ok: true, status: 'PENDING', reference: 'WPUNK', amountCents: 30000, feeCents: 1600, outcome }) });
     assert.match(unsure.text, /could not get confirmation from the bank rail just now/); assert.match(unsure.text, /R300 plus the R16 fee is held, not spent/); assert.match(unsure.text, /WPUNK/);
     assert.ok(!/Sent|handed to the bank rail|within minutes/.test(unsure.text), `nothing claimed for ${outcome}`);
   }
-  const failed = await executeWithdraw({ account: verified, data: ok.data, deps: deps(100000, { ok: false, status: 'FAILED', error: 'INVALID_MOBILE', reference: 'WPX' }) });
+  const failed = await executeWithdraw({ account: verified, data: ok.data, pinProof: proofFor(verified, ok.data), deps: deps(100000, { ok: false, status: 'FAILED', error: 'INVALID_MOBILE', reference: 'WPX' }) });
   assert.match(failed.text, /did not go through/); assert.match(failed.text, /Nothing has left your balance/);
-  const broke = await executeWithdraw({ account: verified, data: ok.data, deps: deps(100000, { ok: false, error: 'INSUFFICIENT_FUNDS', totalCents: 31600 }) });
+  const broke = await executeWithdraw({ account: verified, data: ok.data, pinProof: proofFor(verified, ok.data), deps: deps(100000, { ok: false, error: 'INSUFFICIENT_FUNDS', totalCents: 31600 }) });
   assert.match(broke.text, /no longer have R316/);
 });
 
@@ -111,7 +111,9 @@ test('processor + menu + AI truth follow the switch; the PIN case is the only pa
   assert.deepEqual(matchWithdrawAsk('how do I cash-out R150'), { amountCents: 15000, method: null });
   for (const st of PAYOUT_STATES.filter((x) => x !== 'PAYOUT_PIN')) assert.match(p, new RegExp(`case '${st}':`), st);
   const pinCase = p.slice(p.indexOf("case 'PAYOUT_PIN': {"), p.indexOf("case 'REQUEST_MONEY_AMOUNT': {"));
-  assert.match(pinCase, /verifyPIN\(\{ accountId: account\.id, pin: text\.trim\(\) \}\)/);
+  // A correct PIN returns a proof bound to this intent and amount, and the money call carries it (BUGLOG #112).
+  assert.match(pinCase, /verifyPIN\(\{ accountId: account\.id, pin: text\.trim\(\), approves: \{ intentId: data\?\.intentId, amountCents: data\?\.amountCents \} \}\)/);
+  assert.match(pinCase, /executeWithdraw\(\{ account, data, pinProof: pinResult\.proof \|\| null \}\)/);
   assert.ok(pinCase.indexOf('await updateConversationState(from, null);\n      const { executeWithdraw }') > -1, 'state cleared BEFORE the money call');
   assert.equal((p.match(/executeWithdraw\(/g) || []).length, 1, 'exactly one call site');
   assert.match(p, /state\.startsWith\('PAYOUT'\) \? 'WITHDRAW'/); assert.match(p, /\['WITHDRAW', process\.env\.WAPAY_PAYOUT_ENABLED === 'true' &&/, 'self-contained: the isolated-function tests evaluate it without imports');
@@ -161,7 +163,7 @@ test('a question in the middle of the withdraw flow is answered, then the step r
   const d = deps(10000); // R100 (cash needs R68 since the R50 floor of 2026-10-10)
   const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
   const q1 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: 'If I send someone money, can they withdraw it?' });
-  assert.equal(q1.state, 'PAYOUT_METHOD', 'the flow is parked, not advanced'); assert.match(q1.text, /lands in their WaPay balance and it is free/); assert.match(q1.text, /Back to your withdrawal/); assert.match(q1.text, /1️⃣ \*PayShap\*/);
+  assert.equal(q1.state, 'PAYOUT_METHOD', 'the flow is parked, not advanced'); assert.match(q1.text, /It is free and lands in their WaPay balance/); assert.match(q1.text, /Back to your withdrawal/); assert.match(q1.text, /1️⃣ \*PayShap\*/);
   const q2 = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: 'Does it work when I send cash to an ATM? How do I withdraw the money?' });
   assert.equal(q2.state, 'PAYOUT_METHOD', '"ATM" inside a question is not a menu choice'); assert.match(q2.text, /Here is how it works/);
   const pick = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '3' });
@@ -233,6 +235,7 @@ test('below the minimum: the message names the methods that DO allow the amount,
 // ---------------------------------------------------------------------------
 import { parseCompoundWithdraw, methodFromWords, METHOD_SYNONYMS, cleanFullName, pickSavedDestination, parseSaveAnswer, wantsAnotherFlow } from '../lib/payout-chat.js';
 import { payoutOutcomeMessage } from '../lib/payouts.js';
+import { proofFor } from './helpers/pin-proof.mjs';
 
 const LIVE4 = [
   { method: 'PAYSHAP', providerCode: '127', providerName: 'PayShap Account', minCents: 5000, maxCents: 15000000, requiredFields: ['firstname', 'surname', 'id_number', 'mobile', 'account_number', 'branch_code'] },
@@ -319,15 +322,15 @@ test('the full name is asked once as on the account when KYC has none; the confi
   assert.equal(s3.state, 'PAYOUT_CONFIRM'); assert.match(s3.text, /Name on the account: Nieuwoudt Gresse/); assert.match(s3.text, /ID number: •••087/); assert.ok(!/9001015009087/.test(s3.text), 'the ID number is masked in the confirmation');
   const pin = await handleWithdrawReply({ account: founder, state: s3.state, data: s3.data, text: 'yes' });
   assert.equal(pin.state, 'PAYOUT_PIN');
-  const done = await executeWithdraw({ account: founder, data: pin.data, deps: { ...d, beneficiariesAvailable: () => false } });
+  const done = await executeWithdraw({ account: founder, data: pin.data, pinProof: proofFor(founder, pin.data), deps: { ...d, beneficiariesAvailable: () => false } });
   assert.equal(base.last.recipient.firstname, 'Nieuwoudt'); assert.equal(base.last.recipient.surname, 'Gresse'); assert.equal(base.last.recipient.id_number, '9001015009087');
   assert.match(done.text, /Done\./); assert.match(done.text, /withdrawal code is sent by SMS to •••1175/, 'a cellphone shows four digits (2026-10-12)'); assert.match(done.text, /Cardless services/); assert.match(done.text, /If the SMS does not arrive/);
   assert.equal(done.state, null, 'no save offer while the vault is not configured');
   assert.ok(!/—/.test(done.text), 'no em dashes in customer copy');
   // A bank method says the bank's own app or SMS will show the credit.
-  const bank = await executeWithdraw({ account: verified, data: { method: 'PAYSHAP', amountCents: 5000, intentId: 'wa-x-y', recipient: { account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', mobile: '0731234567', id_number: '9001015009087' } }, deps: { ...deps(), beneficiariesAvailable: () => false } });
+  const bank = await executeWithdraw({ account: verified, data: { method: 'PAYSHAP', amountCents: 5000, intentId: 'wa-x-y', recipient: { account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', mobile: '0731234567', id_number: '9001015009087' } }, pinProof: proofFor(verified, { method: 'PAYSHAP', amountCents: 5000, intentId: 'wa-x-y', recipient: { account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', mobile: '0731234567', id_number: '9001015009087' } }), deps: { ...deps(), beneficiariesAvailable: () => false } });
   assert.match(bank.text, /straight into your bank account\. Your bank's own app or SMS will show the credit/);
-  const pend = await executeWithdraw({ account: verified, data: { method: 'PAYSHAP', amountCents: 5000, intentId: 'wa-x-z', recipient: { account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', mobile: '0731234567', id_number: '9001015009087' } }, deps: { ...deps(100000, { ok: true, status: 'PENDING', reference: 'WPPEND', amountCents: 5000, feeCents: 800, outcome: 'PENDING_FINALISATION' }), beneficiariesAvailable: () => false } });
+  const pend = await executeWithdraw({ account: verified, data: { method: 'PAYSHAP', amountCents: 5000, intentId: 'wa-x-z', recipient: { account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', mobile: '0731234567', id_number: '9001015009087' } }, pinProof: proofFor(verified, { method: 'PAYSHAP', amountCents: 5000, intentId: 'wa-x-z', recipient: { account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', mobile: '0731234567', id_number: '9001015009087' } }), deps: { ...deps(100000, { ok: true, status: 'PENDING', reference: 'WPPEND', amountCents: 5000, feeCents: 800, outcome: 'PENDING_FINALISATION' }), beneficiariesAvailable: () => false } });
   assert.match(pend.text, /In progress\./); assert.match(pend.text, /bank's own app or SMS as well/); assert.ok(!/within minutes/.test(pend.text));
   // The finalisers say the same thing later (webhook / sweep): paid carries the collection steps, failed does not.
   const later = payoutOutcomeMessage({ status: 'SETTLED', method: 'NEDCASH', amountCents: 2000, reference: 'WPX', recipient: { mobile: '•••175' } });
@@ -344,7 +347,7 @@ test('save for next time: offered only after an accepted pay-out with typed deta
     saveIdentity: async (a) => { calls.push(['id', a.fullName, a.idNumber]); return { ok: true, idLast3: '087' }; },
   };
   const data = { method: 'NEDCASH', amountCents: 2000, intentId: 'wa-a-b', options: OPTS4, balanceCents: 15200, recipient: { mobile: '0787051175', fullName: 'Nieuwoudt Gresse', id_number: '9001015009087' } };
-  const done = await executeWithdraw({ account: founder, data, deps: d });
+  const done = await executeWithdraw({ account: founder, data, pinProof: proofFor(founder, data), deps: d });
   assert.equal(done.state, 'PAYOUT_SAVE'); assert.match(done.text, /Done\./); assert.match(done.text, /💾 Save these details for next time \(Cellphone •••1175 and your name and ID number ending 087\)\? Reply \*YES\*, or give them a name like "mine" or "mother"/); assert.match(done.text, /stored encrypted/); assert.match(done.text, /"forget my bank details"/);
   assert.ok(!/9001015009087|0787051175/.test(done.text), 'nothing full in the offer');
   assert.equal(done.data.saveDestination, true); assert.equal(done.data.saveIdentity, true);
@@ -356,11 +359,11 @@ test('save for next time: offered only after an accepted pay-out with typed deta
   const other = await handleWithdrawReply({ account: founder, state: 'PAYOUT_SAVE', data: done.data, text: 'buy R20 airtime', deps: d });
   assert.deepEqual(other, { state: null, passthrough: true }, 'anything else is answered as a new message, nothing kept');
   // Not offered: after a failure, when the vault is off, or when the destination was a saved one.
-  const failed = await executeWithdraw({ account: founder, data, deps: { ...d, requestPayout: async () => ({ ok: false, status: 'FAILED', error: 'PROVIDER_FAILURE', reference: 'WPF' }) } });
+  const failed = await executeWithdraw({ account: founder, data, pinProof: proofFor(founder, data), deps: { ...d, requestPayout: async () => ({ ok: false, status: 'FAILED', error: 'PROVIDER_FAILURE', reference: 'WPF' }) } });
   assert.equal(failed.state, null); assert.ok(!/Save these details/.test(failed.text));
-  const pending = await executeWithdraw({ account: founder, data, deps: { ...d, requestPayout: async (a) => ({ ok: true, status: 'PENDING', reference: 'WPP', amountCents: a.amountCents, feeCents: 1800, outcome: 'PENDING_FINALISATION' }) } });
+  const pending = await executeWithdraw({ account: founder, data, pinProof: proofFor(founder, data), deps: { ...d, requestPayout: async (a) => ({ ok: true, status: 'PENDING', reference: 'WPP', amountCents: a.amountCents, feeCents: 1800, outcome: 'PENDING_FINALISATION' }) } });
   assert.equal(pending.state, 'PAYOUT_SAVE', 'a real OTT pending is an accepted pay-out');
-  const kycd = await executeWithdraw({ account: verified, data: { ...data, recipient: { mobile: '0787051175', id_number: '9001015009087' } }, deps: d });
+  const kycd = await executeWithdraw({ account: verified, data: { ...data, recipient: { mobile: '0787051175', id_number: '9001015009087' } }, pinProof: proofFor(verified, { ...data, recipient: { mobile: '0787051175', id_number: '9001015009087' } }), deps: d });
   assert.equal(kycd.data.saveIdentity, false, 'the KYC name is not saved again'); assert.equal(kycd.data.saveDestination, true);
 });
 
@@ -386,7 +389,7 @@ test('saved destinations are offered by number or name, skip the name and ID ste
   const typed = await handleWithdrawReply({ account: founder, state: s0.state, data: s0.data, text: '62099988877' });
   assert.equal(typed.state, 'PAYOUT_BRANCH', 'a new account number still works');
   const pin = await handleWithdrawReply({ account: founder, state: pick.state, data: pick.data, text: 'yes' });
-  const done = await executeWithdraw({ account: founder, data: pin.data, deps: d });
+  const done = await executeWithdraw({ account: founder, data: pin.data, pinProof: proofFor(founder, pin.data), deps: d });
   assert.equal(base.last.recipient.account_number, '62012345394'); assert.equal(base.last.recipient.branch_code, '250655'); assert.equal(base.last.recipient.id_number, '9001015009087'); assert.equal(base.last.recipient.firstname, 'Nieuwoudt'); assert.equal(base.last.recipient.surname, 'Gresse');
   assert.deepEqual(touched, ['d1']); assert.equal(done.state, null, 'nothing new to save'); assert.match(done.text, /Done\./);
   const cash = await startWithdraw({ account: founder, ask: { amountCents: 5000, method: 'NEDCASH' }, deps: d });
@@ -395,7 +398,7 @@ test('saved destinations are offered by number or name, skip the name and ID ste
   assert.equal(yesOne.state, 'PAYOUT_CONFIRM', '"Yes" to a list of one saved number picks it (BUGLOG #97)'); assert.equal(yesOne.data.recipient.savedId, 'd2'); assert.match(cash.text, /\*mine\* for this WhatsApp number/);
   const mine = await handleWithdrawReply({ account: founder, state: cash.state, data: cash.data, text: 'mine' });
   assert.equal(mine.state, 'PAYOUT_CONFIRM', '"mine" still works beside the saved list');
-  const gone = await executeWithdraw({ account: founder, data: { ...pin.data, recipient: { savedId: 'd9', savedLabel: 'Gone account •••000', mobile: '0787051175' } }, deps: d });
+  const gone = await executeWithdraw({ account: founder, data: { ...pin.data, recipient: { savedId: 'd9', savedLabel: 'Gone account •••000', mobile: '0787051175' } }, pinProof: proofFor(founder, { ...pin.data, recipient: { savedId: 'd9', savedLabel: 'Gone account •••000', mobile: '0787051175' } }), deps: d });
   assert.equal(gone.done, false); assert.match(gone.text, /could not read the saved details/); assert.match(gone.text, /nothing has left your balance/);
 });
 
@@ -482,14 +485,14 @@ test('round 3: a cellphone typed again that is already saved is a use, not a sec
   const mine = await handleWithdrawReply({ account: founder, state: s0.state, data: s0.data, text: 'mine' });   // typed beside the list
   assert.equal(mine.state, 'PAYOUT_CONFIRM');
   const pin = await handleWithdrawReply({ account: founder, state: mine.state, data: mine.data, text: 'yes' });
-  const done = await executeWithdraw({ account: founder, data: pin.data, deps: d });
+  const done = await executeWithdraw({ account: founder, data: pin.data, pinProof: proofFor(founder, pin.data), deps: d });
   assert.equal(done.state, null, 'no second save offer for a number already saved'); assert.deepEqual(touched, ['c1'], 'counted as a use of the saved row');
   assert.match(done.text, /two SMSes from Absa: one with a 10-digit reference and one with a 6-digit PIN/); assert.match(done.text, /1️⃣ Go to any Absa ATM/); assert.match(done.text, /4️⃣ Enter the 10-digit reference from the first SMS, then the 6-digit PIN from the second/); assert.match(done.text, /If anything is unclear, just ask and I will guide you step by step/);
   // A new number: offered, and YES with a nickname saves under it.
   const s1 = await startWithdraw({ account: founder, ask: { amountCents: 5000, method: 'CASHSEND' }, deps: d });
   const other = await handleWithdrawReply({ account: founder, state: s1.state, data: s1.data, text: '083 111 2222' });
   const pin1 = await handleWithdrawReply({ account: founder, state: other.state, data: other.data, text: 'yes' });
-  const done1 = await executeWithdraw({ account: founder, data: pin1.data, deps: d });
+  const done1 = await executeWithdraw({ account: founder, data: pin1.data, pinProof: proofFor(founder, pin1.data), deps: d });
   assert.equal(done1.state, 'PAYOUT_SAVE'); assert.match(done1.text, /Save these details for next time \(Cellphone •••2222\)\? Reply \*YES\*, or give them a name like "mine" or "mother"/);
   const yes = await handleWithdrawReply({ account: founder, state: 'PAYOUT_SAVE', data: done1.data, text: 'Yes please save it as my mother', deps: d });
   assert.equal(saved.length, 1); assert.equal(saved[0].nickname, 'My Mother'); assert.equal(saved[0].recipient.mobile, '0831112222');

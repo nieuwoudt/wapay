@@ -10,8 +10,12 @@
  * arrives via the session-gated APIs after OTP login.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Head from 'next/head';
+import { fmtR, fmtN, simulate, preset, budgetFn, BUDGET_DEFAULT } from '../../lib/scale-model.js';
+
+// Mission Control refreshes itself every ten minutes (founder 2026-10-19); the Meta read is throttled server-side to the same cadence.
+const REFRESH_MS = 10 * 60 * 1000;
 
 const R = (c) => 'R' + (Math.round(c || 0) / 100).toLocaleString('en-ZA', { maximumFractionDigits: 2 });
 const Rw = (c) => 'R' + Math.round((c || 0) / 100).toLocaleString('en-ZA');
@@ -588,12 +592,13 @@ function Funnel({ f }) {
   const stages = [
     ['Contacts', f.contacts, 'accounts + captured pay-link payers'],
     ['Accounts', f.accounts, 'onboarded'],
+    ['Made a link', f.linked, 'created a payment link'],
     ['Funded', f.funded, 'first money in'],
     ['Transacting', f.transacting, 'first spend or send'],
     ['Repeat', f.repeat, '2+ money events in 30d'],
   ].filter(([, v]) => v != null);
   const top = stages[0]?.[1] || 1;
-  const shades = ['#6bbf92', '#4dae77', '#31995e', '#1d7a3f', '#14512c'];
+  const shades = ['#6bbf92', '#4dae77', '#3aa36a', '#31995e', '#1d7a3f', '#14512c'];
   return (
     <div>
       {stages.map(([k, v, note], i) => (
@@ -802,6 +807,7 @@ function Dashboard() {
   const [range, setRange] = useState('30');
   const [m, setM] = useState(null);
   const [err, setErr] = useState('');
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setErr('');
@@ -810,7 +816,8 @@ function Dashboard() {
       .then((d) => { if (!cancelled) setM(d); })
       .catch(() => { if (!cancelled) setErr('Could not load metrics.'); });
     return () => { cancelled = true; };
-  }, [range]);
+  }, [range, tick]);
+  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), REFRESH_MS); return () => clearInterval(id); }, []);
   if (err) {
     // The floats and UniFuel panels have their own endpoints — a metrics
     // failure must not blank them too (review 2026-08-29).
@@ -835,10 +842,11 @@ function Dashboard() {
   return (
     <>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-        <div className="tabs">{['7', '30', '90', 'all'].map((r) => (
+        <div className="tabs">{['1', '7', '30', '90', 'all'].map((r) => (
           <button key={r} className={range === r ? 'on' : ''} onClick={() => setRange(r)}>{r === 'all' ? 'All' : r + 'd'}</button>
         ))}</div>
-        <span className="note" style={{ margin: 0 }}>generated {dt(m.generatedAt)} · live ledger data</span>
+        <button className="linkish" onClick={() => setTick((t) => t + 1)} title="Re-read every number now">↻ Refresh</button>
+        <span className="note" style={{ margin: 0 }}>generated {dt(m.generatedAt)} · live ledger data · refreshes itself every 10 minutes</span>
       </div>
       <div className="grid kpis">
         {[
@@ -847,11 +855,28 @@ function Dashboard() {
           ['Monthly actives', v.mau ?? '—', 'money event in 30d'],
           ['GMV, period', Rw(v.gmvCents), 'in + spent + transferred'],
           ['Revenue, period', R(v.revenueCents), v.takeRatePct != null ? `take rate ${v.takeRatePct}%` : ''],
-          ['Wallet float', R(v.floatCents), `${v.walletCount ?? '—'} wallets · ${v.activeHolds ?? 0} active holds`],
+          ['Customer balances', R(v.balancesCents ?? v.floatCents), `${v.walletCount ?? '—'} wallets · ${v.walletsAbove20 ?? '—'} at or above R20 · ${v.activeHolds ?? 0} active holds`],
         ].map(([k, val, sub]) => (
           <div className="card" key={k}><div className="k">{k}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>
         ))}
       </div>
+      <div className="grid kpis" style={{ marginTop: 10 }}>
+        {(() => {
+          // The money tiles follow the selected period (founder 2026-10-19); the 1-day range is "today".
+          const p = range === '1' ? v.today : (v.period || v.today);
+          const label = range === '1' ? 'today' : range === 'all' ? 'all time' : `last ${range} days`;
+          return [
+            [`Money in, ${label}`, R(p?.moneyInCents), `${p?.moneyInCount ?? '—'} loads from outside · ${p?.linksPaidCount ?? '—'} links paid (${R(p?.linksPaidCents)})`],
+            [`Pay-outs, ${label}`, R(p?.payoutsCents), `${p?.payoutsCount ?? '—'} paid to the rail`],
+            ['Open links', n0(m.links?.open?.n ?? v.today?.openLinksCount), `${R(m.links?.open?.cents ?? v.today?.openLinksCents)} waiting for a payer`],
+          ].map(([k, val, sub]) => (
+            <div className="card" key={k}><div className="k">{k}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>
+          ));
+        })()}
+        <FloatTile balancesCents={v.balancesCents ?? v.floatCents} payouts7dCents={null} tick={tick} />
+      </div>
+      <LinksAndLoop links={m.links} viral={m.viral} generatedAt={m.generatedAt} />
+      <LiveValuation compact tick={tick} />
       <div className="card" style={{ marginTop: 14 }}>
         <h2>The funnel</h2>
         <p className="note">All-time. Contacts include {m.funnel?.capturedPayers ?? 0} captured pay-link payer(s) who have not onboarded yet.</p>
@@ -904,37 +929,384 @@ function Dashboard() {
         </p>
       </div>
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2>Money-engine health</h2>
-        <p className="note">If any of these is red, treat every number above as suspect until it is fixed.</p>
-        <OpsHealth ops={m.ops} />
-      </div>
+      <p className="note" style={{ marginTop: 14 }}>Money-engine health, the Pay agent and pay-out reconciliation live on the Health tab; supplier floats and UniFuel on the Supplier Floats tab.</p>
+    </>
+  );
+}
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2>Conversations and the Pay agent</h2>
-        <p className="note">Both sides of every chat, what the agent answered behind the shadow list, what it cost, which output gates fired, and any pay-out still parked with the bank rail.</p>
-        <Conversations />
-      </div>
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2>Pay-out reconciliation</h2>
-        <p className="note">What WaPay owes its customers, what is held for pay-outs, what the journal says was paid out, and whether every pay-out’s three records agree. Red means a customer or the float is out of pocket until someone looks.</p>
-        <PayoutBooks />
-      </div>
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2>Supplier floats</h2>
-        <p className="note">Prepaid balances at each counterparty, next to what the ledger believes. Top up before a low float fails a vend.</p>
-        <Floats />
-      </div>
 
+/* ---------------- Payment links as the key figure, and the viral loop (founder 2026-10-19) ---------------- */
+
+function LinksAndLoop({ links: l, viral: vl, generatedAt }) {
+  const stamp = generatedAt ? new Date(generatedAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : null;
+  const tiles = l ? [
+    ['Payment links created', R(l.created.cents), `${n0(l.created.n)} links, all time · ${n0(l.createdInRange.n)} in this period (${R(l.createdInRange.cents)})`],
+    ['Paid', R(l.paid.cents), `${n0(l.paid.n)} paid (${l.paidRatePct ?? '—'}% of links) · ${n0(l.paid.fromBalance)} from a balance, ${n0(l.paid.byCard)} by card or EFT · fees earned ${R(l.feeRealisedCents)}`],
+    ['Open, waiting for a payer', R(l.open.cents), `${n0(l.open.n)} links · ${n0(l.lapsed.n)} lapsed unpaid (${R(l.lapsed.cents)})`],
+    ['If every open link is paid by card', R(l.ifOpenPaidByCard.feeCents), `fee revenue · ${R(l.ifOpenPaidByCard.marginCents)} after the card rail`],
+    ['If each is then paid out by PayShap', R(l.ifThenPaidOut.feeCents), `${n0(l.ifThenPaidOut.n)} × R${(PAYSHAP_FEE_RAND).toFixed(0)} fees · ${R(l.ifThenPaidOut.marginCents)} after the rail`],
+  ] : [];
+  const loop = vl ? [
+    ['Accounts from payment links', n0(vl.accountsFromLinks), `${vl.shareOfAccountsPct ?? '—'}% of all accounts · ${n0(vl.sendersWhoBroughtAccounts)} senders brought them`],
+    ['Payers captured, not yet on WaPay', n0(vl.payersCapturedNotYetOnWaPay), `${n0(vl.contactsFromLinks)} contacts started from a link`],
+  ] : [];
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <h2>Payment links and the viral loop <span className="note" style={{ display: 'inline', fontWeight: 400 }}>{stamp ? `· refreshed ${stamp}, every 10 minutes` : ''}</span></h2>
+      <p className="note">The key figure: the value of the links customers have created, how much of it was paid and how, what is still open, and what the open links are worth in fees if they are paid by card and then paid out. Fees at today's schedule; rail costs from the commercials of record.</p>
+      {!l && <div className="empty">Link figures unavailable.</div>}
+      <div className="grid kpis">
+        {[...tiles, ...loop].map(([k, val, sub]) => (<div className="card" key={k}><div className="k">{k}</div><div className="v">{val}</div><div className="vs">{sub}</div></div>))}
+      </div>
+      {l?.daily?.length > 1 && (
+        <div className="grid two" style={{ marginTop: 12 }}>
+          <div>
+            <div className="k">Links over time, this period</div>
+            <p className="note">Cumulative value created and paid, and how many links are open at the end of each day.</p>
+            <DailyLines rows={cumulativeLinks(l.daily)} series={[{ key: 'createdRand', name: 'Created, R (cumulative)', color: 'var(--s1)' }, { key: 'paidRand', name: 'Paid, R (cumulative)', color: 'var(--good)' }, { key: 'open', name: 'Open links (count)', color: 'var(--s4)' }]} />
+          </div>
+          <div>
+            <div className="k">Fee outlook from every link made so far</div>
+            <p className="note">If every link made to date is paid by card: the card fee WaPay keeps, and the pay-out fees if the money then leaves by PayShap or as cash at an Absa or Nedbank ATM.</p>
+            <DailyLines rows={l.daily.map((d) => ({ date: d.date, card: Math.round(d.cardFeeCents / 100), payshap: Math.round(d.payshapFeeCents / 100), cash: Math.round(d.cashFeeCents / 100) }))} series={[{ key: 'card', name: 'Card fees, R', color: 'var(--s1)' }, { key: 'payshap', name: 'PayShap pay-out fees, R', color: 'var(--good)' }, { key: 'cash', name: 'Cash pay-out fees, R', color: 'var(--s4)' }]} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+const PAYSHAP_FEE_RAND = 8;
+function cumulativeLinks(daily) {
+  let c = 0, p = 0;
+  return daily.map((d) => { c += d.createdCents || 0; p += d.paidCents || 0; return { date: d.date, createdRand: Math.round(c / 100), paidRand: Math.round(p / 100), open: d.open || 0 }; });
+}
+
+/* The path (founder 2026-10-19, "all time, clear"): cumulative accounts from the first one ever, today's pace carried forward, the plan's point. */
+function PathChart({ series, t }) {
+  if (!t || !series?.length) return <div className="empty">No accounts yet.</div>;
+  const W = 560, H = 190, L = 46, Rr = 14, T = 14, B = 26;
+  const horizonDays = t.monthsAhead * 30;
+  const actual = series;
+  const n = actual.length;
+  const flat = Array.from({ length: Math.ceil(horizonDays / 7) + 1 }, (_, i) => ({ d: Math.min(horizonDays, i * 7), v: t.now.accounts + t.perDay.accounts * Math.min(horizonDays, i * 7) }));
+  const g = t.weeklyGrowth;
+  const comp = g != null ? flat.map(({ d }, i) => { let acc = t.now.accounts, wk = t.last7.accounts; for (let w = 0; w < i; w++) { wk *= 1 + g; acc += wk; } return { d, v: acc }; }) : null;
+  const maxV = Math.max(10, ...flat.map((p) => p.v), ...(comp || []).map((p) => p.v), t.plan.ahead.accounts) * 1.08;
+  const y = (v) => T + (H - T - B) * (1 - v / maxV);
+  const totalDays = (n - 1) + horizonDays;
+  const x = (i) => L + ((W - L - Rr) * i) / Math.max(1, totalDays);
+  const step = maxV > 20000 ? 10000 : maxV > 5000 ? 2000 : maxV > 2000 ? 1000 : maxV > 500 ? 200 : 100;
+  const ticks = []; for (let v = 0; v <= maxV; v += step) ticks.push(v);
+  const lbl = (v) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}m` : v >= 1e3 ? `${Math.round(v / 1e3)}k` : String(Math.round(v)));
+  const actualPath = actual.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.accounts).toFixed(1)}`).join('');
+  const off = n - 1;
+  const flatPath = flat.map((p, i) => `${i ? 'L' : 'M'}${x(off + p.d).toFixed(1)},${y(p.v).toFixed(1)}`).join('');
+  const compPath = comp ? comp.map((p, i) => `${i ? 'L' : 'M'}${x(off + p.d).toFixed(1)},${y(p.v).toFixed(1)}`).join('') : null;
+  const planX = x(off + horizonDays), planY = y(t.plan.ahead.accounts);
+  const last = actual[n - 1];
+  const mid = actual[Math.floor(n / 2)];
+  return (
+    <div>
+      <div className="note" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        <span><i style={{ display: 'inline-block', width: 18, height: 3, background: 'var(--good)', marginRight: 5, verticalAlign: 3 }} />accounts, all time</span>
+        <span><i style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dashed var(--s1)', marginRight: 5, verticalAlign: 3 }} />today's pace</span>
+        {compPath && <span><i style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dotted var(--s4)', marginRight: 5, verticalAlign: 3 }} />compounding</span>}
+        <span><i style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 9, border: '1.5px solid var(--ink3)', marginRight: 5, verticalAlign: -1 }} />plan at {t.horizon.label}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" style={{ width: '100%', height: 'auto' }}>
+        {ticks.map((v) => (<g key={v}><line x1={L} x2={W - Rr} y1={y(v)} y2={y(v)} stroke="var(--grid)" strokeDasharray="2 4" /><text x={L - 6} y={y(v) + 3} textAnchor="end" fontSize="9" fill="var(--ink3)">{lbl(v)}</text></g>))}
+        <path d={flatPath} fill="none" stroke="var(--s1)" strokeWidth={1.6} strokeDasharray="5 4" />
+        {compPath && <path d={compPath} fill="none" stroke="var(--s4)" strokeWidth={1.6} strokeDasharray="2 3" />}
+        <path d={actualPath} fill="none" stroke="var(--good)" strokeWidth={2.4} />
+        {actual.map((p, i) => <circle key={p.date} cx={x(i)} cy={y(p.accounts)} r={n > 120 ? 1.2 : 2} fill="var(--good)"><title>{`${p.date}: ${p.accounts.toLocaleString('en-ZA')} accounts (+${p.newAccounts})`}</title></circle>)}
+        <text x={x(off) + 4} y={y(last.accounts) - 6} fontSize="10" fontWeight="600" fill="var(--good)">{last.accounts.toLocaleString('en-ZA')} today</text>
+        <circle cx={planX} cy={planY} r={3.5} fill="none" stroke="var(--ink3)" strokeWidth={1.5}><title>{`Plan at ${t.horizon.label}: ${t.plan.ahead.accounts.toLocaleString('en-ZA')} accounts`}</title></circle>
+        <text x={planX - 6} y={planY - 7} textAnchor="end" fontSize="9" fill="var(--ink3)">plan {lbl(t.plan.ahead.accounts)}</text>
+        <text x={x(off + horizonDays) - 2} y={y(flat[flat.length - 1].v) - 6} textAnchor="end" fontSize="9" fill="var(--s1)">{lbl(flat[flat.length - 1].v)} at today's pace</text>
+        <text x={x(0)} y={H - 8} fontSize="9" fill="var(--ink3)">{actual[0].date}</text>
+        {n > 20 && <text x={x(Math.floor(n / 2))} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--ink3)">{mid.date}</text>}
+        <text x={x(off)} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--ink3)">today</text>
+        <text x={W - Rr} y={H - 8} textAnchor="end" fontSize="9" fill="var(--ink3)">{t.horizon.label}</text>
+      </svg>
+    </div>
+  );
+}
+
+/* The valuation path: the plan's monthly curve, the same model on the inputs measured so far, and today's pace held flat; hover any point. */
+function ValuationPath({ t, v }) {
+  if (!t) return null;
+  const planRows = simulate(preset('plan'), budgetFn(BUDGET_DEFAULT)).rows.slice(0, 13);
+  const measuredInputs = Object.fromEntries((v?.measuredUsed || []).map((u) => [u.key, u.value]));
+  const modelRows = Object.keys(measuredInputs).length ? simulate({ ...preset('plan'), ...measuredInputs }, budgetFn(BUDGET_DEFAULT)).rows.slice(0, 13) : null;
+  const worthOf = (r) => Math.max(r.valRev, r.valActive);
+  // Today's pace held flat: the seven-day revenue rate as a month, funded-per-month as actives, the higher frame, never below the floor.
+  const pace = (() => {
+    const revMonthRand = (t.perDay.revenueCents * 30) / 100;
+    const actives = Math.max(t.now.actives, t.perDay.funded * 30);
+    return Math.max(t.frames.floorRand, revMonthRand * 12 * t.frames.multiple, actives * t.frames.perActive);
+  })();
+  const W = 560, H = 170, L = 52, Rr = 14, T = 12, B = 24;
+  const maxV = Math.max(...planRows.map(worthOf), ...(modelRows || []).map(worthOf), pace) * 1.08;
+  const y = (val) => T + (H - T - B) * (1 - val / maxV);
+  const x = (i) => L + ((W - L - Rr) * i) / 12;
+  const label = (m) => planRows[m - 1] ? `${t.now.label.split(' ')[1]}`.slice(0, 0) + monthLabel(m) : '';
+  function monthLabel(m) { const d = new Date(Date.UTC(2026, 9 + (m - 1), 1)); return d.toLocaleString('en-ZA', { month: 'short', year: '2-digit', timeZone: 'UTC' }); }
+  const path = (rows, f) => rows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(f(r)).toFixed(1)}`).join('');
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(maxV * f));
+  return (
+    <div>
+      <div className="note" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        <span><i style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dashed var(--ink3)', marginRight: 5, verticalAlign: 3 }} />the plan</span>
+        {modelRows && <span><i style={{ display: 'inline-block', width: 18, height: 3, background: 'var(--s1)', marginRight: 5, verticalAlign: 3 }} />model on measured inputs</span>}
+        <span><i style={{ display: 'inline-block', width: 18, height: 3, background: 'var(--good)', marginRight: 5, verticalAlign: 3 }} />today's pace</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" style={{ width: '100%', height: 'auto' }}>
+        {ticks.map((val) => (<g key={val}><line x1={L} x2={W - Rr} y1={y(val)} y2={y(val)} stroke="var(--grid)" strokeDasharray="2 4" /><text x={L - 6} y={y(val) + 3} textAnchor="end" fontSize="9" fill="var(--ink3)">{fmtR(val)}</text></g>))}
+        <path d={path(planRows, worthOf)} fill="none" stroke="var(--ink3)" strokeWidth={1.6} strokeDasharray="5 4" />
+        {planRows.map((r, i) => <circle key={`p${i}`} cx={x(i)} cy={y(worthOf(r))} r={2.5} fill="var(--ink3)"><title>{`Plan, ${monthLabel(r.m)}: ${fmtR(worthOf(r))} (${Math.round(r.cumOnb).toLocaleString('en-ZA')} accounts, ${Math.round(r.mau).toLocaleString('en-ZA')} actives, ${fmtR(Math.round(r.revenue))} a month)`}</title></circle>)}
+        {modelRows && <path d={path(modelRows, worthOf)} fill="none" stroke="var(--s1)" strokeWidth={2} />}
+        {modelRows && modelRows.map((r, i) => <circle key={`m${i}`} cx={x(i)} cy={y(worthOf(r))} r={2.5} fill="var(--s1)"><title>{`Model on measured inputs, ${monthLabel(r.m)}: ${fmtR(worthOf(r))} (${Math.round(r.cumOnb).toLocaleString('en-ZA')} accounts, ${Math.round(r.mau).toLocaleString('en-ZA')} actives, ${fmtR(Math.round(r.revenue))} a month)`}</title></circle>)}
+        <path d={planRows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(pace).toFixed(1)}`).join('')} fill="none" stroke="var(--good)" strokeWidth={2.4} />
+        {planRows.map((r, i) => <circle key={`t${i}`} cx={x(i)} cy={y(pace)} r={2.5} fill="var(--good)"><title>{`Today's pace, ${monthLabel(r.m)}: ${fmtR(pace)} (${i === 0 ? 'now: ' : ''}${t.now.accounts.toLocaleString('en-ZA')} accounts today, ${t.now.actives} actives, R${(t.now.revenueMonthCents / 100).toFixed(0)} a month; the floor until net revenue grows)`}</title></circle>)}
+        <text x={x(0)} y={H - 7} fontSize="9" fill="var(--ink3)">{monthLabel(1)}</text>
+        <text x={x(6)} y={H - 7} textAnchor="middle" fontSize="9" fill="var(--ink3)">{monthLabel(7)}</text>
+        <text x={W - Rr} y={H - 7} textAnchor="end" fontSize="9" fill="var(--ink3)">{monthLabel(13)}</text>
+      </svg>
+    </div>
+  );
+}
+
+/* The insight (founder 2026-10-19): the biggest finding, what to work on, the most promising figure, from the measured inputs and the plan. Rules, not a model. */
+const WORK_ON = {
+  payersPerLink: 'Get the links that exist paid: follow up every sender after a day, make "forward it" the only step, and make the payer page obvious on a phone.',
+  actToFund: 'Turn link-makers into funded accounts: the first paid link is the funding event, so the work is the same as getting links paid.',
+  selfLoad: 'Give people who never make a link a reason to add money: one thing they can do with a balance today.',
+  onbToAct: 'Get more new accounts to make their first link: the first-link prompt is the moment; test its wording and the example.',
+  payerToOnb: 'Turn payers into members: the thank-you after a payment is the invitation.',
+  convToOnb: 'Fewer drop-outs between the first message and the finished account: the code and PIN steps.',
+  cpConv: 'The ad is cheap per conversation; keep the budget where it is and spend the effort on what happens after the first message.',
+};
+function insightFrom(v, t) {
+  const used = v?.measuredUsed || [];
+  const stops = used.filter((u) => u.status === 'stop');
+  const greats = used.filter((u) => u.status === 'great');
+  const fmt = (u) => `${u.label} ${u.unit === '%' ? u.value + '%' : u.unit === 'R' ? 'R' + u.value : u.value} against a plan of ${u.unit === '%' ? u.plan + '%' : u.unit === 'R' ? 'R' + u.plan : u.plan}`;
+  const worst = stops[0] || null;
+  const best = greats[0] || null;
+  const finding = worst
+    ? `Biggest finding: ${fmt(worst)}${worst.early ? ' (an early read, the cohort is young)' : ''}.`
+    : used.length ? 'No measured input is below its stop line yet.' : 'Nothing measured yet; the plan stands as the only view.';
+  const work = worst ? (WORK_ON[worst.key] || 'Work on the step that input measures before anything else.') : 'Keep the pipe open and wait for the first two-week cohort.';
+  const promising = best ? `Most promising: ${fmt(best)}.` : t ? `Most promising: ${t.now.accounts.toLocaleString('en-ZA')} accounts against a plan of ${t.plan.toDate.accounts} by day ${t.dayOfLaunch}.` : '';
+  const gap = t ? `Accounts run at ${t.plan.toDate.accounts ? Math.round((t.now.accounts / t.plan.toDate.accounts) * 100) : '—'}% of the plan to date, funded accounts at ${t.plan.toDate.funded ? Math.round((t.now.funded / t.plan.toDate.funded) * 100) : '—'}%.` : '';
+  return { finding, work, promising, gap, worst, best, stops, greats };
+}
+function InsightBox({ v, t }) {
+  if (!v) return null;
+  const i = insightFrom(v, t);
+  const Chip = ({ tone, children }) => <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, border: `1px solid ${tone}`, color: tone, marginRight: 8, whiteSpace: 'nowrap' }}>{children}</span>;
+  return (
+    <div className="card" style={{ marginTop: 14, borderColor: i.worst ? 'var(--crit)' : 'var(--good)' }}>
+      <h2>Insight: what the numbers say today</h2>
+      <p style={{ margin: '6px 0' }}><Chip tone="var(--crit)">finding</Chip>{i.finding}</p>
+      <p style={{ margin: '6px 0' }}><Chip tone="var(--warn, #e3b341)">work on</Chip>{i.work}</p>
+      <p style={{ margin: '6px 0' }}><Chip tone="var(--good)">promising</Chip>{i.promising}</p>
+      {i.gap && <p className="note" style={{ margin: '6px 0 0' }}>{i.gap} Green = at or above the great line, yellow = on plan or too early, red = below the stop line, as the matrix measures them.</p>}
+      {(i.stops.length > 1 || i.greats.length > 1) && (
+        <p className="note" style={{ margin: '6px 0 0' }}>
+          {i.stops.length > 1 && <>Also below the stop line: {i.stops.slice(1).map((u) => u.label).join(', ')}. </>}
+          {i.greats.length > 1 && <>Also above the great line: {i.greats.slice(1).map((u) => u.label).join(', ')}.</>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- The pay-out float tile and the live valuation matrix ---------------- */
+
+function FloatTile({ balancesCents, tick = 0 }) {
+  const [f, setF] = useState(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setErr(false);
+    fetch('/api/admin/floats')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setF(d); })
+      .catch(() => { if (!cancelled) setErr(true); });
+    return () => { cancelled = true; };
+  }, [tick]);
+  const row = (f?.floats || []).find((x) => /payout/i.test(String(x.key || '')) || /pay-?out/i.test(String(x.name || '')));
+  const cents = row?.api?.availableCents ?? null;
+  const cover = cents != null && balancesCents > 0 ? Math.round((10 * cents) / balancesCents) / 10 : null;
+  const val = err ? 'unavailable' : !f ? '…' : cents != null ? R(cents) : (row?.api?.configured === false ? 'no credentials' : 'unreadable');
+  const sub = row ? `${row.low ? 'LOW · ' : ''}warn under ${R(row.warnCents)}${cover != null ? ` · ${cover}× of customer balances` : ''}` : 'OTT pay-out rail';
+  return (
+    <div className="card" style={row?.low ? { borderColor: 'var(--crit)' } : undefined}>
+      <div className="k">Pay-out float</div>
+      <div className="v" style={row?.low ? { color: 'var(--crit)' } : undefined}>{val}</div>
+      <div className="vs">{sub}</div>
+    </div>
+  );
+}
+
+const SCENARIO_LABELS = {
+  plan: 'Plan (13 Sep assessment)',
+  now: 'Measured inputs, plan budget',
+  nowCurrentSpend: 'Measured inputs, today\'s spend',
+  great: 'Great case',
+  stop: 'Stop-and-fix case',
+};
+
+function useGrowth(given, tick = 0) {
+  const [fetched, setFetched] = useState(null);
+  useEffect(() => {
+    if (given) return undefined;
+    let cancelled = false;
+    fetch('/api/admin/growth?range=30')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setFetched(d || null); })
+      .catch(() => { if (!cancelled) setFetched(false); });
+    return () => { cancelled = true; };
+  }, [given, tick]);
+  return given || fetched;
+}
+
+/* The plan, where we are, the actual inputs, and where today's pace leads (founder, 2026-10-19). */
+function PlanVsNow({ v }) {
+  if (v === false) return <div className="empty">Could not load the projection.</div>;
+  const t = v?.trajectory;
+  if (!t) return <div className="empty">Projecting…</div>;
+  const worth = (row) => Math.max(row.valRev, row.valActive);
+  const basis = (row) => (worth(row) <= t.frames.floorRand ? 'the pre-traction floor' : row.valRev >= row.valActive ? 'revenue frame' : 'per-active frame');
+  const pct = (g) => `${g >= 0 ? '+' : ''}${Math.round(g * 100)}% a week`;
+  const h = t.horizon.label;
+  const cols = [
+    { key: 'planToDate', title: `Plan by day ${t.dayOfLaunch}`, sub: 'month 1 pro rata', row: t.plan.toDate },
+    { key: 'now', title: 'Now', sub: `day ${t.dayOfLaunch} of the launch`, row: t.now, strong: true },
+    { key: 'planAhead', title: `Plan, ${h}`, sub: `model month ${t.plan.ahead.month}`, row: t.plan.ahead },
+    { key: 'flat', title: `Today's pace, ${h}`, sub: 'last 7 days held flat', row: t.flat },
+    { key: 'compounded', title: `Compounding, ${h}`, sub: t.compounded ? pct(t.weeklyGrowth) : `needs two full weeks (from ${t.weeklyGrowthFrom})`, row: t.compounded },
+    { key: 'model', title: `Model on measured inputs, ${h}`, sub: 'plan budget', row: t.model ? t.model.ahead : null },
+  ];
+  const lines = [
+    ['Accounts', (r) => fmtN(r.accounts)],
+    ['Funded accounts', (r) => fmtN(r.funded)],
+    ['30-day actives', (r) => fmtN(r.actives)],
+    ['Net revenue a month', (r) => R(r.revenueMonthCents)],
+    ['Valuation, revenue frame', (r) => fmtR(r.valRev)],
+    ['Valuation, per active user', (r) => fmtR(r.valActive)],
+  ];
+  const tiles = [
+    ['Valuation today', fmtR(worth(t.now)), basis(t.now)],
+    [`In ${t.monthsAhead} months at today's pace`, fmtR(worth(t.flat)), basis(t.flat)],
+    [`Plan, ${h}`, fmtR(worth(t.plan.ahead)), basis(t.plan.ahead)],
+    t.compounded ? [`Compounding at ${pct(t.weeklyGrowth)}, ${h}`, fmtR(worth(t.compounded)), basis(t.compounded)]
+      : t.model ? [`Model on measured inputs, ${h}`, fmtR(worth(t.model.ahead)), basis(t.model.ahead)] : null,
+  ].filter(Boolean);
+  return (
+    <div>
+      <div className="grid kpis">
+        {tiles.map(([k, val, sub]) => (<div className="card" key={k}><div className="k">{k}</div><div className="v">{val}</div><div className="vs">{sub}</div></div>))}
+      </div>
+      <div style={{ overflowX: 'auto', marginTop: 10 }}>
+        <table style={{ minWidth: 900 }}>
+          <thead><tr><th></th>{cols.map((c) => <th key={c.key} className="n">{c.title}<div className="note" style={{ margin: 0, fontWeight: 400 }}>{c.sub}</div></th>)}</tr></thead>
+          <tbody>
+            {lines.map(([label, f]) => (
+              <tr key={label}><td>{label}</td>{cols.map((c) => <td key={c.key} className="n" style={c.strong ? { fontWeight: 700 } : undefined}>{c.row ? f(c.row) : '—'}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>
+        Actual inputs, last 7 days: {fmtN(t.last7.accounts)} accounts ({t.perDay.accounts.toFixed(1)} a day), {fmtN(t.last7.funded)} funded ({t.perDay.funded.toFixed(2)} a day), {R(t.last7.revenueCents)} net revenue ({R(Math.round(t.perDay.revenueCents))} a day); 30-day actives {fmtN(t.now.actives)}; net revenue last 30 days {R(t.now.revenueMonthCents)}.
+        {' '}Weekly growth: {t.weeklyGrowth != null ? `${pct(t.weeklyGrowth)} (accounts, this week over last)` : `measured once two full weeks exist (from ${t.weeklyGrowthFrom}); until then the trajectory holds today's pace flat`}.
+        {' '}Valuation frames as in the plan: {t.frames.multiple}× annualised net revenue (more with faster growth) or R{fmtN(t.frames.perActive)} per 30-day active, never below the {fmtR(t.frames.floorRand)} floor. The model's measured inputs are listed under the matrix below.
+      </p>
+    </div>
+  );
+}
+
+/* One fetch for both cards: the plan-vs-now section and the matrix (the Growth tab passes its own data). */
+function LiveValuation({ g: given = null, compact = false, minSample = null, tick = 0 }) {
+  const g = useGrowth(given, tick);
+  const v = g === false ? false : g ? g.valuation : null;
+  const t = v?.trajectory;
+  return (
+    <>
+      <div className="grid two" style={{ marginTop: 14 }}>
+        <div className="card">
+          <h2>The path: accounts, actual and at today's pace</h2>
+          <p className="note">Cumulative accounts since launch (solid), today's seven-day pace carried forward (dashed), compounding once two full weeks exist (dotted), the plan's point at the horizon (ring). Log scale.</p>
+          {g === false ? <div className="empty">Could not load.</div> : !t ? <div className="empty">Measuring…</div> : <PathChart series={g.pathSeries} t={t} />}
+        </div>
+        <div className="card">
+          <h2>Valuation: plan against today's pace</h2>
+          <p className="note">The plan's month-by-month valuation (dashed) against today's pace held flat (solid), the higher of the two frames, never below the floor.</p>
+          {g === false ? <div className="empty">Could not load.</div> : !t ? <div className="empty">Measuring…</div> : <ValuationPath t={t} v={v} />}
+        </div>
+      </div>
+      <InsightBox v={v} t={t} />
       <div className="card" style={{ marginTop: 14 }}>
-        <h2>UniFuel / wiCode</h2>
-        <p className="note">WaPay-originated fuel voucher issuance and redemptions, via the UniFuel service.</p>
-        <UniFuelPanel />
+        <h2>The plan, where we are, and where today's pace leads</h2>
+        <p className="note">The plan is the 13 September assessment (model month 1 = October 2026; launch day 1 = 18 October). Now is live. The trajectory takes the last seven days as a daily rate and holds it for six months; once two full weeks exist it also compounds at the measured weekly growth. Valuations use the plan's two frames and its floor.</p>
+        <PlanVsNow v={v} />
+      </div>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Valuation matrix, live</h2>
+        <p className="note">Plan = the 13 September assessment. Measured = the same model with every input the data has measured (sample of {minSample ?? 20} or more) in place of its plan value, under the plan budget and under today's ad spend held flat; the rest stand at plan. The line under the table says which inputs were used.</p>
+        <ValuationMatrix v={v} compact={compact} />
       </div>
     </>
   );
 }
 
+function ValuationMatrix({ v, compact = false }) {
+  const [month, setMonth] = useState(12);
+  if (v === false) return <div className="empty">Could not load the projection.</div>;
+  if (!v) return <div className="empty">Projecting…</div>;
+  const keys = compact ? ['plan', 'now', 'nowCurrentSpend'] : ['plan', 'now', 'nowCurrentSpend', 'great', 'stop'];
+  const idx = v.months.indexOf(month) >= 0 ? v.months.indexOf(month) : 1;
+  const m = v.months[idx];
+  const ms = (sc, target) => { const x = (sc.milestones || []).find((y) => y.target === target); return x && x.month ? `M${x.month}` : 'beyond M36'; };
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+        <span className="note" style={{ margin: 0 }}>Read at month</span>
+        <div className="tabs">{v.months.map((mm) => (
+          <button key={mm} className={mm === m ? 'on' : ''} onClick={() => setMonth(mm)}>M{mm} · {v.monthLabels?.[mm]}</button>
+        ))}</div>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ minWidth: compact ? 640 : 860 }}>
+          <thead><tr><th>Scenario</th><th className="n">Accounts</th><th className="n">30-day actives</th><th className="n">Net revenue / mo</th><th className="n">Valuation, revenue frame</th><th className="n">Valuation, per active</th>{!compact && <th className="n">Peak funding</th>}{!compact && <th className="n">100k · 1m accounts</th>}</tr></thead>
+          <tbody>
+            {keys.map((k) => {
+              const sc = v.scenarios[k]; const at = sc?.at?.[idx]; if (!at) return null;
+              const strong = k === 'now';
+              return (
+                <tr key={k} style={strong ? { fontWeight: 700 } : undefined}>
+                  <td>{SCENARIO_LABELS[k]}{k === 'nowCurrentSpend' ? <div className="note" style={{ margin: 0 }}>{fmtR(v.currentMonthlySpend)} a month, flat</div> : null}</td>
+                  <td className="n">{fmtN(at.accounts)}</td>
+                  <td className="n">{fmtN(at.actives)}</td>
+                  <td className="n">{fmtR(at.revenueMonthly)}</td>
+                  <td className="n">{fmtR(at.valRev)}</td>
+                  <td className="n">{fmtR(at.valActive)}</td>
+                  {!compact && <td className="n">{fmtR(sc.peakFunding)}</td>}
+                  {!compact && <td className="n">{ms(sc, 100000)} · {ms(sc, 1000000)}</td>}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="note" style={{ marginTop: 8, marginBottom: 0 }}>
+        Measured so far and used: {(v.measuredUsed || []).length ? v.measuredUsed.map((u) => `${u.label} ${u.unit === '%' ? u.value + '%' : u.unit === 'R' ? 'R' + u.value : u.value} (plan ${u.unit === '%' ? u.plan + '%' : u.unit === 'R' ? 'R' + u.plan : u.plan}, ${u.status}${u.early ? ', early read' : ''})`).join(' · ') : 'nothing yet'}. {v.assumedCount} inputs still at their plan value.{v.earlyCount ? ` "Early read" means accounts younger than 14 days were judged, because no older cohort exists yet; the measured table below keeps the stricter rule.` : ''}
+      </p>
+    </div>
+  );
+}
 
 /* ---------------- Growth: the Scale Model's inputs, measured ---------------- */
 
@@ -1029,6 +1401,7 @@ function Growth() {
       .finally(() => setBusy(false));
   }, [range]);
   useEffect(() => { load(false); }, [load]);
+  useEffect(() => { const id = setInterval(() => load(true), REFRESH_MS); return () => clearInterval(id); }, [load]);
   if (err) return <div className="card"><div className="empty">{err}</div></div>;
   if (!g) return <div className="card"><div className="empty">Measuring…</div></div>;
   const k = g.kpis || {}, st = g.status || {}, lp = g.loop || {}, ms = g.messages || {};
@@ -1061,6 +1434,8 @@ function Growth() {
           <div className="card" key={kk}><div className="k">{kk}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>
         ))}
       </div>
+
+      <LiveValuation g={g} minSample={g.minSample} />
 
       <div className="grid two" style={{ marginTop: 14 }}>
         <div className="card">
@@ -1117,6 +1492,21 @@ function Growth() {
           </div>
         )}
       </div>
+
+      {(g.entryBreakdown || []).length > 0 && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <h2>Which question brought them in</h2>
+          <p className="note">Ad arrivals by the suggested question they tapped (or typed), and how far each group got. Reminders sent {n0(g.reminders?.sent)} · opted out {n0(g.reminders?.optedOut)}.</p>
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead><tr><th>Entry</th><th className="n">Contacts</th><th className="n">Accounts</th><th className="n">Activated</th><th className="n">Funded</th></tr></thead>
+              <tbody>{g.entryBreakdown.map((e) => (
+                <tr key={e.entry}><td>{e.label}</td><td className="n">{n0(e.contacts)}</td><td className="n">{n0(e.onboarded)}</td><td className="n">{n0(e.activated)}</td><td className="n">{n0(e.funded)}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ marginTop: 14 }}>
         <h2>The Scale Model's inputs, measured</h2>
@@ -1189,8 +1579,38 @@ function Growth() {
   );
 }
 
-function Customer() {
-  const [q, setQ] = useState('');
+/* A person answers the customer inside their WhatsApp chat (founder 2026-10-19). One text, inside their 24-hour window, remembered by the chat. */
+function ReplyBox({ accountId, name }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const send = useCallback(async () => {
+    if (!text.trim()) return;
+    setBusy(true); setMsg('');
+    try {
+      const r = await fetch('/api/admin/ops-reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId, text }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.ok) { setMsg('Sent. The chat remembers it as its own message.'); setText(''); }
+      else if (r.status === 409) setMsg('Their 24-hour window is closed (no message from them in the last day), so a plain text cannot be delivered.');
+      else setMsg(j.error ? `Not sent: ${j.error}` : 'Not sent.');
+    } catch { setMsg('Not sent: network error.'); }
+    setBusy(false);
+  }, [accountId, text]);
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="k">Reply in their WhatsApp chat</div>
+      <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 1500))} rows={4} placeholder={`Hi ${(name || '').split(' ')[0] || 'there'}, this is the WaPay team…`} style={{ width: '100%', marginTop: 6, padding: 10, borderRadius: 8, border: '1px solid var(--grid)', background: 'var(--bg)', color: 'var(--ink)', fontFamily: 'inherit', fontSize: 13 }} />
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+        <button className="searchrow-btn" style={{ padding: '8px 14px', border: 0, borderRadius: 8, background: 'var(--accent)', color: '#fff', cursor: 'pointer' }} disabled={busy || !text.trim()} onClick={send}>{busy ? 'Sending…' : 'Send as WaPay'}</button>
+        <span className="note" style={{ margin: 0 }}>{text.length}/1500 · sent from WaPay's WhatsApp, recorded in their chat</span>
+        {msg && <span className="note" style={{ margin: 0, color: 'var(--ink2)' }}>{msg}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Customer({ initialQuery = '' }) {
+  const [q, setQ] = useState(initialQuery || '');
   const [c, setC] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1222,6 +1642,10 @@ function Customer() {
       setTimeout(() => document.getElementById('customer-profile')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     }
   }, []);
+
+  // A deep link (?customer=…) opens that profile once, after openCustomer exists (2026-10-20: declared before it, the tab crashed).
+  const openedInitial = useRef(false);
+  useEffect(() => { if (initialQuery && !openedInitial.current) { openedInitial.current = true; openCustomer(initialQuery); } }, [initialQuery, openCustomer]);
 
   const look = useCallback(async () => {
     // The search box drives BOTH: it filters the list and, when the number is
@@ -1271,7 +1695,7 @@ function Customer() {
               <tbody>
                 {list.customers.map((cu) => (
                   <tr key={cu.id} onClick={() => openCustomer(cu.msisdn)} style={{ cursor: 'pointer' }} title="Open this customer">
-                    <td>{cu.displayName || <span style={{ color: 'var(--ink3)' }}>—</span>}</td>
+                    <td>{cu.displayName || <span style={{ color: 'var(--ink3)' }}>—</span>} <a href={`/admin?tab=customer&customer=${encodeURIComponent(cu.msisdn)}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} title="Open on its own page" style={{ marginLeft: 6, fontSize: 11 }}>↗</a></td>
                     <td>{cu.msisdn}</td>
                     <td className="n">{R(cu.availableCents)}</td>
                     <td><span className={`pill ${cu.kycStatus === 'VERIFIED' ? 'g' : cu.kycStatus === 'NOT_VERIFIED' ? 'r' : 'y'}`}>{cu.kycStatus.replace('_', ' ')}</span></td>
@@ -1312,6 +1736,7 @@ function Customer() {
                 {!kycOn && <span className="note" style={{ margin: 0 }}>Didit not configured yet (3 envs).</span>}
                 {kycMsg && <span className="note" style={{ margin: 0, color: 'var(--ink2)' }}>{kycMsg}</span>}
               </div>
+              <ReplyBox accountId={c.account.id} name={c.account.displayName} />
             </div>
             <div className="card">
               <h2>Balances</h2>
@@ -1324,12 +1749,21 @@ function Customer() {
                 ))}
                 <div><div className="k">Active holds</div><div className="bal">{c.activeHolds?.length || 0}</div></div>
               </div>
+              {c.payoutFreeze && (
+                <p className="note" style={{ marginTop: 10, color: 'var(--red, #b42318)' }}>
+                  ⏸ Pay-outs and outbound sends frozen since {dt(c.payoutFreeze.at)}{c.payoutFreeze.reason ? ` · ${c.payoutFreeze.reason}` : ''}{c.payoutFreeze.by ? ` · by ${c.payoutFreeze.by}` : ''}. Receiving still works. Lift it with POST /api/internal/payout-freeze.
+                </p>
+              )}
               {c.activeHolds?.length > 0 && (
                 <p className="note" style={{ marginTop: 10 }}>
                   Holds: {c.activeHolds.map((h) => `${R(h.amountCents)} (${h.reason || 'no reason'})`).join(' · ')}
                 </p>
               )}
             </div>
+          </div>
+          <div className="card" style={{ marginTop: 14 }}>
+            <h2>Conversation and support <span className="note" style={{ display: 'inline', fontWeight: 400 }}>· everything they asked WaPay, and what WaPay and the team said</span></h2>
+            <ConversationCard accountId={c.account.id} />
           </div>
           <div className="card" style={{ marginTop: 14 }}>
             <h2>Everything they've bought &amp; moved</h2>
@@ -1366,6 +1800,22 @@ function Customer() {
               </div>
             </div>
             <div className="card">
+              <h2>Referrals</h2>
+              <p className="note">The customer asks for the invite in chat; the friend taps the link and writes first. Rewards are tracked now and paid only when the switch is on.</p>
+              {c.referrals ? (
+                <>
+                  <div style={{ display: 'flex', gap: 26, marginTop: 8, flexWrap: 'wrap' }}>
+                    <div><div className="k">Invited</div><div className="bal">{c.referrals.invited || 0}</div></div>
+                    <div><div className="k">Opened an account</div><div className="bal">{c.referrals.onboarded || 0}</div></div>
+                    <div><div className="k">Funded</div><div className="bal">{c.referrals.funded || 0}</div></div>
+                    <div><div className="k">Got paid</div><div className="bal">{c.referrals.paid || 0}</div></div>
+                    <div><div className="k">Reward eligible</div><div className="bal">{R(c.referrals.rewardEligibleCents || 0)}</div><div className="vs">paid {R(c.referrals.rewardPaidCents || 0)} · {c.referrals.rewardsOn ? 'rewards on' : 'tracked only'}</div></div>
+                  </div>
+                  <p className="note" style={{ marginTop: 10 }}>Code {c.referrals.code || 'not asked for yet'}{c.referrals.link ? ` · ${c.referrals.link}` : ''}</p>
+                </>
+              ) : <div className="empty">No referral data for this customer.</div>}
+            </div>
+            <div className="card">
               <h2>Payment requests &amp; deposits</h2>
               <div style={{ overflowX: 'auto' }}>
                 <table><thead><tr><th>When</th><th>What</th><th className="n">Amount</th><th>Status</th></tr></thead>
@@ -1390,11 +1840,297 @@ function Customer() {
   );
 }
 
+/* ---------------- Health, Supplier Floats, the Inbox and the conversation card (founder 2026-10-19) ---------------- */
+
+function useMetrics(range = '30', tick = 0) {
+  const [m, setM] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/admin/metrics?range=${range}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setM(d); })
+      .catch(() => { if (!cancelled) setErr('Could not load metrics.'); });
+    return () => { cancelled = true; };
+  }, [range, tick]);
+  return [m, err];
+}
+
+function Health() {
+  const [tick, setTick] = useState(0);
+  const [m, err] = useMetrics('30', tick);
+  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), REFRESH_MS); return () => clearInterval(id); }, []);
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+        <button className="linkish" onClick={() => setTick((t) => t + 1)}>↻ Refresh</button>
+        <span className="note" style={{ margin: 0 }}>{m ? `generated ${dt(m.generatedAt)}` : ''} · refreshes itself every 10 minutes</span>
+      </div>
+      <QualityCard tick={tick} />
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Money-engine health</h2>
+        <p className="note">If any of these is red, treat every number on the Dashboard as suspect until it is fixed.</p>
+        {err ? <div className="empty">{err}</div> : !m ? <div className="empty">Checking…</div> : <OpsHealth ops={m.ops} />}
+      </div>
+      <AuditPanel tick={tick} />
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Conversations and the Pay agent</h2>
+        <p className="note">Both sides of every chat, what the agent answered behind the shadow list, what it cost, which output gates fired, and any pay-out still parked with the bank rail.</p>
+        <Conversations />
+      </div>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Pay-out reconciliation</h2>
+        <p className="note">What WaPay owes its customers, what is held for pay-outs, what the journal says was paid out, and whether every pay-out's three records agree. Red means a customer or the float is out of pocket until someone looks.</p>
+        <PayoutBooks />
+      </div>
+    </>
+  );
+}
+
+/* Meta's view of the WhatsApp number (2026-10-20): the quality rating decides whether WaPay may start any conversation at all. */
+function QualityCard({ tick = 0 }) {
+  const [q, setQ] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/whatsapp-quality').then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then((d) => { if (!cancelled) setQ(d); }).catch(() => { if (!cancelled) setQ(false); });
+    return () => { cancelled = true; };
+  }, [tick]);
+  const rating = q && q.qualityRating;
+  const tone = rating === 'GREEN' ? 'var(--good)' : rating === 'YELLOW' ? 'var(--warn, #e3b341)' : rating ? 'var(--crit)' : 'var(--ink3)';
+  return (
+    <div className="card" style={{ borderColor: rating && rating !== 'GREEN' ? 'var(--crit)' : undefined }}>
+      <h2>WhatsApp number, as Meta sees it</h2>
+      <p className="note">The quality rating is built from blocks and reports. While it is not GREEN, WaPay sends nothing a customer did not just ask for: reminders stay off, replies only, one message per turn.</p>
+      <div className="grid kpis">
+        <div className="card"><div className="k">Quality rating</div><div className="v" style={{ color: tone }}>{q === false ? 'unavailable' : !q ? '…' : rating || (q.error || 'unknown')}</div><div className="vs">{q && q.messagingLimitTier ? `messaging limit ${q.messagingLimitTier}` : 'read from the Graph API, cached for a minute'}</div></div>
+        <div className="card"><div className="k">Number status</div><div className="v">{q && q.status ? q.status : '…'}</div><div className="vs">{q && q.nameStatus ? `display name ${q.nameStatus}` : ''}</div></div>
+        <div className="card"><div className="k">Support contact on the profile</div><div className="v" style={{ color: q && q.profile ? (q.profile.hasSupportContact ? 'var(--good)' : 'var(--crit)') : undefined }}>{q && q.profile ? (q.profile.hasSupportContact ? 'yes' : 'missing') : '…'}</div><div className="vs">{q && q.profile ? [q.profile.email, ...(q.profile.websites || [])].filter(Boolean).join(' · ') || 'the Messaging Policy asks for an e-mail or website' : ''}</div></div>
+      </div>
+    </div>
+  );
+}
+
+/* The daily conversation audit (built alongside this tab; reads /api/admin/audit when it exists). */
+function AuditPanel({ tick = 0 }) {
+  const [a, setA] = useState(null);
+  const [state, setState] = useState('loading');
+  useEffect(() => {
+    let cancelled = false;
+    setState('loading');
+    fetch('/api/admin/audit')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) { setA(d); setState('ok'); } })
+      .catch((e) => { if (!cancelled) setState(String(e?.message) === '404' ? 'absent' : 'error'); });
+    return () => { cancelled = true; };
+  }, [tick]);
+  const sevTone = (sev) => (sev === 'P1' ? 'var(--crit)' : sev === 'P2' ? 'var(--warn, #e3b341)' : 'var(--ink3)');
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <h2>Conversation audit, daily</h2>
+      <p className="note">Every new conversation is swept and reviewed against what is true today, findings are stored with their recurrence, and the bugs found, open and resolved are counted over time. The checker reads the live product registry, so a feature launch updates it.</p>
+      {state === 'loading' && <div className="empty">Reading…</div>}
+      {state === 'absent' && <div className="empty">The daily audit is being built; its first run will appear here.</div>}
+      {state === 'error' && <div className="empty">Could not read the audit.</div>}
+      {state === 'ok' && a && (
+        <>
+          <div className="grid kpis">
+            {[
+              ['Open', n0(a.counts?.open), a.latestRun ? `latest run ${dt(a.latestRun.finishedAt || a.latestRun.startedAt)}` : 'no run yet'],
+              ['Recurring', n0(a.counts?.recurring), 'seen in two or more runs'],
+              ['Resolved', n0(a.counts?.resolved), 'gone for two runs or marked by hand'],
+              ['Latest run', a.latestRun ? `${n0(a.latestRun.findings?.P1)} · ${n0(a.latestRun.findings?.P2)} · ${n0(a.latestRun.findings?.P3)}` : '—', a.latestRun ? `P1 · P2 · P3 over ${n0(a.latestRun.accounts)} accounts, ${n0(a.latestRun.turns)} turns${a.latestRun.reviewed ? '' : ' (rules only, no model review)'}` : ''],
+            ].map(([k, val, sub]) => (<div className="card" key={k}><div className="k">{k}</div><div className="v">{val ?? '—'}</div><div className="vs">{sub}</div></div>))}
+          </div>
+          {a.trend?.length > 1 && (
+            <div style={{ marginTop: 10 }}>
+              <div className="k">Bugs found, resolved and open, per run</div>
+              <DailyLines rows={a.trend} series={[{ key: 'found', name: 'Found', color: 'var(--crit)' }, { key: 'resolved', name: 'Resolved', color: 'var(--good)' }, { key: 'open', name: 'Open', color: 'var(--s1)' }]} />
+            </div>
+          )}
+          {a.recurring?.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div className="k">Recurring</div>
+              <ul className="note" style={{ margin: '6px 0 0', paddingLeft: 18 }}>{a.recurring.slice(0, 10).map((f) => <li key={f.fingerprint}><b style={{ color: sevTone(f.severity) }}>{f.severity}</b> {f.title} · {n0(f.occurrences)} times</li>)}</ul>
+            </div>
+          )}
+          {a.findings?.length > 0 && (
+            <div style={{ overflowX: 'auto', marginTop: 10 }}>
+              <table>
+                <thead><tr><th>Sev</th><th>Category</th><th>Finding</th><th className="n">Accounts</th><th className="n">Seen</th><th>Status</th></tr></thead>
+                <tbody>{a.findings.slice(0, 60).map((f) => (
+                  <tr key={f.id || f.fingerprint}><td><b style={{ color: sevTone(f.severity) }}>{f.severity}</b></td><td className="note" style={{ margin: 0 }}>{f.category}</td><td title={f.why || ''}>{f.title}</td><td className="n">{n0(f.accounts)}</td><td className="n">{n0(f.occurrences)}</td><td><span className={`pill ${f.status === 'resolved' ? 'g' : f.status === 'recurring' ? 'r' : 'y'}`}>{f.status}</span></td></tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+          {!a.findings?.length && <div className="empty">No findings stored yet.</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
+function FloatsTab() {
+  const [tick, setTick] = useState(0);
+  const [m] = useMetrics('30', tick);
+  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), REFRESH_MS); return () => clearInterval(id); }, []);
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+        <button className="linkish" onClick={() => setTick((t) => t + 1)}>↻ Refresh</button>
+        <span className="note" style={{ margin: 0 }}>live supplier reads are cached for about a minute · refreshes itself every 10 minutes</span>
+      </div>
+      <div className="grid kpis">
+        <FloatTile balancesCents={m?.vitals?.balancesCents ?? m?.vitals?.floatCents ?? 0} tick={tick} />
+        <div className="card"><div className="k">Customer balances</div><div className="v">{m ? R(m.vitals?.balancesCents ?? m.vitals?.floatCents) : '…'}</div><div className="vs">what the pay-out float must cover</div></div>
+      </div>
+      <div className="card" style={{ marginTop: 14 }} key={`floats-${tick}`}>
+        <h2>Supplier floats</h2>
+        <p className="note">Prepaid balances at each counterparty, next to what the ledger believes. Top up before a low float fails a vend.</p>
+        <Floats />
+      </div>
+      <div className="card" style={{ marginTop: 14 }} key={`fuel-${tick}`}>
+        <h2>UniFuel / wiCode</h2>
+        <p className="note">WaPay-originated fuel voucher issuance and redemptions, via the UniFuel service.</p>
+        <UniFuelPanel />
+      </div>
+    </>
+  );
+}
+
+/* One customer's conversation: the flags an operator needs, the questions they asked, and both sides of the chat. */
+function ConversationCard({ accountId, tick = 0, compact = false }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  const [onlyQuestions, setOnlyQuestions] = useState(false);
+  useEffect(() => {
+    if (!accountId) return undefined;
+    let cancelled = false;
+    setErr(''); setD(null);
+    fetch(`/api/admin/customer-turns?id=${encodeURIComponent(accountId)}&limit=300`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j) => { if (!cancelled) setD(j); })
+      .catch(() => { if (!cancelled) setErr('Could not load the conversation.'); });
+    return () => { cancelled = true; };
+  }, [accountId, tick]);
+  if (err) return <div className="empty">{err}</div>;
+  if (!d) return <div className="empty">Loading the conversation…</div>;
+  const flags = [
+    d.unanswered && ['unanswered', 'var(--crit)'],
+    d.closeAsk && ['asked to close the account', 'var(--crit)'],
+    d.personAsked && ['a person was asked', 'var(--warn, #e3b341)'],
+    d.gateTier != null && [`gate tier ${d.gateTier}`, d.gateTier >= 2 ? 'var(--crit)' : 'var(--ink3)'],
+    d.opsReplies > 0 && [`${d.opsReplies} ${d.opsReplies === 1 ? 'reply' : 'replies'} from a person`, 'var(--good)'],
+  ].filter(Boolean);
+  const turns = onlyQuestions ? d.turns.filter((t) => t.role === 'user' && d.questions.some((q) => q.at === t.at)) : d.turns;
+  const who = (t) => (t.role === 'user' ? 'Customer' : t.kind === 'ops' ? 'WaPay team' : t.role === 'assistant' ? `WaPay${t.kind ? ` (${t.kind})` : ''}` : `Event${t.kind ? ` (${t.kind})` : ''}`);
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span className="note" style={{ margin: 0 }}>{d.counts.user} from them · {d.counts.bot} from WaPay · last message {d.lastUserAt ? dt(d.lastUserAt) : '—'}</span>
+        {flags.map(([label, tone]) => <span key={label} style={{ fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, border: `1px solid ${tone}`, color: tone }}>{label}</span>)}
+        <span className="spacer" />
+        <button className="linkish" onClick={() => setOnlyQuestions((q) => !q)}>{onlyQuestions ? 'Show everything' : `Questions only (${d.questions.length})`}</button>
+      </div>
+      <div style={{ maxHeight: compact ? 360 : 560, overflowY: 'auto', marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {turns.length === 0 && <div className="empty">Nothing here yet.</div>}
+        {turns.map((t) => (
+          <div key={t.id || t.at + t.role} style={{ alignSelf: t.role === 'user' ? 'flex-start' : 'flex-end', maxWidth: '82%', padding: '8px 11px', borderRadius: 12, background: t.role === 'user' ? 'var(--glass)' : t.kind === 'ops' ? 'var(--accent-soft)' : 'rgba(53,152,83,.10)', border: '1px solid var(--glass-edge)' }}>
+            <div className="note" style={{ margin: '0 0 3px', fontSize: 10.5 }}>{who(t)} · {dt(t.at)}</div>
+            <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: 'var(--ink)' }}>{t.text}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Inbox() {
+  const [days, setDays] = useState('7');
+  const [tick, setTick] = useState(0);
+  const [items, setItems] = useState(null);
+  const [err, setErr] = useState('');
+  const [sel, setSel] = useState(null);
+  const [filter, setFilter] = useState('all');
+  useEffect(() => {
+    let cancelled = false;
+    setErr('');
+    fetch(`/api/admin/inbox?days=${days}&limit=150`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (!cancelled) setItems(d.items || []); })
+      .catch(() => { if (!cancelled) setErr('Could not load the inbox.'); });
+    return () => { cancelled = true; };
+  }, [days, tick]);
+  useEffect(() => { const id = setInterval(() => setTick((t) => t + 1), REFRESH_MS); return () => clearInterval(id); }, []);
+  const shown = (items || []).filter((i) => filter === 'all' || (filter === 'person' && i.needsPerson) || (filter === 'unanswered' && i.unanswered) || (filter === 'replied' && i.opsReplies > 0));
+  const selected = (items || []).find((i) => i.accountId === sel) || null;
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="tabs">{['1', '7', '30'].map((d) => <button key={d} className={days === d ? 'on' : ''} onClick={() => setDays(d)}>{d}d</button>)}</div>
+        <div className="tabs">{[['all', 'All'], ['person', 'Needs a person'], ['unanswered', 'Unanswered'], ['replied', 'Replied by us']].map(([k, l]) => <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{l}</button>)}</div>
+        <button className="linkish" onClick={() => setTick((t) => t + 1)}>↻ Refresh</button>
+        <span className="note" style={{ margin: 0 }}>customers who wrote in the window, newest first · refreshes itself every 10 minutes</span>
+      </div>
+      {err && <div className="card"><div className="empty">{err}</div></div>}
+      <div className="grid two">
+        <div className="card">
+          <h2>Conversations {items ? <span className="note" style={{ display: 'inline', fontWeight: 400 }}>· {shown.length} shown</span> : null}</h2>
+          {!items && !err && <div className="empty">Loading…</div>}
+          {items && !shown.length && <div className="empty">Nothing in this window.</div>}
+          <div style={{ maxHeight: 640, overflowY: 'auto' }}>
+            {shown.map((i) => (
+              <div key={i.accountId} onClick={() => setSel(i.accountId)} style={{ cursor: 'pointer', padding: '9px 10px', borderRadius: 10, marginBottom: 6, background: sel === i.accountId ? 'var(--accent-soft)' : 'var(--glass)', border: '1px solid var(--glass-edge)' }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                  <b style={{ color: 'var(--ink)' }}>{i.displayName || 'Customer'}</b>
+                  <span className="note" style={{ margin: 0 }}>{i.msisdn ? `…${String(i.msisdn).slice(-4)}` : ''} · {i.state === 'S5_COMPLETED' ? 'account' : 'signing up'} · {i.source}</span>
+                  <span className="spacer" />
+                  <span className="note" style={{ margin: 0 }}>{i.lastUserAt ? dt(i.lastUserAt) : ''}</span>
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--ink2)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.lastUserText || ''}</div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
+                  {i.unanswered && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--crit)' }}>unanswered</span>}
+                  {i.closeAsk && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--crit)' }}>close account</span>}
+                  {i.personAsked && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--warn, #e3b341)' }}>person asked</span>}
+                  {i.gateTier != null && i.gateTier >= 2 && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--crit)' }}>gate tier {i.gateTier}</span>}
+                  {i.opsReplies > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--good)' }}>replied</span>}
+                  {i.questions?.length > 0 && <span className="note" style={{ margin: 0, fontSize: 10.5 }}>{i.questions.length} question{i.questions.length === 1 ? '' : 's'}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          {!selected && <div className="empty">Pick a conversation to read it and reply.</div>}
+          {selected && (
+            <>
+              <h2>{selected.displayName || 'Customer'} <span className="note" style={{ display: 'inline', fontWeight: 400 }}>· {selected.msisdn} · <a href={`/admin?tab=customer&customer=${encodeURIComponent(selected.msisdn || '')}`} target="_blank" rel="noopener noreferrer">open profile ↗</a></span></h2>
+              <ConversationCard accountId={selected.accountId} tick={tick} compact />
+              <ReplyBox accountId={selected.accountId} name={selected.displayName} />
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+const TABS = [['dashboard', 'Dashboard'], ['growth', 'Valuation Metrics'], ['inbox', 'Inbox'], ['customer', 'Customers'], ['health', 'Health'], ['floats', 'Supplier Floats']];
+
 export default function Admin() {
   const [authed, setAuthed] = useState(null);
   const [configured, setConfigured] = useState(true);
   const [passwordLogin, setPasswordLogin] = useState(false);
   const [tab, setTab] = useState('dashboard');
+  const [initialCustomer, setInitialCustomer] = useState('');
+  // Deep links (founder 2026-10-19): /admin?tab=customer&customer=27… opens one customer on its own page.
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const t = q.get('tab'); if (t && TABS.some(([k]) => k === t)) setTab(t);
+      const c = q.get('customer'); if (c) { setInitialCustomer(c); setTab('customer'); }
+    } catch {}
+  }, []);
   const probe = useCallback(() => {
     fetch('/api/admin/auth').then((r) => r.json()).then((s) => {
       setAuthed(s.authed); setConfigured(s.configured); setPasswordLogin(!!s.passwordLogin);
@@ -1424,9 +2160,7 @@ export default function Admin() {
         {authed && (
           <>
             <div className="tabs">
-              <button className={tab === 'dashboard' ? 'on' : ''} onClick={() => setTab('dashboard')}>Dashboard</button>
-              <button className={tab === 'growth' ? 'on' : ''} onClick={() => setTab('growth')}>Growth</button>
-              <button className={tab === 'customer' ? 'on' : ''} onClick={() => setTab('customer')}>Customers</button>
+              {TABS.map(([k, label]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>)}
             </div>
             <button className="linkish" onClick={async () => {
               await fetch('/api/admin/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) });
@@ -1437,7 +2171,9 @@ export default function Admin() {
       </header>
       {authed === null && <div className="card"><div className="empty">…</div></div>}
       {authed === false && <Login configured={configured} passwordLogin={passwordLogin} onDone={probe} />}
-      {authed === true && (tab === 'dashboard' ? <Dashboard /> : tab === 'growth' ? <Growth /> : <Customer />)}
+      {authed === true && (
+        tab === 'dashboard' ? <Dashboard /> : tab === 'growth' ? <Growth /> : tab === 'inbox' ? <Inbox /> : tab === 'health' ? <Health /> : tab === 'floats' ? <FloatsTab /> : <Customer initialQuery={initialCustomer} />
+      )}
     </div>
   );
 }

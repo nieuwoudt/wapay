@@ -12,6 +12,7 @@ import { depositFeeCents } from '../lib/deposits.js';
 import { buildBrainKnowledge, spendDestinationLines } from '../lib/spend-catalogue.js';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+const ON_SCOPE = { airtime: true, data: true, electricity: true, anyVas: true, allVas: true, bluLoad: true, ottLoad: false, voucher: true };
 
 test('the founder screenshot exchange is a fee question, routed by topic', () => {
   assert.equal(matchFeeAsk('How much does it cost to deposit money on here?'), 'deposit');
@@ -32,15 +33,22 @@ test('not fee questions: balances, product prices, plain commands', () => {
 test('answers carry the real numbers from the charging functions', () => {
   const s = feeSchedule();
   assert.equal(s.deposit.examples[0].feeCents, depositFeeCents(2000));
-  const a = feeAnswer('deposit');
+  const a = feeAnswer('deposit', null, { scope: ON_SCOPE });
   assert.match(a, /4\.2% \+ R2\.30/);
   assert.match(a, /R20 costs R24/); assert.match(a, /R100 costs R107/);
   assert.match(a, /keeps 6%/); assert.match(a, /R100 voucher adds R94/);
-  const exact = feeAnswer('deposit', 25000);
+  // Launch scope 2026-10-18: with the Blu rail off, no cash fee is quoted and the ask is honest.
+  const hold = feeAnswer('deposit');
+  assert.match(hold, /Cash top-ups with a Blu voucher at a till are coming soon/);
+  assert.doesNotMatch(hold, /keeps 6%/);
+  assert.match(feeAnswer('general'), /Airtime, data and electricity are coming soon/);
+  assert.match(feeAnswer('voucher'), /coming soon/);
+  assert.match(feeAnswer('ott'), /Buying an OTT voucher for yourself is coming soon/);
+  const exact = feeAnswer('deposit', 25000, { scope: ON_SCOPE });
   assert.match(exact, /R250 costs R263/, 'the named amount gets an exact quote');
   assert.equal(feeAskAmountCents('how much does it cost to deposit R250?'), 25000);
-  const g = feeAnswer('general');
-  for (const frag of ['What WaPay costs', 'free', 'R3 flat', 'under R50', 'No monthly fees']) assert.ok(g.includes(frag), frag);
+  const g = feeAnswer('general', null, { scope: ON_SCOPE });
+  for (const frag of ['What WaPay costs', 'free', 'Sending money from your balance is free, to any SA number', 'under R50', 'No monthly fees']) assert.ok(g.includes(frag), frag);
   assert.ok(!/—/.test(g) && !/PayShap/.test(g) && !/\bbet/i.test(g), 'customer copy rules');
 });
 
@@ -76,7 +84,7 @@ test('processor wiring: fee hook before the keyword router, deposit trap ignores
   // ring deleted).
   assert.match(p, /async function handleFeeAsk\(\{ from, account, topic, text \}\)[\s\S]{0,900}?sendWhatsAppText\(/, 'the fee answer is sent through say.js, which records it');
   assert.match(p, /import \{ sendWhatsAppText, recordInbound \} from '\.\.\/\.\.\/\.\.\/lib\/say\.js';/);
-  assert.match(p, /Here is everything your WaPay money can do right now\*\\n\\n\$\{spendDestinationLines\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\) \}\)\}/, '"what can I buy" opens with the catalogue-built list, gated per customer');
+  assert.match(p, /Here is everything your WaPay money can do right now\*\\n\\n\$\{spendDestinationLines\(\{ wicodeLive: fuelLiveFor\(from\), withdrawLive: payoutAllowedFor\(from\), scope \}\)\}/, '"what can I buy" opens with the catalogue-built list, gated per customer');
   assert.ok(!/🛒 \*WaPay VAS Products\*/.test(p), 'the three-item dump is gone');
   // Tightened 2026-09-15: the menu follows the PER-USER gate, so it never
   // advertises withdrawal to a customer the pilot allowlist will refuse.
@@ -88,8 +96,8 @@ test('processor wiring: fee hook before the keyword router, deposit trap ignores
 test('the AI prompt never freezes the payout flag and never plants a betting word', () => {
   const ai = read('../packages/ai/src/orchestrator.ts');
   // 2026-09-16: evaluated per call AND per customer (withdrawLive from the pilot allowlist).
-  assert.match(ai, /const PRODUCT_TRUTH = \(withdrawLive: boolean = process\.env\.WAPAY_PAYOUT_ENABLED === 'true'\): string =>/, 'evaluated per call, per customer');
-  assert.match(ai, /\$\{PRODUCT_TRUTH\(withdrawLive\)\}/);
+  assert.match(ai, /const PRODUCT_TRUTH = \(withdrawLive: boolean = process\.env\.WAPAY_PAYOUT_ENABLED === 'true', scope: LaunchScope = scopeFromEnv\(\)\): string =>/, 'evaluated per call, per customer');
+  assert.match(ai, /\$\{PRODUCT_TRUTH\(withdrawLive, scope\)\}/);
   assert.ok(!/betting/i.test(ai), 'Meta policy: no betting words in the prompt');
   assert.match(ai, /withdrawals are live, tell them to type/);
   assert.match(feeFacts(), /FEES YOU CAN QUOTE/);

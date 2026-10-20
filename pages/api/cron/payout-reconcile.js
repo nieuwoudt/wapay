@@ -9,7 +9,7 @@
  * webhook's words. Idempotent: a finalised row is a no-op next time.
  *
  * Auth (any one):
- * - Vercel Cron header: x-vercel-cron=1
+ * - Authorization: Bearer CRON_SECRET (what Vercel sends when the env is set; lib/cron-auth.js)
  * - query token: ?key=${CRON_SECRET}
  * - the internal key (x-internal-api-key, lib/internal-auth.js), so the same
  *   sweep can be run by hand from an operator script
@@ -22,12 +22,9 @@
 
 import { requireInternalAuth } from '../../../lib/internal-auth.js';
 import { sweepPayoutsAndNotify } from '../../../lib/payouts.js';
+// Golden thread O4 (2026-10-16): Bearer CRON_SECRET only; no header trust, no query token.
+import { isCronAuthed } from '../../../lib/cron-auth.js';
 
-function isCronAuthed(req) {
-  if (req.headers['x-vercel-cron'] === '1') return true;
-  const key = req.query?.key;
-  return !!(process.env.CRON_SECRET && key === process.env.CRON_SECRET);
-}
 
 /** Cron auth first; the internal key is an accepted alternative only when it is configured AND presented. */
 function isAuthed(req, res) {

@@ -36,7 +36,7 @@ test('the shadow gate: a listed number reaches the agent after the guard hooks a
 });
 
 test('inside the turn: guards run before any model call, the budget before the context load, the ledger records every path', () => {
-  const guardAt = turn.indexOf('const guard = agentGuard(text, { pendingIntent });');
+  const guardAt = turn.indexOf('const guard = agentGuard(text, { pendingIntent, scope: launchScopeFor({ waId: from, account }) });');
   const budgetAt = turn.indexOf('agentTurnsInLastHour({ prisma, accountId: account.id })');
   const loadAt = turn.indexOf('loadContextPack({ prisma, account })');
   const modelAt = turn.indexOf('await runAgentTurn({');
@@ -52,8 +52,11 @@ test('inside the turn: guards run before any model call, the budget before the c
   assert.match(turn, /if \(sent && sent\.ok === false\) throw Object\.assign\(new Error\('AGENT_SEND_FAILED'\)/);
   assert.doesNotMatch(turn.slice(turn.indexOf('const guard = agentGuard(text, { pendingIntent });')), /await sendWhatsAppText\(/, 'every send goes through deliver()');
   assert.match(turn, /WAPAY_AGENT_TURNS_PER_HOUR \|\| 60/);
-  // ledger rows on: guard, budget, slot rescue (2026-10-04), error, proposal, reply/clarify
-  assert.equal((turn.match(/await ledger\(/g) || []).length, 6);
+  // ledger rows on: guard, bare secret (BUGLOG #111: a PIN, ID or passport never reaches the model, before the budget so it costs no model turn), budget, slot rescue (2026-10-04), error, proposal, reply/clarify
+  assert.equal((turn.match(/await ledger\(/g) || []).length, 7);
+  assert.match(turn, /outcome: 'BARE_SECRET'/);
+  const secretAt = turn.indexOf('const secretKind = bareSecretKind(text);');
+  assert.ok(guardAt < secretAt && secretAt < budgetAt, 'guard → bare secret → budget');
   assert.match(turn, /outcome: 'BUDGET'/);
   // the current inbound never appears twice in the messages
   assert.match(turn, /excludeWaMessageId: messageId/);
@@ -77,14 +80,15 @@ test('a proposal is dispatched through dispatchOrchestratorAction with an empty 
 test('every reply and clarify passes the output gate and the provenance guard; a blocked reply becomes the fact-built fallback; clarify parks AGENT_CLARIFY', () => {
   const rep = turn.slice(turn.indexOf('// A reply or a clarifying question'));
   const sanAt = rep.indexOf('sanitizeUserText(result.text');
-  const gateAt = rep.indexOf('outputGate(out, { withdrawLive })');
+  const gateAt = rep.indexOf('outputGate(out, { withdrawLive, payoutPending: !!pack?.pendingPayout })');
   const receiptAt = rep.indexOf('looksLikeReceipt(out, known)');
   const sendAt = rep.indexOf("deliver({ to: from, text: out, kind: blocked ? 'fallback' : 'agent' })");
   const parkAt = rep.indexOf("updateConversationState(from, 'AGENT_CLARIFY', { pendingIntent: result.pendingIntent })");
   const ledgerAt = rep.indexOf('await ledger(');
   assert.ok(sanAt > 0 && sanAt < gateAt && gateAt < receiptAt && receiptAt < sendAt, 'sanitize → gate → provenance → send');
   assert.ok(sendAt < parkAt && parkAt < ledgerAt, 'send → park the clarify → ledger row (a throw before the send leaves no row and no state)');
-  assert.match(rep, /if \(blocked\) out = await fallback\(\);/, 'one localized fallback for every blocked reply');
+  // One localized fallback for every blocked reply; a PIN request or a pay-out claim gets the truth instead (BUGLOG #111).
+  assert.match(rep, /if \(blocked\) out = \(gate\.rule === 'PIN_ASK' \|\| gate\.rule === 'MONEY_CLAIM'\) \? await localizeOutbound\(nothingPendingLine\(pack\?\.balances\?\.spendCents \|\| 0\), await userLang\(account\)\) : await fallback\(\);/, 'one localized fallback for every blocked reply');
   assert.match(rep, /const parked = !blocked && result\.outcome === 'clarify' && !!result\.pendingIntent;/, 'a blocked clarify is never parked');
   assert.match(rep, /kind: blocked \? 'fallback' : 'agent'/);
   // the error path: fallback from the record, never a canned "didn't catch that"
@@ -123,7 +127,8 @@ test('AGENT_CLARIFY: the state clears first, the answer goes back to the agent w
 });
 
 test('the imports are the dormant Phase 2 modules, nothing new', () => {
-  assert.match(processor, /import \{ orchestrate, runAgentTurn, buildAgentSystemPrompt \} from '@wapay\/ai';/);
+  // The privacy scope of the model boundary joined the same import (BUGLOG #111).
+  assert.match(processor, /import \{ orchestrate, runAgentTurn, buildAgentSystemPrompt, runWithPrivacy, addPrivacyNames \} from '@wapay\/ai';/);
   assert.match(processor, /import \{ buildToolDefinitions, executeTool \} from '\.\.\/\.\.\/\.\.\/lib\/agent\/tools\/index\.js';/);
   assert.match(processor, /import \{ agentGuard, outputGate \} from '\.\.\/\.\.\/\.\.\/lib\/agent\/guards\.js';/);
   assert.match(processor, /import \{ recordAgentTurn, agentTurnsInLastHour \} from '\.\.\/\.\.\/\.\.\/lib\/agent\/turn-ledger\.js';/);

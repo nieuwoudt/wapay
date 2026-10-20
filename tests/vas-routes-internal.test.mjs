@@ -30,7 +30,7 @@ const BLU_CLIENT = /\b(BluVasClient|BluClient|BluVasExtendedClient|BLU_BASE_URL)
 // excluded from the walk: its gate is Meta's signature on the request.
 const GATES = [
   /requireInternalAuth\(/,          // operator and chat-internal routes
-  /isCronAuthed\(/,                 // the daily catalogue sync (Vercel cron header or CRON_SECRET)
+  /isCronAuthed\(/,                 // the daily catalogue sync (Bearer CRON_SECRET, lib/cron-auth.js)
   /ADMIN_API_KEY|x-admin-key/,      // the manual catalogue sync
 ];
 
@@ -44,7 +44,7 @@ test('every route under pages/api that reaches Blu stands behind a gate', () => 
   assert.deepEqual(offenders, [], `routes reaching Blu without a gate: ${offenders.join(', ')}`);
   // The gates are real functions, not comments: each named gate exists where it is relied on.
   const cron = readFileSync(path.join(root, 'pages/api/cron/daily-vas-sync.js'), 'utf8');
-  assert.ok(/function isCronAuthed\(/.test(cron) && /if \(!isCronAuthed\(req\)\)/.test(cron), 'the cron sync checks its gate');
+  assert.ok(/import \{ isCronAuthed \} from '..\/..\/..\/lib\/cron-auth.js'/.test(cron) && /if \(!isCronAuthed\(req\)\)/.test(cron), 'the cron sync checks the shared gate');
   const admin = readFileSync(path.join(root, 'pages/api/admin/sync-vas-catalog.js'), 'utf8');
   assert.ok(/ADMIN_API_KEY/.test(admin), 'the manual sync checks the admin key');
 });

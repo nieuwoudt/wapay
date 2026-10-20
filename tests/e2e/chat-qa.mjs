@@ -22,6 +22,22 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { seedQaAccount, teardownQaAccount, createSession, QA_WA_ID } from './chat-harness.mjs';
 import { fundQaAccount, parkQaState, QA_PIN, ottCalls, prisma } from './chat-harness.mjs';
 
+// The ledger send (BUGLOG #117): the processor's self-HTTP to /api/wallet/send/* is
+// served IN PROCESS by the real route handlers against the harness database, so a
+// scenario's send can never reach a deployed host.
+const realFetchForSend = globalThis.fetch;
+globalThis.fetch = async (url, init) => {
+  const m = String(url).match(/\/api\/wallet\/send\/(preview|execute)$/);
+  if (!m) return realFetchForSend(url, init);
+  const { default: handler } = await import(`../../pages/api/wallet/send/${m[1]}.js`);
+  const headers = Object.fromEntries(Object.entries(init?.headers || {}).map(([k, v]) => [k.toLowerCase(), v]));
+  const req = { method: init?.method || 'GET', headers, body: init?.body ? JSON.parse(init.body) : {}, url: `/api/wallet/send/${m[1]}` };
+  let status = 200; let payload = null;
+  const res = { status(c) { status = c; return res; }, json(p) { payload = p; return res; }, setHeader() { return res; } };
+  await handler(req, res);
+  return new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } });
+};
+
 const results = [];
 
 function verdict(name, checks, session, notes = []) {
@@ -57,8 +73,14 @@ const MENU_MARKERS = [
 ];
 const looksLikeMenu = (t) => MENU_MARKERS.some((re) => re.test(String(t || '')));
 
+const LAUNCH_SWITCHES = ['VAS_LIVE_AIRTIME', 'VAS_LIVE_DATA', 'VAS_LIVE_ELECTRICITY', 'VAS_LIVE_BLU_LOAD', 'VAS_LIVE_OTT_VOUCHER'];
+
 async function run() {
   await seedQaAccount();
+  // Launch scope (2026-10-18): the scenarios below were written for the pre-launch world, so its
+  // switches are on in-process here; scenario 6e below runs the shipped default (everything off).
+  for (const k of LAUNCH_SWITCHES) process.env[k] = 'true';
+  process.env.WAPAY_LAUNCH_HOLD = 'off';
   const s = createSession();
 
   // ------------------------------------------------------------------
@@ -184,7 +206,8 @@ async function run() {
       { level: 'FAIL', ok: !has(a.replyText, /How much electricity would you like to buy/i) && has(a.replyText, /R10 to R5000/) && has(a.replyText, /buy R100 electricity/), what: '"Can I buy electricity?" explains and offers the words to start' },
       { level: 'FAIL', ok: !has(b.replyText, /Withdraw from WaPay|Reply 1, 2 or 3/i) && has(b.replyText, /cannot be exchanged for cash/i), what: 'an OTT cash-out question is answered, not turned into a withdrawal' },
       { level: 'FAIL', ok: has(c.replyText, /Checkers does not take OTT vouchers/i) && has(c.replyText, /Talk360|Pay@/), what: '"Is it accepted at Checkers?" gets a no by name and the places it does work' },
-      { level: 'FAIL', ok: has(d.replyText, /lands in their balance and it is free/i) && !has(d.replyText, /instantly|in minutes/i) && !looksLikeMenu(d.replyText), what: '"Can I send money to someone?" explains sending, with no time promised (2026-10-12)' },
+      // The ledger send (BUGLOG #117): free, balance to balance, the same words whether or not they are on WaPay.
+      { level: 'FAIL', ok: has(d.replyText, /It is free and lands in their WaPay balance/i) && has(d.replyText, /straight away if they use WaPay, or when they join/i) && !has(d.replyText, /voucher PIN|instantly|in minutes/i) && !looksLikeMenu(d.replyText), what: '"Can I send money to someone?" explains the ledger send, free, membership-neutral, no time promised (2026-10-12, 2026-10-18)' },
     ], s);
   }
   {
@@ -214,7 +237,7 @@ async function run() {
       const g3 = await s.say('Put in my bank account');
       const g4 = await s.say('How much can I withdraw');
       verdict('Lisa 3: the R0 gate reads her situation, explains more the second time, offers a person the third time, never the same line twice', [
-        { level: 'FAIL', ok: has(g1.replyText, /You have R0 to withdraw\. The R350 \w+ sent you today came as a voucher PIN, not as money in your balance/) && has(g1.replyText, /R367 payment link from today was not paid/), what: 'first time: her money, the voucher and the unpaid link, before any minimum' },
+        { level: 'FAIL', ok: has(g1.replyText, /You have R0 to withdraw\. The R350 \w+ sent you today came as a voucher PIN, not as money in your balance/) && has(g1.replyText, /R350 add-money link \(R367 with the card fee\) from today was not paid/), what: 'first time: her money, the voucher and the unpaid link, before any minimum' },
         { level: 'FAIL', ok: !has(g1.replyText, /Withdrawals start at/), what: 'never the old product-fact line' },
         { level: 'FAIL', ok: has(g2.replyText, /Let me explain where your money is/) && has(g2.replyText, /What you can do:/) && has(g2.replyText, /passport or foreign ID works too/), what: 'second time: the picture as bullets, what she can do, a passport works' },
         { level: 'FAIL', ok: has(g3.replyText, /asked a person from the WaPay team|To talk to a person|Here it is once more/) && g3.replyText !== g2.replyText, what: 'third time: a person (or, with no alert channel here, a different wording), never the same line' },
@@ -231,7 +254,7 @@ async function run() {
       verdict('Lisa 4 and 5: "send money" to her own number is refused, never a voucher link; an unpaid link is "not paid", never "still confirming"', [
         { level: 'FAIL', ok: has(s3.replyText, /That is your own number/) && has(s3.replyText, /say \*withdraw\*/), what: 'her own number after "send money" is refused and points to withdraw' },
         { level: 'FAIL', ok: !has(s3.replyText, /Pay the R\d+ difference|button below|Confirm WaPay Voucher/), what: 'no voucher purchase and no payment link' },
-        { level: 'FAIL', ok: has(d1.replyText, /You have not paid your R367 payment link/) && has(d1.replyText, /Ignore it if you did not mean to buy/), what: '"did my payment go through" says the link was not paid' },
+        { level: 'FAIL', ok: has(d1.replyText, /You have not paid your R350 add-money link \(R367 with the card fee\)/) && has(d1.replyText, /Ignore it if you did not mean to buy/), what: '"did my payment go through" says the link was not paid' },
         { level: 'FAIL', ok: !has(d1.replyText, /still confirming|PayFast/), what: 'never "still confirming", no partner named' },
       ], s);
     } finally {
@@ -530,6 +553,154 @@ async function run() {
   }
 
   // ------------------------------------------------------------------
+  // 6f. The timeout (Lisa, 2026-10-15; BUGLOG #111): her withdrawal waited
+  // four hours at the ID step; her ID and then her PIN went to the AI, which
+  // asked for the PIN and said "Your payout is being confirmed now" with
+  // nothing sent. Now: a late answer carries the withdrawal on, a late yes or
+  // PIN is confirmed again and never used, a bare PIN or ID outside a flow is
+  // answered without a model (both brains), and a day-old flow says it stopped.
+  // ------------------------------------------------------------------
+  {
+    const prev = { on: process.env.WAPAY_PAYOUT_ENABLED, kyc: process.env.WAPAY_PAYOUT_KYC, agent: process.env.WAPAY_AGENT_V3_MSISDNS };
+    process.env.WAPAY_PAYOUT_ENABLED = 'true'; process.env.WAPAY_PAYOUT_KYC = 'off';
+    const qa = await prisma.account.findFirst({ where: { waId: QA_WA_ID } });
+    const ageState = async (hours) => {
+      const a = await prisma.account.findUnique({ where: { id: qa.id } });
+      await prisma.account.update({ where: { id: qa.id }, data: { conversationData: { ...(a.conversationData || {}), stateSetAt: new Date(Date.now() - hours * 3600 * 1000).toISOString() } } });
+    };
+    const clearPinReset = async () => { const a = await prisma.account.findUnique({ where: { id: qa.id } }); const { pinReset, ...rest } = a.profile || {}; await prisma.account.update({ where: { id: qa.id }, data: { profile: rest } }); };
+    try {
+      await clearPinReset();
+      await prisma.payoutIdentity.deleteMany({ where: { accountId: qa.id } });
+      await prisma.payoutDestination.deleteMany({ where: { accountId: qa.id } });
+      await fundQaAccount({ cents: 20000, key: 'timeout' });
+      await s.say('cancel');
+      for (const t of ['withdraw 50 to my bank account', '1234567890', 'Capitec', 'Lisa Moyo']) await s.say(t);
+      await ageState(4);
+      const t1 = await s.say('FN123456');
+      const t2 = await s.say('Zimbabwe');
+      await ageState(4);
+      const t3 = await s.say('yes');
+      const t4 = await s.say('yes');
+      await ageState(4);
+      const before = ottCalls.length;
+      const t5 = await s.say(QA_PIN);
+      const usedLatePin = ottCalls.length !== before;
+      const t6 = await s.say('cancel');
+      for (const t of ['withdraw 50']) await s.say(t);
+      await ageState(4);
+      const t7 = await s.say('2580');
+      const t8 = await s.say('2580');
+      const t9 = await s.say('8001015009087');
+      for (const t of ['withdraw 50 to my bank account', '1234567890', 'Capitec', 'Lisa Moyo']) await s.say(t);
+      await ageState(30);
+      const t10 = await s.say('FN123456');
+      process.env.WAPAY_AGENT_V3_MSISDNS = QA_WA_ID;
+      const t11 = await s.say('2580');
+      const t12 = await s.say('8001015009087');
+      const leak = (r) => has(r.replyText, /enter your (?:wapay )?pin|being confirmed|on its way|is being processed/i);
+      verdict('Lisa 9: a timed-out withdrawal never hands her ID or PIN to the AI; late answers carry on or are confirmed again; nothing is paid on a late PIN', [
+        { level: 'FAIL', ok: has(t1.replyText, /Which country issued that passport/), what: 'her ID four hours later carries the withdrawal on (the country is asked)' },
+        { level: 'FAIL', ok: has(t2.replyText, /Please confirm:/), what: 'then the confirmation, everything shown before any PIN' },
+        { level: 'FAIL', ok: has(t3.replyText, /checking it with you again before your PIN/) && has(t3.replyText, /Please confirm:/), what: 'a late YES is confirmed again, never straight to the PIN' },
+        { level: 'FAIL', ok: has(t4.replyText, /Enter your WaPay PIN/), what: 'a fresh YES reaches the PIN step' },
+        { level: 'FAIL', ok: has(t5.replyText, /I did not use the PIN you just sent/) && !usedLatePin, what: 'a late PIN is not used and nothing reaches the rail' },
+        { level: 'FAIL', ok: has(t6.replyText, /Cancelled|cancel/i), what: 'cancel ends it' },
+        { level: 'FAIL', ok: has(t7.replyText, /timed out/) && has(t7.replyText, /nothing was paid/), what: 'a PIN after an early step timed out is told so, deterministically' },
+        { level: 'FAIL', ok: has(t8.replyText, /Nothing is waiting for a PIN right now/), what: 'a bare PIN outside a flow never reaches the two-tier model' },
+        { level: 'FAIL', ok: has(t9.replyText, /Nothing is waiting for an ID or passport number/), what: 'a bare ID outside a flow never reaches the two-tier model' },
+        { level: 'FAIL', ok: has(t10.replyText, /stopped because it waited too long/) && has(t10.replyText, /Nothing was sent/), what: 'a day-old withdrawal says it stopped' },
+        { level: 'FAIL', ok: has(t11.replyText, /Nothing is waiting for a PIN right now/) && has(t12.replyText, /Nothing is waiting for an ID or passport number/), what: 'the agent path: a bare PIN or ID never reaches the model either' },
+        { level: 'FAIL', ok: ![t1, t2, t3, t5, t7, t8, t9, t10, t11, t12].some(leak), what: 'no reply asks for a PIN out of turn or claims a pay-out is under way' },
+      ], s);
+    } finally {
+      await s.say('cancel').catch(() => {});
+      for (const [k, v] of [['WAPAY_PAYOUT_ENABLED', prev.on], ['WAPAY_PAYOUT_KYC', prev.kyc], ['WAPAY_AGENT_V3_MSISDNS', prev.agent]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 6g. Send money through the ledger (founder 2026-10-18, BUGLOG #117): to a
+  // member it lands in their balance at once, free; to anyone else it is held
+  // and lands when they join, once; never a voucher, never a PIN; the sender
+  // reads the same words either way (membership-neutral). Two harness-made
+  // recipients, torn down with every ledger row the sends created.
+  // ------------------------------------------------------------------
+  {
+    const B = '27600000902'; const C = '27600000903';
+    const qa = await prisma.account.findFirst({ where: { waId: QA_WA_ID } });
+    const foreign = await prisma.account.findFirst({ where: { waId: { in: [B, C] }, NOT: { displayName: 'CHAT_QA_HARNESS' } } });
+    const mkMember = async (waId) => {
+      const a = await prisma.account.create({ data: { waId, msisdn: waId, displayName: 'CHAT_QA_HARNESS', onboardingState: 'S5_COMPLETED', onboardingStatus: 'COMPLETE', status: 'ACTIVE', conversationState: null, conversationData: {}, profile: {} } });
+      await prisma.wallet.create({ data: { accountId: a.id, balanceType: 'SPEND', currency: 'ZAR', availableCents: 0, pendingCents: 0 } });
+      return a;
+    };
+    const spendOf = async (waId) => (await prisma.wallet.findFirst({ where: { account: { waId }, balanceType: 'SPEND' } }))?.availableCents ?? null;
+    const cleanup = async () => {
+      const previews = await prisma.providerRequest.findMany({ where: { accountId: qa.id, route: 'send-preview' }, select: { id: true } });
+      const keys = previews.flatMap(({ id }) => [`send-${id}`, `gift-held-gift-${id}`, `gift-claim-balance-gift-${id}`, `gift-refund-gift-${id}`]);
+      if (keys.length) {
+        await prisma.journalLine.deleteMany({ where: { entry: { idemKey: { in: keys } } } }).catch(() => {});
+        await prisma.journalEntry.deleteMany({ where: { idemKey: { in: keys } } }).catch(() => {});
+      }
+      await prisma.pendingGift.deleteMany({ where: { senderAccountId: qa.id } }).catch(() => {});
+      await prisma.beneficiary.deleteMany({ where: { accountId: qa.id } }).catch(() => {});
+      for (const waId of [B, C]) {
+        const a = await prisma.account.findFirst({ where: { waId, displayName: 'CHAT_QA_HARNESS' } });
+        if (!a) continue;
+        await prisma.conversationTurn.deleteMany({ where: { accountId: a.id } }).catch(() => {});
+        await prisma.providerRequest.deleteMany({ where: { accountId: a.id } }).catch(() => {});
+        await prisma.wallet.deleteMany({ where: { accountId: a.id } }).catch(() => {});
+        await prisma.account.delete({ where: { id: a.id } }).catch(() => {});
+      }
+    };
+    if (foreign) {
+      verdict('Send 1: send money through the ledger (skipped: a test number belongs to a real account)', [{ level: 'WARN', ok: false, what: 'harness recipient numbers are taken; set other numbers' }], s);
+    } else {
+      try {
+        await cleanup();
+        await mkMember(B);
+        await fundQaAccount({ cents: 20000, key: 'send' });
+        const before = await spendOf(QA_WA_ID);
+        const ottBefore = ottCalls.length;
+        await s.say('cancel');
+        const m1 = await s.say('send R50 to 0600000902');
+        const m2 = await s.say('yes');
+        const m3 = await s.say(QA_PIN);
+        const bSpend = await spendOf(B);
+        const n1 = await s.say('send R30 to 0600000903');
+        const n2 = await s.say('yes');
+        const n3 = await s.say(QA_PIN);
+        const held = await prisma.pendingGift.findFirst({ where: { senderAccountId: qa.id, recipientMsisdn: '0600000903' } });
+        const after = await spendOf(QA_WA_ID);
+        await mkMember(C);
+        const c = createSession(C);
+        const c1 = await c.say('hi');
+        const cSpend1 = await spendOf(C);
+        const c2 = await c.say('hi');
+        const cSpend2 = await spendOf(C);
+        const claims = held ? await prisma.journalEntry.count({ where: { idemKey: `gift-claim-balance-${held.id}` } }) : -1;
+        const heldAfter = held ? await prisma.pendingGift.findUnique({ where: { id: held.id } }) : null;
+        const neutral = (t) => has(t, /straight away if they use WaPay, or when they join\. No fee\./) && !has(t, /voucher|does not have WaPay|not on WaPay/i);
+        verdict('Send 1: to a member it lands at once, free; to anyone else it is held and lands when they join, once; never a voucher or a PIN; the sender reads the same words either way', [
+          { level: 'FAIL', ok: neutral(m1.replyText) && neutral(n1.replyText), what: 'the confirm is the same for a member and a non-member, free, no voucher' },
+          { level: 'FAIL', ok: has(m2.replyText, /Enter your WaPay PIN\* to send R50 to 0600000902/), what: 'YES asks for the PIN for the send' },
+          { level: 'FAIL', ok: has(m3.replyText, /Sent R50/) && has(n3.replyText, /Sent R30/) && has(m3.replyText, /in their WaPay balance, or it waits there for them until they join WaPay/) && has(n3.replyText, /in their WaPay balance, or it waits there for them until they join WaPay/), what: 'the receipt is the same for both' },
+          { level: 'FAIL', ok: bSpend === 5000, what: 'the member balance rose by R50 at once' },
+          { level: 'FAIL', ok: !!held && held.rail === 'WAPAY' && held.voucherPin === null && held.amountCents === 3000, what: 'the R30 to a non-member is held: rail WAPAY, no PIN' },
+          { level: 'FAIL', ok: before - after === 8000, what: 'the sender paid R80 in total, no fee' },
+          { level: 'FAIL', ok: ottCalls.length === ottBefore, what: 'no rail was called' },
+          { level: 'FAIL', ok: has(c1.replyText, /sent you R30\. It is in your WaPay balance/) && cSpend1 === 3000, what: 'joining lands the R30 in their balance with one line' },
+          { level: 'FAIL', ok: !has(c2.replyText, /sent you R30/) && cSpend2 === 3000 && claims === 1 && heldAfter?.status === 'DELIVERED', what: 'a second message claims nothing; one claim entry; the row is DELIVERED' },
+          { level: 'FAIL', ok: ![m1, m2, m3, n1, n2, n3, c1, c2].some((r) => has(r.replyText, /voucher PIN|PIN:/i)), what: 'no voucher PIN anywhere' },
+        ], s);
+      } finally {
+        await cleanup();
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
   // 7. Languages: switch, localized replies, non-English inbound
   // ------------------------------------------------------------------
   {
@@ -598,7 +769,7 @@ async function run() {
       verdict('Agent: "How can I withdraw money?" is short, honest, and never the menu', [
         { level: 'FAIL', ok: !looksLikeMenu(a.replyText), what: 'no menu' },
         { level: 'FAIL', ok: !has(a.replyText, /\b(january|february|march|april|june|july|august|september|october|november|december|20\d\d)\b/i), what: 'no date promised' },
-        { level: 'FAIL', ok: !has(a.replyText, /\bOTT\b/) || live, what: 'the payout partner is not named while withdrawals are off' },
+        { level: 'FAIL', ok: !has(a.replyText, /\bOTT\b(?! vouchers?\b)/) || live, what: 'the payout partner is not named while withdrawals are off (the OTT voucher product may be)' },
         { level: 'FAIL', ok: !has(a.replyText, /\bbet|wager|casino|odds\b/i), what: 'no betting word' },
         { level: 'WARN', ok: aLines.length <= 6, what: 'six lines or fewer (review 4: two lines and a question)' },
         live
@@ -684,6 +855,123 @@ async function run() {
     } finally {
       if (prevList === undefined) delete process.env.WAPAY_AGENT_V3_MSISDNS; else process.env.WAPAY_AGENT_V3_MSISDNS = prevList;
       if (prevBudget === undefined) delete process.env.WAPAY_AGENT_TURNS_PER_HOUR; else process.env.WAPAY_AGENT_TURNS_PER_HOUR = prevBudget;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 6e. Launch scope (2026-10-18): the shipped default. Airtime, data,
+  //     electricity, voucher loads and the OTT self-purchase read "coming
+  //     soon" with what works today; the home card and the catalogue agree;
+  //     send money and pay links stay live. docs/LAUNCH_SCOPE.md.
+  // ------------------------------------------------------------------
+  {
+    const prevSwitches = Object.fromEntries([...LAUNCH_SWITCHES, 'WAPAY_LAUNCH_HOLD'].map((k) => [k, process.env[k]]));
+    for (const k of [...LAUNCH_SWITCHES, 'WAPAY_LAUNCH_HOLD']) delete process.env[k];
+    try {
+      await s.say('cancel');
+      const a = await s.say('buy airtime');
+      const b = await s.say('buy R50 electricity');
+      const c = await s.say('show MTN bundles');
+      const d = await s.say('Can I buy electricity?');
+      const e2 = await s.say('What can I buy with this?');
+      const f2 = await s.say('redeem voucher');
+      await s.say('cancel');
+      const g = await s.say('1234567812345678');
+      const h = await s.say('buy an OTT voucher for R50');
+      const i = await s.say('how much does it cost to deposit cash?');
+      const j = await s.say('hi');
+      const soon = (r) => has(r.replyText, /coming soon/i);
+      const works = (r) => has(r.replyText, /Right now you can get paid with a "please pay me" link/);
+      verdict('Launch scope: off products say coming soon and what works; nothing starts; home and catalogue agree', [
+        { level: 'FAIL', ok: soon(a) && works(a) && !has(a.replyText, /How much airtime would you like/i), what: '"buy airtime" is coming soon, no amount ask' },
+        { level: 'FAIL', ok: soon(b) && !has(b.replyText, /meter number/i), what: '"buy R50 electricity" is coming soon, no meter ask' },
+        { level: 'FAIL', ok: soon(c) && !has(c.replyText, /MTN.*R\d/i), what: '"show MTN bundles" is coming soon, no bundle list' },
+        { level: 'FAIL', ok: soon(d) && !has(d.replyText, /R10 to R5000/), what: '"Can I buy electricity?" is coming soon, never the steps' },
+        { level: 'FAIL', ok: has(e2.replyText, /Send money/i) && has(e2.replyText, /Get paid/i) && !has(e2.replyText, /Prepaid products you can buy here/) && has(e2.replyText, /Coming soon/), what: '"what can I buy" lists what works and names what is coming, no product menu' },
+        { level: 'FAIL', ok: has(f2.replyText, /How much would you like to add/i) && soon(f2) && !has(f2.replyText, /Blu Voucher.*send me the code/i), what: '"redeem voucher" becomes the card / EFT amount ask with the cash position' },
+        { level: 'FAIL', ok: soon(g) && !has(g.replyText, /Processing Voucher/i), what: 'a 16-digit PIN gets coming soon, never a redemption attempt' },
+        { level: 'FAIL', ok: soon(h) && !has(h.replyText, /Confirm|enter your PIN/i), what: '"buy an OTT voucher" is coming soon, no preview' },
+        { level: 'WARN', ok: soon(i) && !has(i.replyText, /keeps 6%/), what: 'the cash top-up fee question says coming soon, no Blu fee quoted' },
+        { level: 'FAIL', ok: has(j.replyText, /\*Coming soon\*: airtime, data, electricity, fuel vouchers, cash deposits with a Blu or OTT voucher and a virtual card/) && !has(j.replyText, /\*Buy\*/) && has(j.replyText, /by card or Instant EFT/) && has(j.replyText, /\*Send\*/), what: 'the home card: one coming-soon line (cash deposits and the virtual card included), no Buy line, card-only deposit, Send live' },
+        { level: 'FAIL', ok: ![a, b, c, d, e2, f2, g, h, i, j].some((r) => /[—–]|\b(bet|betting|casino)\b/i.test(String(r.replyText || ''))), what: 'copy rules hold in every reply' },
+      ], s);
+    } finally {
+      for (const [k, v] of Object.entries(prevSwitches)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 7. Ad arrivals (docs/AD_CHAT_FLOW.md, 2026-10-18): the tapped questions, no
+  //    second welcome, onboarding straight in, the first link, the section-2
+  //    truth for FAQs, and "stop". A fresh QA number with a synthetic referral.
+  // ------------------------------------------------------------------
+  {
+    const AD_WA_ID = process.env.CHAT_QA_AD_WA_ID || '27600000902';
+    const REF = { source_url: 'https://fb.me/wapay-qa', source_type: 'ad', source_id: 'qa-ad-1', headline: 'Please pay me', body: 'Get paid on WhatsApp', media_type: 'image', ctwa_clid: `qa-clid-${process.pid}` };
+    const teardownAd = async () => {
+      const acc = await prisma.account.findFirst({ where: { waId: AD_WA_ID } });
+      if (!acc) return;
+      await prisma.paymentRequest.updateMany({ where: { accountId: acc.id, status: 'PENDING' }, data: { status: 'CANCELLED' } }).catch(() => {});
+      await prisma.paymentRequest.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.authFactor.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.conversationTurn.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.agentTurn.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.otpCode.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.consent.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.auditLog.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.wallet.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.account.delete({ where: { id: acc.id } }).catch(() => {});
+    };
+    const existing = await prisma.account.findFirst({ where: { waId: AD_WA_ID } });
+    if (existing && existing.onboardingState === 'S5_COMPLETED' && existing.profile?.acquisitionSource !== 'ad') {
+      console.log('[SKIP] Ad arrival: CHAT_QA_AD_WA_ID belongs to a real account; set another number');
+    } else {
+      await teardownAd();
+      const prevOtp = process.env.WAPAY_ONBOARDING_OTP;
+      // The harness cannot read a real one-time code; the OTP step is skipped so
+      // PIN and consent still run. Production keeps the OTP.
+      process.env.WAPAY_ONBOARDING_OTP = 'off';
+      try {
+        const ad = createSession(AD_WA_ID);
+        const a = await ad.say('What does it cost?', { referral: REF, profile: { name: 'Thandi QA' } });
+        const b = await ad.say('How it works');
+        const c = await ad.say('Open my account');
+        const d = await ad.say('2580');
+        const e = await ad.say('I accept');
+        const f = await ad.say('R20 from Thandi for the test');
+        const g = await ad.say('Can I buy airtime?');
+        const h = await ad.say('How do I get my money out?');
+        const i = await ad.say('stop');
+        const row = await prisma.account.findFirst({ where: { waId: AD_WA_ID } });
+        const attr = row?.profile?.attribution || {};
+        const links = row ? await prisma.paymentRequest.count({ where: { accountId: row.id } }) : 0;
+        const banned = /\b(banking|send money|transfer|withdraw|cash ?out)\b/i;
+        verdict('Ad arrival: Q3 → how it works → open → PIN → consent → first link → FAQ → stop', [
+          { level: 'FAIL', ok: has(a.replyText, /Under R50, getting paid is free/) && has(a.replyText, /\[Open my account\]/), what: 'the cost answer carries the open-account button' },
+          { level: 'FAIL', ok: !has(a.replyText, /Welcome to WaPay/i) && !a.replies.some((r) => /onboarding_step_1/.test(r.text)), what: 'no second welcome, no welcome template' },
+          { level: 'FAIL', ok: has(b.replyText, /Forward the payment link we send you/), what: '"How it works" answers the three steps' },
+          { level: 'FAIL', ok: has(c.replyText, /Great, Thandi/) && has(c.replyText, /pin|onboarding_step_3/i), what: '"Open my account" greets by name and reaches the PIN step at once' },
+          { level: 'FAIL', ok: has(d.replyText, /accept|consent|onboarding_step_4|Step 3 of 3/i), what: 'the PIN moves to the consent step' },
+          { level: 'FAIL', ok: has(e.replyText, /Let's get you paid\. Who owes you, and how much\?/), what: 'completion asks for the first link, not the business question' },
+          { level: 'FAIL', ok: has(f.replyText, /Here's your payment link for R20: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/) && has(f.replyText, /Forward it to Thandi/), what: '"R20 from Thandi" mints the link with the short forwardable copy' },
+          { level: 'FAIL', ok: links === 1, what: 'exactly one link exists' },
+          { level: 'FAIL', ok: has(g.replyText, /coming soon/), what: '"Can I buy airtime?" is coming soon' },
+          { level: 'FAIL', ok: has(h.replyText, /PayShap/) && has(h.replyText, /\[Nedbank cash\]/), what: 'money-out answer with the three pay-out buttons' },
+          { level: 'FAIL', ok: has(i.replyText, /no more reminders/i) && attr.reminderOptOut === true, what: '"stop" opts out of the reminder' },
+          { level: 'FAIL', ok: attr.entry === 'Q3' && Boolean(attr.ctwaClid) && Boolean(attr.onboardedAt), what: 'the account carries entry Q3, the click id and the onboarding time' },
+          { level: 'FAIL', ok: [a, b, c, d, e, f, g, h, i].every((t) => !banned.test(t.replyText)), what: 'no banned word anywhere in the flow' },
+        ], ad);
+        await teardownAd();
+        const ad2 = createSession(AD_WA_ID);
+        const q1 = await ad2.say('Open my WaPay account', { referral: REF, profile: { name: 'Sipho QA' } });
+        verdict('Ad arrival: Q1 goes straight into onboarding', [
+          { level: 'FAIL', ok: has(q1.replyText, /Great, Sipho\. Let's open your WaPay account/) && has(q1.replyText, /pin|onboarding_step_3/i), what: 'one greeting line, then the first onboarding step' },
+          { level: 'FAIL', ok: !q1.replies.some((r) => /onboarding_step_1/.test(r.text)), what: 'the welcome template is skipped' },
+        ], ad2);
+      } finally {
+        if (prevOtp === undefined) delete process.env.WAPAY_ONBOARDING_OTP; else process.env.WAPAY_ONBOARDING_OTP = prevOtp;
+        await teardownAd();
+      }
     }
   }
 

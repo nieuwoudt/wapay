@@ -13,7 +13,7 @@
  * Usage:
  *   BLU_VAS_STUB_MODE=false \
  *   BLU_BASE_URL=https://api.qa.bltelecoms.net/v2/trade \
- *   BLU_TRADE_API_KEY=5135ae7a-3d92-44ff-86bb-89c401722221 \
+ *   BLU_TRADE_API_KEY=<your-api-key> \
  *   node scripts/test-blu-vas-airtime-qa.js
  * 
  * Or with env vars already set:

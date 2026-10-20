@@ -434,7 +434,7 @@ model PendingGift {
   recipientMsisdn String
   amountCents     Int
   rail            String
-  voucherPin      String // bearer secret — never log the full PIN
+  voucherPin      String? // bearer secret — never log the full PIN; null for a held send (rail WAPAY, BUGLOG #117)
   voucherSerial   String?
   status          String    @default("ISSUED") // ISSUED | DELIVERED | CANCELLED
   idemKey         String    @unique
@@ -560,4 +560,58 @@ model AdCatalog {
   updatedAt    DateTime @default(now()) @updatedAt
 
   @@map("ad_catalog")
+}
+
+// The daily conversation audit (docs/audits/DAILY_AUDIT.md, 2026-10-19): one
+// row per run of lib/audit/run.js, and one row per distinct finding keyed by
+// its fingerprint (sha1 of category + normalised title) so a problem that
+// returns day after day is counted, not re-listed. Quotes are taken from the
+// redacted memory (conversation_turns) with known names masked; never a
+// number, PIN or code. Mission Control's Health tab reads both tables through
+// GET /api/admin/audit.
+model AuditRun {
+  id         String    @id @default(cuid())
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  since      DateTime
+  until      DateTime
+  accounts   Int       @default(0)
+  turns      Int       @default(0)
+  p1         Int       @default(0)
+  p2         Int       @default(0)
+  p3         Int       @default(0)
+  reviewed   Boolean   @default(false) // the model reviewer ran over every chunk
+  error      String?
+  summary    Json? // counts after the run, patterns, the review's own numbers, the top recurring titles
+
+  @@index([startedAt])
+  @@map("audit_runs")
+}
+
+model AuditFinding {
+  id              String    @id @default(cuid())
+  fingerprint     String    @unique // sha1(category + normalised title)
+  severity        String // P1 | P2 | P3
+  category        String
+  title           String
+  why             String?
+  fix             String?
+  firstSeenRunId  String
+  lastSeenRunId   String
+  firstSeenAt     DateTime  @default(now())
+  lastSeenAt      DateTime  @default(now())
+  occurrences     Int       @default(1) // hits across every run (one per account per run)
+  accountCount    Int       @default(0) // distinct accounts ever, uncapped
+  accountsJson    Json? // [{ id, at }] newest first, at most 20
+  sampleBotQuote  String?
+  sampleUserQuote String?
+  status          String    @default("open") // open | recurring | resolved
+  resolvedAt      DateTime?
+  resolvedNote    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+
+  @@index([status, severity])
+  @@index([lastSeenRunId])
+  @@map("audit_findings")
 }

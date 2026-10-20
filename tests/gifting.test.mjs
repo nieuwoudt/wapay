@@ -62,7 +62,7 @@ test('resolveGift: bare cash send becomes a VOUCHER_GIFT (goods voucher, never m
   assert.equal(r.product, 'VOUCHER');
 });
 
-test('resolveGift: send-money without amount asks for it with voucher-flavoured copy', () => {
+test('resolveGift: send-money without amount asks for it with balance copy (ledger send since 2026-10-18; audit 2026-10-19)', () => {
   const r = resolveGift({
     slots: { productHint: 'SEND_MONEY', msisdn: '0840012300' },
     senderMsisdn: SENDER,
@@ -70,11 +70,11 @@ test('resolveGift: send-money without amount asks for it with voucher-flavoured 
   assert.equal(r.kind, 'NEEDS_AMOUNT');
   assert.equal(r.ok, false);
   assert.equal(r.product, 'VOUCHER');
-  assert.match(r.message, /WaPay voucher/);
-  assert.match(r.message, /spend online at any store that accepts OTT vouchers/i);
+  assert.match(r.message, /from your WaPay balance to theirs, free/);
+  assert.ok(!/voucher|OTT/i.test(r.message), 'a send never speaks of a voucher');
 });
 
-test('resolveGift: send-money without recipient asks for it (keeps amount, voucher copy)', () => {
+test('resolveGift: send-money without recipient asks for it (keeps amount, balance copy)', () => {
   const r = resolveGift({
     slots: { productHint: 'SEND_MONEY', amountCents: 5000 },
     senderMsisdn: SENDER,
@@ -82,7 +82,7 @@ test('resolveGift: send-money without recipient asks for it (keeps amount, vouch
   assert.equal(r.kind, 'NEEDS_RECIPIENT');
   assert.equal(r.ok, false);
   assert.equal(r.amountCents, 5000);
-  assert.match(r.message, /WaPay voucher/);
+  assert.match(r.message, /from your WaPay balance to theirs, free/); assert.ok(!/voucher|OTT/i.test(r.message));
 });
 
 test('resolveGift: send-money with invalid recipient is rejected', () => {

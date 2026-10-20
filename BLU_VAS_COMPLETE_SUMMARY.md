@@ -36,7 +36,7 @@
 - ✅ Phone number normalization
 
 ### **4. Environment Setup (Complete!)**
-- ✅ API key received: `e73d6237-0864-4c87-ba40-e520e951b336`
+- ✅ API key received (stored in Vercel, never in the repository)
 - ✅ Created `VERCEL_ENV_COMPLETE.md`
 - ✅ All Blu credentials documented
 
