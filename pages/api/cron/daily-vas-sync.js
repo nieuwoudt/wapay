@@ -27,6 +27,9 @@ import prisma from '../../../lib/prisma.js';
 import { isCronAuthed } from '../../../lib/cron-auth.js';
 
 
+// The audit step at the end needs more than the default budget (2026-10-20: the 02:00 run read 3 of 5 chunks in 25 s).
+export const config = { maxDuration: 60 };
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', ['GET']);
@@ -206,13 +209,13 @@ export default async function handler(req, res) {
     // The daily conversation audit (docs/audits/DAILY_AUDIT.md, 2026-10-19):
     // the conversations since the last run swept by the rules and read by the
     // reviewer, findings stored with their recurrence, the ops summary sent.
-    // One call, its own try/catch, a hard cap of 25 s (less when the steps
+    // One call, its own try/catch, a hard cap of 45 s (less when the steps
     // above used the function's budget): it can never fail or delay the cron's
     // answer, and it is logged, never returned (the response literal below is
     // pinned by tests/payout-reconcile.test.mjs).
     try {
       const { runDailyAudit } = await import('../../../lib/audit/run.js');
-      const auditCapMs = Math.max(5 * 1000, Math.min(25 * 1000, 55 * 1000 - (Date.now() - cronStartedMs)));
+      const auditCapMs = Math.max(5 * 1000, Math.min(45 * 1000, 57 * 1000 - (Date.now() - cronStartedMs)));
       let auditTimer = null;
       const audit = await Promise.race([
         runDailyAudit({ prisma, deadlineMs: auditCapMs - 3 * 1000 }),

@@ -5,7 +5,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseReviewOutput, gateFinding, REVIEW_SCHEMA, P1_CONFIDENCE } from '../lib/audit/review.js';
+import { parseReviewOutput, gateFinding, REVIEW_SCHEMA, P1_CONFIDENCE, quotesKnownCorrectTemplate } from '../lib/audit/review.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 import { truthBlock, buildReviewBrief } from '../lib/audit/brief.js';
 
 test('the schema asks for a cited rule and a confidence; the gate demotes an uncited or unsure P1 and drops the known misreadings', () => {
@@ -48,4 +51,23 @@ test('the live-provider minimum never drops below the cash floor; deposits name 
   assert.equal(minWithdrawCents([{ method: 'PAYSHAP', minCents: 3000 }]), 3000, 'a bank method takes the rail minimum');
   assert.equal(minWithdrawCents(null), 5000);
   assert.match(truthBlock({ providers: null }), /adding money by card, Instant EFT, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, SnapScan or Zapper through PayFast/);
+});
+
+test('a wrong-fact finding that quotes a known-correct template is dropped; the known-titles list no longer invites a re-report; the cron gives the audit its own budget', () => {
+  const addMoney = '💳 *Add Money to WaPay*\n\nHow much would you like to add? Reply with the amount, for example "R100", and I send you a secure payment link for your card, Apple Pay, Google Pay, Samsung Pay, Capitec Pay, Instant EFT, SnapScan or Zapper.';
+  assert.equal(quotesKnownCorrectTemplate(addMoney), true);
+  assert.equal(quotesKnownCorrectTemplate('You can collect it as an FNB eWallet.'), false);
+  const f = { severity: 'P1', category: 'wrong-fact', title: 'Add-money flow lists payment methods that are not available today', accountId: 'a', botQuote: addMoney, userQuote: 'add money', why: 'x', fix: 'y', rule: 'adding money by card or Instant EFT', confidence: 0.95 };
+  assert.deepEqual(parseReviewOutput({ findings: [f] }, { accountIds: ['a'] }).findings, []);
+  const loop = { ...f, category: 'stuck-loop', severity: 'P2', title: 'The same prompt three times' };
+  assert.equal(parseReviewOutput({ findings: [loop] }, { accountIds: ['a'] }).findings.length, 1, 'only wrong-fact and money findings are gated by the template list');
+  const brief = buildReviewBrief({ truth: truthBlock({ providers: null }), processChecks: '', knownTitles: ['Quotes a R20 withdrawal minimum'] });
+  assert.match(brief, /Their presence here is NOT evidence that they happen in these transcripts: do not look for them\./);
+  assert.match(brief, /every PayFast method named below is live for deposits and for paying a link/);
+  const cron = read('../pages/api/cron/daily-vas-sync.js');
+  assert.match(cron, /export const config = \{ maxDuration: 60 \};/);
+  assert.match(cron, /Math\.min\(45 \* 1000, 57 \* 1000 - \(Date\.now\(\) - cronStartedMs\)\)/);
+  const proc = read('../pages/api/webhooks/message-processor-v2.js');
+  assert.ok(!proc.includes('(R5–R3000)') && !proc.includes('(R10–R1000)'), 'the range prompts say "to", no en dash');
+  assert.match(proc, /\(R5 to R3000\)/);
 });

@@ -89,3 +89,15 @@ invite list taken as a rule about opening an account. Two changes:
   Deterministic findings are untouched. `tests/audit-precision.test.mjs` locks it.
 
 The trial rows from that first run were deleted and the loop was run again on the same day.
+
+## After the first scheduled run (2026-10-20, 02:00 UTC)
+
+The cron run read 119 accounts and 681 turns but reviewed 3 of 5 chunks inside its 25-second
+cap, and the reviewer re-reported the add-money prompt's method list as a wrong fact fourteen
+times although every method in it is live. Three changes: the cron file declares a 60-second
+budget and gives the audit, which runs last, up to 45 seconds; `KNOWN_CORRECT_TEMPLATES` in
+`lib/audit/review.js` drops a wrong-fact finding that quotes a fixed template whose facts come
+from the same functions the brief is built from (the add-money prompt, the get-paid prompt, the
+chooser, the first-link prompt, the link-created line, the send confirmation); and the known
+titles list in the brief now says it is not evidence and must not be searched for. The two
+false add-money findings were marked resolved by hand with that note.

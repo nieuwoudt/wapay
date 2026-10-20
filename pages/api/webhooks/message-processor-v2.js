@@ -2224,7 +2224,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       });
     }
     await updateConversationState(from, 'VOUCHER_GIFT_AMOUNT', { recipientMsisdn: account.msisdn, self: true });
-    const askMsg = `🎟️ *OTT Voucher*\n\nHow much would you like your voucher for? (R10–R1000)\n\nFor example "R50", or reply "cancel" to stop.`;
+    const askMsg = `🎟️ *OTT Voucher*\n\nHow much would you like your voucher for? (R10 to R1000)\n\nFor example "R50", or reply "cancel" to stop.`;
     return await sendWhatsAppText({ to: from, text: askMsg });
   }
 
@@ -3367,7 +3367,7 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
     const askMsg = await localizeOutbound(
       reason
         ? `🙏 ${reason}\n\nReply with the amount, for example "R150", or "cancel" to stop.`
-        : `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5–R3000)\n\nFor example "R150", or reply "cancel" to stop.`,
+        : `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5 to R3000)\n\nFor example "R150", or reply "cancel" to stop.`,
       await userLang(account)
     );
     return await sendWhatsAppText({ to: from, text: askMsg });

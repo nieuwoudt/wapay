@@ -538,7 +538,7 @@ test('cron: one capped audit call inside its own try/catch, logged, never in the
   assert.ok(before.lastIndexOf('try {') > before.lastIndexOf('catch'), 'inside its own try');
   const block = cron.slice(i, cron.indexOf('return res.status(200)'));
   assert.match(block, /Promise\.race\(\[\s*runDailyAudit\(\{ prisma, deadlineMs: auditCapMs - 3 \* 1000 \}\)/);
-  assert.match(block, /Math\.min\(25 \* 1000/); assert.match(block, /clearTimeout\(auditTimer\)/);
+  assert.match(block, /Math\.min\(45 \* 1000/); assert.match(block, /clearTimeout\(auditTimer\)/);
   assert.match(block, /type: 'cron_daily_audit'/); assert.match(block, /catch \(e\) \{[\s\S]*cron_daily_audit_failed/);
   assert.doesNotMatch(block, /accountId|text:|quote/i, 'the cron log carries counts only');
   assert.match(cron, /return res\.status\(200\)\.json\(\{ \.\.\.out, turnsPurged, integrity: .*?, embeddings, payoutSweep, jobs \}\)/, 'the response literal is unchanged');

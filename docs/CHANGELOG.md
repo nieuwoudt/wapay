@@ -81,6 +81,8 @@ docs/audits/DAILY_AUDIT_BRIEF.md; the manual is docs/audits/DAILY_AUDIT.md.
 
 - **Precision gate (same day, after the first real run):** the brief states the four facts the reviewer misread (account opening is open to anyone, the payer's methods, who carries the card fee with worked arithmetic, the scripted ad answers); the schema carries `rule` and `confidence`; `gateFinding` drops coming-soon and invite-list misreadings and demotes an uncited or unsure P1 to "Verify:" P3. `tests/audit-precision.test.mjs`.
 
+- **After the first scheduled run (2026-10-20):** the cron declares a 60-second budget and gives the audit up to 45 seconds; `KNOWN_CORRECT_TEMPLATES` drops wrong-fact findings that quote a fixed template; the known-titles list no longer invites a re-report; the get-paid and voucher range prompts say "R5 to R3000" instead of an en dash (the sweep counted the dash 30 times).
+
 ## 2026-10-19 (98) — The first conversation audit's fixes: the send flow speaks balance, the request ceiling and re-link rules, a real answer to "close my account", the example echo and "nobody owes me", the Send tap, add-money links named as such; the business question asks only on "ask"
 
 Four review agents read every customer conversation (348 accounts, 2,498 turns, redacted
