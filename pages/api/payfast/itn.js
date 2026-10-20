@@ -198,6 +198,9 @@ export default async function handler(req, res) {
     if (!posted?.replayed) {
       const { opsMoneyIn } = await import('../../../lib/ops-alerts.js');
       await opsMoneyIn({ amountCents, kind: intent.route === 'deposit' ? 'DEPOSIT' : 'LINK_PAID', accountId, idemKey: intent.idemKey });
+      // Referrals (docs/REFERRALS.md, 2026-10-20): a referred account's first money in qualifies the invite. Idempotent, never throws.
+      const { onFunded } = await import('../../../lib/referrals.js');
+      await onFunded({ accountId });
     }
     // Memory: this customer loads by card — but only for their OWN deposits.
     // On a payment request the card belongs to a THIRD PARTY, not the

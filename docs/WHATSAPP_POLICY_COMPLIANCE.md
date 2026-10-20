@@ -43,3 +43,28 @@ operating standard from now on. BUGLOG #130 is the incident.
 - Account quality: read the reason Meta gives, and use "Request review" where offered.
 - Business profile: add the support e-mail and the website if either is missing (the Health tab shows which).
 - Templates: leave every MARKETING template unused until the rating is GREEN; UTILITY and AUTHENTICATION templates sent inside a flow the customer started are fine.
+
+## Reaching a customer after the 24-hour window
+
+A person who asked WaPay for help and then went quiet must never be out of reach. Free-form
+text is refused by Meta after 24 hours, so the ops reply route (`lib/ops-reply.js`, the Inbox
+reply box and `/api/internal/ops-reply`) switches rail by itself: inside the window the text
+goes as a normal message; after it, the same text travels inside the approved UTILITY template
+`wapay_support_followup` ("Hi {{1}}, WaPay support here, about your message to us. {{2}} Reply to
+this message if you still need help."). A customer's own support request is the opt-in for that
+follow-up; it is a utility message, never marketing. A customer who said stop is not written to
+on either rail until they write again. `WAPAY_TEMPLATE_SUPPORT_FOLLOWUP=off` disables the rail;
+another name selects another approved utility template with the same two parameters.
+
+Templates are created through `POST /api/internal/template-create` (internal key), which refuses
+the MARKETING category outright: nothing promotional is added while the rating is not GREEN.
+Receipts filed as marketing (the paid-link notice `wapay_request_paid`) are re-created as
+utility and the env names switched (`WAPAY_TEMPLATE_REQUEST_PAID`).
+
+## The send cap
+
+No code path, agent or hook may send a storm of messages. `lib/say.js` refuses the ninth text
+to one number inside twenty seconds with `{ ok: false, error: 'SEND_CAP' }` and logs
+`say_send_cap`; legitimate turns never reach four. `WAPAY_SEND_CAP` raises or lowers the count
+(never below three). The agent's prompt carries the matching standing rule: WaPay only answers,
+one reply per message, never a promise to message, remind or follow up later.

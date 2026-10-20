@@ -4,6 +4,20 @@
 
 ---
 
+## 133. Money could leave one suspicious account only by switching pay-outs off for everyone
+
+- **Symptom:** 2026-10-20: a R3,000 card-paid link was followed within hours by 23 pay-out attempts on three rails, three R1,000 gifts to numbers that opened accounts minutes later and sent the money back, and a second fresh account with the same shape (R3,000 link seven minutes after sign-up, card-paid, PayShap destination). The only brake was `WAPAY_PAYOUT_ENABLED=false`, which stops every customer.
+- **Root cause:** no per-account control existed on the two paths money leaves a balance (`requestPayout`, `sendMoney`); the open pilot has KYC off and no settlement delay on card-funded balances.
+- **Fix:** `lib/payout-freeze.js` + `POST /api/internal/payout-freeze`; the freeze is read fresh before any ledger move in `requestPayout`, in `startWithdraw` (the flow never opens) and in `sendMoney`; receiving is untouched; a masked ops alert on every change; `payoutFreeze` on the customer profile.
+- **Guard:** tests/payout-freeze.test.mjs (state shape, refusal before any rail or ledger call, the chat copy with no time promise, the route's auth and alert). Open decisions for the founder: a settlement hold on card-funded balances before pay-out, KYC above a cumulative pay-out amount, and PayFast's view of the two card payments.
+
+## 132. A customer who asked for help and went quiet for a day could not be reached at all
+
+- **Symptom:** two people from 19 October (one asked to close their account, one went quiet after a question) were past their 24-hour window on 20 October; the ops reply route answered WINDOW_CLOSED and there was no approved support template, so WaPay had no permitted way to write to them.
+- **Root cause:** every template on the account was a transactional or onboarding template; nobody had created a utility follow-up for support, and the ops reply knew only the free-form rail.
+- **Fix:** `wapay_support_followup` (UTILITY) created through the new `/api/internal/template-create`; `lib/ops-reply.js` falls back to it after the window with the first name and the text as parameters; the Inbox reply box inherits the fallback.
+- **Guard:** tests/ops-reply.test.mjs locks the rail switch, the parameter sanitiser (Meta refuses newlines in parameters), the stop refusal on both rails and the 502 on a template failure; docs/WHATSAPP_POLICY_COMPLIANCE.md names the template as the only way WaPay writes first.
+
 ## 131. The pay page named the requester by their self-chosen WhatsApp name alone
 
 - **Symptom:** a link made by any account whose WhatsApp profile name was set to "Nieuwoudt" rendered "Nieuwoudt is requesting R300" with nothing a payer could check against; the founder asked how a scammer using his name would be stopped (2026-10-20).
