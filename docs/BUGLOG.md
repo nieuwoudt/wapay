@@ -4,6 +4,13 @@
 
 ---
 
+## 129. The pay-out float ran dry: 23 pay-outs rejected in two and a half hours while the chat blamed the customer's bank
+
+- **Symptom (2026-10-20, 03:34 to 05:52 UTC):** the first R3,000 link paid by card landed R2,871.70 in a customer's balance; after two withdrawals the OTT pay-out float (R872.80 at midnight) was empty, and every further attempt, 23 across three accounts and three methods, came back from the rail as "Insufficient funds for this transaction". The chat said "the bank rail declined it (PAYOUT_REJECTED)"; the customer retried fifteen times, moved the money between numbers, and only got it out after the founder's top-up landed at 05:53. The float-low alert never fired because it only fires after a SUCCESS.
+- **Root cause:** no float check before a pay-out, no reading of the rail's own "insufficient funds", a customer line that named the bank, and an alert wired to the wrong event.
+- **Fix (CHANGELOG 101):** `requestPayout` reads the live float before any ledger move and refuses with `FLOAT_SHORT` when it cannot cover the amount plus the rail's cost (nothing moves, nothing is held); the rail's "insufficient funds" is recorded as `FLOAT_SHORT` too; both raise `floatShortAlert` (WhatsApp and e-mail, once per ten minutes); the chat says "our pay-out account is being topped up, nothing has left your balance", naming a person only when the alert went. Locked in `tests/payout-float-short.test.mjs`. The three customers were messaged by hand the same morning.
+- **Lesson:** a liability that can be withdrawn within minutes needs the float checked at the moment of the request, not reported after the fact; and a rejection must name whose fault it is.
+
 ## 128. The model was told to say "withdraw R<amount>" and a customer received the placeholder three times
 
 - **Symptom (audit 2026-10-19, shard 4):** a customer writing Sesotho asked to withdraw three ways and three times got a line ending in `withdraw R<amount>`, angle brackets included, HTML-escaped by the localiser.

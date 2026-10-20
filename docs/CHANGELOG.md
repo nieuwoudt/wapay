@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-10-20 (101) — The pay-out float is checked before every pay-out; the rail's "insufficient funds" is named as ours; the operator is alerted; the customer hears the truth
+
+The morning the first R3,000 link was paid (BUGLOG #129): 23 pay-outs rejected for our
+empty float, the chat blaming the bank, no alert. Now `requestPayout` refuses honestly before
+any ledger move when the live float cannot cover the amount plus the rail's cost, records
+`FLOAT_SHORT`, and `floatShortAlert` tells ops by WhatsApp and e-mail once per ten minutes; the
+rail's own "insufficient funds" answer is classified the same way after the hold is released;
+`lib/payout-chat.js` says "our pay-out account is being topped up, nothing has left your
+balance". `tests/payout-float-short.test.mjs`.
+
 ## 2026-10-19 (100) — Mission Control: six tabs, a refresh button and a 1-day range, period money tiles, the support inbox, the conversation on every profile, links over time and the fee outlook, the path all time, the valuation path with hover, the insight box
 
 Founder, 19 October, from seven annotated screenshots. Everything below is on the admin host.
