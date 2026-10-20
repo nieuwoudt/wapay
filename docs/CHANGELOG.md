@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-10-20 (110) — After the identity check the pay-out continues by itself; Didit sends the customer back to the chat
+
+Founder, after his own KYC test: the Didit page said "You've been verified" and nothing
+happened in WhatsApp, then "withdraw" started from scratch. Now `lib/kyc-resume.js` keeps the
+ask the check interrupted on `profile.kyc.pendingWithdraw` (24 hours), and a VERIFIED result,
+from Didit's webhook or from a manual sync in Mission Control, sends "✅ You are verified.
+Continuing your pay-out of R3,000." and reopens the flow at the next step; a bare "withdraw"
+after verification picks the ask up too. The Didit session carries a `callback` back to the
+WaPay chat (`WAPAY_WA_NUMBER`, default the live number), so the verified page returns the
+customer to WhatsApp. The status itself was already on the profile and the customer page;
+this makes the moment after it work. Tests: tests/kyc-resume.test.mjs.
+
+## 2026-10-20 (109) — Creative review, round one: Q2/Q3 open the account at once, an example-free first-link prompt, a loans line
+
+From the ads report review. (1) "How do I get paid with a link?" and "What does it cost?"
+answer and then start onboarding step 1 in the same turn (no button, no wait); a member gets
+the answer alone. They opened an account 36% and 28% of the time against 85% for Q1/Q4.
+(2) The first-link prompt carries no example sentence any more ("Who owes you, and how much?
+Type the amount and their name."); `parseFirstLinkAsk` accepts amount and name in either
+order, with or without "from" / "owes me"; the old example sentence is still recognised and
+refused with "That was just our example…", no link created. 28 accounts had typed it back and
+12 first links of exactly R250 were minted from it before the 19 October refusal. (3) Loans:
+`matchLoanAsk` → "WaPay doesn't offer loans. You can get paid, top up, pay other WaPay users
+and pay out." plus the next step, before the agent; the agent prompt carries the same rule.
+Harness scenario 7 rewritten for the new path. docs/AD_CHAT_FLOW.md updated with the copy.
+
 ## 2026-10-20 (108) — Credentials out of the repository: placeholders in 36 files and a guard that fails the suite on a credential-shaped string
 
 BUGLOG #134. The repository was public with the Supabase database password, Meta WhatsApp

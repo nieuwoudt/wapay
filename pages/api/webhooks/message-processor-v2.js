@@ -15,7 +15,7 @@ import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, sendWhatsAppReplyButtons, out
 // side of the turn by construction (docs/AGENT_ARCHITECTURE_V2.md C2).
 import { sendWhatsAppText, recordInbound } from '../../../lib/say.js';
 import { rememberSent } from '../../../lib/say.js';
-import { isFirstLinkExample, EXAMPLE_ECHO_REPLY, looksLikeNobodyOwesMe, NOBODY_OWES_ME_REPLY } from '../../../lib/ad-flow.js';
+import { isFirstLinkExample, EXAMPLE_ECHO_REPLY, looksLikeNobodyOwesMe, NOBODY_OWES_ME_REPLY, matchLoanAsk, LOANS_REPLY } from '../../../lib/ad-flow.js';
 import { matchCloseAccountAsk, closeAccountReply, closeAccountAlert } from '../../../lib/account-closure.js';
 import { getLatestPendingRequest as latestPendingLink, cancelPaymentRequest as cancelPendingLink } from '../../../lib/payment-requests.js';
 import { recentTurns, renderTurns, redactForMemory } from '../../../lib/turns.js';
@@ -1966,6 +1966,11 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
 
   // CLOSE MY ACCOUNT (audit 2026-10-19, BUGLOG #125): a person does it; the chat says so once and raises the alert, never a "secure step".
   if (matchCloseAccountAsk(text)) return await handleCloseAccountAsk({ from, account });
+  // Loans (creative review, 2026-10-20): one honest line and the next step, never the model.
+  if (matchLoanAsk(text)) {
+    logStructured('loan_ask', { accountId: account.id });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(LOANS_REPLY, await userLang(account)), kind: 'guard' });
+  }
 
   // BUSINESS SIGN-UP from the chat (founder ask 2026-09-06): "business
   // account" / "register my business" starts the two-question flow for an

@@ -84,6 +84,23 @@ export default async function handler(req, res) {
     if (NOTIFY[status] && synced.kyc?.notifiedStatus !== status) {
       const account = await prisma.account.findUnique({ where: { id: accountId } });
       if (account?.waId) {
+        // VERIFIED continues the pay-out the check interrupted (lib/kyc-resume.js, founder 2026-10-20);
+        // the plain line below is the fallback when nothing was pending or the resume could not send.
+        if (status === 'VERIFIED') {
+          try {
+            const [{ resumeAfterKyc }, { startWithdraw }, { updateConversationState }] = await Promise.all([
+              import('../../../lib/kyc-resume.js'), import('../../../lib/payout-chat.js'), import('./user-manager.js'),
+            ]);
+            const r = await resumeAfterKyc({ prisma, account, deps: { startWithdraw, updateConversationState, send: sendWhatsAppText, localize: (t) => localizeOutbound(t, account.profile?.language) } });
+            if (r.sent) {
+              await markKycNotified({ accountId, status });
+              logEvent(event, status);
+              return res.status(200).json({ ok: true, resumed: !!r.resumed });
+            }
+          } catch (e) {
+            console.error(JSON.stringify({ type: 'kyc_resume_failed', accountId, error: e?.message }));
+          }
+        }
         const msg = await localizeOutbound(NOTIFY[status], account.profile?.language);
         const sent = await sendWhatsAppText({ to: account.waId, text: msg });
         if (sent?.ok) {

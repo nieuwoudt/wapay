@@ -933,12 +933,13 @@ async function run() {
       process.env.WAPAY_ONBOARDING_OTP = 'off';
       try {
         const ad = createSession(AD_WA_ID);
+        // 2026-10-20 (creative review): the cost answer now runs straight into onboarding step 1
+        // in the same turn, so there is no "How it works" / "Open my account" tap any more; the
+        // first-link prompt carries no example and "amount name" is enough.
         const a = await ad.say('What does it cost?', { referral: REF, profile: { name: 'Thandi QA' } });
-        const b = await ad.say('How it works');
-        const c = await ad.say('Open my account');
         const d = await ad.say('2580');
         const e = await ad.say('I accept');
-        const f = await ad.say('R20 from Thandi for the test');
+        const f = await ad.say('R20 Thandi');
         const g = await ad.say('Can I buy airtime?');
         const h = await ad.say('How do I get my money out?');
         const i = await ad.say('stop');
@@ -946,20 +947,18 @@ async function run() {
         const attr = row?.profile?.attribution || {};
         const links = row ? await prisma.paymentRequest.count({ where: { accountId: row.id } }) : 0;
         const banned = /\b(banking|send money|transfer|withdraw|cash ?out)\b/i;
-        verdict('Ad arrival: Q3 → how it works → open → PIN → consent → first link → FAQ → stop', [
-          { level: 'FAIL', ok: has(a.replyText, /Under R50, getting paid is free/) && has(a.replyText, /\[Open my account\]/), what: 'the cost answer carries the open-account button' },
+        verdict('Ad arrival: Q3 → answer + PIN step at once → consent → first link → FAQ → stop', [
+          { level: 'FAIL', ok: has(a.replyText, /Under R50, getting paid is free/) && !has(a.replyText, /\[Open my account\]/) && has(a.replyText, /pin|onboarding_step_3/i), what: 'the cost answer carries no button and reaches the PIN step in the same turn' },
           { level: 'FAIL', ok: !has(a.replyText, /Welcome to WaPay/i) && !a.replies.some((r) => /onboarding_step_1/.test(r.text)), what: 'no second welcome, no welcome template' },
-          { level: 'FAIL', ok: has(b.replyText, /Forward the payment link we send you/), what: '"How it works" answers the three steps' },
-          { level: 'FAIL', ok: has(c.replyText, /Great, Thandi/) && has(c.replyText, /pin|onboarding_step_3/i), what: '"Open my account" greets by name and reaches the PIN step at once' },
           { level: 'FAIL', ok: has(d.replyText, /accept|consent|onboarding_step_4|Step 3 of 3/i), what: 'the PIN moves to the consent step' },
           { level: 'FAIL', ok: has(e.replyText, /Let's get you paid\. Who owes you, and how much\?/), what: 'completion asks for the first link, not the business question' },
-          { level: 'FAIL', ok: has(f.replyText, /Here's your payment link for R20: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/) && has(f.replyText, /Forward it to Thandi/), what: '"R20 from Thandi" mints the link with the short forwardable copy' },
+          { level: 'FAIL', ok: has(f.replyText, /Here's your payment link for R20: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/) && has(f.replyText, /Forward it to Thandi/), what: '"R20 Thandi" (no example to copy) mints the link with the short forwardable copy' },
           { level: 'FAIL', ok: links === 1, what: 'exactly one link exists' },
           { level: 'FAIL', ok: has(g.replyText, /coming soon/), what: '"Can I buy airtime?" is coming soon' },
           { level: 'FAIL', ok: has(h.replyText, /PayShap/) && has(h.replyText, /\[Nedbank cash\]/), what: 'money-out answer with the three pay-out buttons' },
           { level: 'FAIL', ok: has(i.replyText, /no more reminders/i) && attr.reminderOptOut === true, what: '"stop" opts out of the reminder' },
           { level: 'FAIL', ok: attr.entry === 'Q3' && Boolean(attr.ctwaClid) && Boolean(attr.onboardedAt), what: 'the account carries entry Q3, the click id and the onboarding time' },
-          { level: 'FAIL', ok: [a, b, c, d, e, f, g, h, i].every((t) => !banned.test(t.replyText)), what: 'no banned word anywhere in the flow' },
+          { level: 'FAIL', ok: [a, d, e, f, g, h, i].every((t) => !banned.test(t.replyText)), what: 'no banned word anywhere in the flow' },
         ], ad);
         await teardownAd();
         const ad2 = createSession(AD_WA_ID);

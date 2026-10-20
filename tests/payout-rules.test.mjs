@@ -87,7 +87,7 @@ test('requestPayout refuses by the cap before any ledger move or rail call', asy
 
 test('the chat flow checks the rules at the amount step and maps the late errors; the dashboard shows referrals and the freeze', () => {
   const chat = read('../lib/payout-chat.js');
-  assert.match(chat, /const rules = await checkPayoutRules\(\{ prisma: prismaClient, account, amountCents \}\);\n\s+if \(!rules\.ok\) return rulesStop\(\{ rules, data \}\);/);
+  assert.match(chat, /const rules = await checkPayoutRules\(\{ prisma: prismaClient, account, amountCents \}\);\n\s+if \(!rules\.ok\) \{[\s\S]{0,400}return rulesStop\(\{ rules, data, amountCents \}\);/);
   assert.match(chat, /if \(out\.error === 'DAILY_CAP'\)/);
   assert.match(chat, /if \(out\.error === 'KYC_REQUIRED' && out\.reason\)/);
   assert.match(chat, /data\.rulesNote = rulesNote\(/);
