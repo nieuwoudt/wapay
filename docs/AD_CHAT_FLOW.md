@@ -208,3 +208,5 @@ entry stored on the account is a question id, never text. The first-link state a
 late amount itself before the idle-expiry branch can treat it as a secret-shaped answer.
 Nothing in this flow moves money: the link creation ends in the existing flow, and a
 payment arrives through the card rails as before.
+
+**2026-10-20 (CHANGELOG 102, BUGLOG #130):** the section-10 reminder is OFF by default after Meta's "sending spam" notice and a RED quality rating; `WAPAY_AD_REMINDERS=on` is the only way to send it. "Stop" now opts any customer out of everything WaPay would start, not only the reminder. See docs/WHATSAPP_POLICY_COMPLIANCE.md.

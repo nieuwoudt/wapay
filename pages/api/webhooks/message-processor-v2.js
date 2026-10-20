@@ -998,12 +998,11 @@ async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCe
   }
 }
 
-async function sendPostTransactionCta(to) {
-  // Founder call (2026-08-31): no menu after a successful transaction —
-  // the receipt is the moment; a bullet list under it reads as clutter.
-  // One warm line, nothing else.
-  const cta = `💚 If you have any questions or get stuck anywhere, just tell me. I am right here.`;
-  return await sendWhatsAppText({ to, text: cta });
+async function sendPostTransactionCta() {
+  // 2026-10-20 (Meta "sending spam" notice, quality RED, BUGLOG #130): the receipt is the last
+  // message of a transaction. A second line that adds nothing is a second message the customer
+  // did not ask for, and every extra message is a chance to be reported. Nothing is sent.
+  return { ok: true, skipped: 'NO_TRAILER' };
 }
 
 /**
@@ -1942,6 +1941,13 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     const answered = await handleBusinessLoginAsk({ from, account });
     if (answered) return answered;
     // Not a business owner (and not invited): route normally, say nothing.
+  }
+
+  // STOP for everyone (WhatsApp Business Messaging Policy; 2026-10-20, BUGLOG #130): the word opts the customer
+  // out of every message WaPay would start. Replies to what they write still come. Never inside a PIN or confirm step.
+  if (matchesStop(text)) {
+    const { state: stopState } = await getConversationState(from);
+    if (!/_PIN$|PIN_RESEND_AUTH|AWAITING_VOUCHER_PIN|^PIN_RESET_|CONFIRM/.test(String(stopState || ''))) return await handleStopAsk({ from, account });
   }
 
   // CLOSE MY ACCOUNT (audit 2026-10-19, BUGLOG #125): a person does it; the chat says so once and raises the alert, never a "secure step".
@@ -3159,6 +3165,14 @@ async function askAccountType({ from, account }) {
   const { accountTypeQuestion } = await import('../../../lib/business-chat.js');
   logStructured('business_signup_question', { accountId: account.id });
   return await deliverBusinessStep({ from, account, step: accountTypeQuestion() });
+}
+const STOP_ALL_REPLY = 'Okay. WaPay will not message you unless you write first. Your account and balance stay as they are, and you can say *hi* any time.';
+async function handleStopAsk({ from, account }) {
+  await markReminderOptOut({ accountId: account.id }).catch(() => {});
+  await mergeProfileSubkeyAtomic({ accountId: account.id, key: 'messaging', patch: { optOut: true, optOutAt: new Date().toISOString() } }).catch(() => {});
+  await updateConversationState(from, null).catch(() => {});
+  logStructured('messaging_opt_out', { accountId: account.id });
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(STOP_ALL_REPLY, await userLang(account)) });
 }
 async function handleCloseAccountAsk({ from, account }) {
   const { opsPersonAlert } = await import('../../../lib/ops-alerts.js');
@@ -6670,16 +6684,12 @@ async function handleConversationState({ from, text, state, data, account }) {
           });
         }
 
-        await sendWhatsAppText({
-          to: from,
-          text:
-            await localizeOutbound(data?.send
-              ? `⏳ Sending...`
-              : normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')
-              ? `⏳ Generating your OTT voucher...`
-              : `⏳ Sending your WaPay voucher...`, await userLang(account)),
-        });
-
+        // No "Sending..." interim message for a send (2026-10-20, BUGLOG #130): the receipt follows within
+        // seconds, and one message per customer turn is the rule now. The self-purchase keeps its one
+        // interstitial because the voucher mint can take longer (founder 2026-08: "generating, not sending").
+        if (!data?.send && normaliseMsisdn(recipientMsisdn) === normaliseMsisdn(account.msisdn || '')) {
+          await sendWhatsAppText({ to: from, text: await localizeOutbound(`⏳ Generating your OTT voucher...`, await userLang(account)) });
+        }
         try {
           // A send moves money in the ledger (BUGLOG #117); only the self-purchase calls the voucher route.
           const executeUrl = apiUrl(data?.send ? '/api/wallet/send/execute' : '/api/vas/voucher/execute');

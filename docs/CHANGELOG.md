@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-10-20 (102) — WhatsApp policy compliance after Meta's "sending spam" notice: nothing WaPay starts, one message per turn, stop for everyone, the quality rating watched daily
+
+BUGLOG #130; the standard is docs/WHATSAPP_POLICY_COMPLIANCE.md. Reminders to ad arrivals are
+off unless `WAPAY_AD_REMINDERS=on` (`adRemindersEnabled`); the post-transaction trailer and the
+"Sending…" interim message are gone; "stop" from any customer outside a PIN step records
+`profile.messaging.optOut`, answers once and starts nothing again, and the ops reply routes
+refuse a stopped customer until they write again; `lib/whatsapp-quality.js` reads Meta's
+quality rating, messaging limit, number status and the profile's support contact, the cron
+alerts ops while the rating is not GREEN, `GET /api/admin/whatsapp-quality` feeds the Health
+tab's first card, and the flags readout carries it. `tests/whatsapp-compliance.test.mjs`.
+
 ## 2026-10-20 (101) — The pay-out float is checked before every pay-out; the rail's "insufficient funds" is named as ours; the operator is alerted; the customer hears the truth
 
 The morning the first R3,000 link was paid (BUGLOG #129): 23 pay-outs rejected for our

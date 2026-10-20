@@ -1631,8 +1631,6 @@ function Customer({ initialQuery = '' }) {
     } catch { setListErr('Could not load the customer list.'); }
   }, []);
   useEffect(() => { loadList(''); }, [loadList]);
-  const openedInitial = useRef(false);
-  useEffect(() => { if (initialQuery && !openedInitial.current) { openedInitial.current = true; openCustomer(initialQuery); } }, [initialQuery, openCustomer]);
 
   const openCustomer = useCallback(async (msisdn) => {
     setBusy(true); setErr(''); setC(null); setKycMsg('');
@@ -1644,6 +1642,10 @@ function Customer({ initialQuery = '' }) {
       setTimeout(() => document.getElementById('customer-profile')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     }
   }, []);
+
+  // A deep link (?customer=…) opens that profile once, after openCustomer exists (2026-10-20: declared before it, the tab crashed).
+  const openedInitial = useRef(false);
+  useEffect(() => { if (initialQuery && !openedInitial.current) { openedInitial.current = true; openCustomer(initialQuery); } }, [initialQuery, openCustomer]);
 
   const look = useCallback(async () => {
     // The search box drives BOTH: it filters the list and, when the number is
@@ -1843,7 +1845,8 @@ function Health() {
         <button className="linkish" onClick={() => setTick((t) => t + 1)}>↻ Refresh</button>
         <span className="note" style={{ margin: 0 }}>{m ? `generated ${dt(m.generatedAt)}` : ''} · refreshes itself every 10 minutes</span>
       </div>
-      <div className="card">
+      <QualityCard tick={tick} />
+      <div className="card" style={{ marginTop: 14 }}>
         <h2>Money-engine health</h2>
         <p className="note">If any of these is red, treat every number on the Dashboard as suspect until it is fixed.</p>
         {err ? <div className="empty">{err}</div> : !m ? <div className="empty">Checking…</div> : <OpsHealth ops={m.ops} />}
@@ -1860,6 +1863,29 @@ function Health() {
         <PayoutBooks />
       </div>
     </>
+  );
+}
+
+/* Meta's view of the WhatsApp number (2026-10-20): the quality rating decides whether WaPay may start any conversation at all. */
+function QualityCard({ tick = 0 }) {
+  const [q, setQ] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/whatsapp-quality').then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then((d) => { if (!cancelled) setQ(d); }).catch(() => { if (!cancelled) setQ(false); });
+    return () => { cancelled = true; };
+  }, [tick]);
+  const rating = q && q.qualityRating;
+  const tone = rating === 'GREEN' ? 'var(--good)' : rating === 'YELLOW' ? 'var(--warn, #e3b341)' : rating ? 'var(--crit)' : 'var(--ink3)';
+  return (
+    <div className="card" style={{ borderColor: rating && rating !== 'GREEN' ? 'var(--crit)' : undefined }}>
+      <h2>WhatsApp number, as Meta sees it</h2>
+      <p className="note">The quality rating is built from blocks and reports. While it is not GREEN, WaPay sends nothing a customer did not just ask for: reminders stay off, replies only, one message per turn.</p>
+      <div className="grid kpis">
+        <div className="card"><div className="k">Quality rating</div><div className="v" style={{ color: tone }}>{q === false ? 'unavailable' : !q ? '…' : rating || (q.error || 'unknown')}</div><div className="vs">{q && q.messagingLimitTier ? `messaging limit ${q.messagingLimitTier}` : 'read from the Graph API, a minute's cache'}</div></div>
+        <div className="card"><div className="k">Number status</div><div className="v">{q && q.status ? q.status : '…'}</div><div className="vs">{q && q.nameStatus ? `display name ${q.nameStatus}` : ''}</div></div>
+        <div className="card"><div className="k">Support contact on the profile</div><div className="v" style={{ color: q && q.profile ? (q.profile.hasSupportContact ? 'var(--good)' : 'var(--crit)') : undefined }}>{q && q.profile ? (q.profile.hasSupportContact ? 'yes' : 'missing') : '…'}</div><div className="vs">{q && q.profile ? [q.profile.email, ...(q.profile.websites || [])].filter(Boolean).join(' · ') || 'the Messaging Policy asks for an e-mail or website' : ''}</div></div>
+      </div>
+    </div>
   );
 }
 

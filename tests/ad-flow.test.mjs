@@ -158,7 +158,7 @@ test('reminders: due only in the 20 to 23.5 hour window, once, and never after s
   assert.equal(newest.getTime(), now.getTime() - 20 * 3600e3);
   assert.equal(oldest.getTime(), now.getTime() - 23.5 * 3600e3);
   const sent = [];
-  const out = await sendAdReminders({ prisma, now, send: async (m) => { sent.push(m); return { ok: true }; } });
+  const out = await sendAdReminders({ prisma, now, enabled: true, send: async (m) => { sent.push(m); return { ok: true }; } });
   assert.equal(out.sent, 2);
   assert.equal(sent[0].text, 'Hi Thandi, you\'re one step away from your WaPay account. Want to finish?');
   assert.equal(sent[1].text, 'Ready for your first payment link? Just tell me who owes you and how much.');

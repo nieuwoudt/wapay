@@ -206,6 +206,14 @@ export default async function handler(req, res) {
       console.error(JSON.stringify({ type: 'cron_jobs_drain_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
     }
 
+    // Meta's quality rating (2026-10-20, BUGLOG #130): read once a day, alert ops while it is not GREEN. Logged, never returned.
+    try {
+      const { qualityCheck } = await import('../../../lib/whatsapp-quality.js');
+      await Promise.race([qualityCheck(), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 8000))]);
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_whatsapp_quality_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
     // The daily conversation audit (docs/audits/DAILY_AUDIT.md, 2026-10-19):
     // the conversations since the last run swept by the rules and read by the
     // reviewer, findings stored with their recurrence, the ops summary sent.

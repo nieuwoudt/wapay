@@ -131,9 +131,11 @@ function stubDb({ dupes = new Set() } = {}) {
 
 test('money in: once per event, below the minimum skipped, delivered to every recipient with the float position', async () => {
   const sent = [];
-  const deps = { floatPosition: async () => position, deliver: async ({ text, kind }) => { sent.push({ text, kind }); return { sent: 1, recipients: 1 }; } };
+  const mails = [];
+  const deps = { floatPosition: async () => position, deliver: async ({ text, kind }) => { sent.push({ text, kind }); return { sent: 1, recipients: 1 }; }, sendOpsAlert: async (m) => { mails.push(m); return { success: true }; } };
   const db = stubDb();
   const r1 = await opsMoneyIn({ amountCents: 25000, kind: 'LINK_PAID', accountId: 'a1', idemKey: 'pf-1', prisma: db, deps });
+  assert.equal(r1.email, true, 'the same text goes by e-mail too'); assert.equal(mails.length, 1); assert.match(mails[0].subject, /^Money in: R250\.00 \(payment link paid by card\)$/);
   assert.equal(r1.sent, 1);
   assert.match(r1.text, /Money in: R250\.00/);
   assert.deepEqual(db.created, ['ops-alert:in:pf-1']);

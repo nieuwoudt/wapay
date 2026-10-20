@@ -4,6 +4,13 @@
 
 ---
 
+## 130. Meta flagged the number for "sending spam": quality rating RED after two days of ad reminders and multi-message turns
+
+- **Symptom (2026-10-20, 08:26 SAST):** Meta's e-mail "WhatsApp Business account WaPay has been identified as sending spam… may face restrictions or be disabled"; the Graph API read the number's quality rating as RED (status CONNECTED, throughput STANDARD).
+- **Root cause:** in the two days after the ad launch WaPay started conversations with 54 ad arrivals who had gone quiet (the one reminder, hourly loop plus the 02:00 cron), inside their windows but unasked for, to the exact people most likely to block; the bot also sent two or three messages per customer turn (receipt plus a trailer line, an interim "Sending…", prompt plus a coming-soon line), and "stop" was honoured only for ad arrivals' reminders. Blocks and reports feed the rating.
+- **Fix (CHANGELOG 102):** reminders off unless `WAPAY_AD_REMINDERS=on`; the trailer and the interim message removed; "stop" honoured for everyone with `profile.messaging.optOut` and refused human replies until they write again; `lib/whatsapp-quality.js` reads the rating daily, alerts ops while it is not GREEN, and shows on the Health tab and the flags readout; `docs/WHATSAPP_POLICY_COMPLIANCE.md` is the standard. Locked in `tests/whatsapp-compliance.test.mjs`.
+- **Lesson:** inside the window is not the same as wanted; a message the customer did not just ask for is a report waiting to happen, and the rating must be watched like the float.
+
 ## 129. The pay-out float ran dry: 23 pay-outs rejected in two and a half hours while the chat blamed the customer's bank
 
 - **Symptom (2026-10-20, 03:34 to 05:52 UTC):** the first R3,000 link paid by card landed R2,871.70 in a customer's balance; after two withdrawals the OTT pay-out float (R872.80 at midnight) was empty, and every further attempt, 23 across three accounts and three methods, came back from the rail as "Insufficient funds for this transaction". The chat said "the bank rail declined it (PAYOUT_REJECTED)"; the customer retried fifteen times, moved the money between numbers, and only got it out after the founder's top-up landed at 05:53. The float-low alert never fired because it only fires after a SUCCESS.

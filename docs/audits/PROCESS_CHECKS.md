@@ -61,3 +61,8 @@ Flag: a balance or a transaction status stated by the model; two balance-card fo
 Correct: the customer's language is kept once chosen; one reply per message; two lines and one question; lists only when the content is multifaceted; names used as given, without emoji or possessives mangled.
 
 Flag: "just say it in English" against "in any language"; the same line sent twice in a row; a reply over 1,200 characters to a short question; internal strings, "please try again later" suffixes or raw values in customer text; a time promise ("in minutes", "shortly", a date); a partner named; an em dash.
+
+## Messaging compliance (docs/WHATSAPP_POLICY_COMPLIANCE.md)
+- Correct: every bot message answers a message the customer sent in that conversation, or is the receipt of a transaction they just made; one message per customer turn, a second only when it is the payment card or the receipt; "stop" from anyone is acknowledged once and nothing follows it.
+- Flag (P1): a bot message with no customer message in the 24 hours before it that is not a receipt; any message after the customer said stop, unsubscribe or leave me alone; a marketing line of any kind.
+- Flag (P2): three or more bot messages in one minute for one customer turn; the same prompt repeated without new information; a customer asking for a person without the person being promised.
