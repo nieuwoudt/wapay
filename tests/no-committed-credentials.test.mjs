@@ -21,8 +21,12 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname;
+// fileURLToPath, not .pathname: the iCloud checkout lives under a path with
+// spaces, which .pathname leaves percent-encoded (ENOENT on every git call
+// and on the walk, 2026-10-20).
+const root = fileURLToPath(new URL('..', import.meta.url));
 const fingerprint = (v) => createHash('sha256').update(v).digest('hex').slice(0, 16);
 
 // Published test values, allowed wherever they appear: sha256 (first 16 hex) → where it is published.
