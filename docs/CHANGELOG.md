@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-10-21 (117) — The personal web portal: log in, see your money, get paid and pay out without WhatsApp
+
+Meta restricted WaPay's WhatsApp number for 30 days on 20 October, so customers holding balances
+could not be answered. `/app` is the personal twin of WaPay for Business (brief
+`docs/briefs/PERSONAL_PORTAL_BRIEF.md`, prototype `docs/briefs/personal-portal/prototype.html`),
+mobile-first, centred at 420 px on a desktop, and nothing in it needs WhatsApp.
+
+- Sign-in: the cell number and the WaPay PIN through `@wapay/auth` `verifyPIN` only. Five
+  failures per number and per IP in 15 minutes lock for 15 minutes; a malformed PIN never reaches
+  the verifier; the web never takes the shared counter past 8, so a stranger cannot push an
+  account into the year-long lock. A wrong PIN and an unknown number answer the same.
+  Cookie `wapay_app` (HttpOnly, Secure, SameSite=Lax, 24 h, Path=/api/app), bound to the PIN's
+  `setAt` so a PIN change anywhere ends it; signed double-submit CSRF on every POST; every POST
+  counted per IP and per account (`processed_messages` rows, prefix `app-rl:`).
+- Forgot PIN: the whole ID or passport number in the vault (last characters, then a keyed
+  digest), three misses in 24 hours pause it (the chat's `PIN_RESET_ID_FAILED` count), then the
+  new PIN twice through `resetPIN`. The chat's 24-hour cool-off follows (`profile.pinReset`
+  with `via: 'app'`): pay-outs only to saved destinations, and on the web no sends to other
+  people. An account with no ID on file gets the same answer as a miss, with the support e-mail.
+- Money: `/api/app/pin` asks `verifyPIN` with `approves` for one intent and amount; pay out
+  (`requestPayout`), send (`sendMoney`, through a `send-preview` row like the chat) and link
+  create (`createPaymentRequest`, one link per intent by an audit claim) each verify that proof
+  first. Intent ids carry their purpose (`apo-`, `alk-`, `preview-send-`). Saved destinations and
+  the ID on file are decrypted only inside the pay-out request. Rules, freezes, the cool-off and
+  KYC answer in the chat's words (`dailyCapCopy`, `kycThresholdCopy`, `FROZEN_*_COPY`, through
+  `webLine`, which only replaces "reply VERIFY", "or cancel" and WhatsApp bold).
+- Screens: home, get paid (Share and Copy), top up (PayFast, back to the portal), send, pay out
+  (saved or new details, KYC by a Didit link that returns to the portal and resumes the pay-out;
+  `startKycSession` takes an optional https `callbackUrl`, the chat's default unchanged),
+  activity (journal + pay-outs in progress or failed, 50 a page), profile, help, and the
+  coming-soon tiles from the capability registry. `/app` pages refuse framing (next.config.js);
+  `WAPAY_APP_HOST` sends that domain's root to `/app` (middleware); `/api/internal/flags` shows
+  the portal's switches. Golden thread 2.13.
+- Development: `WAPAY_APP_DEV_FIXTURE=1` on `next dev` runs the whole portal on an in-memory
+  fixture with no database (lib/app-dev-fixture.js; never selectable in production).
+
+Tests: tests/app-portal.test.mjs (39). Not deployed: branch feat/personal-portal.
+
 ## 2026-10-21 (116) — Onboarding sends no marketing-category templates; an operator can pay out a saved destination
 
 BUGLOG #136. Two of the onboarding templates are filed by Meta under MARKETING (`consent_terms_`
