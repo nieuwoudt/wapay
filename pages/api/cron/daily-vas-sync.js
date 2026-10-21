@@ -210,6 +210,8 @@ export default async function handler(req, res) {
     try {
       const { qualityCheck } = await import('../../../lib/whatsapp-quality.js');
       await Promise.race([qualityCheck(), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 8000))]);
+      const { deliveryStallCheck } = await import('../../../lib/delivery-health.js');
+      await Promise.race([deliveryStallCheck({ prisma }), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 5000))]);
     } catch (e) {
       console.error(JSON.stringify({ type: 'cron_whatsapp_quality_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
     }

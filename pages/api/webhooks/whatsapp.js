@@ -97,6 +97,21 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'invalid json' });
     }
     await webhookPulse('webhook-ok');
+    // Delivery health (BUGLOG #136, 2026-10-21): once every ten minutes, read Meta's delivery
+    // statuses from the pulse rows and alert ops when replies stop landing (the API kept accepting
+    // sends for nine hours while every status came back failed 131031). The claim below is the
+    // throttle: only the first inbound in a ten-minute bucket runs the check. Never affects the webhook.
+    try {
+      const bucket = `${new Date().toISOString().slice(0, 15)}0`;
+      const claim = await claimMessage({ waMessageId: `delivery-check:${bucket}` }).catch(() => null);
+      const first = claim !== null && claim !== false && !(claim && (claim.claimed === false || claim.replayed === true || claim.duplicate === true));
+      if (first) {
+        const { deliveryStallCheck } = await import('../../../lib/delivery-health.js');
+        await Promise.race([deliveryStallCheck({ prisma }), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 4000))]);
+      }
+    } catch {
+      // diagnostics never change the webhook's behaviour
+    }
 
     // Processing MUST complete before the ACK. On Vercel serverless,
     // execution after the response is not guaranteed — a fire-and-forget

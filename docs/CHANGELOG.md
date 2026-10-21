@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-10-21 (114) — Delivery health: the dashboard and ops see the first time Meta stops delivering
+
+BUGLOG #136. From 21:30 UTC on 20 October Meta rejected every WaPay reply with status 131031
+while the API kept accepting the sends, so the chat looked alive in our logs and dead on every
+phone for nine hours. `lib/delivery-health.js` reads the delivery-status pulse rows the webhook
+already writes, gives a verdict (OK, DEGRADED, STALLED) over the last 15 and 60 minutes and 24
+hours, and `deliveryStallCheck` alerts ops by e-mail and WhatsApp once per hour per code. The
+inbound webhook runs it at most once per ten minutes (a claim row is the throttle), the cron runs
+it daily, `/api/admin/whatsapp-quality` carries `delivery`, and the Health tab's WhatsApp card
+shows "Delivery, last hour" with the Meta code and the time the streak began. Tests:
+tests/delivery-health.test.mjs.
+
 ## 2026-10-21 (113) — The nightly audit gets its own budget
 
 The 02:00 UTC run on 21 October read 227 accounts and 2,332 turns but reviewed 0 of 12 chunks:

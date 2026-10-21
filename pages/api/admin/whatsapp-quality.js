@@ -4,11 +4,12 @@
  */
 import { requireAdmin } from '../../../lib/admin-auth.js';
 import { readWhatsAppQuality } from '../../../lib/whatsapp-quality.js';
+import { deliveryHealth } from '../../../lib/delivery-health.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
   if (req.method !== 'GET') return res.status(405).json({ error: 'method' });
   if (!requireAdmin(req).ok) return res.status(401).json({ error: 'UNAUTHORIZED' });
-  const q = await readWhatsAppQuality();
-  return res.status(200).json(q);
+  const [q, delivery] = await Promise.all([readWhatsAppQuality(), deliveryHealth()]);
+  return res.status(200).json({ ...q, delivery });
 }

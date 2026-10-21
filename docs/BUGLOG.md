@@ -4,6 +4,13 @@
 
 ---
 
+## 136. Meta restricted the WhatsApp number: every reply fails with 131031 since 21:30 UTC on 20 October
+
+- **Symptom:** from 21:30:50 UTC on 20 October Meta's delivery statuses for WaPay's outbound messages turned to `failed 131031` (74 by 06:35 UTC on 21 October, against sent/delivered/read the day before at the same hours); the API still accepts each send, so our side records a reply within a second and the customer's phone shows nothing. The founder's own three messages at 06:27 to 06:29 UTC were answered instantly on our side and never arrived. Inbound keeps flowing (webhook-ok pulses), so customers write and hear nothing; sign-ups in the following hours fell to zero.
+- **Root cause:** Meta's enforcement of the "sending spam" finding from 19 October (BUGLOG #130): error 131031 is the account-locked/restricted code. The restriction landed about thirteen hours after the notice e-mail and after the review request was submitted.
+- **Fix:** appeal through Account quality with the behaviour since 20 October 08:30 UTC (395 customer messages, 802 replies all customer-initiated, 21 by a person, no templates, reminders removed, the code-enforced rules); pause the ad while outbound is dead; admin sign-in by typing "login code" in the chat does not help here because the reply is not delivered either.
+- **Guard (built the same morning, CHANGELOG 114):** `lib/delivery-health.js` reads the webhook's `status-*` pulse rows; the inbound webhook runs it once per ten minutes and the cron daily; STALLED (five failures of one code in fifteen minutes and nothing delivered) raises an ops e-mail and WhatsApp alert once per hour per code; the Health tab shows "Delivery, last hour" with the Meta code. Read `processed_messages` for `status-failed-<code>` before blaming the chat code.
+
 ## 135. Production lost its database for about an hour after the password rotation: Mission Control blank, chat down
 
 - **Symptom:** 2026-10-20 ~11:44 to the fix: every Mission Control tile empty ("No accounts yet", "Link figures unavailable"), `/api/admin/customers` "Could not load customers", a bare `prisma.account.findUnique` route answering 500 in a quarter of a second, while routes that touch no table answered 200. The newest conversation turn written was 11:43:51 UTC, so the WhatsApp webhook stopped processing at the same moment (it acknowledges Meta first, so the messages of that window are not retried).

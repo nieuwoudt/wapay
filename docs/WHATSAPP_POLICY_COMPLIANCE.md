@@ -68,3 +68,7 @@ to one number inside twenty seconds with `{ ok: false, error: 'SEND_CAP' }` and 
 `say_send_cap`; legitimate turns never reach four. `WAPAY_SEND_CAP` raises or lowers the count
 (never below three). The agent's prompt carries the matching standing rule: WaPay only answers,
 one reply per message, never a promise to message, remind or follow up later.
+
+## When Meta stops delivering
+
+A restriction shows first in Meta's delivery statuses, not in our logs: the API accepts the send and the status comes back `failed 131031`. The Health tab's WhatsApp card shows "Delivery, last hour"; an ops e-mail and WhatsApp alert go out when five failures of one code land in fifteen minutes with nothing delivered. Response: pause the ad, appeal in Meta Business Suite → Account quality with the behaviour since the fix, change no code.

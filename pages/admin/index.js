@@ -1930,6 +1930,13 @@ function QualityCard({ tick = 0 }) {
       <div className="grid kpis">
         <div className="card"><div className="k">Quality rating</div><div className="v" style={{ color: tone }}>{q === false ? 'unavailable' : !q ? '…' : rating || (q.error || 'unknown')}</div><div className="vs">{q && q.messagingLimitTier ? `messaging limit ${q.messagingLimitTier}` : 'read from the Graph API, cached for a minute'}</div></div>
         <div className="card"><div className="k">Number status</div><div className="v">{q && q.status ? q.status : '…'}</div><div className="vs">{q && q.nameStatus ? `display name ${q.nameStatus}` : ''}</div></div>
+        <div className="card" style={{ borderColor: q && q.delivery && q.delivery.verdict === 'STALLED' ? 'var(--crit)' : undefined }}>
+          <div className="k">Delivery, last hour</div>
+          <div className="v" style={{ color: q && q.delivery ? (q.delivery.verdict === 'OK' ? 'var(--good)' : q.delivery.verdict === 'DEGRADED' ? 'var(--warn, #e3b341)' : q.delivery.verdict === 'STALLED' ? 'var(--crit)' : 'var(--ink3)') : undefined }}>
+            {!q ? '…' : !q.delivery || q.delivery.verdict === 'UNKNOWN' ? 'unknown' : `${q.delivery.last60.ok} delivered · ${q.delivery.last60.failed} failed`}
+          </div>
+          <div className="vs">{q && q.delivery && q.delivery.verdict !== 'UNKNOWN' ? (q.delivery.verdict === 'OK' ? `delivery ok · 24 h: ${q.delivery.last24h.ok} delivered, ${q.delivery.last24h.failed} failed` : `${q.delivery.verdict}${q.delivery.code ? ` · Meta code ${q.delivery.code}` : ''}${q.delivery.last24h?.firstFailAt ? ` · since ${dt(q.delivery.last24h.firstFailAt)}` : ''}`) : 'from Meta\'s delivery statuses on the webhook'}</div>
+        </div>
         <div className="card"><div className="k">Support contact on the profile</div><div className="v" style={{ color: q && q.profile ? (q.profile.hasSupportContact ? 'var(--good)' : 'var(--crit)') : undefined }}>{q && q.profile ? (q.profile.hasSupportContact ? 'yes' : 'missing') : '…'}</div><div className="vs">{q && q.profile ? [q.profile.email, ...(q.profile.websites || [])].filter(Boolean).join(' · ') || 'the Messaging Policy asks for an e-mail or website' : ''}</div></div>
       </div>
     </div>
