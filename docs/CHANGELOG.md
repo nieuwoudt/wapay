@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-10-21 (113) — The nightly audit gets its own budget
+
+The 02:00 UTC run on 21 October read 227 accounts and 2,332 turns but reviewed 0 of 12 chunks:
+the cron's earlier steps (pay-out sweep, catalogue sync, ads snapshot, CAPI sweep, reconcile,
+quality read) had spent the 60-second function budget and the audit received the five-second
+floor. The cron now hands the audit to `POST /api/internal/audit-run` with the internal key and
+stops waiting after four seconds; the route runs the audit on its own 60-second budget after the
+cron disconnects. The in-process run remains the fallback when the hand-off cannot be made.
+Tests: tests/audit-handoff.test.mjs.
+
 ## 2026-10-20 (112) — Mission Control on a phone, with interactive charts
 
 Founder: "make sure it's mobile responsive and updated please with live interactive graphs,

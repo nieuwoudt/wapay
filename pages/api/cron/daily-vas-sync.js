@@ -222,16 +222,40 @@ export default async function handler(req, res) {
     // answer, and it is logged, never returned (the response literal below is
     // pinned by tests/payout-reconcile.test.mjs).
     try {
+      // 2026-10-21: the 02:00 run reviewed 0 of 12 chunks because the steps above had used the
+      // budget (the audit got the 5-second floor). The audit now runs in its OWN invocation:
+      // this cron fires POST /api/internal/audit-run with the internal key and stops waiting
+      // after four seconds; the route keeps running on its own 60-second budget after the
+      // client goes away. The in-process run stays as the fallback when the hand-off cannot be
+      // made (no key, no base URL, the request never left).
       const { runDailyAudit } = await import('../../../lib/audit/run.js');
       const auditCapMs = Math.max(5 * 1000, Math.min(45 * 1000, 57 * 1000 - (Date.now() - cronStartedMs)));
-      let auditTimer = null;
-      const audit = await Promise.race([
-        runDailyAudit({ prisma, deadlineMs: auditCapMs - 3 * 1000 }),
-        new Promise((resolve) => { auditTimer = setTimeout(() => resolve({ ok: false, skipped: 'TIMEOUT' }), auditCapMs); }),
-      ]);
-      if (auditTimer) clearTimeout(auditTimer);
+      let audit = null;
+      const key = process.env.WAPAY_INTERNAL_API_KEY || '';
+      if (key) {
+        const { apiUrl } = await import('../../../lib/api-url.js');
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4000);
+        try {
+          const r = await fetch(apiUrl('/api/internal/audit-run', req), { method: 'POST', headers: { 'x-internal-api-key': key, 'content-type': 'application/json' }, signal: controller.signal });
+          audit = { ok: r.ok, handoff: true, status: r.status };
+        } catch (e) {
+          // An abort means the request was sent and the audit route is running on its own budget.
+          audit = e?.name === 'AbortError' ? { ok: true, handoff: true, status: 'RUNNING' } : null;
+          if (!audit) console.error(JSON.stringify({ type: 'cron_daily_audit_handoff_failed', error: e?.message || String(e) }));
+        } finally { clearTimeout(timer); }
+      }
+      if (!audit) {
+        let auditTimer = null;
+        audit = await Promise.race([
+          runDailyAudit({ prisma, deadlineMs: auditCapMs - 3 * 1000 }),
+          new Promise((resolve) => { auditTimer = setTimeout(() => resolve({ ok: false, skipped: 'TIMEOUT' }), auditCapMs); }),
+        ]);
+        if (auditTimer) clearTimeout(auditTimer);
+      }
       console.log(JSON.stringify({
         type: 'cron_daily_audit',
+        handoff: audit?.handoff || false,
         ok: audit?.ok ?? false,
         skipped: audit?.skipped || audit?.review?.skipped || null,
         error: audit?.error || null,
