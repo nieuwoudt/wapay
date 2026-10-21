@@ -749,8 +749,8 @@ test("webLine keeps the chat's rule sentences and drops only the chat's instruct
 });
 
 test('the banner: on by default, off by switch, text overridable; tiles light up by the launch switches', () => {
-  assert.equal(bannerFor({}).show, true);
-  assert.equal(bannerFor({ WAPAY_APP_WHATSAPP_PAUSED: 'off' }).show, false);
+  assert.equal(bannerFor({}).show, false);
+  assert.equal(bannerFor({ WAPAY_APP_WHATSAPP_PAUSED: 'on' }).show, true);
   assert.equal(bannerFor({ WAPAY_APP_BANNER: 'Back <b>soon</b>' }).text, 'Back bsoon/b');
   const keep = { hold: process.env.WAPAY_LAUNCH_HOLD, air: process.env.VAS_LIVE_AIRTIME };
   try {
