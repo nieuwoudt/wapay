@@ -344,7 +344,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
               your PIN.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
             </div>
             <div style={styles.fine}>
-              Have a WaPay account? <a href="/app" style={{ color: '#359853', fontWeight: 600 }}>Log in on the web</a> to see your balance, get paid and pay out.
+              Have a WaPay account? <a href="https://app.wapay.co.za" style={{ color: '#359853', fontWeight: 600 }}>Log in at app.wapay.co.za</a> to see your balance, get paid and pay out.
             </div>
           </>
         ) : status === 'PAID' ? (
@@ -352,7 +352,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
             <div style={styles.done}>✅</div>
             <div style={styles.sub}>This request has been paid.</div>
             <div style={styles.fine}>
-              Have a WaPay account? <a href="/app" style={{ color: '#359853', fontWeight: 600 }}>Log in on the web</a> to see your balance, get paid and pay out.
+              Have a WaPay account? <a href="https://app.wapay.co.za" style={{ color: '#359853', fontWeight: 600 }}>Log in at app.wapay.co.za</a> to see your balance, get paid and pay out.
             </div>
             <div style={styles.amount}>{rands(amountCents)}</div>
             <a style={{ ...styles.btn, ...styles.primary }} href={receiptLink}>
