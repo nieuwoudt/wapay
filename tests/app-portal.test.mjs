@@ -904,3 +904,23 @@ test('the portal domain defaults to app.wapay.co.za, WAPAY_APP_HOST overrides it
   assert.equal(appHostDecision({ host: 'pleasepayme.co.za', pathname: '/', appHost: configuredAppHost({}) }), 'pass');
   assert.equal(appHostDecision({ host: 'app.wapay.co.za', pathname: '/pay/X', appHost: configuredAppHost({}) }), 'pass');
 });
+
+test('an open Didit check is re-read from the decision endpoint when the pay-out screen loads, once a minute, and never when already decided', async () => {
+  const { refreshOpenKyc } = await import('../lib/app-money.js');
+  const calls = [];
+  const verified = { id: 'kyc1', waId: '27830000001', profile: { kyc: { status: 'VERIFIED', sessionId: 's1', fullName: 'Thandi Dlamini' } } };
+  const deps = { kycConfigured: () => true, syncKycFromDecision: async (a) => { calls.push(a); return { ok: true, kyc: { status: 'VERIFIED', fullName: 'Thandi Dlamini' } }; }, prisma: { account: { findUnique: async () => verified } } };
+  const pending = { id: 'kyc1', waId: '27830000001', profile: { kyc: { status: 'PENDING', sessionId: 's1' } } };
+  const NOW = Date.parse('2026-10-21T14:00:00Z');
+  const a = await refreshOpenKyc(deps, { account: pending, now: NOW });
+  assert.equal(a.profile.kyc.status, 'VERIFIED');
+  assert.equal(calls.length, 1); assert.equal(calls[0].sessionId, 's1'); assert.equal(calls[0].accountId, 'kyc1');
+  await refreshOpenKyc(deps, { account: pending, now: NOW + 30 * 1000 });
+  assert.equal(calls.length, 1, 'throttled to once a minute');
+  await refreshOpenKyc(deps, { account: pending, now: NOW + 61 * 1000 });
+  assert.equal(calls.length, 2, 'asked again after a minute');
+  const done = await refreshOpenKyc(deps, { account: verified, now: NOW + 5 * 60 * 1000 });
+  assert.equal(calls.length, 2, 'a decided check is never re-read'); assert.equal(done, verified);
+  const noSession = await refreshOpenKyc(deps, { account: { id: 'kyc2', profile: { kyc: { status: 'PENDING' } } }, now: NOW });
+  assert.equal(calls.length, 2, 'no session id, nothing to ask'); assert.equal(noSession.profile.kyc.status, 'PENDING');
+});
