@@ -105,8 +105,11 @@ export default async function handler(req, res) {
     out.wabaSubscribedApps = sa.error
       ? { error: sa.error }
       : (sa.data || []).map((a) => ({ appId: mask(a.whatsapp_business_api_data?.id), name: a.whatsapp_business_api_data?.name, overrideCallbackUri: a.override_callback_uri || null }));
-    const waba = await graph(wabaId, token, { fields: 'id,name,account_review_status,business_verification_status' });
-    out.waba = waba.error ? { error: waba.error } : { name: waba.name, accountReviewStatus: waba.account_review_status, businessVerificationStatus: waba.business_verification_status };
+    const waba = await graph(wabaId, token, { fields: 'id,name,account_review_status,business_verification_status,primary_funding_id,timezone_id,currency' });
+    // primary_funding_id is the payment method / credit line attached to THIS
+    // WhatsApp account; null means Meta has nothing to bill and 131042 follows
+    // (2026-10-20, BUGLOG #136). Masked like every other id here.
+    out.waba = waba.error ? { error: waba.error } : { name: waba.name, accountReviewStatus: waba.account_review_status, businessVerificationStatus: waba.business_verification_status, primaryFundingId: waba.primary_funding_id ? mask(waba.primary_funding_id) : null, timezoneId: waba.timezone_id ?? null, currency: waba.currency || null };
     const tpl = await graph(`${wabaId}/message_templates`, token, { fields: 'name,status,category,language,components', limit: '100' });
     // Components are returned for authentication templates only: their exact
     // button shape decides which parameters a send must carry (BUGLOG #41).
@@ -126,6 +129,17 @@ export default async function handler(req, res) {
       : { displayPhoneNumber: pn.display_phone_number, verifiedName: pn.verified_name, qualityRating: pn.quality_rating, status: pn.status, nameStatus: pn.name_status, messagingLimitTier: pn.messaging_limit_tier, platformType: pn.platform_type, throughput: pn.throughput?.level || pn.throughput || null };
     const wh = await graph(phoneNumberId, token, { fields: 'webhook_configuration' });
     out.phoneWebhookOverride = wh.error ? { error: wh.error } : (wh.webhook_configuration || null);
+    // 5. Meta's own verdict on whether this number can send and, if not, why:
+    //    one entry per entity (PHONE_NUMBER, WABA, BUSINESS, APP) with the
+    //    blocking error, its description and Meta's suggested fix. Added
+    //    2026-10-21 during the 131031 lock (BUGLOG #136) so the reason is read
+    //    from the source instead of guessed from delivery failures.
+    const hs = await graph(phoneNumberId, token, { fields: 'health_status' });
+    out.health = hs.error ? { error: hs.error } : (hs.health_status || null);
+    if (hs.error && wabaId) {
+      const hw = await graph(wabaId, token, { fields: 'health_status' });
+      out.healthWaba = hw.error ? { error: hw.error } : (hw.health_status || null);
+    }
   } else {
     out.phone = { skipped: 'no phone number id in this deployment' };
   }
