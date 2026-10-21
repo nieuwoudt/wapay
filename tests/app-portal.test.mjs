@@ -893,3 +893,14 @@ test('no answer ever carries the account row, its PIN hash or its profile', asyn
     assert.ok(!/argon2-hash-marker|authFactors|secretHash|"profile"|onboardingState/.test(text), `${make.name} leaks the account row`);
   }
 });
+
+test('the portal domain defaults to app.wapay.co.za, WAPAY_APP_HOST overrides it, and off disables the root redirect', async () => {
+  const { configuredAppHost, appHostDecision, DEFAULT_APP_HOST } = await import('../lib/app-host.js');
+  assert.equal(DEFAULT_APP_HOST, 'app.wapay.co.za');
+  assert.equal(configuredAppHost({}), 'app.wapay.co.za');
+  assert.equal(configuredAppHost({ WAPAY_APP_HOST: 'App.Example.co.za ' }), 'app.example.co.za');
+  assert.equal(configuredAppHost({ WAPAY_APP_HOST: 'off' }), '');
+  assert.equal(appHostDecision({ host: 'app.wapay.co.za', pathname: '/', appHost: configuredAppHost({}) }), 'redirect');
+  assert.equal(appHostDecision({ host: 'pleasepayme.co.za', pathname: '/', appHost: configuredAppHost({}) }), 'pass');
+  assert.equal(appHostDecision({ host: 'app.wapay.co.za', pathname: '/pay/X', appHost: configuredAppHost({}) }), 'pass');
+});
