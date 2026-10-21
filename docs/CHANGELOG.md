@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-10-21 (118) — Delivery alerts that survive a 30-day restriction; the tap-to-pay link
+
+BUGLOG #136. The stall alert of CHANGELOG 114 e-mailed ops on every ten-minute webhook run while
+deliveries failed (144 a day) and only the WhatsApp rail was keyed per hour. One claim row now
+throttles both rails: once per hour per code for the first six hours of a stall, once per day
+after that (subject carries "day N"), and a single "deliveries resumed" line goes out when an OK
+hour follows a stall alert within 36 hours. `lib/delivery-health.js` (`DAMP_AFTER_HOURS`,
+`resumedAlertText`), tests/delivery-health.test.mjs.
+
+Same morning: `lib/ops-link.js` + `/ops/payout` + `/api/ops/payout-link` — a signed, expiring
+link that describes ONE operator pay-out (account, saved destination, amount, fixed intent, who,
+why); the page shows the dry run and executes on a tap; a second tap returns the first result.
+Built because the founder was on an iPad; the first pay-out of the restriction period went
+through it at 09:15 UTC (account ending 5381, PayShap, finalised by OTT's webhook in 23 seconds).
+
 ## 2026-10-21 (117) — The personal web portal: log in, see your money, get paid and pay out without WhatsApp
 
 Meta restricted WaPay's WhatsApp number for 30 days on 20 October, so customers holding balances
