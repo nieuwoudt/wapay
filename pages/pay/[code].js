@@ -343,11 +343,17 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
               ignore. Paying from a WaPay balance is free: reply in WhatsApp to confirm with
               your PIN.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
             </div>
+            <div style={styles.fine}>
+              Have a WaPay account? <a href="/app" style={{ color: '#359853', fontWeight: 600 }}>Log in on the web</a> to see your balance, get paid and pay out.
+            </div>
           </>
         ) : status === 'PAID' ? (
           <>
             <div style={styles.done}>✅</div>
             <div style={styles.sub}>This request has been paid.</div>
+            <div style={styles.fine}>
+              Have a WaPay account? <a href="/app" style={{ color: '#359853', fontWeight: 600 }}>Log in on the web</a> to see your balance, get paid and pay out.
+            </div>
             <div style={styles.amount}>{rands(amountCents)}</div>
             <a style={{ ...styles.btn, ...styles.primary }} href={receiptLink}>
               📲 Get my receipt + my own WaPay
