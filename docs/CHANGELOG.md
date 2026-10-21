@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-10-21 (119) — app.wapay.co.za, and the portal's ID check without the webhook
+
+The portal's domain: `app.wapay.co.za` is the code default (`DEFAULT_APP_HOST`, lib/app-host.js),
+so that host's root opens /app with no Vercel variable; `WAPAY_APP_HOST` overrides, `off`
+disables the redirect. The pay page links to app.wapay.co.za under the fine print and on the paid
+screen. `refreshOpenKyc` (lib/app-money.js): when the pay-out screen loads and the customer's
+Didit check is still PENDING with a session id, the decision endpoint is read directly, at most
+once a minute per account, so the check completes even while the webhook's signing secret is wrong
+in Vercel (six 401s on 20 October). Commits f43860d, 56517e5, 82a85a8; tests in
+tests/app-portal.test.mjs.
+
 ## 2026-10-21 (118) — Delivery alerts that survive a 30-day restriction; the tap-to-pay link
 
 BUGLOG #136. The stall alert of CHANGELOG 114 e-mailed ops on every ten-minute webhook run while
