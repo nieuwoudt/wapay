@@ -83,3 +83,12 @@ test('blockers stop a live run before the rail: frozen, rules, disabled', async 
   assert.deepEqual(out.blockers, ['DISABLED', 'FROZEN', 'KYC_REQUIRED']);
   assert.equal(calls.rail.length, 0);
 });
+
+test('"max" on a balance above the per-pay-out ceiling quotes the ceiling, not an error', async () => {
+  const { d, calls } = deps({ balances: async () => ({ spendCents: 0, cashCents: 580710, totalCents: 580710 }) });
+  const out = await opsPayout({ prisma: db, accountId: 'acc1', amountCents: 'max', deps: d });
+  assert.equal(out.ok, true, JSON.stringify(out));
+  assert.equal(out.quote.amountCents <= out.maxPayoutCents, true);
+  assert.equal(out.quote.amountCents + out.quote.feeCents <= 580710, true);
+  assert.equal(calls.rail.length, 0);
+});
