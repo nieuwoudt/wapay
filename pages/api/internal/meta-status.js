@@ -105,11 +105,19 @@ export default async function handler(req, res) {
     out.wabaSubscribedApps = sa.error
       ? { error: sa.error }
       : (sa.data || []).map((a) => ({ appId: mask(a.whatsapp_business_api_data?.id), name: a.whatsapp_business_api_data?.name, overrideCallbackUri: a.override_callback_uri || null }));
-    const waba = await graph(wabaId, token, { fields: 'id,name,account_review_status,business_verification_status,primary_funding_id,timezone_id,currency' });
-    // primary_funding_id is the payment method / credit line attached to THIS
-    // WhatsApp account; null means Meta has nothing to bill and 131042 follows
-    // (2026-10-20, BUGLOG #136). Masked like every other id here.
-    out.waba = waba.error ? { error: waba.error } : { name: waba.name, accountReviewStatus: waba.account_review_status, businessVerificationStatus: waba.business_verification_status, primaryFundingId: waba.primary_funding_id ? mask(waba.primary_funding_id) : null, timezoneId: waba.timezone_id ?? null, currency: waba.currency || null };
+    const waba = await graph(wabaId, token, { fields: 'id,name,account_review_status,business_verification_status' });
+    out.waba = waba.error ? { error: waba.error } : { name: waba.name, accountReviewStatus: waba.account_review_status, businessVerificationStatus: waba.business_verification_status };
+    // Billing fields, each in its own call so a field Meta reserves for Solution
+    // Providers (primary_funding_id answered "requires ... Business Solution
+    // Provider" on 2026-10-21) can never blank the rest. primary_funding_id is
+    // the payment method / credit line attached to THIS WhatsApp account; null
+    // means Meta has nothing to bill and 131042 follows (BUGLOG #136).
+    if (!waba.error) {
+      const fund = await graph(wabaId, token, { fields: 'primary_funding_id' });
+      out.waba.primaryFundingId = fund.error ? { error: fund.error.message } : (fund.primary_funding_id ? mask(fund.primary_funding_id) : null);
+      const loc = await graph(wabaId, token, { fields: 'timezone_id,currency' });
+      out.waba.billingLocale = loc.error ? { error: loc.error.message } : { timezoneId: loc.timezone_id ?? null, currency: loc.currency || null };
+    }
     const tpl = await graph(`${wabaId}/message_templates`, token, { fields: 'name,status,category,language,components', limit: '100' });
     // Components are returned for authentication templates only: their exact
     // button shape decides which parameters a send must carry (BUGLOG #41).

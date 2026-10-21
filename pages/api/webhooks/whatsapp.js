@@ -375,6 +375,17 @@ export default async function handler(req, res) {
                   // answerable from the database.
                   const errCode = status.errors?.[0]?.code;
                   await webhookPulse(`status-${status.status || 'unknown'}${errCode ? `-${errCode}` : ''}`);
+                  // Meta's own words for a failure (title + error_data.details), so a
+                  // lock or a billing stop is diagnosed from the database instead of
+                  // guessed from the code alone (2026-10-21, the 131031 morning,
+                  // BUGLOG #136). Generic Meta text, never customer data; one row per
+                  // code per minute like every other pulse.
+                  if (status.status === 'failed' && errCode) {
+                    const e0 = status.errors[0] || {};
+                    const why = [e0.title, e0.error_data?.details].filter(Boolean).join(' | ')
+                      .replace(/[^\w .,:;()'/|-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
+                    if (why) await webhookPulse(`why-${errCode}:${why}`);
+                  }
                   // A WaPay-sent business link carries this message id: the
                   // receipt becomes the tick the portal shows (2026-09-10).
                   if (status.id && status.status) {
