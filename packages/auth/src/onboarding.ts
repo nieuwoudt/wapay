@@ -73,6 +73,20 @@ export function onboardingOtpDisabled(): boolean {
 }
 
 /**
+ * WAPAY_ONBOARDING_MARKETING_TEMPLATES=on restores the two onboarding
+ * templates Meta files under MARKETING (consent_terms_ at S3→S4 and
+ * welcome_new_user_account_activation at S4→S5). Default OFF since
+ * 2026-10-21: the number was restricted for "Sending spam" on 20 October,
+ * and marketing-category templates fired at people who had only clicked an
+ * ad were part of what was reported. Off = the plain-text lines below, one
+ * message each, inside the customer's own 24-hour window. The PIN template
+ * (UTILITY) and the step-1 welcome stay as they were.
+ */
+export function marketingTemplatesEnabled(): boolean {
+  return /^(on|true|1|yes)$/i.test(String(process.env.WAPAY_ONBOARDING_MARKETING_TEMPLATES || '').trim());
+}
+
+/**
  * The PIN-creation prompt (template onboarding_step_3_pin_creation, text
  * fallback), used when S1 goes straight to S3 without an OTP.
  */
@@ -410,32 +424,20 @@ export async function handleS3OtpVerified(args: {
     
     console.log(`✅ PIN set successfully for ${displayName}`);
     
-    // Send consent template (consent_terms_ - note the underscore at the end!)
-    console.log(`📤 Sending consent template to ${displayName}`);
-    const consentResult = await sendWhatsAppTemplate({
-      to: waId,
-      templateName: 'consent_terms_',  // CORRECT NAME with underscore
-      language: 'en',
-      components: [
-        {
-          type: 'body',
-          parameters: [
-            {
-              type: 'text',
-              text: displayName,
-            },
-          ],
-        },
-      ],
-    });
-    
+    // The consent step: a plain line by default (one confirmation word, the
+    // terms link, no marketing category); the template only when the flag is on.
+    const consentText = `✅ PIN set!\n\nLast step, ${displayName}: please read our Terms & Privacy Policy at https://wapay.co.za/legal/terms and reply *I accept* to activate your account.`;
+    const consentResult = marketingTemplatesEnabled()
+      ? await sendWhatsAppTemplate({
+          to: waId,
+          templateName: 'consent_terms_',  // CORRECT NAME with underscore
+          language: 'en',
+          components: [{ type: 'body', parameters: [{ type: 'text', text: displayName }] }],
+        })
+      : { ok: false as const, error: 'MARKETING_TEMPLATES_OFF' };
     if (!consentResult.ok) {
-      console.error(`❌ Consent template failed: ${consentResult.error}`);
-      // Fallback to text ONLY if template fails
-      await sendWhatsAppText({
-        to: waId,
-        text: `✅ PIN set!\n\nStep 3 of 3. 📋 Almost done, ${displayName}!\n\nAccept our Terms & Privacy Policy.\n\nReply "I accept" to continue.`,
-      });
+      if (consentResult.error !== 'MARKETING_TEMPLATES_OFF') console.error(`❌ Consent template failed: ${consentResult.error}`);
+      await sendWhatsAppText({ to: waId, text: consentText });
     } else {
       console.log(`✅ Consent template sent successfully`);
     }
@@ -516,35 +518,22 @@ export async function handleS4PinSet(args: {
     const balanceCents = wallet?.availableCents || 0;
     const balance = (balanceCents / 100).toFixed(2);
     
-    // Send account activation template (welcome_new_user_account_activation)
-    const activationResult = await sendWhatsAppTemplate({
-      to: waId,
-      templateName: 'welcome_new_user_account_activation',
-      language: 'en',
-      components: [
-        {
-          type: 'body',
-          parameters: [
-            {
-              type: 'text',
-              text: displayName,
-            },
-            {
-              type: 'text',
-              text: balance,
-            },
-          ],
-        },
-      ],
-    });
-    
+    // Account activation: a plain welcome by default (the MARKETING template
+    // with six product buttons only when the flag is on). No hand-written
+    // product list here: the home card and "help" render what is live for
+    // this customer from the capability registry.
+    const activationResult = marketingTemplatesEnabled()
+      ? await sendWhatsAppTemplate({
+          to: waId,
+          templateName: 'welcome_new_user_account_activation',
+          language: 'en',
+          components: [{ type: 'body', parameters: [{ type: 'text', text: displayName }, { type: 'text', text: balance }] }],
+        })
+      : { ok: false as const, error: 'MARKETING_TEMPLATES_OFF' };
     if (!activationResult.ok) {
-      // Fallback to text
       await sendWhatsAppText({
         to: waId,
-        // No hand-written product list here: the home card and "help" render
-        // what is live for this customer from the capability registry.
-        text: `🎉 Welcome to WaPay, ${displayName}!\n\n✅ Your account is now active!\n\n💰 Current Balance: R ${balance}\n\nJust tell me what you need, in any language, or type "help" to see everything I can do. 😊`,
+        text: `🎉 Welcome to WaPay, ${displayName}! Your account is active.\n\n💰 Balance: R ${balance}\n\nTo get paid, tell me who owes you and how much, and I make the link you forward to them. Type *Home* any time to see what you can do.`,
       });
     }
     

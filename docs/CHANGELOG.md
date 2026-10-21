@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-21 (116) — Onboarding sends no marketing-category templates; an operator can pay out a saved destination
+
+BUGLOG #136. Two of the onboarding templates are filed by Meta under MARKETING (`consent_terms_`
+at the PIN→consent step and `welcome_new_user_account_activation` with its six product buttons at
+activation); fired at people who had only clicked an ad, they were part of what was reported as
+spam. Both are now off unless `WAPAY_ONBOARDING_MARKETING_TEMPLATES=on`: the consent step is one
+plain line with the terms link and a single confirmation word ("I accept"), activation is one
+plain welcome that points at the home card. The PIN template (UTILITY) and the step-1 welcome are
+unchanged. `packages/auth/src/onboarding.ts`, tests/onboarding-marketing-templates.test.mjs.
+
+Same day, for the restriction period: `lib/ops-payout.js` + `POST /api/internal/ops-payout` pay a
+customer's own balance to a destination they saved, from the operator's side, through
+`requestPayout` with a STEP_UP proof bound to account, intent and amount; dry run by default
+(quote, rules, freeze, balance, float, destination label, identity on file, no rail call), live
+run needs `by` and `reason`, writes an `OPS_PAYOUT` audit row, raises the pay-out alert and queues
+the customer a receipt line. Numbers never leave the server beyond last digits.
+tests/ops-payout.test.mjs.
+
 ## 2026-10-21 (115) — Meta's own verdict on the lock, and its words for every failure
 
 BUGLOG #136/#137. `/api/internal/meta-status` now asks Meta's Health Status API for the number
