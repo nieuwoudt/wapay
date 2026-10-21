@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-10-21 (115) — Meta's own verdict on the lock, and its words for every failure
+
+BUGLOG #136/#137. `/api/internal/meta-status` now asks Meta's Health Status API for the number
+(`health_status`: one entry per entity, BUSINESS / WABA / APP / PHONE_NUMBER, with the blocking
+error and Meta's suggested fix), reads which business portfolio owns the WhatsApp account
+(`owner_business_info`, `on_behalf_of_business_info`), that portfolio's verification and invoiced
+credit lines, and the billing locale; the billing fields run in their own calls so a field Meta
+reserves for Solution Providers (`primary_funding_id`) can never blank the rest. The inbound
+webhook stores Meta's failure text for a failed status as a `why-<code>:<title | details>` pulse
+row and account-level events (`account_update`, `account_alerts`, `account_review_update`,
+`phone_number_quality_update`) as `account-<field>:<event>…` rows, so a lock and its lifting are
+read from the database. Commits 25aaac6, 87a55cd, 37b08ee; the first of them was also the push
+that exposed the Vercel author block (BUGLOG #137), fixed by ee02c3d.
+
 ## 2026-10-21 (114) — Delivery health: the dashboard and ops see the first time Meta stops delivering
 
 BUGLOG #136. From 21:30 UTC on 20 October Meta rejected every WaPay reply with status 131031
