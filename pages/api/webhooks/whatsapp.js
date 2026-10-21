@@ -354,6 +354,17 @@ export default async function handler(req, res) {
                 }
               }
 
+              // Account-level events (restriction, violation, alert, review, quality
+              // tier) as pulse rows, so a lock and its lifting are visible from the
+              // database. Meta's own enum words only, never customer data
+              // (2026-10-21, BUGLOG #136).
+              if (['account_update', 'account_alerts', 'account_review_update', 'phone_number_quality_update'].includes(change.field)) {
+                const v = change.value || {};
+                const bits = [change.field, v.event, v.alert_type, v.alert_severity, v.alert_status, v.decision, v.current_limit,
+                  Array.isArray(v.restriction_info) ? v.restriction_info.map((r) => r?.restriction_type).filter(Boolean).join('+') : null,
+                  v.ban_info?.waba_ban_state, v.violation_info?.violation_type].filter(Boolean).map(String).join(':');
+                await webhookPulse(`account-${bits.replace(/[^\w:+.-]/g, '_').slice(0, 120)}`);
+              }
               // Delivery statuses arrive under field "messages" as value.statuses
               // (the Cloud API has no "message_status" field; that check never
               // matched since January, so statuses were silently ignored: found
