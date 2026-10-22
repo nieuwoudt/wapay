@@ -114,7 +114,11 @@ making links, the balance and the transactions never ask.
 
 - **Where it is asked** (`lib/pin-setup.js`, `pinSetupGate` in the processor): at the moment the flow would
   say "enter your PIN" (`PAYOUT_PIN` in `deliverPayoutStep`, `VOUCHER_GIFT_PIN` for a send, `PAYREQ_PIN`),
-  when the account has none: "🔐 Choose a 4-digit PIN to protect your pay-outs…". Typed twice. Any other
+  when the account has none: "🔐 Choose a 4-digit PIN to protect your pay-outs…". Typed twice, and only a
+  PIN on its own counts, as at every PIN step: "2580 please" or "send R2000 to 083…" is asked again and never
+  routed or sent to a model; a real sentence without a PIN-length number leaves the setup, and when a pay-out or
+  send was waiting the answer starts "No problem, switching over. No PIN was set and nothing left your balance."
+  The classic sign-up stamps `pinDeferred` the moment it skips the PIN step. Any other
   wallet-PIN step reached without a PIN does the same when a PIN (or "forgot PIN") is typed there.
   "PIN", "set my PIN" or "forgot PIN" from an account without one starts it on its own (the web sends people here).
 - **Then the interrupted step carries on in the same turn**: the step waits at its PIN prompt and runs with
@@ -149,12 +153,17 @@ making links, the balance and the transactions never ask.
   loop's paylink attribution (requester as referrer) and a zero SPEND wallet (`lib/payer-preregister.js`).
   POPIA: the number was given for the receipt; it is used for nothing else until they write. No message
   beyond the receipt they already get. A pre-registered payer is not a contact on the Growth tab until they write.
+- Their first message, on any path, starts the account (`markPayerStarted`): `createdAt` moves to that moment
+  and `profile.onboarding.startedAt` is stamped, so the new-account pay-out cap, the funnel and the Growth tab
+  count from when they joined, never from the receipt (a number cannot be aged by paying a link and waiting);
+  `profile.origin.paidAt` keeps the receipt's time.
 - The receipt: free text inside their window as before; outside it, the v2 template when its name is set and
   C covers the payer, else the current template. The **My receipt** tap arrives as a button reply whose
   payload is `WAPAY_RECEIPT:<code>`; the webhook hands that over as the turn's text.
 - Their tap, or any first message: the one-step sign-up (A) with the receipt on top ("🧾 You paid R250 to
-  Thandi on 22 Oct, reference PF … · PR…."), the home card and the terms line. The PayFast reference only to
-  the number that paid. A member who taps gets the receipt alone.
+  Thandi on 22 Oct, reference PF … · PR…."), the home card and the terms line. "You paid" and the PayFast
+  reference only to the number that paid; anyone else holding the code reads "Receipt: R250 paid to Thandi…".
+  A member who taps gets the receipt alone.
 
 ### D. The funnel (always on)
 
@@ -175,3 +184,6 @@ making links, the balance and the transactions never ask.
   is the WhatsApp profile name, as in the classic flow.
 - Holding a pending pay-out across a PIN setup that runs past the 30-minute idle limit: it expires like any
   step and the customer starts the pay-out again (the KYC hold of `lib/kyc-resume.js` is for checks that take hours).
+  A send's quote lives 5 minutes (`/api/wallet/send/preview`): a customer who takes longer to choose the PIN gets
+  "Your WaPay PIN is set" with "That send did not go through", and sends again with the new PIN.
+- Two quick first messages from a new number can each get the welcome (no per-number lock, as in the classic flow).

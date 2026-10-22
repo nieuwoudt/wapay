@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { preRegisterPayer, receiptV2TemplateMessage, receiptV2Name } from '../lib/payer-preregister.js';
+import { preRegisterPayer, receiptV2TemplateMessage, receiptV2Name, markPayerStarted } from '../lib/payer-preregister.js';
 import { deliverRequestPaidNotifications } from '../lib/request-notify.js';
 import { receiptV2TemplateFor, payerPreregisterFor, oneStepSignupFor, FLAGS, RECEIPT_V2_ENV } from '../lib/onboarding-flags.js';
 import { payerReceiptLine, payerPendingLine, receiptButtonPayload, receiptCodeFromPayload, RECEIPT_BUTTON_PAYLOAD, shortSastDate } from '../lib/one-step-signup.js';
@@ -248,4 +248,37 @@ test('the v2 template spec: UTILITY, the neutral closing line, one "My receipt" 
   assert.ok(!/—/.test(text));
   assert.equal((text.match(/\{\{\d\}\}/g) || []).length, 3);
   assert.deepEqual(body.components.find((c) => c.type === 'BUTTONS').buttons, [{ type: 'QUICK_REPLY', text: 'My receipt' }]);
+});
+
+test('a pre-registered payer starts at their first message: the account\'s age, the funnel and the Growth tab count from then', async () => {
+  const calls = [];
+  const db = { async $executeRaw(strings, ...values) { calls.push({ sql: strings.join('$'), values }); return 1; } };
+  const payer = { id: 'acc_payer', profile: { origin: { kind: 'PAYER', requestCode: CODE } } };
+  const now = new Date('2026-10-29T10:00:00.000Z');
+  assert.equal(await markPayerStarted({ prisma: db, account: payer, path: 'ONE_STEP', now }), true);
+  const { sql, values } = calls[0];
+  assert.match(sql, /SET "createdAt" = now\(\)/, 'the age of the account restarts: the new-account pay-out cap applies from the first message');
+  assert.match(sql, /profile->'origin'->>'kind' = 'PAYER'/);
+  assert.match(sql, /\(profile->'onboarding'->>'startedAt'\) IS NULL/, 'once only');
+  assert.deepEqual(JSON.parse(values.find((v) => typeof v === 'string' && v.includes('startedAt'))), { path: 'ONE_STEP', startedAt: now.toISOString() });
+  assert.equal(await markPayerStarted({ prisma: db, account: { id: 'x', profile: { origin: { kind: 'PAYER' }, onboarding: { startedAt: 'then' } } } }), false, 'already started');
+  assert.equal(await markPayerStarted({ prisma: db, account: { id: 'y', profile: { acquisitionSource: 'organic' } } }), false, 'not a pre-registered payer');
+  assert.equal(calls.length, 1);
+  assert.equal(await markPayerStarted({ prisma: { $executeRaw: async () => { throw new Error('down'); } }, account: payer }), false, 'never throws');
+  // Wired on the first message, on every path, before anything answers.
+  const start = processor.indexOf("if (isPayerOrigin(account) && !account.profile?.onboarding?.startedAt) {");
+  const referralHook = processor.indexOf('const referralTurn = await handleReferralCodeTurn(');
+  assert.ok(start > 0 && start < referralHook);
+  assert.match(processor.slice(start, start + 300), /await markPayerStarted\(\{ account, path: oneStepSignupFor\(\{ waId: from, account \}\) \? 'ONE_STEP' : 'CLASSIC' \}\);/);
+});
+
+test('the receipt on top of the sign-up says "you paid" only to the number that paid', () => {
+  const base = { amountCents: 25000, requesterLabel: 'Thandi', paidAt: '2026-10-22T09:30:00Z', reference: CODE };
+  assert.match(payerReceiptLine({ ...base, own: false }), new RegExp(`^🧾 Receipt: R250 paid to Thandi on 22 Oct, reference ${CODE}\\.$`));
+  assert.ok(!/You paid/.test(payerReceiptLine({ ...base, own: false })));
+  assert.match(payerPendingLine({ requesterLabel: 'Thandi', own: false }), /^⏳ That payment to Thandi is not confirmed yet\.$/);
+  const lead = processor.slice(processor.indexOf('async function oneStepReceiptLead('), processor.indexOf('async function pinSetupGate('));
+  assert.match(lead, /const own = typeof meta\.payerMsisdn === 'string' && !!meta\.payerMsisdn && normaliseMsisdn\(from\) === meta\.payerMsisdn;/);
+  assert.match(lead, /const pf = own && /, 'the PayFast reference only to the payer');
+  assert.match(lead, /reference: pf \? `PF \$\{pf\} · \$\{code\}` : code, own \}/);
 });

@@ -73,7 +73,7 @@ test('the switch: B covering the number, or an account that finished without a P
   assert.equal(pinDeferredAtSignupFor('27600000919', ENV_ON), true);
   assert.equal(pinDeferredAtSignupFor('27600000919', { WAPAY_ONBOARDING_ONE_STEP: 'on', WAPAY_PAYER_PREREGISTER: 'on' }), false, 'the classic sign-up skips its PIN only under B');
   assert.match(processor, /const deferPin = pinDeferredAtSignupFor\(from\);/);
-  assert.match(processor, /deferPin: pinDeferredAtSignupFor\(from\) \}\);/);
+  assert.match(processor, /const deferPin = pinDeferredAtSignupFor\(from\);\s*const started = await startOnboardingFromAd\(\{ accountId: account\.id, waId: from, msisdn: account\.msisdn \|\| from, displayName, deferPin \}\);\s*if \(deferPin\) await stampPinDeferredIfSkipped\(\{ account \}\);/);
 });
 
 // ---------------------------------------------------------------- each gate asks once, then continues
@@ -147,7 +147,14 @@ test('the setup: never over an existing PIN, weak PINs refused, a mismatch start
   const step = startPinSetup({ resumeState: 'PAYOUT_PIN', resumeData: { intentId: 'wd_x', amountCents: 5000 } });
   assert.match((await handlePinSetupReply({ account: ACCOUNT, state: step.state, data: step.data, text: '1234', deps: { auth: s.auth }, env: ENV_ON })).text, /too easy/);
   assert.match((await handlePinSetupReply({ account: ACCOUNT, state: step.state, data: step.data, text: '12', deps: { auth: s.auth }, env: ENV_ON })).text, /4 digits/);
-  const chose = await handlePinSetupReply({ account: ACCOUNT, state: step.state, data: step.data, text: 'my pin is 2580', deps: { auth: s.auth }, env: ENV_ON });
+  // Only a PIN on its own is a PIN, as at every PIN step: words with it are asked again and never leave the setup.
+  for (const wrapped of ['my pin is 2580', '2580 please', 'use 2580', 'ok 2580']) {
+    const r = await handlePinSetupReply({ account: ACCOUNT, state: step.state, data: step.data, text: wrapped, deps: { auth: s.auth }, env: ENV_ON });
+    assert.equal(r.state, 'PIN_SETUP_NEW', wrapped);
+    assert.match(r.text, /only the digits/, wrapped);
+    assert.ok(!r.passthrough, `${wrapped}: never handed to the router or a model`);
+  }
+  const chose = await handlePinSetupReply({ account: ACCOUNT, state: step.state, data: step.data, text: ` ${PIN} `, deps: { auth: s.auth }, env: ENV_ON });
   assert.equal(chose.state, 'PIN_SETUP_CONFIRM');
   const mismatch = await handlePinSetupReply({ account: ACCOUNT, state: chose.state, data: chose.data, text: '9631', deps: { auth: s.auth }, env: ENV_ON });
   assert.equal(mismatch.state, 'PIN_SETUP_NEW');
@@ -162,7 +169,18 @@ test('the setup: never over an existing PIN, weak PINs refused, a mismatch start
   assert.match(refused.text, /already set/);
   assert.equal(meanwhile.calls.setPIN.length, 0);
   assert.match((await handlePinSetupReply({ account: ACCOUNT, state: 'PIN_SETUP_NEW', data: step.data, text: 'cancel', deps: { auth: s.auth }, env: ENV_ON })).text, /No PIN was set and nothing left your balance/);
-  assert.deepEqual(await handlePinSetupReply({ account: ACCOUNT, state: 'PIN_SETUP_NEW', data: step.data, text: 'what is my balance', deps: { auth: s.auth }, env: ENV_ON }), { state: null, passthrough: true });
+  // A real sentence with no PIN-length number leaves; with a pay-out or send waiting, it says so (dropped).
+  assert.deepEqual(await handlePinSetupReply({ account: ACCOUNT, state: 'PIN_SETUP_NEW', data: step.data, text: 'what is my balance', deps: { auth: s.auth }, env: ENV_ON }), { state: null, passthrough: true, dropped: true });
+  assert.deepEqual(await handlePinSetupReply({ account: ACCOUNT, state: 'PIN_SETUP_NEW', data: startPinSetup({}).data, text: 'what is my balance', deps: { auth: s.auth }, env: ENV_ON }), { state: null, passthrough: true }, 'nothing parked: nothing to say');
+  for (const short of ['yes', 'okay', 'what?', 'hmm']) {
+    const r = await handlePinSetupReply({ account: ACCOUNT, state: 'PIN_SETUP_NEW', data: step.data, text: short, deps: { auth: s.auth }, env: ENV_ON });
+    if (short === 'what?') assert.equal(r.passthrough, true, 'a question is a real sentence');
+    else assert.equal(r.state, 'PIN_SETUP_NEW', `${short}: asked again, the parked send is not dropped silently`);
+  }
+  for (const cmd of ['send R2000 to 0821234567', 'withdraw R5000']) {
+    const r = await handlePinSetupReply({ account: ACCOUNT, state: 'PIN_SETUP_CONFIRM', data: step.data, text: cmd, deps: { auth: s.auth }, env: ENV_ON });
+    assert.ok(!r.passthrough && r.state === 'PIN_SETUP_CONFIRM', `${cmd}: a PIN-length number keeps it in the setup`);
+  }
   assert.match((await handlePinSetupReply({ account: ACCOUNT, state: 'PIN_SETUP_NEW', data: step.data, text: PIN, deps: { auth: s.auth }, env: {} })).text, /not available/, 'no key: no PIN is half-set');
   for (const yes of ['PIN', 'pin', 'set my PIN', 'Set up my WaPay PIN', 'create a pin', 'my pin', 'I want to set a PIN']) assert.equal(matchPinSetupAsk(yes), true, yes);
   for (const no of ['what is a pin for my voucher number 1234', 'pinned', 'spin', 'send R50 to 0821234567']) assert.equal(matchPinSetupAsk(no), false, no);
@@ -326,4 +344,31 @@ test('the classic sign-up under B: no PIN step; the consent step names the PIN f
   const flow = fnBody(processor, 'handleOnboardingFlow');
   assert.equal((flow.match(/\bdeferPin,\n/g) || []).length, 3, 'S1, S2 and S3 get it');
   assert.match(flow, /if \(deferPin && !\(await hasPIN\(account\.id\)\.catch\(\(\) => true\)\)\) \{\s*await mergeProfileSubkeyAtomic\(\{ accountId: account\.id, key: 'onboarding', patch: \{ pinDeferred: true \} \}\)/);
+});
+
+test('review fixes: the skip is stamped when it happens, "stop" never pre-empts the setup, a dropped send is said, a failed send keeps the lead line', async () => {
+  // B turned off between the skipped PIN step and "I accept" can no longer strand the account.
+  const flow = fnBody(processor, 'handleOnboardingFlow');
+  assert.equal((flow.match(/if \(deferPin\) await stampPinDeferredIfSkipped\(\{ account \}\);/g) || []).length, 3, 'S1, S2 and S3');
+  const stamp = fnBody(processor, 'stampPinDeferredIfSkipped');
+  assert.match(stamp, /if \(\(await getOnboardingState\(account\.id\)\) !== 'S4_PIN_SET'\) return;/);
+  assert.match(stamp, /if \(await hasPIN\(account\.id\)\.catch\(\(\) => true\)\) return;/);
+  assert.match(stamp, /patch: \{ pinDeferred: true \}/);
+  // The ad flow's "stop" hook leaves a PIN being chosen to the setup itself.
+  assert.match(processor, /const protectedState = \/_PIN\$\|PIN_RESEND_AUTH\|AWAITING_VOUCHER_PIN\|\^PIN_RESET_\|\^PIN_SETUP_\|CONFIRM\//);
+  // A real sentence that leaves the setup while a send waited: the answer says nothing was made, in one message.
+  const setup = fnBody(processor, 'handlePinSetupState');
+  assert.match(setup, /if \(!step\.dropped\) return await handlePostOnboarding\(\{ account, from, text \}\);/);
+  assert.match(setup, /withLeadLine\(\{ to: from, line: switched \}, \(\) => handlePostOnboarding\(\{ account, from, text \}\)\)/);
+  assert.match(setup, /deps: \{ isEscape: isConversationalEscape \}/, 'the same sentence rule as every other PIN step');
+  // The lead line counts as delivered only when its send went out.
+  const sent = [];
+  let fail = true;
+  configureSay({ transport: async ({ to, text }) => { if (fail) { fail = false; return { ok: false, error: 'down' }; } sent.push({ to, text }); return { ok: true, data: { messages: [{ id: 'm' }] } }; }, prisma: { account: { findUnique: async () => null } } });
+  const r = await withLeadLine({ to: '27600000919', line: PIN_SET_LINE }, async () => {
+    await sendWhatsAppText({ to: '27600000919', text: 'first try' });
+    return 'x';
+  });
+  assert.equal(r.used, false, 'the caller sends the line itself');
+  configureSay({ transport: null, prisma: null });
 });

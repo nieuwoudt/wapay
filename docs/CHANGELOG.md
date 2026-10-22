@@ -30,7 +30,9 @@ unset (docs/ONBOARDING.md §5, `lib/onboarding-flags.js`):
   handed over by the webhook as the text), opens the account with "🧾 You paid R250 to Thandi on 22 Oct,
   reference …" on top. The v2 template is specified in `docs/templates/wapay_payment_receipt_v2.md` (UTILITY,
   not created here) and goes only when `WAPAY_TEMPLATE_PAYMENT_RECEIPT_V2` names it and C covers the payer.
-  Pre-registered payers who never wrote are kept out of the Growth tab's contacts.
+  Pre-registered payers who never wrote are kept out of the Growth tab's contacts; a payer's first message
+  starts the account (`createdAt` and `profile.onboarding.startedAt`), so the new-account pay-out cap counts
+  from then; "You paid" only to the number that paid.
 - **D, always on**: every new account is stamped `profile.onboarding.path` (`ONE_STEP` | `CLASSIC`, older =
   CLASSIC) and `startedAt`; `GET /api/internal/funnel?since&until` (internal key) gives per day and path the
   accounts opened, finished, finished in 10 minutes, first link in 24 hours, first link paid in 72 hours,

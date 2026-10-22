@@ -228,6 +228,9 @@ test('the processor: every first-message door goes one-step only under the switc
   assert.match(processor, /if \(referralTurn\?\.oneStepLead\) oneStepLead = referralTurn;\s*else if \(referralTurn\) return referralTurn;/);
   // The receipt ask from a number with no finished account.
   assert.match(processor, /if \(receiptMatch && onboardingState !== 'S5_COMPLETED' && oneStepSignupFor\(\{ waId: from, account \}\)\) \{\s*return await oneStepSignupTurn\(/);
-  // Nothing else in the processor opens an account in one step.
-  assert.equal((processor.match(/completeOneStepOnboarding\(/g) || []).length, 1);
+  // Nothing else in the processor opens an account in one step: the call and its one retry live in the turn.
+  const turn = fnBody(processor, 'oneStepSignupTurn');
+  assert.equal((processor.match(/completeOneStepOnboarding\(commit\)/g) || []).length, 2);
+  assert.equal((turn.match(/completeOneStepOnboarding\(commit\)/g) || []).length, 2, 'both inside oneStepSignupTurn');
+  assert.match(turn, /let done = await completeOneStepOnboarding\(commit\);\s*if \(!done\?\.ok\) done = await completeOneStepOnboarding\(commit\);/, 'one retry after the notice went out');
 });
