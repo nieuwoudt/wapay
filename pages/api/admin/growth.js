@@ -71,6 +71,7 @@ export default async function handler(req, res) {
   }
 
   // ---- per-account facts (one bounded query; aggregated here, never returned) ----
+  // A payer pre-registered at a receipt (WAPAY_PAYER_PREREGISTER, 2026-10-22) is not a contact until they write.
   const accounts = await safe(
     () => prisma.$queryRaw`
       SELECT a.id,
@@ -97,6 +98,7 @@ export default async function handler(req, res) {
       LEFT JOIN (SELECT split_part(jl."accountCode", ':', 2) AS account_id, max(je."createdAt") AS last_money_at
                  FROM "JournalLine" jl JOIN "JournalEntry" je ON je.id = jl."entryId"
                  WHERE jl."accountCode" LIKE 'WALLET:%' GROUP BY 1) m ON m.account_id = a.id
+      WHERE coalesce(a."profile"->'origin'->>'kind', '') <> 'PAYER' OR (a."profile"->'onboarding'->>'startedAt') IS NOT NULL
       LIMIT 200000`,
     []
   );

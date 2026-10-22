@@ -1412,6 +1412,56 @@ function DailyLinesStatic({ rows, series }) {
   );
 }
 
+/* The sign-up funnel (2026-10-22, lib/signup-funnel.js): one-step and classic sign-ups side by side, per day. */
+const FUNNEL_COLS = [['opened', 'Opened'], ['finished', 'Finished'], ['finished10m', 'In 10 min'], ['firstLink24h', 'Link in 24 h'], ['firstPaid72h', 'Paid in 72 h'], ['payout72h', 'Pay-out in 72 h']];
+function SignupFunnelCard({ range }) {
+  const [f, setF] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let live = true;
+    setErr('');
+    fetch(`/api/admin/signup-funnel?range=${range}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => { if (live) setF(d); })
+      .catch(() => { if (live) setErr('Could not load the sign-up funnel.'); });
+    return () => { live = false; };
+  }, [range]);
+  if (err || !f) return <div className="card" style={{ marginTop: 14 }}><h2>Sign-up funnel</h2><div className="empty">{err || 'Measuring…'}</div></div>;
+  const rows = (f.days || []).map((d) => ({ date: d.date, oneStep: d.byPath.ONE_STEP.rates.finished, classic: d.byPath.CLASSIC.rates.finished, link: d.total.rates.firstLink24h }));
+  const cell = (c, k) => (k === 'opened' ? n0(c.opened) : `${n0(c[k])}${c.rates?.[k] != null ? ` (${c.rates[k]}%)` : ''}`);
+  const fl = f.flags || {};
+  const sw = (x) => (x?.everyone ? 'on for everyone' : x?.listed ? `on for ${x.listed} number${x.listed === 1 ? '' : 's'}` : 'off');
+  const summary = [['One-step', f.summary?.byPath?.ONE_STEP], ['Classic', f.summary?.byPath?.CLASSIC], ['All', f.summary?.total]].filter(([, c]) => c);
+  const dayRows = [...(f.days || [])].reverse().flatMap((d) => ['ONE_STEP', 'CLASSIC'].filter((p) => d.byPath[p].opened > 0).map((p) => ({ d, p })));
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <h2>Sign-up funnel</h2>
+      <p className="note">Accounts opened per day, by the path they were opened on: one-step (the first message opens the account) or classic (welcome, code, PIN, consent). Rates are of the accounts opened that day; a day younger than a measure's window is still filling. One-step {sw(fl.oneStep)} · deferred PIN {sw(fl.pinOnDemand)} · payer pre-registration {sw(fl.payerPreregister)}. Internal: GET /api/internal/funnel.</p>
+      <DailyLines rows={rows} series={[
+        { key: 'oneStep', name: 'One-step finished %', color: 'var(--s1)' },
+        { key: 'classic', name: 'Classic finished %', color: 'var(--s4)' },
+        { key: 'link', name: 'First link in 24 h %, all', color: 'var(--s3)' },
+      ]} />
+      <div style={{ overflowX: 'auto', marginTop: 10 }}>
+        <table>
+          <thead><tr><th>Path, this period</th>{FUNNEL_COLS.map(([k, label]) => <th key={k} className="n">{label}</th>)}</tr></thead>
+          <tbody>{summary.map(([label, c]) => <tr key={label}><td>{label}</td>{FUNNEL_COLS.map(([k]) => <td key={k} className="n">{cell(c, k)}</td>)}</tr>)}</tbody>
+        </table>
+      </div>
+      {dayRows.length > 0 && (
+        <div style={{ overflowX: 'auto', marginTop: 10 }}>
+          <table>
+            <thead><tr><th>Day</th><th>Path</th>{FUNNEL_COLS.map(([k, label]) => <th key={k} className="n">{label}</th>)}</tr></thead>
+            <tbody>{dayRows.map(({ d, p }) => (
+              <tr key={d.date + p}><td>{d.date}</td><td>{p === 'ONE_STEP' ? 'one-step' : 'classic'}</td>{FUNNEL_COLS.map(([k]) => <td key={k} className="n">{cell(d.byPath[p], k)}</td>)}</tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Growth() {
   const [range, setRange] = useState('30');
   const [g, setG] = useState(null);
@@ -1494,6 +1544,8 @@ function Growth() {
           </table>
         </div>
       </div>
+
+      <SignupFunnelCard range={range} />
 
       <div className="card" style={{ marginTop: 14 }}>
         <h2>Per ad, this period</h2>
