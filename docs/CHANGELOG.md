@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-10-22 (120) — The float morning: a probe, a throttle, and the web line on every home card
+
+The pay-out float ran empty on 21 October at 15:27 UTC after seven pay-outs in a day and stayed
+empty until OTT credited the founder's bank transfers at 06:50 and 11:45–11:55 UTC on the 22nd;
+three customers retried about 70 times in the four hours before. `GET /api/internal/float`
+reads the live OTT balance with a 20-second timeout so a top-up can be watched for. The
+float-empty alert now goes once per 30 minutes on both rails (the e-mail used to go on every
+refusal); each refusal stays on its provider-request row and in the audit log. The home card
+names the web portal on every card: "🌐 Web: app.wapay.co.za - WaPay in your browser"
+(lib/capabilities.js, founder 2026-10-22). Commits 54c3ca5, 5aa88f5, 6b48cf1 and this one.
+
 ## 2026-10-21 (119) — app.wapay.co.za, and the portal's ID check without the webhook
 
 The portal's domain: `app.wapay.co.za` is the code default (`DEFAULT_APP_HOST`, lib/app-host.js),
