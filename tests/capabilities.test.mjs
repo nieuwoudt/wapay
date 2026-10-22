@@ -159,6 +159,8 @@ const DEPOSIT_CARD = `💳 *Deposit*: "deposit R100" by card or Instant EFT`;
 const HOME_TAIL = `📄 *Transactions* · ⚙️ *Settings*`;
 // Referrals (docs/REFERRALS.md, 2026-10-20): the invite is named once on the card, right before the tail.
 const INVITE = `🤝 *Invite*: "invite" to share WaPay with a friend`;
+// The web portal line (2026-10-22): between the invite and the tail on every card.
+const WEB = `🌐 *Web*: app.wapay.co.za - WaPay in your browser`;
 const FUEL_ON = `⛽ *Fuel*: "buy fuel" for participating stations`;
 const FUEL_OFF = `⛽ *Fuel vouchers*: coming soon`;
 const WITHDRAW_ON = `🏧 *Withdraw*: "withdraw R200" to your bank, or cash at an ATM`;
@@ -172,11 +174,11 @@ const HOME_HEAD_HOLD = [SEND, GET_PAID, DEPOSIT_CARD];
 test('homeLines equals renderHome for a non-pilot number and for a pilot number', () => {
   // Nothing set (the shipped default, the master hold): no product that is off, one coming-soon line.
   withEnv({ ...NEUTRAL }, () => {
-    assert.deepEqual(homeLines({ waId: OTHER }), [...HOME_HEAD_HOLD, WITHDRAW_OFF, SOON_ALL, INVITE, HOME_TAIL]);
+    assert.deepEqual(homeLines({ waId: OTHER }), [...HOME_HEAD_HOLD, WITHDRAW_OFF, SOON_ALL, INVITE, WEB, HOME_TAIL]);
   });
   // The hold outranks a switch and a tester list left on from an earlier rollout (the founder's own test, 2026-10-18).
   withEnv({ ...NEUTRAL, VAS_LIVE_ELECTRICITY: 'true', VAS_ALLOWLIST_ELECTRICITY: PILOT, WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: PILOT, WAPAY_LAUNCH_HOLD: undefined }, () => {
-    assert.deepEqual(homeLines({ waId: PILOT }), [...HOME_HEAD_HOLD, WITHDRAW_OFF, SOON_ALL, INVITE, HOME_TAIL]);
+    assert.deepEqual(homeLines({ waId: PILOT }), [...HOME_HEAD_HOLD, WITHDRAW_OFF, SOON_ALL, INVITE, WEB, HOME_TAIL]);
   });
   // A single switch on (hold released) shows only that product.
   withEnv({ ...NEUTRAL, WAPAY_LAUNCH_HOLD: 'off', VAS_LIVE_AIRTIME: 'true' }, () => {
@@ -184,12 +186,12 @@ test('homeLines equals renderHome for a non-pilot number and for a pilot number'
   });
   // Launch switches on, pilot lists set: the pilot sees both live, everyone else still sees coming soon.
   withEnv({ ...NEUTRAL, ...LAUNCH_ON, WAPAY_PAYOUT_ENABLED: 'true', WAPAY_PAYOUT_ALLOWLIST: PILOT, WAPAY_WICODE_LIVE: 'true', VAS_ALLOWLIST_FUEL: PILOT }, () => {
-    assert.deepEqual(homeLines({ waId: PILOT }), [...HOME_HEAD_ON, FUEL_ON, WITHDRAW_ON, SOON_PILOT, INVITE, HOME_TAIL]);
-    assert.deepEqual(homeLines({ waId: OTHER }), [...HOME_HEAD_ON, WITHDRAW_OFF, SOON_OTHER, INVITE, HOME_TAIL]);
+    assert.deepEqual(homeLines({ waId: PILOT }), [...HOME_HEAD_ON, FUEL_ON, WITHDRAW_ON, SOON_PILOT, INVITE, WEB, HOME_TAIL]);
+    assert.deepEqual(homeLines({ waId: OTHER }), [...HOME_HEAD_ON, WITHDRAW_OFF, SOON_OTHER, INVITE, WEB, HOME_TAIL]);
   });
   // Phase 1 (2026-09-16): renderHome prints these lines BY CALLING the registry.
   assert.ok(processorSource.includes("${homeLines({ waId: from, account }).join('\\n')}"), 'renderHome renders homeLines');
-  for (const line of [...HOME_HEAD_ON, ...HOME_HEAD_HOLD, FUEL_ON, FUEL_OFF, WITHDRAW_ON, WITHDRAW_OFF, SOON_ALL, INVITE, HOME_TAIL]) {
+  for (const line of [...HOME_HEAD_ON, ...HOME_HEAD_HOLD, FUEL_ON, FUEL_OFF, WITHDRAW_ON, WITHDRAW_OFF, SOON_ALL, INVITE, WEB, HOME_TAIL]) {
     assert.ok(!processorSource.includes(line) || line === HOME_TAIL, `no hand-written copy of: ${line}`);
   }
 });
