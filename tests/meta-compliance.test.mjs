@@ -112,3 +112,9 @@ test('the run alerts once a day and on WhatsApp only for a new reason', async ()
   await runComplianceCheck({ prisma, now: NOW + 60e3, env: {}, alert: true, deps });
   assert.equal(mails.length, 1, 'one e-mail a day');
 });
+
+test('the check names a missing receipt template, because payers outside their window then get nothing', () => {
+  const base = { meta: { ok: true, quality: 'GREEN', canSend: 'AVAILABLE', templates: [] }, pulses: { failures: {}, priced: {}, accountEvents: [] }, behaviour: { reminders: 0, stopViolations: 0, complaints: 0, threePlusPct: 0 } };
+  assert.equal(complianceVerdict({ ...base, env: {} }).reasons[0].code, 'NO_RECEIPT_TEMPLATE');
+  assert.equal(complianceVerdict({ ...base, env: { WAPAY_TEMPLATE_PAYMENT_RECEIPT: 'wapay_payment_receipt' } }).verdict, 'GREEN');
+});
