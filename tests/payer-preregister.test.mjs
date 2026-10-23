@@ -184,7 +184,7 @@ test('the v2 rule: the name set AND the switch covering the payer; a failed v2 s
 
 test('the receipt leg: the POPIA note sits with the pre-registration, which never blocks the receipt', () => {
   const at = notifySource.indexOf('if (payerPreregisterFor(payerWaId)) {');
-  const firstSend = notifySource.indexOf('const sent = await send.text({', at);
+  const firstSend = notifySource.indexOf('await send.text({', at);
   assert.ok(at > 0 && firstSend > at, 'the record is made before the receipt goes, so a tap finds it');
   assert.match(notifySource.slice(at - 600, at), /POPIA: the number was given for this receipt; it is used for nothing else until they\s*\n?\s*\/\/ write to WaPay\./);
   assert.match(notifySource, /\.catch\(\(error\) => log\('request_notify_preregister_error'/);

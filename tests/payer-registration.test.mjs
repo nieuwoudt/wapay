@@ -168,7 +168,8 @@ test('notify: flags are set ONLY after a send succeeds — exactly-once with rep
 });
 
 test('notify: send outcomes read from the RESOLVED result — send fns never throw', () => {
-  assert.match(notifySource, /const sent = await send\.text\(/);
+  assert.match(notifySource, /const sent = [^\n]*await send\.text\(/);
+  assert.match(notifySource, /serviceWindowOpen\(prisma, \{ waId: payerWaId \}\)/, 'the payer\'s window is decided before plain text (2026-10-23: accepted-then-131047 lost receipts)');
   assert.match(notifySource, /sent\?\.ok/);
   assert.match(notifySource, /tpl\?\.ok/);
 });
@@ -357,4 +358,28 @@ test('new copy: no betting words, no cash-out promises', () => {
     );
     assert.ok(!/cash\s*-?\s*out|withdraw/i.test(source), 'no cash-out claims');
   }
+});
+
+test('a payer who never wrote gets the approved receipt template, not a plain text that Meta drops with 131047 (2026-10-23)', async () => {
+  const { deliverRequestPaidNotifications } = await import('../lib/request-notify.js');
+  process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT = 'wapay_payment_receipt';
+  const calls = [];
+  const send = {
+    text: async (a) => { calls.push(['text', a.to]); return { ok: true }; },
+    template: async (a) => { calls.push(['template', a.to, a.templateName]); return { ok: true }; },
+    direct: async () => ({ ok: false }),
+  };
+  const intent = { idemKey: 'wapay-payreq-PRWINDOW', status: 'SUCCESS', providerRef: '123', metadata: { accountId: 'req1', waId: '27830000001', payerMsisdn: '0729990002', amountCents: 9500, grossCents: 10000, requesterNotifiedAt: true } };
+  const prisma = {
+    paymentRequest: { findUnique: async () => ({ id: 'PRWINDOW', accountId: 'req1', status: 'PAID', amountCents: 10000, businessId: null, note: null }) },
+    providerRequest: { findUnique: async () => intent, update: async ({ data }) => { Object.assign(intent.metadata, data.metadata || {}); return intent; } },
+    account: { findFirst: async () => null, findUnique: async () => ({ id: 'req1', waId: '27830000001', displayName: 'Thandi', profile: {} }) },
+    conversationTurn: { findFirst: async () => null },
+    wallet: { findFirst: async () => null },
+  };
+  await deliverRequestPaidNotifications({ code: 'PRWINDOW', prisma, send, preRegisterPayer: async () => null });
+  delete process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT;
+  const toPayer = calls.filter((c) => c[1] === '27729990002');
+  assert.ok(!toPayer.some((c) => c[0] === 'text'), 'no plain text to a payer outside the window');
+  assert.ok(toPayer.some((c) => c[0] === 'template' && c[2] === 'wapay_payment_receipt'), 'the approved template goes');
 });
