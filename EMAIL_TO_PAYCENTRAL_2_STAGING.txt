@@ -21,11 +21,12 @@ Our platform runs on Vercel, so our API calls leave through a fixed pair of stat
 - <IP address 2>
 Please confirm that the staging fee covers both addresses, and that production (R1,500 per month excluding VAT) will whitelist the same pair.
 
-2. Products and onboarding
-We would like the standard costing for CashCentral+ (physical) and DigiCentral (virtual) for our wallet customers, and FuelCentral for our UniFuel fuel product, for now. Shyanne, the completed and signed onboarding document is attached, with a copy of my ID and our company registration documents. The signed NDA is attached as well.
+2. Products, our plan and onboarding
+We plan to start issuing cards as soon as staging is live, beginning with DigiCentral (virtual) and CashCentral (physical) for our wallet customers. We would also like CashCentral+ and BeyondCentral available on our profile from the start, so that we can offer them to selected customers as we grow. Separately, we want to test FuelCentral as a standalone product for our UniFuel fuel business. We have selected all five on the onboarding document, and would appreciate the standard costing for each for now.
+Shyanne, the completed and signed onboarding document is attached, with a copy of my ID and our company registration documents. The signed NDA is attached as well.
 
 3. White-label pack
-What we are building is the white-label solution we discussed: WaPay-branded cards that our customers request, load and manage inside WaPay on WhatsApp, through your API. Our customers load small amounts, typically R50 to R500. At that size a load fee of 4% to 5%, R45 per load on CashCentral+ or R25 per load on FuelCentral does not work for consumers. Please price the white-label pack with a flat fee per load or per active card per month, and include card art, the SMS sender name and the minimum order for branded cards.
+What we are building is the white-label solution we discussed: WaPay-branded cards that our customers request, load and manage inside WaPay on WhatsApp, through your API. Our customers load small amounts, typically R50 to R500. At that size a percentage load fee (5% on DigiCentral, 7.5% on BeyondCentral) or a flat R17 to R45 per load on the CashCentral and FuelCentral cards does not work for consumers. Please price the white-label pack with a flat fee per load or per active card per month, and include card art, the SMS sender name and the minimum order for branded cards.
 
 4. Questions on the API (staging v2.1.5)
 a. What is the production base URL, and does production match this specification?
@@ -40,9 +41,11 @@ i. emailId is required on /card/allocate. Many of our customers have no email ad
 j. How long is the token valid, and do staging and production use separate credentials?
 k. How does a DigiCentral cardholder complete 3-D Secure for online purchases?
 l. Can merchant categories such as gambling and cryptocurrency be blocked for our cards?
-m. Can CashCentral+ cards be couriered to each cardholder, or are they dispatched to us in bulk?
+m. Can physical cards (CashCentral, CashCentral+, BeyondCentral, FuelCentral) be couriered to each cardholder, or are they dispatched to us in bulk?
 n. What is the card "wallet" (/wallet/balance, /card/load_card_from_wallet), relative to our profile and the card?
 o. Is FuelCentral available as a virtual card as well, or physical only? Is its spending limited to fuel stations, and is it issued, loaded and managed through the same API calls as the other cards?
+p. Can one customer hold more than one card (for example DigiCentral and CashCentral), and can a customer move from CashCentral to CashCentral+ or BeyondCentral later? If so, does that need a new card, and what extra FICA do the higher-limit cards require?
+q. Do CashCentral and DigiCentral work at international online merchants, or is that only BeyondCentral?
 
 Thank you, and I look forward to working with you all.
 

@@ -265,13 +265,19 @@ onboarding document and the white-label deck. Diego Langeveldt is the sales cont
 Shyanne Hendricks the onboarding coordinator. The documents are not in the repo; this section
 is the working summary. The reply is `EMAIL_TO_PAYCENTRAL_2_STAGING.txt`.
 
-**Products chosen by the founder:** **DigiCentral** (virtual) and **CashCentral+** (physical,
-reloadable, ATM access), with the white-label pack to follow. **FuelCentral** (fuel card) was
-added the same day to power the UniFuel fuel product (`docs/UNIFUEL_INTEGRATION.md`). On the
-documents it is a **physical** chip-and-PIN card (chip card fee, PIN reset fee, fuel-station swipes)
-listed under "International & Filtering", so probably limited to fuel merchants. DigiCentral is the
-only virtual card offered. Whether a virtual FuelCentral exists, whether its spend is fuel-only and
-whether it uses the same API calls is email question o.
+**Products (founder, 2026-10-23):**
+- **Issue first:** **DigiCentral** (virtual) and **CashCentral** (physical, R17 per load,
+  R25,000 a month).
+- **On the profile from the start, for selected customers as WaPay grows:** **CashCentral+**
+  (R45 per load, R50,000 a month) and **BeyondCentral** (international, 7.5%).
+- **Separate product to test:** **FuelCentral**, for UniFuel (`docs/UNIFUEL_INTEGRATION.md`).
+  On the documents it is a physical chip-and-PIN card listed under "International &
+  Filtering", so probably limited to fuel merchants. DigiCentral is the only virtual card
+  offered. Email question o asks.
+- **Ticked on the onboarding form:** all five. GiftCentral and GiftCentral+ are not ticked.
+- **For the build:** a customer may hold more than one card, and higher tiers may need more
+  FICA (email questions p and q). Plan the `Card` table as many cards per account, each with a
+  product.
 
 **Standard prices (onboarding document; negotiate, do not build on these):**
 

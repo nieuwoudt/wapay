@@ -21,8 +21,8 @@ production R1,500 a month excl VAT. `docs/CARDS.md` §0.9 covers:
   endpoint.
 
 `EMAIL_TO_PAYCENTRAL_2_STAGING.txt` is the reply: staging go-ahead, products, the white-label
-ask and 15 API questions. The onboarding form was pre-filled for the founder (not in the
-repo). FuelCentral was added the same day to power UniFuel. CAPABILITIES' PayCentral row updated.
+ask and 17 API questions. The onboarding form was pre-filled for the founder (not in the
+repo). Products as decided the same day: DigiCentral and CashCentral first, CashCentral+ and BeyondCentral for selected customers, FuelCentral as a standalone UniFuel test. CAPABILITIES' PayCentral row updated.
 
 ---
 
