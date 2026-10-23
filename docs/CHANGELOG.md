@@ -4,7 +4,7 @@
 
 ---
 
-## 2026-10-20 (111) — Cards: PayCentral's NDA reviewed and filled, the product deck read; the cards branch brought up to main (docs only)
+## 2026-10-20 (124) — Cards: PayCentral's NDA reviewed and filled, the product deck read; the cards branch brought up to main (docs only)
 
 PayCentral sent its standard NDA and product deck and told the founder WaPay can start issuing
 virtual and physical cards. `docs/CARDS.md` §0.8 records:
@@ -18,12 +18,11 @@ virtual and physical cards. `docs/CARDS.md` §0.8 records:
 - four new open questions, and a no-code pilot through the portal with company money.
 
 CAPABILITIES' PayCentral row updated. The branch merged `main` (the credentials scrub and
-pay-out rules). This branch's entries were renumbered after main's as 109 and 110 (they were
-88 and 89 on the branch), the same way the scrub's were.
+pay-out rules). This branch's entries are renumbered after main's (first 88 and 89, then 109 to 111, now 122 to 124), the same way the scrub's were.
 
 ---
 
-## 2026-10-16 (110) — Cards: the route is PayCentral (Paymentology direct needs 30,000 cards); plan rewritten for a pre-funded card (docs only)
+## 2026-10-16 (123) — Cards: the route is PayCentral (Paymentology direct needs 30,000 cards); plan rewritten for a pre-funded card (docs only)
 
 On the founder's call Paymentology set a 30,000-card minimum for direct work and referred
 WaPay to PayCentral. PayCentral is a South African programme manager on Paymentology's
@@ -45,7 +44,7 @@ is search-sourced and labelled.
 
 ---
 
-## 2026-10-15 (109) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
+## 2026-10-15 (122) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
 
 The founder asked whether WaPay can issue customers virtual cards through Paymentology,
 how it maps onto the product, and what to send Paymentology's sales form.
@@ -71,6 +70,223 @@ pages were read through search extracts and every fact carries its source. CAPAB
 Paymentology as discovery. No code changed.
 
 ---
+## 2026-10-22 (121) — One-step sign-up, the PIN on demand, the payer's reply, and the sign-up funnel (switches, default off)
+
+The founder's brief of 22 October (`docs/briefs/ONE_STEP_ONBOARDING_BRIEF.md`): of 739 ad arrivals since
+18 October, 177 never answered the welcome, 79 stopped at the PIN step and 32 at the consent step. Three
+switches, each `on` or a comma list of numbers, all unset by default, with the chat byte-identical while
+unset (docs/ONBOARDING.md §5, `lib/onboarding-flags.js`):
+
+- **A, `WAPAY_ONBOARDING_ONE_STEP`**: the first message opens the account in ONE message (the ad answer and
+  the first-link question, or the home card, then "By using WaPay you agree to our Terms & Privacy Policy:
+  https://wapay.co.za/legal/terms"). Sent first; only then `completeOneStepOnboarding` (auth package) moves
+  the account to S5 with two consent rows `IMPLIED_BY_USE wa:<inbound message id>`, an audit row
+  `CONSENT_IMPLIED`, the profile stamp and the audit trail, in one transaction. S1 to S4 accounts complete
+  the same way on their next message. No template, no model call, no PIN.
+- **B, `WAPAY_PIN_ON_DEMAND`**: no PIN at sign-up (the classic flow skips its PIN step); at the pay-out's,
+  the send's or the paid link's PIN step an account with no PIN chooses one (twice), then the step continues
+  with it in the same turn through its own `verifyPIN` (`lib/pin-setup.js`; "PIN set" rides on the step's
+  reply via `withLeadLine` in `lib/say.js`). `setPIN` is the only store and never overwrites a PIN; "PIN"
+  starts it on its own. The web portal's failed login says "Set your WaPay PIN in the WhatsApp chat first
+  (say *PIN*), then log in here." in the same words for every failure; the reset-by-ID never sets a first
+  PIN. The agent prompt and the registry describe the PIN as set on the first pay-out or send.
+- **C, `WAPAY_PAYER_PREREGISTER`**: a card payer's number with no account gets an S0 record with
+  `profile.origin = { kind: 'PAYER', requestCode, paidAt }` (`lib/payer-preregister.js`, POPIA note in the
+  code); their first message, or their tap on the v2 receipt's **My receipt** (payload `WAPAY_RECEIPT:<code>`,
+  handed over by the webhook as the text), opens the account with "🧾 You paid R250 to Thandi on 22 Oct,
+  reference …" on top. The v2 template is specified in `docs/templates/wapay_payment_receipt_v2.md` (UTILITY,
+  not created here) and goes only when `WAPAY_TEMPLATE_PAYMENT_RECEIPT_V2` names it and C covers the payer.
+  Pre-registered payers who never wrote are kept out of the Growth tab's contacts; a payer's first message
+  starts the account (`createdAt` and `profile.onboarding.startedAt`), so the new-account pay-out cap counts
+  from then; "You paid" only to the number that paid.
+- **D, always on**: every new account is stamped `profile.onboarding.path` (`ONE_STEP` | `CLASSIC`, older =
+  CLASSIC) and `startedAt`; `GET /api/internal/funnel?since&until` (internal key) gives per day and path the
+  accounts opened, finished, finished in 10 minutes, first link in 24 hours, first link paid in 72 hours,
+  pay-out in 72 hours, with rates and a summary (`lib/signup-funnel.js`); a "Sign-up funnel" card on the
+  Growth tab (`/api/admin/signup-funnel`); one line in the nightly audit summary with yesterday's finished
+  rate by path. `GET /api/internal/flags` shows the three switches as counts.
+
+Tests: `tests/one-step-onboarding.test.mjs`, `tests/pin-on-demand.test.mjs`, `tests/payer-preregister.test.mjs`,
+`tests/signup-funnel.test.mjs`; harness scenarios 9 to 11 in `tests/e2e/chat-qa.mjs`. Golden thread 2.14.
+The founder's end-to-end script: `docs/testing/one-step-onboarding-2026-10-22.md`. Branch `feat/one-step-onboarding`.
+
+## 2026-10-22 (120) — The float morning: a probe, a throttle, and the web line on every home card
+
+The pay-out float ran empty on 21 October at 15:27 UTC after seven pay-outs in a day and stayed
+empty until OTT credited the founder's bank transfers at 06:50 and 11:45–11:55 UTC on the 22nd;
+three customers retried about 70 times in the four hours before. `GET /api/internal/float`
+reads the live OTT balance with a 20-second timeout so a top-up can be watched for. The
+float-empty alert now goes once per 30 minutes on both rails (the e-mail used to go on every
+refusal); each refusal stays on its provider-request row and in the audit log. The home card
+names the web portal on every card: "🌐 Web: app.wapay.co.za - WaPay in your browser"
+(lib/capabilities.js, founder 2026-10-22). Commits 54c3ca5, 5aa88f5, 6b48cf1 and this one.
+
+## 2026-10-21 (119) — app.wapay.co.za, and the portal's ID check without the webhook
+
+The portal's domain: `app.wapay.co.za` is the code default (`DEFAULT_APP_HOST`, lib/app-host.js),
+so that host's root opens /app with no Vercel variable; `WAPAY_APP_HOST` overrides, `off`
+disables the redirect. The pay page links to app.wapay.co.za under the fine print and on the paid
+screen. `refreshOpenKyc` (lib/app-money.js): when the pay-out screen loads and the customer's
+Didit check is still PENDING with a session id, the decision endpoint is read directly, at most
+once a minute per account, so the check completes even while the webhook's signing secret is wrong
+in Vercel (six 401s on 20 October). Commits f43860d, 56517e5, 82a85a8; tests in
+tests/app-portal.test.mjs.
+
+## 2026-10-21 (118) — Delivery alerts that survive a 30-day restriction; the tap-to-pay link
+
+BUGLOG #136. The stall alert of CHANGELOG 114 e-mailed ops on every ten-minute webhook run while
+deliveries failed (144 a day) and only the WhatsApp rail was keyed per hour. One claim row now
+throttles both rails: once per hour per code for the first six hours of a stall, once per day
+after that (subject carries "day N"), and a single "deliveries resumed" line goes out when an OK
+hour follows a stall alert within 36 hours. `lib/delivery-health.js` (`DAMP_AFTER_HOURS`,
+`resumedAlertText`), tests/delivery-health.test.mjs.
+
+Same morning: `lib/ops-link.js` + `/ops/payout` + `/api/ops/payout-link` — a signed, expiring
+link that describes ONE operator pay-out (account, saved destination, amount, fixed intent, who,
+why); the page shows the dry run and executes on a tap; a second tap returns the first result.
+Built because the founder was on an iPad; the first pay-out of the restriction period went
+through it at 09:15 UTC (account ending 5381, PayShap, finalised by OTT's webhook in 23 seconds).
+
+## 2026-10-21 (117) — The personal web portal: log in, see your money, get paid and pay out without WhatsApp
+
+Meta restricted WaPay's WhatsApp number for 30 days on 20 October, so customers holding balances
+could not be answered. `/app` is the personal twin of WaPay for Business (brief
+`docs/briefs/PERSONAL_PORTAL_BRIEF.md`, prototype `docs/briefs/personal-portal/prototype.html`),
+mobile-first, centred at 420 px on a desktop, and nothing in it needs WhatsApp.
+
+- Sign-in: the cell number and the WaPay PIN through `@wapay/auth` `verifyPIN` only. Five
+  failures per number and per IP in 15 minutes lock for 15 minutes; a malformed PIN never reaches
+  the verifier; the web never takes the shared counter past 8, so a stranger cannot push an
+  account into the year-long lock. A wrong PIN and an unknown number answer the same.
+  Cookie `wapay_app` (HttpOnly, Secure, SameSite=Lax, 24 h, Path=/api/app), bound to the PIN's
+  `setAt` so a PIN change anywhere ends it; signed double-submit CSRF on every POST; every POST
+  counted per IP and per account (`processed_messages` rows, prefix `app-rl:`).
+- Forgot PIN: the whole ID or passport number in the vault (last characters, then a keyed
+  digest), three misses in 24 hours pause it (the chat's `PIN_RESET_ID_FAILED` count), then the
+  new PIN twice through `resetPIN`. The chat's 24-hour cool-off follows (`profile.pinReset`
+  with `via: 'app'`): pay-outs only to saved destinations, and on the web no sends to other
+  people. An account with no ID on file gets the same answer as a miss, with the support e-mail.
+- Money: `/api/app/pin` asks `verifyPIN` with `approves` for one intent and amount; pay out
+  (`requestPayout`), send (`sendMoney`, through a `send-preview` row like the chat) and link
+  create (`createPaymentRequest`, one link per intent by an audit claim) each verify that proof
+  first. Intent ids carry their purpose (`apo-`, `alk-`, `preview-send-`). Saved destinations and
+  the ID on file are decrypted only inside the pay-out request. Rules, freezes, the cool-off and
+  KYC answer in the chat's words (`dailyCapCopy`, `kycThresholdCopy`, `FROZEN_*_COPY`, through
+  `webLine`, which only replaces "reply VERIFY", "or cancel" and WhatsApp bold).
+- Screens: home, get paid (Share and Copy), top up (PayFast, back to the portal), send, pay out
+  (saved or new details, KYC by a Didit link that returns to the portal and resumes the pay-out;
+  `startKycSession` takes an optional https `callbackUrl`, the chat's default unchanged),
+  activity (journal + pay-outs in progress or failed, 50 a page), profile, help, and the
+  coming-soon tiles from the capability registry. `/app` pages refuse framing (next.config.js);
+  `WAPAY_APP_HOST` sends that domain's root to `/app` (middleware); `/api/internal/flags` shows
+  the portal's switches. Golden thread 2.13.
+- Development: `WAPAY_APP_DEV_FIXTURE=1` on `next dev` runs the whole portal on an in-memory
+  fixture with no database (lib/app-dev-fixture.js; never selectable in production).
+
+Tests: tests/app-portal.test.mjs (39). Not deployed: branch feat/personal-portal.
+
+## 2026-10-21 (116) — Onboarding sends no marketing-category templates; an operator can pay out a saved destination
+
+BUGLOG #136. Two of the onboarding templates are filed by Meta under MARKETING (`consent_terms_`
+at the PIN→consent step and `welcome_new_user_account_activation` with its six product buttons at
+activation); fired at people who had only clicked an ad, they were part of what was reported as
+spam. Both are now off unless `WAPAY_ONBOARDING_MARKETING_TEMPLATES=on`: the consent step is one
+plain line with the terms link and a single confirmation word ("I accept"), activation is one
+plain welcome that points at the home card. The PIN template (UTILITY) and the step-1 welcome are
+unchanged. `packages/auth/src/onboarding.ts`, tests/onboarding-marketing-templates.test.mjs.
+
+Same day, for the restriction period: `lib/ops-payout.js` + `POST /api/internal/ops-payout` pay a
+customer's own balance to a destination they saved, from the operator's side, through
+`requestPayout` with a STEP_UP proof bound to account, intent and amount; dry run by default
+(quote, rules, freeze, balance, float, destination label, identity on file, no rail call), live
+run needs `by` and `reason`, writes an `OPS_PAYOUT` audit row, raises the pay-out alert and queues
+the customer a receipt line. Numbers never leave the server beyond last digits.
+tests/ops-payout.test.mjs.
+
+## 2026-10-21 (115) — Meta's own verdict on the lock, and its words for every failure
+
+BUGLOG #136/#137. `/api/internal/meta-status` now asks Meta's Health Status API for the number
+(`health_status`: one entry per entity, BUSINESS / WABA / APP / PHONE_NUMBER, with the blocking
+error and Meta's suggested fix), reads which business portfolio owns the WhatsApp account
+(`owner_business_info`, `on_behalf_of_business_info`), that portfolio's verification and invoiced
+credit lines, and the billing locale; the billing fields run in their own calls so a field Meta
+reserves for Solution Providers (`primary_funding_id`) can never blank the rest. The inbound
+webhook stores Meta's failure text for a failed status as a `why-<code>:<title | details>` pulse
+row and account-level events (`account_update`, `account_alerts`, `account_review_update`,
+`phone_number_quality_update`) as `account-<field>:<event>…` rows, so a lock and its lifting are
+read from the database. Commits 25aaac6, 87a55cd, 37b08ee; the first of them was also the push
+that exposed the Vercel author block (BUGLOG #137), fixed by ee02c3d.
+
+## 2026-10-21 (114) — Delivery health: the dashboard and ops see the first time Meta stops delivering
+
+BUGLOG #136. From 21:30 UTC on 20 October Meta rejected every WaPay reply with status 131031
+while the API kept accepting the sends, so the chat looked alive in our logs and dead on every
+phone for nine hours. `lib/delivery-health.js` reads the delivery-status pulse rows the webhook
+already writes, gives a verdict (OK, DEGRADED, STALLED) over the last 15 and 60 minutes and 24
+hours, and `deliveryStallCheck` alerts ops by e-mail and WhatsApp once per hour per code. The
+inbound webhook runs it at most once per ten minutes (a claim row is the throttle), the cron runs
+it daily, `/api/admin/whatsapp-quality` carries `delivery`, and the Health tab's WhatsApp card
+shows "Delivery, last hour" with the Meta code and the time the streak began. Tests:
+tests/delivery-health.test.mjs.
+
+## 2026-10-21 (113) — The nightly audit gets its own budget
+
+The 02:00 UTC run on 21 October read 227 accounts and 2,332 turns but reviewed 0 of 12 chunks:
+the cron's earlier steps (pay-out sweep, catalogue sync, ads snapshot, CAPI sweep, reconcile,
+quality read) had spent the 60-second function budget and the audit received the five-second
+floor. The cron now hands the audit to `POST /api/internal/audit-run` with the internal key and
+stops waiting after four seconds; the route runs the audit on its own 60-second budget after the
+cron disconnects. The in-process run remains the fallback when the hand-off cannot be made.
+Tests: tests/audit-handoff.test.mjs.
+
+## 2026-10-20 (112) — Mission Control on a phone, with interactive charts
+
+Founder: "make sure it's mobile responsive and updated please with live interactive graphs,
+no static graphs." The eight static SVG charts (daily bars, weekly money flows, take rate,
+sign-ups by source, the daily audit bars and lines, the accounts path and the valuation path)
+are rebuilt in `lib/admin-charts.js` on recharts: responsive to their card, a tooltip on hover
+or tap for every point, clickable legends, no animation lag. The old components stay in the
+page as `*Static` for one release. Phone-width rules (≤700px): the tab bar scrolls sideways,
+tiles sit two across, cards and type shrink, the floats row stacks, the record-a-load form
+wraps, the sign-in card sits higher. `recharts` 2.15.4 added to the root package.
+
+## 2026-10-20 (111) — Float loads recorded on the Floats tab, with a reconciliation against the supplier's live balance
+
+Founder: "record a float load recon on the dashboard in the UI card where we show the current
+float levels." Each float row on the Supplier floats card gets "Record a load" (amount, the
+day it cleared, the bank reference) → `POST /api/admin/float-load` → `FLOAT_LOAD` in the
+journal (debit `ASSET:FLOAT:<KEY>`, credit `FUNDING:BANK`, idempotent on key, day, amount and
+reference). The row shows a Recon pill: loads, journal usage (for the OTT pay-out float every
+CASHOUT entry's credit to CLEARING:OTT, amount plus rail cost), expected balance, and the gap
+to the supplier's live figure. The five loads the founder's bank history showed as completed
+(19 Oct R1,000 ×2; 20 Oct R2,500, R1,500, R2,000) are recorded; earlier loads can be added the
+same way so the reconciliation closes from the rail's first day. Tests: tests/float-loads.test.mjs.
+
+## 2026-10-20 (110) — After the identity check the pay-out continues by itself; Didit sends the customer back to the chat
+
+Founder, after his own KYC test: the Didit page said "You've been verified" and nothing
+happened in WhatsApp, then "withdraw" started from scratch. Now `lib/kyc-resume.js` keeps the
+ask the check interrupted on `profile.kyc.pendingWithdraw` (24 hours), and a VERIFIED result,
+from Didit's webhook or from a manual sync in Mission Control, sends "✅ You are verified.
+Continuing your pay-out of R3,000." and reopens the flow at the next step; a bare "withdraw"
+after verification picks the ask up too. The Didit session carries a `callback` back to the
+WaPay chat (`WAPAY_WA_NUMBER`, default the live number), so the verified page returns the
+customer to WhatsApp. The status itself was already on the profile and the customer page;
+this makes the moment after it work. Tests: tests/kyc-resume.test.mjs.
+
+## 2026-10-20 (109) — Creative review, round one: Q2/Q3 open the account at once, an example-free first-link prompt, a loans line
+
+From the ads report review. (1) "How do I get paid with a link?" and "What does it cost?"
+answer and then start onboarding step 1 in the same turn (no button, no wait); a member gets
+the answer alone. They opened an account 36% and 28% of the time against 85% for Q1/Q4.
+(2) The first-link prompt carries no example sentence any more ("Who owes you, and how much?
+Type the amount and their name."); `parseFirstLinkAsk` accepts amount and name in either
+order, with or without "from" / "owes me"; the old example sentence is still recognised and
+refused with "That was just our example…", no link created. 28 accounts had typed it back and
+12 first links of exactly R250 were minted from it before the 19 October refusal. (3) Loans:
+`matchLoanAsk` → "WaPay doesn't offer loans. You can get paid, top up, pay other WaPay users
+and pay out." plus the next step, before the agent; the agent prompt carries the same rule.
+Harness scenario 7 rewritten for the new path. docs/AD_CHAT_FLOW.md updated with the copy.
 
 ## 2026-10-20 (108) — Credentials out of the repository: placeholders in 36 files and a guard that fails the suite on a credential-shaped string
 

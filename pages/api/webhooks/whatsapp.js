@@ -97,6 +97,21 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'invalid json' });
     }
     await webhookPulse('webhook-ok');
+    // Delivery health (BUGLOG #136, 2026-10-21): once every ten minutes, read Meta's delivery
+    // statuses from the pulse rows and alert ops when replies stop landing (the API kept accepting
+    // sends for nine hours while every status came back failed 131031). The claim below is the
+    // throttle: only the first inbound in a ten-minute bucket runs the check. Never affects the webhook.
+    try {
+      const bucket = `${new Date().toISOString().slice(0, 15)}0`;
+      const claim = await claimMessage({ waMessageId: `delivery-check:${bucket}` }).catch(() => null);
+      const first = claim !== null && claim !== false && !(claim && (claim.claimed === false || claim.replayed === true || claim.duplicate === true));
+      if (first) {
+        const { deliveryStallCheck } = await import('../../../lib/delivery-health.js');
+        await Promise.race([deliveryStallCheck({ prisma }), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 4000))]);
+      }
+    } catch {
+      // diagnostics never change the webhook's behaviour
+    }
 
     // Processing MUST complete before the ACK. On Vercel serverless,
     // execution after the response is not guaranteed — a fire-and-forget
@@ -284,7 +299,11 @@ export default async function handler(req, res) {
                       })
                     );
 
-                    await runTurn({ text: buttonText || buttonPayload || 'continue' });
+                    // The v2 receipt template's "My receipt" tap (WAPAY_PAYER_PREREGISTER, 2026-10-22) carries the
+                    // request code in its payload: that is the turn's text, so the receipt it asks for is known.
+                    // Every other button keeps its title, as before.
+                    const receiptTap = /^WAPAY_RECEIPT:PR[A-HJKMNP-Z]{6}$/.test(String(buttonPayload));
+                    await runTurn({ text: receiptTap ? buttonPayload : buttonText || buttonPayload || 'continue' });
                   }
 
                   // Interactive messages (button_reply, list_reply, product selection)
@@ -301,7 +320,9 @@ export default async function handler(req, res) {
                         JSON.stringify({ id: buttonId, title: buttonTitle })
                       );
 
-                      await runTurn({ text: buttonTitle || buttonId || 'continue' });
+                      // The same receipt payload, should it ever come back as an interactive reply id.
+                      const receiptTap = /^WAPAY_RECEIPT:PR[A-HJKMNP-Z]{6}$/.test(String(buttonId));
+                      await runTurn({ text: receiptTap ? buttonId : buttonTitle || buttonId || 'continue' });
                     }
 
                     if (interactiveType === 'list_reply') {
@@ -339,6 +360,17 @@ export default async function handler(req, res) {
                 }
               }
 
+              // Account-level events (restriction, violation, alert, review, quality
+              // tier) as pulse rows, so a lock and its lifting are visible from the
+              // database. Meta's own enum words only, never customer data
+              // (2026-10-21, BUGLOG #136).
+              if (['account_update', 'account_alerts', 'account_review_update', 'phone_number_quality_update'].includes(change.field)) {
+                const v = change.value || {};
+                const bits = [change.field, v.event, v.alert_type, v.alert_severity, v.alert_status, v.decision, v.current_limit,
+                  Array.isArray(v.restriction_info) ? v.restriction_info.map((r) => r?.restriction_type).filter(Boolean).join('+') : null,
+                  v.ban_info?.waba_ban_state, v.violation_info?.violation_type].filter(Boolean).map(String).join(':');
+                await webhookPulse(`account-${bits.replace(/[^\w:+.-]/g, '_').slice(0, 120)}`);
+              }
               // Delivery statuses arrive under field "messages" as value.statuses
               // (the Cloud API has no "message_status" field; that check never
               // matched since January, so statuses were silently ignored: found
@@ -360,6 +392,17 @@ export default async function handler(req, res) {
                   // answerable from the database.
                   const errCode = status.errors?.[0]?.code;
                   await webhookPulse(`status-${status.status || 'unknown'}${errCode ? `-${errCode}` : ''}`);
+                  // Meta's own words for a failure (title + error_data.details), so a
+                  // lock or a billing stop is diagnosed from the database instead of
+                  // guessed from the code alone (2026-10-21, the 131031 morning,
+                  // BUGLOG #136). Generic Meta text, never customer data; one row per
+                  // code per minute like every other pulse.
+                  if (status.status === 'failed' && errCode) {
+                    const e0 = status.errors[0] || {};
+                    const why = [e0.title, e0.error_data?.details].filter(Boolean).join(' | ')
+                      .replace(/[^\w .,:;()'/|-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
+                    if (why) await webhookPulse(`why-${errCode}:${why}`);
+                  }
                   // A WaPay-sent business link carries this message id: the
                   // receipt becomes the tick the portal shows (2026-09-10).
                   if (status.id && status.status) {

@@ -16,6 +16,7 @@
 import { NextResponse } from 'next/server';
 import { adminHostDecision } from './lib/admin-host.js';
 import { businessHostDecision } from './lib/business-host.js';
+import { appHostDecision, configuredAppHost } from './lib/app-host.js';
 
 export const config = { matcher: ['/', '/admin', '/admin/:path*', '/business', '/business/:path*'] };
 
@@ -41,6 +42,12 @@ export function middleware(req) {
     const url = req.nextUrl.clone();
     url.pathname = admin === 'rewrite' ? '/admin' : '/business';
     return NextResponse.rewrite(url);
+  }
+  // The personal portal (2026-10-21): WAPAY_APP_HOST's bare root opens /app. Unset = no change.
+  if (appHostDecision({ host, pathname, appHost: configuredAppHost() }) === 'redirect') {
+    const url = req.nextUrl.clone();
+    url.pathname = '/app';
+    return NextResponse.redirect(url);
   }
   return NextResponse.next();
 }

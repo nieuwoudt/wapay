@@ -267,15 +267,18 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
               </div>
             ) : null}
             {note ? <div style={styles.note}>“{note}”</div> : null}
+            {requesterTail ? (
+              <div style={{ ...styles.fine, color: '#1f3b2a', background: '#eef6f0', borderRadius: 10, padding: '8px 12px', marginTop: 10 }}>
+                Check the number. This request comes from the WaPay account on a number ending {requesterTail}.
+                If that is not the person you expect, do not pay.
+              </div>
+            ) : null}
 
-            <a style={{ ...styles.btn, ...styles.primary }} href={waLink}>
-              Pay from my WaPay account (free)
-            </a>
-
-            {/* POST: the number must never ride a query string into logs.
-                Both payment options sit adjacent (founder 2026-08-27); the
-                required number field follows the card button, and the
-                browser walks the payer to it on submit. */}
+            {/* One way to pay, front and centre (founder 2026-10-22: payers were confused by
+                three options and a paragraph). The number comes first because the receipt
+                needs it; the card/EFT button is the only primary action; paying from a WaPay
+                balance is a small link underneath for the people who have one. POST so the
+                number never rides a query string into logs. */}
             <form
               method="POST"
               action="/api/pay/checkout"
@@ -293,25 +296,9 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
               }}
             >
               <input type="hidden" name="code" value={code} />
-              {declined ? <div style={styles.nudge}>That payment did not go through ({declined.toLowerCase().replace(/_/g, ' ')}). Nothing was charged. You can try again, or pay from your WaPay balance.</div> : null}
-              <button
-                type="submit"
-                name="rail"
-                value={adumo ? 'adumo' : 'payfast'}
-                style={{ ...styles.btn, ...(numberLooksOk ? styles.cardReady : styles.secondary) }}
-              >
-                {adumo ? `Pay ${rands(amountCents)} by card, Instant EFT or Capitec Pay` : `Pay ${rands(amountCents)} by card / EFT`}
-              </button>
-              {adumo ? (
-                <button type="submit" name="rail" value="payfast" style={{ ...styles.btn, ...styles.secondary, marginTop: 8 }}>
-                  Other ways to pay (PayFast)
-                </button>
-              ) : null}
-              {numberNudge && !numberLooksOk ? (
-                <div style={styles.nudge}>📱 Enter your WhatsApp number first.</div>
-              ) : null}
+              {declined ? <div style={styles.nudge}>That payment did not go through ({declined.toLowerCase().replace(/_/g, ' ')}). Nothing was charged. You can try again.</div> : null}
               <label style={styles.label} htmlFor="payer">
-                Your WhatsApp number, for your receipt
+                Your WhatsApp number (for your receipt)
               </label>
               <input
                 ref={payerInputRef}
@@ -328,26 +315,42 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
                 pattern="[0-9+ ]{10,15}"
                 title="South African cellphone number, e.g. 0731234567"
               />
+              {numberNudge && !numberLooksOk ? (
+                <div style={styles.nudge}>📱 Enter your WhatsApp number first.</div>
+              ) : null}
+              <button
+                type="submit"
+                name="rail"
+                value={adumo ? 'adumo' : 'payfast'}
+                style={{ ...styles.btn, ...(numberLooksOk ? styles.cardReady : styles.secondary), marginTop: 10 }}
+              >
+                {adumo ? `Pay ${rands(amountCents)} by card, Instant EFT or Capitec Pay` : `Pay ${rands(amountCents)} by card or instant EFT`}
+              </button>
+              {adumo ? (
+                <button type="submit" name="rail" value="payfast" style={{ ...styles.btn, ...styles.secondary, marginTop: 8 }}>
+                  Other ways to pay (PayFast)
+                </button>
+              ) : null}
             </form>
 
-            {requesterTail ? (
-              <div style={{ ...styles.fine, color: '#1f3b2a', background: '#eef6f0', borderRadius: 10, padding: '8px 12px' }}>
-                Check the number. This request comes from the WaPay account on a number ending {requesterTail}.
-                If that is not the person you expect, do not pay.
-              </div>
-            ) : null}
+            <div style={{ ...styles.fine, marginTop: 10 }}>
+              Have a WaPay balance? <a href={waLink} style={{ color: '#359853', fontWeight: 600 }}>Pay from it in WhatsApp</a>, free.
+            </div>
             <div style={styles.fine}>
-              No fees for you. You pay exactly {rands(amountCents)}. Card payments are processed
-              securely by PayFast{adumo ? ' or Adumo (Nedbank)' : ''}, no WaPay account needed. Your number is used to send your
-              receipt on WhatsApp and to offer you your own free WaPay, which you're welcome to
-              ignore. Paying from a WaPay balance is free: reply in WhatsApp to confirm with
-              your PIN.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
+              No fees for you: you pay exactly {rands(amountCents)}. Payments are processed securely by PayFast{adumo ? ' or Adumo (Nedbank)' : ''}; no WaPay account is needed.
+              Your number is used to send your receipt on WhatsApp and to offer you your own free WaPay, which you're welcome to ignore.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
+            </div>
+            <div style={styles.fine}>
+              Have a WaPay account? <a href="https://app.wapay.co.za" style={{ color: '#359853', fontWeight: 600 }}>Log in at app.wapay.co.za</a> to see your balance, get paid and pay out.
             </div>
           </>
         ) : status === 'PAID' ? (
           <>
             <div style={styles.done}>✅</div>
             <div style={styles.sub}>This request has been paid.</div>
+            <div style={styles.fine}>
+              Have a WaPay account? <a href="https://app.wapay.co.za" style={{ color: '#359853', fontWeight: 600 }}>Log in at app.wapay.co.za</a> to see your balance, get paid and pay out.
+            </div>
             <div style={styles.amount}>{rands(amountCents)}</div>
             <a style={{ ...styles.btn, ...styles.primary }} href={receiptLink}>
               📲 Get my receipt + my own WaPay

@@ -105,7 +105,7 @@ test('the alert text: amount, source, balances, float, cover, open links; never 
   const account = { profile: { attribution: { ctwaClid: 'x' }, name: 'Thandi Mokoena' } };
   const t = moneyInText({ amountCents: 25000, kind: 'LINK_PAID', account, position });
   assert.match(t, /^💰 Money in: R250\.00 \(payment link paid by card\) to an ad-acquired customer\./);
-  assert.match(t, /Customer balances: R387\.50 in 6 wallets \(3 at or above R20\)\./);
+  assert.match(t, /Customer balances: R387\.50 across 6 accounts with money \(3 at or above R20; .* finished sign-up, 6 opened\)\./);
   assert.match(t, /Pay-out float: R870\.12 · cover 2\.2× of balances · 9\.1 days at the week's pace · warn level R1,500\.00\./);
   assert.match(t, /Open links: 73 \(R30,724\.00\)\. Pay-outs today: 1 \(R325\.00\)\./);
   assert.match(t, /Top up the OTT pay-out float now\.$/);

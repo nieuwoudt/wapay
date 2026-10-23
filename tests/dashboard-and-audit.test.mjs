@@ -73,8 +73,12 @@ test('Mission Control: the links card, the path and valuation charts, the ten-mi
   assert.match(page, /\['If every open link is paid by card', R\(l\.ifOpenPaidByCard\.feeCents\)/);
   assert.match(page, /\['If each is then paid out by PayShap', R\(l\.ifThenPaidOut\.feeCents\)/);
   assert.match(page, /\['Accounts from payment links', n0\(vl\.accountsFromLinks\)/);
-  assert.match(page, /function PathChart\(\{ series, t \}\)/); assert.ok(!/Math\.log10/.test(page), 'the path is linear and all time now');
-  assert.match(page, /function ValuationPath\(\{ t, v \}\)/); assert.match(page, /simulate\(preset\('plan'\), budgetFn\(BUDGET_DEFAULT\)\)\.rows\.slice\(0, 13\)/); assert.match(page, /simulate\(\{ \.\.\.preset\('plan'\), \.\.\.measuredInputs \}, budgetFn\(BUDGET_DEFAULT\)\)/, 'the measured-inputs curve runs the same model');
+  // 2026-10-20: the charts moved to lib/admin-charts.js as interactive recharts components; the page imports them.
+  const charts = read('../lib/admin-charts.js');
+  assert.match(page, /import \{ Bars, WeeklyFlows, TakeRate, StackBars, DailyBars, DailyLines, PathChart, ValuationPath \} from '\.\.\/\.\.\/lib\/admin-charts\.js';/);
+  assert.match(charts, /export function PathChart\(\{ series, t, h = \d+ \}\)/); assert.ok(!/Math\.log10/.test(charts), 'the path is linear and all time now');
+  assert.match(charts, /export function ValuationPath\(\{ t, v, h = \d+ \}\)/); assert.match(charts, /simulate\(preset\('plan'\), budgetFn\(BUDGET_DEFAULT\)\)\.rows\.slice\(0, 13\)/); assert.match(charts, /simulate\(\{ \.\.\.preset\('plan'\), \.\.\.measuredInputs \}, budgetFn\(BUDGET_DEFAULT\)\)/, 'the measured-inputs curve runs the same model');
+  assert.match(charts, /<Tooltip /); assert.match(charts, /ResponsiveContainer/); assert.match(page, /@media\(max-width:700px\)/, 'phone-width rules');
   assert.match(page, /<PathChart series=\{g\.pathSeries\} t=\{t\} \/>/); assert.match(page, /<ValuationPath t=\{t\} v=\{v\} \/>/); assert.match(page, /<InsightBox v=\{v\} t=\{t\} \/>/);
   assert.match(page, /function ReplyBox\(\{ accountId, name \}\)/); assert.match(page, /fetch\('\/api\/admin\/ops-reply', \{ method: 'POST'/);
   assert.match(page, /<ReplyBox accountId=\{c\.account\.id\} name=\{c\.account\.displayName\} \/>/);

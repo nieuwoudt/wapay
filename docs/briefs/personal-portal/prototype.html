@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WaPay App Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--green:#359853;--green-dark:#2b7a43;--ink:#111827;--grey:#6B7280;--line:#E5E7EB;--page:#F4F6F8;--card:#fff;--amber:#B45309;--amber-bg:#FFF7ED;--radius:16px}
+*{box-sizing:border-box}body{margin:0;background:#E9ECEF;font-family:Inter,system-ui,-apple-system,sans-serif;color:var(--ink)}
+.stage{display:flex;gap:28px;flex-wrap:wrap;justify-content:center;padding:28px 12px 60px}
+.phone{width:390px;height:844px;background:var(--page);border-radius:44px;border:10px solid #1f2937;overflow:hidden;position:relative;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+.screen{position:absolute;inset:0;overflow:auto;padding:52px 16px 92px;display:none}.screen.on{display:block}
+.label{font-size:12px;color:var(--grey);text-align:center;margin:8px 0 0;font-weight:600}
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:18px}.logo .w{width:28px;height:28px;border-radius:8px;background:var(--green);color:#fff;display:grid;place-items:center;font-weight:800;font-size:15px}
+.avatar{width:34px;height:34px;border-radius:50%;background:#D1FAE5;color:var(--green-dark);display:grid;place-items:center;font-weight:700;font-size:13px}
+.card{background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.04);margin-bottom:12px}
+.balance .t{font-size:13px;color:var(--grey);margin:0 0 4px}.balance .amt{font-size:36px;font-weight:700;letter-spacing:-.5px;margin:0}.balance .sub{display:flex;gap:16px;font-size:12px;color:var(--grey);margin-top:8px}
+.actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+.act{background:var(--card);border-radius:14px;padding:12px 6px;text-align:center;font-size:11.5px;font-weight:600;border:0;cursor:pointer;color:var(--ink)}.act .ic{width:38px;height:38px;border-radius:12px;background:#ECFDF3;color:var(--green);display:grid;place-items:center;margin:0 auto 6px;font-size:17px}
+.banner{background:var(--amber-bg);border:1px solid #FED7AA;color:var(--amber);border-radius:12px;padding:10px 12px;font-size:12.5px;line-height:1.4;margin-bottom:12px}
+h3{font-size:14px;margin:6px 0 8px;color:var(--grey);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}.row:last-child{border-bottom:0}
+.row .ic{width:38px;height:38px;border-radius:12px;background:#F3F4F6;display:grid;place-items:center;font-size:16px;flex:none}.row .m{flex:1;min-width:0}.row .m b{display:block;font-size:14px;font-weight:600}.row .m span{font-size:12px;color:var(--grey)}
+.row .amt{font-weight:700;font-size:14px}.in{color:var(--green)}.out{color:var(--ink)}
+.btn{display:block;width:100%;padding:14px;border-radius:14px;border:0;background:var(--green);color:#fff;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit}.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.input{width:100%;padding:14px;border-radius:12px;border:1px solid var(--line);font-size:16px;font-family:inherit;background:#fff;margin:6px 0 12px}
+.big{font-size:40px;font-weight:700;text-align:center;border:0;background:transparent;width:100%;outline:none}
+.h1{font-size:22px;font-weight:700;margin:4px 0 2px}.p{font-size:13px;color:var(--grey);margin:0 0 14px;line-height:1.45}
+.pill{display:inline-block;background:#ECFDF3;color:var(--green-dark);font-size:11px;font-weight:700;padding:4px 8px;border-radius:999px}.pill.grey{background:#F3F4F6;color:var(--grey)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.chip{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:13px;font-weight:600;cursor:pointer}.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.tile{background:#fff;border-radius:14px;padding:12px 8px;text-align:center;font-size:12px;font-weight:600;color:var(--grey);opacity:.75}.tile .ic{font-size:20px;margin-bottom:4px}.tile small{display:block;font-size:10px;font-weight:600;color:var(--amber)}
+.nav{position:absolute;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);display:flex;padding:10px 6px 22px}.nav button{flex:1;border:0;background:transparent;font-family:inherit;font-size:11px;font-weight:600;color:var(--grey);cursor:pointer}.nav button.on{color:var(--green)}.nav button i{display:block;font-style:normal;font-size:18px;margin-bottom:2px}
+.kv{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}.kv:last-child{border-bottom:0}.kv span:last-child{font-weight:600}
+.pin{display:flex;gap:10px;justify-content:center;margin:14px 0}.pin i{width:52px;height:60px;border-radius:12px;border:1px solid var(--line);background:#fff;display:grid;place-items:center;font-size:22px;font-weight:700;font-style:normal}
+.link{display:flex;align-items:center;gap:8px;background:#F3F4F6;border-radius:12px;padding:12px;font-size:13px;word-break:break-all;margin-bottom:10px}
+.note{font-size:12px;color:var(--grey);text-align:center;margin-top:10px}
+.center{text-align:center}.mt{margin-top:10px}
+</style>
+</head>
+<body>
+<div class="stage">
+
+<div>
+<div class="phone" id="p1">
+  <section class="screen on" data-s="login">
+    <div class="center" style="margin-top:70px"><div class="logo" style="justify-content:center;font-size:24px"><div class="w" style="width:40px;height:40px;font-size:20px">W</div>WaPay</div>
+    <p class="p mt">Your money, on the web. Log in with your WaPay cell number and PIN.</p></div>
+    <div class="card">
+      <label style="font-size:12px;color:var(--grey);font-weight:600">Cell number</label>
+      <input class="input" value="083 752 5381" readonly>
+      <label style="font-size:12px;color:var(--grey);font-weight:600">WaPay PIN</label>
+      <div class="pin"><i>•</i><i>•</i><i>•</i><i></i></div>
+      <button class="btn" onclick="go('p1','home')">Log in</button>
+      <p class="note">Forgot your PIN? <b>Reset with your ID number</b></p>
+    </div>
+    <div class="banner">WhatsApp replies are paused by WhatsApp for now. Your money is safe and everything here works.</div>
+    <p class="note">WaPay never asks for your PIN by message.</p>
+  </section>
+
+  <section class="screen" data-s="home">
+    <div class="top"><div class="logo"><div class="w">W</div>WaPay</div><div class="avatar">NJ</div></div>
+    <div class="card balance"><p class="t">Available balance</p><p class="amt">R2,872.40</p><div class="sub"><span>Spend R2,872.40</span><span>Cash R0.00</span><span class="pill grey">Verify ID to lift limits</span></div></div>
+    <div class="actions">
+      <button class="act" onclick="go('p1','getpaid')"><div class="ic">⇩</div>Get paid</button>
+      <button class="act"><div class="ic">＋</div>Top up</button>
+      <button class="act"><div class="ic">⇄</div>Send</button>
+      <button class="act" onclick="go('p1','payout')"><div class="ic">🏦</div>Pay out</button>
+    </div>
+    <div class="banner">WhatsApp replies are paused by WhatsApp until further notice. Your money is safe and everything here works.</div>
+    <h3>Recent</h3>
+    <div class="card">
+      <div class="row"><div class="ic">🔗</div><div class="m"><b>Link paid · Lebo</b><span>Mon 20 Oct · card</span></div><div class="amt in">+R2,871.70</div></div>
+      <div class="row"><div class="ic">🏦</div><div class="m"><b>Pay-out · TymeBank •••595</b><span>Mon 20 Oct · PayShap</span></div><div class="amt out">−R2,849.00</div></div>
+      <div class="row"><div class="ic">🔗</div><div class="m"><b>Link paid · Sipho</b><span>Sat 18 Oct · card</span></div><div class="amt in">+R10.00</div></div>
+    </div>
+    <h3>Coming soon</h3>
+    <div class="tiles"><div class="tile"><div class="ic">📱</div>Airtime<small>Coming soon</small></div><div class="tile"><div class="ic">📶</div>Data<small>Coming soon</small></div><div class="tile"><div class="ic">💡</div>Electricity<small>Coming soon</small></div><div class="tile"><div class="ic">⛽</div>Fuel<small>Coming soon</small></div><div class="tile"><div class="ic">🏪</div>In-store<small>Coming soon</small></div><div class="tile"><div class="ic">🎟️</div>Vouchers<small>Coming soon</small></div></div>
+  </section>
+
+  <section class="screen" data-s="getpaid">
+    <p class="h1">Get paid</p><p class="p">Who owes you, and how much? You get a link to forward.</p>
+    <div class="card"><label style="font-size:12px;color:var(--grey);font-weight:600">Amount</label><input class="big" value="R250"><div class="chips"><span class="chip">R100</span><span class="chip on">R250</span><span class="chip">R500</span><span class="chip">R1,000</span></div>
+    <label style="font-size:12px;color:var(--grey);font-weight:600">Who owes you</label><input class="input" value="Thandi"><label style="font-size:12px;color:var(--grey);font-weight:600">For (optional)</label><input class="input" value="Rent"><button class="btn" onclick="go('p1','link')">Create link</button></div>
+    <p class="note">Links last 7 days. The payer pays by card or instant EFT; the fee is taken from what you receive.</p>
+  </section>
+
+  <section class="screen" data-s="link">
+    <p class="h1">Your link is ready</p><p class="p">Forward it to Thandi. You will see it here the moment it is paid.</p>
+    <div class="card"><div class="kv"><span>Amount</span><span>R250.00</span></div><div class="kv"><span>You receive</span><span>R239.30</span></div><div class="kv"><span>Expires</span><span>28 Oct</span></div>
+    <div class="link mt">https://pleasepayme.co.za/pay/PRNDYDUB</div>
+    <button class="btn">Share</button><button class="btn ghost mt">Copy link</button></div>
+    <div class="card"><h3>Open links</h3><div class="row"><div class="ic">🔗</div><div class="m"><b>Thandi · R250</b><span>Created just now</span></div><span class="pill grey">Open</span></div><div class="row"><div class="ic">🔗</div><div class="m"><b>Lebo · R3,000</b><span>Paid 20 Oct</span></div><span class="pill">Paid</span></div></div>
+    <button class="btn ghost" onclick="go('p1','home')">Done</button>
+  </section>
+
+  <section class="screen" data-s="payout">
+    <p class="h1">Pay out</p><p class="p">Where should the money go?</p>
+    <div class="card"><div class="row"><div class="ic">🏦</div><div class="m"><b>TymeBank account •••595</b><span>PayShap · used 4 times</span></div><span class="pill">Saved</span></div></div>
+    <div class="chips"><span class="chip">PayShap</span><span class="chip">Bank transfer</span><span class="chip">Absa cash</span><span class="chip">Nedbank cash</span><span class="chip">FNB eWallet</span></div>
+    <div class="card"><label style="font-size:12px;color:var(--grey);font-weight:600">Amount</label><input class="big" value="R2,872.40"><div class="chips"><span class="chip on">Everything</span><span class="chip">R1,000</span><span class="chip">R2,000</span></div>
+    <div class="kv"><span>Fee</span><span>R12.50</span></div><div class="kv"><span>Arrives</span><span>R2,859.90</span></div></div>
+    <div class="card"><p class="p" style="margin:0 0 8px">Enter your WaPay PIN to confirm</p><div class="pin"><i>•</i><i>•</i><i>•</i><i>•</i></div><button class="btn" onclick="go('p1','done')">Confirm pay-out</button></div>
+    <p class="note">Pay-outs over R3,000, or more than R10,000 in a day, ask for a quick ID check first.</p>
+  </section>
+
+  <section class="screen" data-s="done">
+    <div class="center" style="margin-top:90px"><div style="font-size:54px">✅</div><p class="h1">Sent</p><p class="p">R2,859.90 is on its way to TymeBank •••595 by PayShap. Most banks show it within minutes.</p></div>
+    <div class="card"><div class="kv"><span>Reference</span><span>WP7K2M9Q</span></div><div class="kv"><span>Fee</span><span>R12.50</span></div><div class="kv"><span>New balance</span><span>R0.00</span></div></div>
+    <button class="btn" onclick="go('p1','home')">Back to home</button>
+  </section>
+
+  <section class="screen" data-s="activity">
+    <p class="h1">Activity</p><p class="p">Everything in and out.</p>
+    <div class="card">
+      <div class="row"><div class="ic">🔗</div><div class="m"><b>Link paid · Lebo</b><span>20 Oct 22:18 · card</span></div><div class="amt in">+R2,871.70</div></div>
+      <div class="row"><div class="ic">🏦</div><div class="m"><b>Pay-out · TymeBank •••595</b><span>20 Oct 07:57 · PayShap · settled</span></div><div class="amt out">−R2,849.00</div></div>
+      <div class="row"><div class="ic">🔗</div><div class="m"><b>Link paid · Lebo</b><span>20 Oct 05:25 · card</span></div><div class="amt in">+R2,871.70</div></div>
+      <div class="row"><div class="ic">🔗</div><div class="m"><b>Link paid · Sipho</b><span>18 Oct 18:39 · card</span></div><div class="amt in">+R10.00</div></div>
+      <div class="row"><div class="ic">👋</div><div class="m"><b>Account opened</b><span>18 Oct 18:29</span></div><div class="amt out"></div></div>
+    </div>
+  </section>
+
+  <section class="screen" data-s="profile">
+    <div class="center"><div class="avatar" style="width:64px;height:64px;font-size:22px;margin:10px auto">NJ</div><p class="h1">Ncamsile Jele</p><p class="p">083 752 5381 · member since 18 Oct 2026</p></div>
+    <div class="card"><div class="kv"><span>ID check</span><span class="pill grey">Not yet · Verify</span></div><div class="kv"><span>Language</span><span>English</span></div><div class="kv"><span>Saved pay-out details</span><span>TymeBank •••595</span></div><div class="kv"><span>Invite a friend</span><span>Copy link</span></div><div class="kv"><span>Change PIN</span><span>›</span></div></div>
+    <div class="card"><h3>Help</h3><p class="p" style="margin:0">WhatsApp replies are paused by WhatsApp for now. Everything works here. Support: help@wapay.co.za. WaPay never asks for your PIN by message.</p></div>
+    <button class="btn ghost" onclick="go('p1','login')">Log out</button>
+  </section>
+
+  <nav class="nav"><button class="on" onclick="go('p1','home')"><i>⌂</i>Home</button><button onclick="go('p1','getpaid')"><i>⇅</i>Pay</button><button onclick="go('p1','activity')"><i>☰</i>Activity</button><button onclick="go('p1','profile')"><i>◯</i>Profile</button></nav>
+</div>
+<p class="label">Tap through: Log in → Home → Get paid → Link → Pay out → Sent</p>
+</div>
+
+</div>
+<script>
+function go(phone, s){const p=document.getElementById(phone);p.querySelectorAll('.screen').forEach(x=>x.classList.toggle('on',x.dataset.s===s));const map={home:0,getpaid:1,link:1,payout:1,done:0,activity:2,profile:3};p.querySelectorAll('.nav button').forEach((b,i)=>b.classList.toggle('on',map[s]===i));p.querySelector('.screen.on').scrollTop=0;}
+</script>
+</body>
+</html>

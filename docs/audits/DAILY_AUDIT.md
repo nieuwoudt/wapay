@@ -101,3 +101,4 @@ from the same functions the brief is built from (the add-money prompt, the get-p
 chooser, the first-link prompt, the link-created line, the send confirmation); and the known
 titles list in the brief now says it is not evidence and must not be searched for. The two
 false add-money findings were marked resolved by hand with that note.
+\n\n## Budget (2026-10-21)\n\nThe audit runs in its own serverless invocation: the 02:00 cron fires `POST /api/internal/audit-run` and stops waiting after four seconds; the route has its own 60-second budget. If the Health tab shows a run with `chunksReviewed 0` and `skipped DEADLINE`, the hand-off did not happen (no internal key in the environment) and the in-process fallback ran with whatever time was left.\n

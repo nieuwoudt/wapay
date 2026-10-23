@@ -103,11 +103,17 @@ test('every reply is short, carries at most three buttons of 20 characters, and 
   assert.match(adEntryReply('Q2').text, /Instant EFT, Capitec Pay, SnapScan and more/);
   assert.match(adEntryReply('Q4').text, /coming soon/);
   assert.match(firstLinkCreatedCopy({ amountCents: 25000, url: 'https://x', payerName: 'Thandi' }), /^Here's your payment link for R250: https:\/\/x\n\nForward it to Thandi/);
-  // Q1 and Q4 go straight to onboarding; Q2/Q3 and free text offer the open-account button.
+  // Q1 to Q4 go straight to onboarding (Q2/Q3 after their answer, since 2026-10-20); free text offers the open-account button.
   assert.equal(adEntryReply('Q1').startOnboarding, true);
   assert.equal(adEntryReply('Q4').startOnboarding, true);
-  assert.deepEqual(adEntryReply('Q2').buttons.map((b) => b.title), ['Open my account', 'What it costs']);
-  assert.deepEqual(adEntryReply('Q3', { fee }).buttons.map((b) => b.title), ['Open my account', 'How it works']);
+  // 2026-10-20 (creative review): Q2 and Q3 carry no buttons any more; a new arrival goes straight into onboarding, a member gets the answer alone.
+  assert.deepEqual(adEntryReply('Q2', { firstName: 'Thandi', fee }).buttons, []);
+  assert.equal(adEntryReply('Q2', { firstName: 'Thandi', fee }).startOnboarding, true);
+  assert.equal(adEntryReply('Q3', { fee }).startOnboarding, true);
+  assert.equal(adEntryReply('Q2', { fee, hasAccount: true }).startOnboarding, false);
+  assert.equal(adEntryReply('Q3', { fee, hasAccount: true }).startOnboarding, false);
+  assert.ok(!/Want to open your account/.test(adEntryReply('Q2', { fee }).text), 'no question that waits for a tap');
+  assert.deepEqual(adEntryReply('Q3', { fee }).buttons, [], 'Q3 answers and starts onboarding, no button');
   assert.deepEqual(adEntryReply('free_text').buttons.map((b) => b.title), ['Open my account']);
   assert.match(adEntryReply('Q2').text, /any bank card/);
   assert.match(adEntryReply('Q1', { firstName: 'Thandi' }).text, /^Great, Thandi\./);
@@ -130,7 +136,14 @@ test('the first-link ask parses amount, who and note; the retry line asks for th
   assert.deepEqual(parseFirstLinkAsk('r 99.50'), { amountCents: 9950, payerName: null, note: null });
   assert.equal(parseFirstLinkAsk('who owes me?'), null);
   assert.equal(parseFirstLinkAsk(''), null);
-  assert.match(firstLinkRetry(), /R250 from Thandi/);
+  assert.ok(!/Thandi|R250/.test(firstLinkRetry()) && !/Thandi|R250/.test(firstLinkPrompt('Sipho')), 'no example sentence to copy (creative review 2026-10-20)');
+  // the example-free prompt accepts amount and name in either order, with or without "from" / "owes me"
+  assert.deepEqual(parseFirstLinkAsk('R20 Thandi'), { amountCents: 2000, payerName: 'Thandi', note: null });
+  assert.deepEqual(parseFirstLinkAsk('Thandi R250'), { amountCents: 25000, payerName: 'Thandi', note: null });
+  assert.deepEqual(parseFirstLinkAsk('Thandi owes me 250'), { amountCents: 25000, payerName: 'Thandi', note: null });
+  assert.deepEqual(parseFirstLinkAsk('my brother 200'), { amountCents: 20000, payerName: 'brother', note: null });
+  assert.deepEqual(parseFirstLinkAsk('250 from Sipho for rent'), { amountCents: 25000, payerName: 'Sipho', note: 'rent' });
+  assert.equal(parseFirstLinkAsk('250').payerName, null, 'an amount alone has no name');
 });
 
 test('stop words: only a plain stop, never cancel or PIN-reset words', () => {

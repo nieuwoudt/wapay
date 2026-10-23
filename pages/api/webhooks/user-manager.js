@@ -8,6 +8,7 @@ import prisma from '../../../lib/prisma.js';
 import { newAccountProfile, findPayLinkReferrer } from '../../../lib/growth-attribution.js';
 import { mergeConversationData } from '../../../lib/conversation-data.js';
 import { sealFlowData, unsealFlowData } from '../../../lib/flow-seal.js';
+import { signupPathFor } from '../../../lib/onboarding-flags.js';
 
 export async function wasMessageProcessed(waId, messageId) {
   if (!waId || !messageId) return false;
@@ -133,6 +134,9 @@ export async function getOrCreateUser(waId, profile = {}, { referral = null } = 
     } catch (attribErr) {
       console.error(JSON.stringify({ type: 'acquisition_attrib_error', error: attribErr?.message }));
     }
+    // The sign-up funnel (2026-10-22, lib/signup-funnel.js): every account carries the path it was
+    // opened on, ONE_STEP when WAPAY_ONBOARDING_ONE_STEP covers the number, else CLASSIC, and when.
+    growthProfile = { ...growthProfile, onboarding: { path: signupPathFor(waId), startedAt: new Date().toISOString() } };
 
     // UPSERT on the unique waId (review 2026-08-28): a concurrent first-
     // contact retry could race findFirst→create and hit the unique

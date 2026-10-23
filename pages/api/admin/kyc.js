@@ -73,7 +73,21 @@ export default async function handler(req, res) {
     // On an unmapped/unchanged status synced.kyc may be absent — fall back to
     // the stored status so the console never shows "undefined".
     const kycStatus = synced.kyc?.status || account.profile?.kyc?.status || 'UNKNOWN';
-    return res.status(200).json({ ok: true, kycStatus, changed: !!synced.changed });
+    // A manual sync that lands VERIFIED continues the customer where the check interrupted them (lib/kyc-resume.js).
+    let resumed = false;
+    if (kycStatus === 'VERIFIED' && synced.changed) {
+      try {
+        const [{ resumeAfterKyc }, { startWithdraw }, { updateConversationState }, { sendWhatsAppText }, { localizeOutbound }, fresh] = await Promise.all([
+          import('../../../lib/kyc-resume.js'), import('../../../lib/payout-chat.js'), import('../webhooks/user-manager.js'), import('../../../lib/say.js'), import('../../../lib/localize.js'),
+          prisma.account.findUnique({ where: { id: account.id } }),
+        ]);
+        const r = await resumeAfterKyc({ prisma, account: fresh || account, deps: { startWithdraw, updateConversationState, send: sendWhatsAppText, localize: (t) => localizeOutbound(t, (fresh || account).profile?.language) } });
+        resumed = !!r.resumed;
+      } catch (e) {
+        console.error(JSON.stringify({ type: 'kyc_resume_failed', accountId: account.id, error: e?.message }));
+      }
+    }
+    return res.status(200).json({ ok: true, kycStatus, changed: !!synced.changed, resumed });
   }
 
   return res.status(400).json({ error: 'action' });

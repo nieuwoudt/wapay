@@ -68,3 +68,11 @@ to one number inside twenty seconds with `{ ok: false, error: 'SEND_CAP' }` and 
 `say_send_cap`; legitimate turns never reach four. `WAPAY_SEND_CAP` raises or lowers the count
 (never below three). The agent's prompt carries the matching standing rule: WaPay only answers,
 one reply per message, never a promise to message, remind or follow up later.
+
+## When Meta stops delivering
+
+A restriction shows first in Meta's delivery statuses, not in our logs: the API accepts the send and the status comes back `failed 131031`. The Health tab's WhatsApp card shows "Delivery, last hour"; an ops e-mail and WhatsApp alert go out when five failures of one code land in fifteen minutes with nothing delivered. Response: pause the ad, appeal in Meta Business Suite → Account quality with the behaviour since the fix, change no code.
+
+## 2026-10-21 addendum: the 30-day restriction and what changed
+
+Meta restricted the number for "Sending spam" from 20 October 21:30 UTC for 30 days (no replies to customers). Review requested 21 October. Two onboarding templates Meta files under MARKETING (`consent_terms_`, `welcome_new_user_account_activation`) are now off by default (`WAPAY_ONBOARDING_MARKETING_TEMPLATES`), replaced by one plain line each inside the customer's own window. Where the enforcement shows: Business Support Home → the WhatsApp account's Account overview (the Health Status API and the portfolio issues page do not show it).

@@ -481,6 +481,19 @@ export async function resetPIN(args: {
 }
 
 /**
+ * Does this account have a PIN at all? An existence check for the deferred PIN
+ * (WAPAY_PIN_ON_DEMAND, 2026-10-22): an account opened in one step has none until
+ * money first leaves. It reads no hash and verifies nothing (verifyPIN stays the
+ * only verifier), so it can never spend a lockout attempt.
+ */
+export async function hasPIN(accountId: string, prisma?: any): Promise<boolean> {
+  if (!accountId) return false;
+  const db = prisma || getPrisma();
+  const factor = await db.authFactor.findFirst({ where: { accountId, type: 'PIN' }, select: { id: true } });
+  return !!factor;
+}
+
+/**
  * Check if account is locked and needs PIN reset
  */
 export async function isPINLocked(accountId: string): Promise<boolean> {

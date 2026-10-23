@@ -210,3 +210,20 @@ Nothing in this flow moves money: the link creation ends in the existing flow, a
 payment arrives through the card rails as before.
 
 **2026-10-20 (CHANGELOG 102, BUGLOG #130):** the section-10 reminder is OFF by default after Meta's "sending spam" notice and a RED quality rating; `WAPAY_AD_REMINDERS=on` is the only way to send it. "Stop" now opts any customer out of everything WaPay would start, not only the reminder. See docs/WHATSAPP_POLICY_COMPLIANCE.md.
+
+## Round two changes (creative review, 2026-10-20)
+
+- **Q2 and Q3 open the account at once.** The "how it works" and "what it costs" answers end with
+  "Let's open your account. You only need this phone, and it's three quick steps." and the PIN
+  step follows in the same turn. No open-account button on these two answers any more. A member
+  asking the same question later gets the answer alone.
+- **The first-link prompt has no example sentence.** "You're all set, {name}. Let's get you paid.
+  Who owes you, and how much? Type the amount and their name." The parser takes amount and name
+  in either order ("250 Thandi", "Thandi R250", "Thandi owes me 250", "250 from Sipho for rent").
+  The retry line: "Just the amount and the name of the person who owes you, the amount in rands
+  first." The old example sentence is still recognised and answered with "That was just our
+  example. Who really owes you, and how much? Type the amount and their name.", and no link is
+  created from it.
+- **Loans.** "WaPay doesn't offer loans. You can get paid, top up, pay other WaPay users and pay
+  out. To get paid, tell me who owes you and how much, and I make the link you forward to them."
+  Matched before the agent (`matchLoanAsk`), never a referral to a lender.

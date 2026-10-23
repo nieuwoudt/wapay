@@ -933,12 +933,13 @@ async function run() {
       process.env.WAPAY_ONBOARDING_OTP = 'off';
       try {
         const ad = createSession(AD_WA_ID);
+        // 2026-10-20 (creative review): the cost answer now runs straight into onboarding step 1
+        // in the same turn, so there is no "How it works" / "Open my account" tap any more; the
+        // first-link prompt carries no example and "amount name" is enough.
         const a = await ad.say('What does it cost?', { referral: REF, profile: { name: 'Thandi QA' } });
-        const b = await ad.say('How it works');
-        const c = await ad.say('Open my account');
         const d = await ad.say('2580');
         const e = await ad.say('I accept');
-        const f = await ad.say('R20 from Thandi for the test');
+        const f = await ad.say('R20 Thandi');
         const g = await ad.say('Can I buy airtime?');
         const h = await ad.say('How do I get my money out?');
         const i = await ad.say('stop');
@@ -946,20 +947,18 @@ async function run() {
         const attr = row?.profile?.attribution || {};
         const links = row ? await prisma.paymentRequest.count({ where: { accountId: row.id } }) : 0;
         const banned = /\b(banking|send money|transfer|withdraw|cash ?out)\b/i;
-        verdict('Ad arrival: Q3 → how it works → open → PIN → consent → first link → FAQ → stop', [
-          { level: 'FAIL', ok: has(a.replyText, /Under R50, getting paid is free/) && has(a.replyText, /\[Open my account\]/), what: 'the cost answer carries the open-account button' },
+        verdict('Ad arrival: Q3 → answer + PIN step at once → consent → first link → FAQ → stop', [
+          { level: 'FAIL', ok: has(a.replyText, /Under R50, getting paid is free/) && !has(a.replyText, /\[Open my account\]/) && has(a.replyText, /pin|onboarding_step_3/i), what: 'the cost answer carries no button and reaches the PIN step in the same turn' },
           { level: 'FAIL', ok: !has(a.replyText, /Welcome to WaPay/i) && !a.replies.some((r) => /onboarding_step_1/.test(r.text)), what: 'no second welcome, no welcome template' },
-          { level: 'FAIL', ok: has(b.replyText, /Forward the payment link we send you/), what: '"How it works" answers the three steps' },
-          { level: 'FAIL', ok: has(c.replyText, /Great, Thandi/) && has(c.replyText, /pin|onboarding_step_3/i), what: '"Open my account" greets by name and reaches the PIN step at once' },
           { level: 'FAIL', ok: has(d.replyText, /accept|consent|onboarding_step_4|Step 3 of 3/i), what: 'the PIN moves to the consent step' },
           { level: 'FAIL', ok: has(e.replyText, /Let's get you paid\. Who owes you, and how much\?/), what: 'completion asks for the first link, not the business question' },
-          { level: 'FAIL', ok: has(f.replyText, /Here's your payment link for R20: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/) && has(f.replyText, /Forward it to Thandi/), what: '"R20 from Thandi" mints the link with the short forwardable copy' },
+          { level: 'FAIL', ok: has(f.replyText, /Here's your payment link for R20: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/) && has(f.replyText, /Forward it to Thandi/), what: '"R20 Thandi" (no example to copy) mints the link with the short forwardable copy' },
           { level: 'FAIL', ok: links === 1, what: 'exactly one link exists' },
           { level: 'FAIL', ok: has(g.replyText, /coming soon/), what: '"Can I buy airtime?" is coming soon' },
           { level: 'FAIL', ok: has(h.replyText, /PayShap/) && has(h.replyText, /\[Nedbank cash\]/), what: 'money-out answer with the three pay-out buttons' },
           { level: 'FAIL', ok: has(i.replyText, /no more reminders/i) && attr.reminderOptOut === true, what: '"stop" opts out of the reminder' },
           { level: 'FAIL', ok: attr.entry === 'Q3' && Boolean(attr.ctwaClid) && Boolean(attr.onboardedAt), what: 'the account carries entry Q3, the click id and the onboarding time' },
-          { level: 'FAIL', ok: [a, b, c, d, e, f, g, h, i].every((t) => !banned.test(t.replyText)), what: 'no banned word anywhere in the flow' },
+          { level: 'FAIL', ok: [a, d, e, f, g, h, i].every((t) => !banned.test(t.replyText)), what: 'no banned word anywhere in the flow' },
         ], ad);
         await teardownAd();
         const ad2 = createSession(AD_WA_ID);
@@ -971,6 +970,179 @@ async function run() {
       } finally {
         if (prevOtp === undefined) delete process.env.WAPAY_ONBOARDING_OTP; else process.env.WAPAY_ONBOARDING_OTP = prevOtp;
         await teardownAd();
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 9 to 11. One-step sign-up, the PIN on demand, the payer's reply (docs/ONBOARDING.md §5,
+  //    2026-10-22). The switches are set to these QA numbers only, never "on" for everyone,
+  //    and put back as they were; every row the scenarios make is removed. Money: a synthetic
+  //    R50 ledger load on the one-step account and one R20 send between two harness members
+  //    (no rail, torn down by idemKey); the paid link in scenario 11 is a synthetic record
+  //    with no ledger entry. No template reaches Meta (the transport is captured).
+  // ------------------------------------------------------------------
+  {
+    const ONE = process.env.CHAT_QA_ONESTEP_WA_ID || '27600000904';
+    const PAYER = process.env.CHAT_QA_PAYER_WA_ID || '27600000905';
+    const MEMBER = process.env.CHAT_QA_MEMBER_WA_ID || '27600000906';
+    const ADONE = process.env.CHAT_QA_ADONESTEP_WA_ID || '27600000907';
+    const NUMBERS = [ONE, PAYER, MEMBER, ADONE];
+    // Names this block gives its accounts. Never "Friend": that is every nameless real account's name too.
+    const MARKERS = new Set(['Lerato QA', 'Sipho QA', 'Thandi QA', 'CHAT_QA_HARNESS']);
+    const SWITCHES = ['WAPAY_ONBOARDING_ONE_STEP', 'WAPAY_PIN_ON_DEMAND', 'WAPAY_PAYER_PREREGISTER', 'WAPAY_TEMPLATE_PAYMENT_RECEIPT_V2'];
+    const prevSwitches = Object.fromEntries(SWITCHES.map((k) => [k, process.env[k]]));
+    const TERMS = 'By using WaPay you agree to our Terms & Privacy Policy: https://wapay.co.za/legal/terms';
+    const local = (wa) => `0${wa.slice(2)}`;
+    const qa = await prisma.account.findFirst({ where: { waId: QA_WA_ID } });
+    const made = { codes: [] };
+    const wipe = async (waId) => {
+      const acc = await prisma.account.findFirst({ where: { waId } });
+      if (!acc) return;
+      const previews = await prisma.providerRequest.findMany({ where: { accountId: acc.id, route: 'send-preview' }, select: { id: true } }).catch(() => []);
+      const keys = [`chatqa-onestep-load-${acc.id}`, ...previews.map(({ id }) => `send-${id}`)];
+      await prisma.journalLine.deleteMany({ where: { entry: { idemKey: { in: keys } } } }).catch(() => {});
+      await prisma.journalEntry.deleteMany({ where: { idemKey: { in: keys } } }).catch(() => {});
+      await prisma.hold.deleteMany({ where: { wallet: { accountId: acc.id } } }).catch(() => {});
+      await prisma.paymentRequest.updateMany({ where: { accountId: acc.id, status: 'PENDING' }, data: { status: 'CANCELLED' } }).catch(() => {});
+      await prisma.paymentRequest.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.providerRequest.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      await prisma.pendingGift.deleteMany({ where: { senderAccountId: acc.id } }).catch(() => {});
+      await prisma.beneficiary.deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      for (const model of ['authFactor', 'conversationTurn', 'agentTurn', 'otpCode', 'consent', 'auditLog', 'wallet']) {
+        await prisma[model].deleteMany({ where: { accountId: acc.id } }).catch(() => {});
+      }
+      await prisma.account.delete({ where: { id: acc.id } }).catch(() => {});
+    };
+    const wipeAll = async () => {
+      for (const code of made.codes) {
+        await prisma.providerRequest.deleteMany({ where: { idemKey: `wapay-payreq-${code}` } }).catch(() => {});
+        await prisma.paymentRequest.deleteMany({ where: { id: code } }).catch(() => {});
+      }
+      for (const n of NUMBERS) await wipe(n);
+    };
+    // A payer this block pre-registered in a run that died before its cleanup still reads "Friend"; it is ours
+    // only when it points at this harness's own synthetic paid link. Anything else on these numbers: skip.
+    const isOurs = async (a) => {
+      if (MARKERS.has(a.displayName || '')) return true;
+      const code = a.profile?.origin?.kind === 'PAYER' ? a.profile.origin.requestCode : null;
+      if (!code || !qa) return false;
+      const link = await prisma.paymentRequest.findUnique({ where: { id: code } }).catch(() => null);
+      return link?.accountId === qa.id && link?.note === 'chat QA payer reply';
+    };
+    const strangers = await prisma.account.findMany({ where: { waId: { in: NUMBERS } }, select: { waId: true, displayName: true, profile: true } });
+    const taken = [];
+    for (const a of strangers) if (!(await isOurs(a))) taken.push(a.waId);
+    if (taken.length || !qa) {
+      verdict('One-step sign-up, PIN on demand, payer reply (skipped: a QA number belongs to a real account)', [{ level: 'WARN', ok: false, what: `set CHAT_QA_ONESTEP_WA_ID / _PAYER_ / _MEMBER_ / _ADONESTEP_ to free numbers (${taken.length} taken)` }], s);
+    } else {
+      try {
+        await wipeAll();
+        process.env.WAPAY_ONBOARDING_ONE_STEP = [ONE, ADONE].join(',');
+        process.env.WAPAY_PIN_ON_DEMAND = ONE;
+        delete process.env.WAPAY_PAYER_PREREGISTER;
+        delete process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT_V2;
+
+        // 9. One-step sign-up: the first message opens the account in one message.
+        const one = createSession(ONE);
+        const firstId = `chatqa-onestep-first-${process.pid}`;
+        const a = await one.say('Hi', { messageId: firstId, profile: { name: 'Lerato QA' } });
+        const rowA = await prisma.account.findFirst({ where: { waId: ONE } });
+        const consents = rowA ? await prisma.consent.findMany({ where: { accountId: rowA.id } }) : [];
+        const implied = rowA ? await prisma.auditLog.findFirst({ where: { accountId: rowA.id, event: 'CONSENT_IMPLIED' } }) : null;
+        const b = await one.say('please pay me R20');
+        const c = await one.say('balance');
+        const links = rowA ? await prisma.paymentRequest.count({ where: { accountId: rowA.id } }) : 0;
+        verdict('One-step 1: the first message opens the account in ONE message, terms accepted by continuing, no PIN, with the evidence', [
+          { level: 'FAIL', ok: a.replies.length === 1, what: 'exactly one message' },
+          { level: 'FAIL', ok: has(a.replyText, /Welcome to WaPay, Lerato QA!\* Your account is open\./) && has(a.replyText, /Balance/) && a.replyText.trim().endsWith(TERMS), what: 'the home card that says the account is open, then the terms line last' },
+          { level: 'FAIL', ok: !a.replies.some((r) => r.kind === 'template') && !has(a.replyText, /I accept|create a 4-6 digit PIN|choose a 4-digit PIN|6-digit code|verification code/i), what: 'no template, no code, no PIN, no "I accept"' },
+          { level: 'FAIL', ok: rowA?.onboardingState === 'S5_COMPLETED' && rowA?.profile?.onboarding?.path === 'ONE_STEP' && rowA?.profile?.onboarding?.pinDeferred === true, what: 'S5, stamped ONE_STEP, PIN deferred' },
+          { level: 'FAIL', ok: consents.length === 2 && consents.every((r) => r.granted && r.version === 'v1.0' && r.userAgent === `IMPLIED_BY_USE wa:${firstId}`), what: 'two consent rows IMPLIED_BY_USE with the version and the inbound message id' },
+          { level: 'FAIL', ok: implied?.waMessageId === firstId && implied?.metadata?.method === 'IMPLIED_BY_USE', what: 'the CONSENT_IMPLIED audit row' },
+          { level: 'FAIL', ok: has(b.replyText, /pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/) && !has(b.replyText, /PIN/) && links === 1, what: 'a link is made without any PIN' },
+          { level: 'FAIL', ok: has(c.replyText, /balance/i) && !has(c.replyText, /enter your (WaPay )?PIN|choose a 4-digit PIN/i), what: 'the balance needs no PIN' },
+        ], one);
+
+        // 10. The PIN on demand: asked for by name, then at the first send, which then goes in the same turn.
+        const d = await one.say('PIN');
+        const e = await one.say('cancel');
+        const noPinYet = rowA ? await prisma.authFactor.count({ where: { accountId: rowA.id, type: 'PIN' } }) : -1;
+        const member = await prisma.account.create({ data: { waId: MEMBER, msisdn: MEMBER, displayName: 'CHAT_QA_HARNESS', onboardingState: 'S5_COMPLETED', onboardingStatus: 'COMPLETE', status: 'ACTIVE', conversationState: null, conversationData: {}, profile: {} } });
+        await prisma.wallet.create({ data: { accountId: member.id, balanceType: 'SPEND', currency: 'ZAR', availableCents: 0, pendingCents: 0 } });
+        const { buildLoad: load, RAIL: rail, BALANCE: bal } = await import('../../lib/ledger-core.js');
+        const { postEntry: post, ensureWallet: ensure } = await import('../../lib/ledger-post.js');
+        await ensure({ accountId: rowA.id, balanceType: bal.SPEND });
+        await post(load({ accountId: rowA.id, rail: rail.PAYFAST, faceCents: 5000, idemKey: `chatqa-onestep-load-${rowA.id}` }));
+        const f = await one.say(`send R20 to ${local(MEMBER)}`);
+        const g = await one.say('yes');
+        const h = await one.say('2580');
+        const i = await one.say('2580');
+        const memberSpend = (await prisma.wallet.findFirst({ where: { accountId: member.id, balanceType: 'SPEND' } }))?.availableCents ?? null;
+        const pinNow = await prisma.authFactor.count({ where: { accountId: rowA.id, type: 'PIN' } });
+        verdict('One-step 2: the PIN is chosen when money first leaves, asked once, and the send goes in the same turn', [
+          { level: 'FAIL', ok: has(d.replyText, /Choose a 4-digit PIN to protect your pay-outs/), what: '"PIN" starts the choice' },
+          { level: 'FAIL', ok: has(e.replyText, /Cancelled\. No PIN was set/) && noPinYet === 0, what: '"cancel" leaves no PIN' },
+          { level: 'FAIL', ok: has(f.replyText, /Send R20\* to 0600000906\?/) && !has(f.replyText, /choose a 4-digit PIN|enter your WaPay PIN/i), what: 'the send is confirmed first, no PIN asked yet' },
+          { level: 'FAIL', ok: has(g.replyText, /Choose a 4-digit PIN to protect your pay-outs/) && !has(g.replyText, /Enter your WaPay PIN/), what: 'YES asks to choose a PIN instead of entering one' },
+          { level: 'FAIL', ok: has(h.replyText, /Type the same PIN once more/), what: 'then once more to confirm' },
+          { level: 'FAIL', ok: i.replies.length === 1 && has(i.replyText, /Your WaPay PIN is set/) && has(i.replyText, /Sent R20/), what: 'one message: the PIN is set and the send went' },
+          { level: 'FAIL', ok: memberSpend === 2000 && pinNow === 1, what: 'the member has R20; the sender has one PIN' },
+          { level: 'FAIL', ok: ![d, e, f, g, h, i].some((r) => /2580/.test(String(r.replyText || ''))), what: 'the PIN is never echoed back' },
+        ], one);
+
+        // 9b. One-step from an ad: the answer and the first-link question in one message, then the link.
+        const REF = { source_url: 'https://fb.me/wapay-qa', source_type: 'ad', source_id: 'qa-ad-onestep', headline: 'Please pay me', body: 'Get paid on WhatsApp', media_type: 'image', ctwa_clid: `qa-clid-onestep-${process.pid}` };
+        const ad = createSession(ADONE);
+        const j = await ad.say('What does it cost?', { referral: REF, profile: { name: 'Thandi QA' } });
+        const k = await ad.say('R20 Thandi');
+        const rowAd = await prisma.account.findFirst({ where: { waId: ADONE } });
+        verdict('One-step 3: an ad arrival gets the answer, the first-link question and the terms in one message, then the link', [
+          { level: 'FAIL', ok: j.replies.length === 1 && has(j.replyText, /Under R50, getting paid is free/) && has(j.replyText, /Who owes you, and how much\?/) && j.replyText.trim().endsWith(TERMS), what: 'one message: answer, question, terms' },
+          { level: 'FAIL', ok: !has(j.replyText, /three quick steps|Step \d of \d|PIN/) && !j.replies.some((r) => r.kind === 'template'), what: 'no steps left, no PIN, no template' },
+          { level: 'FAIL', ok: rowAd?.onboardingState === 'S5_COMPLETED' && rowAd?.profile?.attribution?.entry === 'Q3' && Boolean(rowAd?.profile?.attribution?.onboardedAt), what: 'opened, entry Q3, the onboarding time for the Growth tab' },
+          { level: 'FAIL', ok: has(k.replyText, /Here's your payment link for R20: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/), what: 'the first link at once' },
+        ], ad);
+
+        // 11. The payer's reply: a paid link pre-registers the payer; the v2 receipt's tap opens the account with the receipt.
+        delete process.env.WAPAY_ONBOARDING_ONE_STEP;
+        process.env.WAPAY_PAYER_PREREGISTER = PAYER;
+        process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT_V2 = 'wapay_payment_receipt_v2';
+        let code = null;
+        for (let n = 0; n < 5 && !code; n += 1) {
+          const candidate = `PR${Array.from({ length: 6 }, () => 'ABCDEFGHJKMNPQRSTUVWXYZ'[Math.floor(Math.random() * 23)]).join('')}`;
+          if (!(await prisma.paymentRequest.findUnique({ where: { id: candidate } }))) code = candidate;
+        }
+        made.codes.push(code);
+        const paidAt = new Date();
+        await prisma.paymentRequest.create({ data: { id: code, accountId: qa.id, amountCents: 2500, note: 'chat QA payer reply', status: 'PAID', payerRef: 'PAYFAST:qa-pf-1', paidAt, expiresAt: new Date(Date.now() + 86400000) } });
+        await prisma.providerRequest.create({ data: { provider: 'PAYFAST', route: 'chatqa-payreq', idemKey: `wapay-payreq-${code}`, status: 'SUCCESS', providerRef: 'qa-pf-1', accountId: qa.id, metadata: { accountId: qa.id, amountCents: 2500, grossCents: 2500, payerMsisdn: local(PAYER), requesterNotifiedAt: paidAt.toISOString() } } });
+        const { deliverRequestPaidNotifications } = await import('../../lib/request-notify.js');
+        const rails = [];
+        const sendStub = {
+          text: async (x) => { rails.push({ rail: 'text', ...x }); return { ok: false, error: 'window closed' }; },
+          direct: async (x) => { rails.push({ rail: 'direct', ...x }); return { ok: false }; },
+          template: async (x) => { rails.push({ rail: 'template', ...x }); return { ok: true }; },
+        };
+        const notified = await deliverRequestPaidNotifications({ code, send: sendStub });
+        const pre = await prisma.account.findFirst({ where: { waId: PAYER } });
+        const tpl = rails.find((r) => r.rail === 'template');
+        const payer = createSession(PAYER);
+        const tapId = `chatqa-payer-tap-${process.pid}`;
+        const m = await payer.say(`WAPAY_RECEIPT:${code}`, { messageId: tapId, profile: { name: 'Sipho QA' } });
+        const opened = await prisma.account.findFirst({ where: { waId: PAYER } });
+        const payerConsents = opened ? await prisma.consent.count({ where: { accountId: opened.id, userAgent: `IMPLIED_BY_USE wa:${tapId}` } }) : 0;
+        verdict('Payer reply: a paid link pre-registers the payer, the v2 receipt carries "My receipt", and the tap opens the account with the receipt in one message', [
+          { level: 'FAIL', ok: notified.payer === 'sent' && pre?.onboardingState === 'S0_INITIAL' && pre?.profile?.origin?.kind === 'PAYER' && pre?.profile?.origin?.requestCode === code, what: 'an S0 record with the origin, before they ever wrote' },
+          { level: 'FAIL', ok: tpl?.templateName === 'wapay_payment_receipt_v2' && JSON.stringify(tpl?.components || []).includes(`WAPAY_RECEIPT:${code}`) && rails.filter((r) => r.rail === 'template').length === 1, what: 'one v2 receipt with the payload, nothing else sent' },
+          { level: 'FAIL', ok: m.replies.length === 1 && has(m.replyText, new RegExp(`You paid R25 to [^\\n]+ on \\d{1,2} \\w{3}, reference PF qa-pf-1 · ${code}\\.`)) && has(m.replyText, /Your account is open/) && m.replyText.trim().endsWith(TERMS), what: 'one message: the receipt, the home card, the terms line' },
+          { level: 'FAIL', ok: opened?.onboardingState === 'S5_COMPLETED' && opened?.displayName === 'Sipho QA' && opened?.profile?.onboarding?.path === 'ONE_STEP' && Boolean(opened?.profile?.onboarding?.startedAt) && payerConsents === 2, what: 'opened in one step, their name, consent with the tap\'s message id' },
+        ], payer);
+      } catch (error) {
+        verdict('One-step sign-up, PIN on demand, payer reply (scenario error)', [{ level: 'FAIL', ok: false, what: `threw: ${String(error?.message || error).slice(0, 200)}` }], s);
+      } finally {
+        for (const [k2, v] of Object.entries(prevSwitches)) { if (v === undefined) delete process.env[k2]; else process.env[k2] = v; }
+        await wipeAll();
       }
     }
   }

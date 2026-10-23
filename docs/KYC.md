@@ -69,3 +69,16 @@ pricing page · didit.me/solutions/countries/south-africa · korahq.com KYC-prov
 - Counsel: the tiered model + withdrawal gate sit inside the NPS opinion brief.
 - Build: verification page lives on the web (pleasepayme.co.za or wapay.co.za), never in
   chat; result stored as an account attribute; `buildCashout` paths must hard-require it.
+
+## 2026-10-20: thresholds and the continuation
+
+- KYC by threshold (`WAPAY_PAYOUT_KYC=threshold`, docs/PAYOUT_RULES.md): the check is asked only
+  for a single pay-out of R3,000 or more or for more than R10,000 in 24 hours.
+- The ask the check interrupts is kept on `profile.kyc.pendingWithdraw`; a VERIFIED result from
+  the webhook or the console's Refresh continues the pay-out at the next step (lib/kyc-resume.js),
+  and the Didit session's `callback` returns the customer to the WaPay chat.
+- First live run: the founder's session was created through the console's Start KYC, Didit
+  approved it, but the webhook did not apply the result (the profile stayed PENDING until a
+  manual Refresh). Check the destination's delivery log in Didit (response code of our
+  `/api/webhooks/didit`) when that happens: 401 = the secret in Vercel is not this destination's,
+  503 = the three variables were missing from the running deployment.

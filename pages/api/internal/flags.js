@@ -15,6 +15,10 @@ import { payoutLive } from '../../../lib/fee-facts.js';
 import { isWicodeLive } from '../../../lib/spend-catalogue.js';
 import { opsAlertRecipients } from '../../../lib/ops-alerts.js';
 import { mayRegister, businessSignupAllowlist } from '../../../lib/business-auth.js';
+import { appAuthConfigured } from '../../../lib/app-auth.js';
+import { configuredAppHost } from '../../../lib/app-host.js';
+import { bannerFor, supportEmail } from '../../../lib/app-portal.js';
+import { onboardingFlagsReadout } from '../../../lib/onboarding-flags.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
@@ -34,7 +38,11 @@ export default async function handler(req, res) {
     withdrawLive: payoutLive(),
     opsAlertRecipients: opsAlertRecipients().length,
     adminHost: !!(env.WAPAY_ADMIN_HOST || '').trim(),
+    // The personal web portal (2026-10-21): signs in only with a session secret; the banner is on until switched off.
+    app: { configured: appAuthConfigured(), host: configuredAppHost(env) || null, whatsappPausedBanner: bannerFor().show, supportEmail: supportEmail() },
     adReminders: adRemindersEnabled(),
+    // One-step sign-up, deferred PIN, payer pre-registration (2026-10-22): everyone, or how many numbers are listed.
+    onboarding: onboardingFlagsReadout(env),
     whatsapp: quality ? { qualityRating: quality.qualityRating || null, messagingLimitTier: quality.messagingLimitTier || null, status: quality.status || null, supportContact: quality.profile?.hasSupportContact ?? null, error: quality.error || null } : null,
   });
 }

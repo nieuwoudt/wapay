@@ -21,6 +21,21 @@ const nextConfig = {
     ];
   },
   
+  // The personal portal (2026-10-21): the PIN is typed on these pages, so they may never be
+  // framed by another site (clickjacking), and nothing is sniffed or leaked in a referrer.
+  async headers() {
+    const app = [
+      { key: 'X-Frame-Options', value: 'DENY' },
+      { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Referrer-Policy', value: 'same-origin' },
+    ];
+    return [
+      { source: '/app', headers: app },
+      { source: '/app/:path*', headers: app },
+    ];
+  },
+
   // Transpile workspace packages
   transpilePackages: [
     '@wapay/ai',

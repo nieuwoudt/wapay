@@ -34,3 +34,13 @@ test('pay page: shows the tail in the title and heading, warns the payer, busine
   assert.ok(!/—/.test(warning), 'no em dash in customer copy');
   assert.ok(!/withdraw|cash-out|banking/i.test(warning), 'no banned words in the warning');
 });
+
+test('a requester name with no letters or digits falls back to the masked number (2026-10-22: "Please pay !")', async () => {
+  const { maskedRequesterLabel, requesterLabelWithTail } = await import('../lib/payment-requests.js');
+  const bang = { displayName: '!', msisdn: '27731234709' };
+  assert.equal(maskedRequesterLabel(bang), '277•••709');
+  assert.equal(requesterLabelWithTail(bang), '277•••709');
+  assert.equal(maskedRequesterLabel({ displayName: '  Thandi  ', msisdn: '27731234709' }), 'Thandi');
+  assert.equal(maskedRequesterLabel({ displayName: 'Nomsa 🙂', msisdn: '27731234709' }), 'Nomsa 🙂');
+  assert.equal(maskedRequesterLabel({ displayName: '🙂', msisdn: '27731234709' }), '277•••709');
+});

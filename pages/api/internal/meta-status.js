@@ -107,6 +107,32 @@ export default async function handler(req, res) {
       : (sa.data || []).map((a) => ({ appId: mask(a.whatsapp_business_api_data?.id), name: a.whatsapp_business_api_data?.name, overrideCallbackUri: a.override_callback_uri || null }));
     const waba = await graph(wabaId, token, { fields: 'id,name,account_review_status,business_verification_status' });
     out.waba = waba.error ? { error: waba.error } : { name: waba.name, accountReviewStatus: waba.account_review_status, businessVerificationStatus: waba.business_verification_status };
+    // Billing fields, each in its own call so a field Meta reserves for Solution
+    // Providers (primary_funding_id answered "requires ... Business Solution
+    // Provider" on 2026-10-21) can never blank the rest. primary_funding_id is
+    // the payment method / credit line attached to THIS WhatsApp account; null
+    // means Meta has nothing to bill and 131042 follows (BUGLOG #136).
+    if (!waba.error) {
+      const fund = await graph(wabaId, token, { fields: 'primary_funding_id' });
+      out.waba.primaryFundingId = fund.error ? { error: fund.error.message } : (fund.primary_funding_id ? mask(fund.primary_funding_id) : null);
+      const loc = await graph(wabaId, token, { fields: 'timezone_id,currency' });
+      out.waba.billingLocale = loc.error ? { error: loc.error.message } : { timezoneId: loc.timezone_id ?? null, currency: loc.currency || null };
+      // Which business portfolio OWNS this WhatsApp account: its billing lives
+      // there, not in whichever portfolio runs the ads (2026-10-21: the health
+      // verdict named a business id that differed from the ads portfolio).
+      const own = await graph(wabaId, token, { fields: 'owner_business_info,on_behalf_of_business_info' });
+      out.waba.ownerBusiness = own.error ? { error: own.error.message } : { owner: own.owner_business_info || null, onBehalfOf: own.on_behalf_of_business_info || null };
+      const bizIds = [...new Set([own.owner_business_info?.id, process.env.META_BUSINESS_ID].filter(Boolean))];
+      out.businesses = {};
+      for (const bid of bizIds) {
+        const b = await graph(bid, token, { fields: 'name,verification_status' });
+        const credit = await graph(`${bid}/extendedcredits`, token, { fields: 'id,legal_entity_name,balance,max_balance,allocated_amount' });
+        out.businesses[bid] = {
+          ...(b.error ? { error: b.error.message } : { name: b.name, verificationStatus: b.verification_status }),
+          creditLines: credit.error ? { error: credit.error.message } : (credit.data || []).map((c) => ({ id: mask(c.id), legalEntityName: c.legal_entity_name, balance: c.balance, maxBalance: c.max_balance, allocated: c.allocated_amount })),
+        };
+      }
+    }
     const tpl = await graph(`${wabaId}/message_templates`, token, { fields: 'name,status,category,language,components', limit: '100' });
     // Components are returned for authentication templates only: their exact
     // button shape decides which parameters a send must carry (BUGLOG #41).
@@ -126,6 +152,17 @@ export default async function handler(req, res) {
       : { displayPhoneNumber: pn.display_phone_number, verifiedName: pn.verified_name, qualityRating: pn.quality_rating, status: pn.status, nameStatus: pn.name_status, messagingLimitTier: pn.messaging_limit_tier, platformType: pn.platform_type, throughput: pn.throughput?.level || pn.throughput || null };
     const wh = await graph(phoneNumberId, token, { fields: 'webhook_configuration' });
     out.phoneWebhookOverride = wh.error ? { error: wh.error } : (wh.webhook_configuration || null);
+    // 5. Meta's own verdict on whether this number can send and, if not, why:
+    //    one entry per entity (PHONE_NUMBER, WABA, BUSINESS, APP) with the
+    //    blocking error, its description and Meta's suggested fix. Added
+    //    2026-10-21 during the 131031 lock (BUGLOG #136) so the reason is read
+    //    from the source instead of guessed from delivery failures.
+    const hs = await graph(phoneNumberId, token, { fields: 'health_status' });
+    out.health = hs.error ? { error: hs.error } : (hs.health_status || null);
+    if (hs.error && wabaId) {
+      const hw = await graph(wabaId, token, { fields: 'health_status' });
+      out.healthWaba = hw.error ? { error: hw.error } : (hw.health_status || null);
+    }
   } else {
     out.phone = { skipped: 'no phone number id in this deployment' };
   }

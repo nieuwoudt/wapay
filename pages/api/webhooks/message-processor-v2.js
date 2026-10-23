@@ -15,7 +15,14 @@ import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, sendWhatsAppReplyButtons, out
 // side of the turn by construction (docs/AGENT_ARCHITECTURE_V2.md C2).
 import { sendWhatsAppText, recordInbound } from '../../../lib/say.js';
 import { rememberSent } from '../../../lib/say.js';
-import { isFirstLinkExample, EXAMPLE_ECHO_REPLY, looksLikeNobodyOwesMe, NOBODY_OWES_ME_REPLY } from '../../../lib/ad-flow.js';
+// One-step sign-up, the deferred PIN and the payer's reply (docs/ONBOARDING.md §5, 2026-10-22): all behind switches, default off.
+import { withLeadLine } from '../../../lib/say.js';
+import { oneStepSignupFor, pinOnDemandFor, pinDeferredAtSignupFor, isPayerOrigin } from '../../../lib/onboarding-flags.js';
+import { composeOneStepMessage, openedGreeting, referredOpenedLead, payerReceiptLine, payerPendingLine, RECEIPT_BUTTON_PAYLOAD } from '../../../lib/one-step-signup.js';
+import { adOpenedReply } from '../../../lib/ad-flow.js';
+import { markPayerStarted } from '../../../lib/payer-preregister.js';
+import { completeOneStepOnboarding, hasPIN } from '@wapay/auth';
+import { isFirstLinkExample, EXAMPLE_ECHO_REPLY, looksLikeNobodyOwesMe, NOBODY_OWES_ME_REPLY, matchLoanAsk, LOANS_REPLY } from '../../../lib/ad-flow.js';
 import { matchCloseAccountAsk, closeAccountReply, closeAccountAlert } from '../../../lib/account-closure.js';
 import { getLatestPendingRequest as latestPendingLink, cancelPaymentRequest as cancelPendingLink } from '../../../lib/payment-requests.js';
 import { recentTurns, renderTurns, redactForMemory } from '../../../lib/turns.js';
@@ -1038,7 +1045,11 @@ async function voucherBalanceSummary(account) {
   }
 }
 
-async function renderHome({ from, account }) {
+/**
+ * greeting: the first line instead of "Hi <name>!" (the one-step sign-up's "your account is open");
+ * textOnly: return { text } unlocalised and unsent, for a turn that sends the card inside one message.
+ */
+async function renderHome({ from, account, greeting = null, textOnly = false }) {
   const { balance, displayName } = await getUserBalance(from);
   const vouchers = await voucherBalanceSummary(account);
 
@@ -1076,7 +1087,7 @@ async function renderHome({ from, account }) {
   // One message, one screen: the "bank home". Three separate bubbles read
   // as clutter (user feedback 2026-08-21) and triple the send cost.
   const home =
-    `👋 *Hi ${displayName}!*\n` +
+    `${greeting || `👋 *Hi ${displayName}!*`}\n` +
     `💰 Balance: *${formatMoneyZar(balance)}*\n` +
     (vouchers
       ? `🎟️ Voucher Balance: *${randsShort(vouchers.totalCents)}* (${vouchers.count} OTT voucher${vouchers.count === 1 ? '' : 's'}). Reply "my vouchers"\n`
@@ -1087,6 +1098,7 @@ async function renderHome({ from, account }) {
     `${homeLines({ waId: from, account }).join('\n')}\n\n` +
     `⚡ Quick: ${quickActions[0]} · ${quickActions[1]} · ${quickActions[2]}\n\n` +
     `Just tell me what you need, in any language.`;
+  if (textOnly) return { text: home };
 
   logStructured('home_render', { from, accountId: account.id });
 
@@ -1270,23 +1282,33 @@ async function processMessageInner({ from, text, messageId, profile, sharedConta
 
   console.log(`📊 Account state: ${onboardingState} (new: ${isNewUser})`);
 
+  // C (WAPAY_PAYER_PREREGISTER): a payer pre-registered at a receipt starts with this first message, on any
+  // path: the account's age (the pay-out rules' new-account cap), the funnel and the Growth tab count from now.
+  if (isPayerOrigin(account) && !account.profile?.onboarding?.startedAt) {
+    await markPayerStarted({ account, path: oneStepSignupFor({ waId: from, account }) ? 'ONE_STEP' : 'CLASSIC' });
+  }
+
   // Referrals (docs/REFERRALS.md, 2026-10-20): a message carrying a member's invite code. A new
   // number is stamped with who invited them and the contact is counted before anything is said;
   // a member who sends one is told they already have an account. The friend wrote first, so
   // everything here is a reply; no model call anywhere in it.
+  // Under the one-step sign-up the hook hands back the welcome that names the inviter, and the
+  // onboarding gate below sends it on top of the one message that opens the account.
+  let oneStepLead = null;
   {
     const referralTurn = await handleReferralCodeTurn({ from, account, text, profile, onboardingState }).catch((e) => {
       logStructured('referral_code_error', { from, error: e?.message });
       return null;
     });
-    if (referralTurn) return referralTurn;
+    if (referralTurn?.oneStepLead) oneStepLead = referralTurn;
+    else if (referralTurn) return referralTurn;
   }
 
   // Ad chat flow (docs/AD_CHAT_FLOW.md, 2026-10-18): a person who tapped a
   // click-to-WhatsApp ad is answered from the brief, deterministically, with
   // no model call. Only ad arrivals ever enter; everything else falls through.
   {
-    const adTurn = await handleAdEntryTurn({ from, account, text, profile, referral, onboardingState }).catch((e) => {
+    const adTurn = await handleAdEntryTurn({ from, account, text, profile, referral, onboardingState, messageId }).catch((e) => {
       logStructured('ad_entry_error', { from, error: e?.message });
       return null;
     });
@@ -1301,7 +1323,13 @@ async function processMessageInner({ from, text, messageId, profile, sharedConta
   // (established users, and mid-onboarding states whose OTP/PIN prompts
   // must not eat the code) gets the receipt and stops.
   {
-    const receiptMatch = String(text || '').match(RECEIPT_CODE_PATTERN);
+    // The v2 receipt template's "My receipt" tap arrives with its payload as the text (WAPAY_RECEIPT:PRXXXXXX, webhook).
+    const receiptMatch = String(text || '').match(RECEIPT_CODE_PATTERN) || String(text || '').trim().match(RECEIPT_BUTTON_PAYLOAD);
+    // One-step sign-up (A, or C for a pre-registered payer): a receipt ask from a number with no
+    // finished account opens it in the same message: the receipt, the home card, the terms line.
+    if (receiptMatch && onboardingState !== 'S5_COMPLETED' && oneStepSignupFor({ waId: from, account })) {
+      return await oneStepSignupTurn({ from, account, profile, text, messageId, onboardingState, via: 'RECEIPT', receiptCode: receiptMatch[1].toUpperCase() });
+    }
     if (receiptMatch) {
       await handlePaymentReceiptAsk({ from, code: receiptMatch[1].toUpperCase() });
       if (onboardingState !== 'S0_INITIAL') {
@@ -1330,6 +1358,11 @@ async function processMessageInner({ from, text, messageId, profile, sharedConta
 
   // Handle onboarding flow
   if (onboardingState !== 'S5_COMPLETED') {
+    // One-step sign-up (A, WAPAY_ONBOARDING_ONE_STEP; C for a pre-registered payer; docs/ONBOARDING.md §5):
+    // this message opens the account. A brand-new number, or an S1 to S4 sign-up the switch now completes.
+    if (oneStepSignupFor({ waId: from, account })) {
+      return await oneStepSignupTurn({ from, account, profile, text, messageId, onboardingState, via: oneStepLead ? 'REFERRAL' : isPayerOrigin(account) ? 'PAYER_REPLY' : 'FIRST_MESSAGE', lead: oneStepLead?.oneStepLead || null, recordLead: oneStepLead?.oneStepRecordLead || null });
+    }
     return await handleOnboardingFlow({
       account,
       from,
@@ -1413,6 +1446,8 @@ async function handleSharedContact({ from, account, sharedContact }) {
  */
 async function handleOnboardingFlow({ account, from, text, profile, onboardingState }) {
   const displayName = profile?.name || account.displayName || 'Friend';
+  // B (WAPAY_PIN_ON_DEMAND, docs/ONBOARDING.md §5): no PIN step at sign-up; it is chosen when money first leaves.
+  const deferPin = pinDeferredAtSignupFor(from);
 
   switch (onboardingState) {
     case 'S0_INITIAL':
@@ -1423,15 +1458,19 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
         displayName,
       });
 
-    case 'S1_WELCOME_SENT':
+    case 'S1_WELCOME_SENT': {
       // User responded to welcome - send OTP
-      return await handleS1WelcomeSent({
+      const r1 = await handleS1WelcomeSent({
         accountId: account.id,
         waId: from,
         msisdn: account.msisdn,
         displayName,
         userMessage: text,
+        deferPin,
       });
+      if (deferPin) await stampPinDeferredIfSkipped({ account });
+      return r1;
+    }
 
     case 'S2_OTP_SENT':
       // User entered OTP - verify it
@@ -1444,21 +1483,30 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
         });
       }
       
-      return await handleS2OtpSent({
-        accountId: account.id,
-        waId: from,
-        displayName,
-        userMessage: text,
-      });
+      {
+        const r2 = await handleS2OtpSent({
+          accountId: account.id,
+          waId: from,
+          displayName,
+          userMessage: text,
+          deferPin,
+        });
+        if (deferPin) await stampPinDeferredIfSkipped({ account });
+        return r2;
+      }
 
-    case 'S3_OTP_VERIFIED':
+    case 'S3_OTP_VERIFIED': {
       // User entered PIN - set it
-      return await handleS3OtpVerified({
+      const r3 = await handleS3OtpVerified({
         accountId: account.id,
         waId: from,
         displayName,
         userMessage: text,
+        deferPin,
       });
+      if (deferPin) await stampPinDeferredIfSkipped({ account });
+      return r3;
+    }
 
     case 'S4_PIN_SET': {
       // User accepted consent - complete onboarding
@@ -1484,6 +1532,10 @@ async function handleOnboardingFlow({ account, from, text, profile, onboardingSt
         }
         // Growth: remember the moment and tell Meta (LeadSubmitted) if an ad brought them.
         await growthOnOnboarded({ account }).catch((e) => logStructured('growth_onboarded_hook_failed', { from, error: e?.message }));
+        // B: an account that finished sign-up without a PIN keeps the way to choose one, whatever the switches say later.
+        if (deferPin && !(await hasPIN(account.id).catch(() => true))) {
+          await mergeProfileSubkeyAtomic({ accountId: account.id, key: 'onboarding', patch: { pinDeferred: true } }).catch(() => {});
+        }
       }
       return done;
     }
@@ -1769,7 +1821,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       waId: from,
       text,
       waMessageId: messageId,
-      inPinState: /_PIN$|PIN_RESEND_AUTH|AWAITING_VOUCHER_PIN|^PIN_RESET_/.test(String(state || '')),
+      inPinState: /_PIN$|PIN_RESEND_AUTH|AWAITING_VOUCHER_PIN|^PIN_RESET_/.test(String(state || '')) || /^PIN_SETUP_/.test(String(state || '')),
       // A bank account number or an ID number typed bare in the withdraw
       // flow keeps no digits in memory either.
       secretInput: /^PAYOUT_(ACCOUNT|ID)$/.test(String(state || '')),
@@ -1848,6 +1900,19 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     await updateConversationState(from, null);
     if (agentV3For(from)) return await handleAgentTurn({ from, text, account, messageId, pendingIntent });
     state = null; data = null;
+  }
+
+  // B (WAPAY_PIN_ON_DEMAND): the PIN being chosen owns every word until it ends (lib/pin-setup.js):
+  // never the reset, never the router, and its digits are never logged.
+  if (/^PIN_SETUP_/.test(String(state || ''))) return await handlePinSetupState({ from, account, state, data, text });
+  // B: any other wallet-PIN step reached without a PIN (a purchase while its switch is on): a PIN
+  // typed there, or "forgot PIN", chooses one first, then the step carries on with it.
+  if (state && /_PIN$/.test(String(state)) && pinOnDemandFor({ waId: from, account })) {
+    const { matchPinResetAsk, isWalletPinState } = await import('../../../lib/pin-reset.js');
+    if (isWalletPinState(state) && (/^\s*\d{4,6}\s*$/.test(String(text || '')) || matchPinResetAsk(text, { atPinPrompt: true }))) {
+      const gated = await pinSetupGate({ from, account, nextState: state, nextData: data || {}, notYet: true });
+      if (gated) return gated;
+    }
   }
 
   // Not inside the reset itself, a voucher-code step or a business name (a "New Pin Salon" is a name).
@@ -1966,6 +2031,11 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
 
   // CLOSE MY ACCOUNT (audit 2026-10-19, BUGLOG #125): a person does it; the chat says so once and raises the alert, never a "secure step".
   if (matchCloseAccountAsk(text)) return await handleCloseAccountAsk({ from, account });
+  // Loans (creative review, 2026-10-20): one honest line and the next step, never the model.
+  if (matchLoanAsk(text)) {
+    logStructured('loan_ask', { accountId: account.id });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(LOANS_REPLY, await userLang(account)), kind: 'guard' });
+  }
 
   // BUSINESS SIGN-UP from the chat (founder ask 2026-09-06): "business
   // account" / "register my business" starts the two-question flow for an
@@ -1978,6 +2048,18 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   // INVITE A FRIEND (docs/REFERRALS.md, 2026-10-20): one forwardable message with the member's
   // own link, only when they ask for it, once per ask. Never a reminder, never a nudge.
   if (matchInviteAsk(text)) return await handleInviteAsk({ from, account });
+
+  // B (WAPAY_PIN_ON_DEMAND): "PIN", "set my PIN" or "forgot PIN" from an account that has none (the web
+  // portal sends people here to say *PIN*): the PIN is chosen now. No code and no ID check, because
+  // there is no PIN to replace; an account that has one goes on to the reset below as before.
+  if (pinOnDemandFor({ waId: from, account })) {
+    const { matchPinSetupAsk } = await import('../../../lib/pin-setup.js');
+    const { matchPinResetAsk: resetAsk } = await import('../../../lib/pin-reset.js');
+    if (matchPinSetupAsk(text) || resetAsk(text)) {
+      const gated = await pinSetupGate({ from, account });
+      if (gated) return gated;
+    }
+  }
 
   // "I forgot my PIN" / "Reset pin" / "Me for my password what to reset": the reset itself,
   // never a model's invented command (founder 2026-10-14; Lisa was told "type reset PIN" four times).
@@ -3119,7 +3201,21 @@ async function sendAdReply({ from, account, reply }) {
 
 async function startAdOnboarding({ from, account, profile }) {
   const displayName = profile?.name || account.displayName || 'Friend';
-  return await startOnboardingFromAd({ accountId: account.id, waId: from, msisdn: account.msisdn || from, displayName });
+  const deferPin = pinDeferredAtSignupFor(from);
+  const started = await startOnboardingFromAd({ accountId: account.id, waId: from, msisdn: account.msisdn || from, displayName, deferPin });
+  if (deferPin) await stampPinDeferredIfSkipped({ account });
+  return started;
+}
+
+/**
+ * B: the classic sign-up just skipped its PIN step (WAPAY_PIN_ON_DEMAND). The account is stamped at
+ * that moment, so it keeps the way to choose a PIN even if the switch is turned off before it
+ * finishes. Best effort; reads only when the switch covered the step.
+ */
+async function stampPinDeferredIfSkipped({ account }) {
+  if ((await getOnboardingState(account.id)) !== 'S4_PIN_SET') return;
+  if (await hasPIN(account.id).catch(() => true)) return;
+  await mergeProfileSubkeyAtomic({ accountId: account.id, key: 'onboarding', patch: { pinDeferred: true } }).catch(() => {});
 }
 
 /**
@@ -3142,6 +3238,9 @@ async function handleReferralCodeTurn({ from, account, text, profile, onboarding
   const recorded = await recordReferredContact({ account, code });
   logStructured('referral_contact', { accountId: account.id, ok: recorded.ok, reason: recorded.reason || null, already: !!recorded.already, referrerAccountId: recorded.referrerAccountId || null, state: onboardingState });
   if (!recorded.ok || onboardingState !== 'S0_INITIAL') return null;
+  // One-step sign-up (A): the welcome that names the inviter leads the one message that opens the
+  // account (sent by the onboarding gate, which has the message id); memory keeps "A friend".
+  if (oneStepSignupFor({ waId: from, account })) return { oneStepLead: referredOpenedLead({ inviterFirstName: recorded.inviterFirstName }), oneStepRecordLead: referredOpenedLead({ inviterFirstName: null }) };
   const welcome = referredWelcome({ inviterFirstName: recorded.inviterFirstName });
   await sendWhatsAppText({ to: from, text: welcome, recordAs: referredWelcome({ inviterFirstName: null }), kind: 'flow' });
   return await startAdOnboarding({ from, account, profile });
@@ -3159,13 +3258,13 @@ async function handleInviteAsk({ from, account }) {
  * The ad arrival's turn. Returns a result when it answered, null when the
  * normal path should run. No model call anywhere in here.
  */
-async function handleAdEntryTurn({ from, account, text, profile, referral, onboardingState }) {
+async function handleAdEntryTurn({ from, account, text, profile, referral, onboardingState, messageId = null }) {
   const adAcquired = isAdAcquired(account);
   if (!referral && !adAcquired) return null;
   const { state: convState } = await getConversationState(from);
   // Section 10: "stop" opts out of the one reminder. Never inside a PIN, a
   // PIN reset or a confirm step, where the flow owns every word.
-  const protectedState = /_PIN$|PIN_RESEND_AUTH|AWAITING_VOUCHER_PIN|^PIN_RESET_|CONFIRM/.test(String(convState || ''));
+  const protectedState = /_PIN$|PIN_RESEND_AUTH|AWAITING_VOUCHER_PIN|^PIN_RESET_|^PIN_SETUP_|CONFIRM/.test(String(convState || ''));
   if (adAcquired && !protectedState && matchesStop(text)) {
     await markReminderOptOut({ accountId: account.id }).catch(() => {});
     if (convState === AD_STATES.ENTRY || convState === AD_STATES.FIRST_LINK) await updateConversationState(from, null);
@@ -3183,6 +3282,8 @@ async function handleAdEntryTurn({ from, account, text, profile, referral, onboa
   if (!hasAccount) {
     if (onboardingState !== 'S0_INITIAL') return null; // the OTP, PIN or consent step answers
     if (!referral && convState !== AD_STATES.ENTRY) return null; // not an ad entry turn
+    // One-step sign-up (A): the answer and the first-link question, with the terms line, in the one message that opens the account.
+    if (oneStepSignupFor({ waId: from, account })) return await oneStepSignupTurn({ from, account, profile, text, messageId, onboardingState, via: 'AD', adKind: kind });
     const reply = adEntryReply(kind, { firstName, fee, hasAccount: false });
     if (reply.startOnboarding || PAYOUT_BUTTON_KINDS.includes(kind)) {
       if (reply.startOnboarding) await sendWhatsAppText({ to: from, text: reply.text, kind: 'ad' });
@@ -3210,6 +3311,136 @@ async function handleAdEntryTurn({ from, account, text, profile, referral, onboa
     return await handleWithdrawStart({ from, account, ask: { amountCents: null }, text: 'withdraw' });
   }
   return null;
+}
+
+/* ---------------- One-step sign-up (A, WAPAY_ONBOARDING_ONE_STEP; C's payer reply; docs/ONBOARDING.md §5, 2026-10-22) ---------------- */
+
+/**
+ * The message that opens the account. ONE message (one reply per customer message), no
+ * template, no model call: a lead on top (who invited them, the payer's receipt), then the ad
+ * answer and the first-link question for an ad arrival or the home card for anyone else, then
+ * the terms line. It is sent first, and only a notice WhatsApp accepted becomes consent: then the
+ * account opens (@wapay/auth completeOneStepOnboarding: S5, the consent rows IMPLIED_BY_USE with
+ * this message id, the profile stamp, the audit rows), an ad arrival waits at the first-link
+ * step, and the growth hook records the moment (LeadSubmitted for an ad). No name step (the
+ * WhatsApp profile name) and no PIN (chosen when money first leaves).
+ */
+async function oneStepSignupTurn({ from, account, profile, text = '', messageId = null, onboardingState = null, via = 'FIRST_MESSAGE', adKind = null, lead = null, recordLead = null, receiptCode = null }) {
+  // "stop" as a first word opens nothing: the opt-out is recorded and said once.
+  if (matchesStop(text)) return await handleStopAsk({ from, account });
+  const ad = adKind != null || isAdAcquired(account);
+  const name = profile?.name || (account.displayName && account.displayName !== 'Friend' ? account.displayName : null);
+  // The payer's receipt (C): the code they tapped or asked for, else the link their number paid when it was pre-registered.
+  const code = receiptCode || (isPayerOrigin(account) ? account.profile?.origin?.requestCode || null : null);
+  const receipt = code ? await oneStepReceiptLead({ from, code }) : null;
+  const top = lead || receipt?.line || null;
+  // Memory (what the next turn's model may read) keeps neither the inviter nor the requester by name (golden thread 1).
+  if (!lead && receipt?.memory) recordLead = receipt.memory;
+  let body;
+  if (ad) {
+    body = adOpenedReply(adKind || 'free_text', { firstName: firstNameFrom(name), fee: feeExample(paymentRequestFeeCents) });
+  } else {
+    const card = await renderHome({ from, account, greeting: openedGreeting(name), textOnly: true });
+    body = await localizeOutbound(card.text, await userLang(account));
+  }
+  const { text: message, recordAs } = composeOneStepMessage({ lead: top, body, recordLead });
+  const sent = await sendWhatsAppText({ to: from, text: message, kind: ad ? 'ad' : 'home', ...(recordAs ? { recordAs } : {}) });
+  if (!sent?.ok) {
+    logStructured('one_step_signup_unsent', { from, accountId: account.id, via, error: sent?.error || null });
+    return sent;
+  }
+  const pinDeferred = !(await hasPIN(account.id).catch(() => false));
+  const commit = { accountId: account.id, waMessageId: messageId, noticeMessageId: sent?.data?.messages?.[0]?.id || null, via, pinDeferred, displayName: name };
+  // The notice went out: one more try if the write failed, so "your account is open" stays true.
+  let done = await completeOneStepOnboarding(commit);
+  if (!done?.ok) done = await completeOneStepOnboarding(commit);
+  logStructured('one_step_signup', { from, accountId: account.id, via, ad, fromState: onboardingState, ok: !!done?.ok, already: !!done?.already, receipt: !!receipt, pinDeferred });
+  if (!done?.ok || done.already) return { ok: true, oneStep: false };
+  if (ad) await updateConversationState(from, AD_STATES.FIRST_LINK, { stateSetAt: new Date().toISOString() }).catch(() => {});
+  await growthOnOnboarded({ account }).catch((e) => logStructured('growth_onboarded_hook_failed', { from, error: e?.message }));
+  return { ok: true, oneStep: true };
+}
+
+/**
+ * The payer's receipt on top of the reply that opens their account (C): a paid link reads "You
+ * paid R250 to Thandi on 22 Oct, reference ..."; one not confirmed yet says so; anything else adds
+ * nothing. The PayFast reference only to the number that paid (handlePaymentReceiptAsk's rule).
+ * Returns { line, memory } (memory: the same line without the requester's name), or null.
+ */
+async function oneStepReceiptLead({ from, code }) {
+  try {
+    const request = await getPaymentRequest({ code });
+    if (!request) return null;
+    let label = 'a WaPay user';
+    try {
+      const requester = await prisma.account.findUnique({ where: { id: request.accountId } });
+      label = firstNameFrom(requester?.displayName) || maskedRequesterLabel(requester);
+      if (request.businessId) {
+        const { businessLabelForRequest } = await import('../../../lib/business.js');
+        label = (await businessLabelForRequest({ request })) || label;
+      }
+    } catch {
+      // The name is cosmetic; the receipt stands without it.
+    }
+    if (request.status !== 'PAID' && request.status !== 'PENDING') return null;
+    const intent = await prisma.providerRequest.findUnique({ where: { idemKey: `wapay-payreq-${code}` } }).catch(() => null);
+    const meta = intent?.metadata || {};
+    // "You paid" and the PayFast reference only to the number that paid; anyone else holding the code reads it neutrally.
+    const own = typeof meta.payerMsisdn === 'string' && !!meta.payerMsisdn && normaliseMsisdn(from) === meta.payerMsisdn;
+    if (request.status === 'PENDING') return { line: payerPendingLine({ requesterLabel: label, own }), memory: payerPendingLine({ requesterLabel: null, own }) };
+    const pf = own && typeof request.payerRef === 'string' && request.payerRef.startsWith('PAYFAST:') ? request.payerRef.slice('PAYFAST:'.length) : null;
+    const amountCents = Number.isInteger(meta.grossCents) ? meta.grossCents : request.amountCents;
+    const receipt = { amountCents, paidAt: request.paidAt, reference: pf ? `PF ${pf} · ${code}` : code, own };
+    return { line: payerReceiptLine({ ...receipt, requesterLabel: label }), memory: payerReceiptLine({ ...receipt, requesterLabel: null }) };
+  } catch (error) {
+    logStructured('one_step_receipt_error', { from, error: error?.message });
+    return null;
+  }
+}
+
+/* ---------------- The PIN chosen on demand (B, WAPAY_PIN_ON_DEMAND; lib/pin-setup.js) ---------------- */
+
+/**
+ * At the moment a flow would ask "enter your PIN": an account without one chooses it instead,
+ * once, and the step it interrupted continues in the turn that confirms it. Returns the send
+ * result when it took the turn, else null (the flow asks for the PIN as it always did).
+ */
+async function pinSetupGate({ from, account, nextState = null, nextData = null, notYet = false }) {
+  const { pinSetupGateStep } = await import('../../../lib/pin-setup.js');
+  const step = await pinSetupGateStep({ account, waId: from, nextState, nextData, notYet, hasPin: (id) => hasPIN(id) });
+  if (!step) return null;
+  await updateConversationState(from, step.state, step.data);
+  logStructured('pin_setup_started', { accountId: account.id, resume: nextState || null });
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(step.text, await userLang(account)), kind: 'flow' });
+}
+
+/** One reply inside the PIN setup (PIN_SETUP_NEW / PIN_SETUP_CONFIRM). */
+async function handlePinSetupState({ from, account, state, data, text }) {
+  const { handlePinSetupReply, SWITCHED_LINE } = await import('../../../lib/pin-setup.js');
+  const step = await handlePinSetupReply({ account, state, data, text, deps: { isEscape: isConversationalEscape } });
+  if (step.passthrough) {
+    await updateConversationState(from, null);
+    if (!step.dropped) return await handlePostOnboarding({ account, from, text });
+    // A pay-out or send waited for this PIN: the answer to the new message says it was not made (one message).
+    const switched = await localizeOutbound(SWITCHED_LINE, await userLang(account));
+    const { out, used } = await withLeadLine({ to: from, line: switched }, () => handlePostOnboarding({ account, from, text }));
+    if (!used) await sendWhatsAppText({ to: from, text: switched });
+    return out;
+  }
+  if (step.done && step.resume?.state && step.pin) {
+    // The interrupted step carries on in this turn with the PIN the customer just chose and
+    // confirmed; that step's own verifyPIN issues the proof (golden thread 2.1). It waits at its
+    // PIN prompt first, so anything that stops it short leaves the customer exactly there.
+    logStructured('pin_setup_done', { accountId: account.id, resume: step.resume.state });
+    await updateConversationState(from, step.resume.state, step.resume.data);
+    const line = await localizeOutbound(step.text, await userLang(account));
+    const { out, used } = await withLeadLine({ to: from, line }, () => handleConversationState({ from, text: step.pin, state: step.resume.state, data: step.resume.data, account }));
+    if (!used) await sendWhatsAppText({ to: from, text: line });
+    return out;
+  }
+  if (step.done) logStructured('pin_setup_done', { accountId: account.id, resume: null });
+  await updateConversationState(from, step.state || null, step.data || null);
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(step.text, await userLang(account)), kind: 'flow' });
 }
 
 async function askAccountType({ from, account }) {
@@ -3266,6 +3497,12 @@ async function deliverPayoutStep({ from, account, step }) {
       ? `🪪 Here is your secure identity-check link. It takes about two minutes:\n${k.url}\n\nOnce it clears, say "withdraw" again.`
       : await localizeOutbound(`🪪 I could not start the identity check right now. Please try again a little later.`, await userLang(account));
     return await sendWhatsAppText({ to: from, text: msg });
+  }
+  // B (WAPAY_PIN_ON_DEMAND): a pay-out reaching its PIN step on an account with no PIN chooses one
+  // first, then carries on with it in the same turn (lib/pin-setup.js).
+  if (step.state === 'PAYOUT_PIN') {
+    const gated = await pinSetupGate({ from, account, nextState: 'PAYOUT_PIN', nextData: step.data || {} });
+    if (gated) return gated;
   }
   await updateConversationState(from, step.state || null, step.data || null);
   const msg = step.raw ? step.text : await localizeOutbound(step.text, await userLang(account));
@@ -4740,6 +4977,10 @@ async function handleConversationState({ from, text, state, data, account }) {
     case 'PAYREQ_CONFIRM': {
       const normalized = text.trim().toLowerCase();
       if (/^(yes|yep|yeah|y|sure|ok|okay|confirm|yebo|ewe|ja|ee|eya)$/i.test(normalized)) {
+        // B (WAPAY_PIN_ON_DEMAND): paying someone's link from the balance on an account with no PIN
+        // chooses one first, then pays in the same turn (lib/pin-setup.js).
+        const gated = await pinSetupGate({ from, account, nextState: 'PAYREQ_PIN', nextData: data });
+        if (gated) return gated;
         await updateConversationState(from, 'PAYREQ_PIN', data);
         const pinMsg = await localizeOutbound(`🔐 *Enter Your PIN*\n\nTo pay ${randsShort(data.amountCents)} to ${data.requesterLabel}, please enter your WaPay PIN.`, await userLang(account));
         return await sendWhatsAppText({ to: from, text: pinMsg });
@@ -6659,6 +6900,13 @@ async function handleConversationState({ from, text, state, data, account }) {
           return await startVoucherGiftPreviewAndConfirm({ from, account, amountCents, recipientMsisdn });
         }
 
+        // B (WAPAY_PIN_ON_DEMAND): a send to another person on an account with no PIN chooses one
+        // first, then the send goes in the same turn (lib/pin-setup.js).
+        if (data?.send) {
+          const gated = await pinSetupGate({ from, account, nextState: 'VOUCHER_GIFT_PIN', nextData: { previewId, amountCents, feeCents, recipientMsisdn, send: true } });
+          if (gated) return gated;
+        }
+
         await updateConversationState(from, 'VOUCHER_GIFT_PIN', {
           previewId,
           amountCents,
@@ -7164,6 +7412,7 @@ async function handleAgentTurn({ from, text, account, messageId = null, pendingI
     customerRecord,
     focusKnowledge: null,
     language: profile?.language || null,
+    pinOnDemand: pinOnDemandFor({ waId: from, account }),
   });
   const messages = [
     ...turns.map((t) => ({ role: t.role === 'user' ? 'user' : 'assistant', content: t.role === 'event' ? '[event] ' + t.text : t.text })),

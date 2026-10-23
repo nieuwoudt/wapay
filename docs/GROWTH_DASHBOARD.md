@@ -278,3 +278,13 @@ to be reachable). It is not a bulk rail: one account per call, the account id mu
   asks from the matcher, replies from kind `ops`, and the questions (a question mark or a question
   word). `/api/admin/inbox` reads at most 300 customers and their last day of context;
   `/api/admin/customer-turns` reads up to 1,000 turns of one account. Neither logs text.
+
+## Supplier floats: loads and reconciliation (2026-10-20)
+
+Each float row on the Floats tab can record a load (the founder's transfer to the supplier,
+entered once it cleared at the bank). Loads post `FLOAT_LOAD` to the journal; for the OTT
+pay-out float the row then shows loads, usage (CASHOUT entries' credits to CLEARING:OTT, which
+is the amount paid plus the rail cost), the expected balance and the gap to OTT's live balance.
+A gap of a few rand is the rail-cost estimate against OTT's exact fee; a gap of hundreds means a
+load is missing from the record or a pay-out is missing from the journal. Route:
+`/api/admin/float-load` (GET lists, POST records). Library: `lib/float-loads.js`.
