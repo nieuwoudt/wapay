@@ -118,3 +118,9 @@ test('the check names a missing receipt template, because payers outside their w
   assert.equal(complianceVerdict({ ...base, env: {} }).reasons[0].code, 'NO_RECEIPT_TEMPLATE');
   assert.equal(complianceVerdict({ ...base, env: { WAPAY_TEMPLATE_PAYMENT_RECEIPT: 'wapay_payment_receipt' } }).verdict, 'GREEN');
 });
+
+test('a template setting that names no template on the account is flagged', () => {
+  const v = complianceVerdict({ meta: { ok: true, quality: 'GREEN', canSend: 'AVAILABLE', templates: [{ name: 'wapay_payment_receipt', category: 'UTILITY', status: 'APPROVED' }] }, pulses: { failures: {}, priced: {}, accountEvents: [] }, behaviour: { reminders: 0, stopViolations: 0, complaints: 0, threePlusPct: 0 }, env: { WAPAY_TEMPLATE_PAYMENT_RECEIPT: 'wapay_payment_receipt', WAPAY_TEMPLATE_OPS_ALERT: '<an approved one-parameter utility template>' } });
+  assert.equal(v.verdict, 'AMBER');
+  assert.ok(v.reasons.some((r) => r.code === 'MISSING_TEMPLATE_WAPAY_TEMPLATE_OPS_ALERT'));
+});

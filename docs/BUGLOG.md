@@ -4,6 +4,13 @@
 
 ---
 
+## 138. Paid-link receipts to payers who never wrote to WaPay were dropped by Meta while WaPay counted them as sent
+
+- **Symptom (found 2026-10-23 by the new daily compliance check):** Meta refused messages with 131047 ("more than 24 hours since the customer last replied") in 10 minutes of a single day. Of the 41 receipts sent to payers other than the recipient, 38 went to payers with no open 24-hour window; no payer had become an account holder.
+- **Root cause:** `deliverRequestPaidNotifications` tried a plain text first and treated the API's acceptance as delivery. The Cloud API accepts a plain text outside the window and drops it seconds later on the status webhook (131047), so the approved receipt template, the only rail that reaches someone who never wrote, was never tried. Requester notices had the same shape (5 fell outside the window).
+- **Fix (248f531):** the window is decided before the rail (`serviceWindowOpen`: last message to WaPay, or the account's opening from the person's own first message); outside it, plain text is skipped and Direct Send then the approved template go. tests/payer-registration.test.mjs.
+- **Guard:** the daily compliance check (CHANGELOG 122) raises AMBER at five or more 131047 minutes a day and when `WAPAY_TEMPLATE_PAYMENT_RECEIPT` is unset or names a template Meta does not have. Lesson: on WhatsApp, "sent" is the API's acceptance; delivery is only what the status webhook says.
+
 ## 137. Nothing deployed for twenty hours after the repository went private: Vercel "Deployment was blocked" in four seconds
 
 - **Symptom:** every push after 11:59 UTC on 20 October (3cc45e6, a24f4b9, 41ca29d, 8a5bb24, 12ab276, f56f1fa, a138b30, 25aaac6) got two GitHub commit statuses from Vercel, "Vercel – wapay-api" and "Vercel – wapay-api-vcel", both `failure` with the description "Deployment was blocked", three to four seconds after the push; production stayed on the redeployed de305c4. Re-authorising Vercel's GitHub app changed nothing.
