@@ -1413,7 +1413,7 @@ function DailyLinesStatic({ rows, series }) {
 }
 
 /* The sign-up funnel (2026-10-22, lib/signup-funnel.js): one-step and classic sign-ups side by side, per day. */
-const FUNNEL_COLS = [['opened', 'Opened'], ['finished', 'Finished'], ['finished10m', 'In 10 min'], ['firstLink24h', 'Link in 24 h'], ['firstPaid72h', 'Paid in 72 h'], ['payout72h', 'Pay-out in 72 h']];
+const FUNNEL_COLS = [['opened', 'Opened'], ['finished', 'Finished'], ['finished10m', 'In 10 min'], ['firstLink24h', 'Link in 24 h'], ['firstPaid72h', 'Paid in 72 h'], ['genuinePaid72h', 'Paid by someone else in 72 h'], ['payout72h', 'Pay-out in 72 h']];
 function SignupFunnelCard({ range }) {
   const [f, setF] = useState(null);
   const [err, setErr] = useState('');

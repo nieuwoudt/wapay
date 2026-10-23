@@ -76,9 +76,9 @@ test('the funnel on fixture data: per day, per path, the rates and the summary',
   assert.deepEqual(pick(d2.byPath.CLASSIC), [1, 1, 1, 0, 0, 0], 'c3 finished in 5 min by its consent');
   assert.deepEqual(pick(d2.byPath.ONE_STEP), [3, 3, 2, 1, 1, 1], 'o1, o2, p1; o2 has no finish moment and a late link');
   assert.deepEqual(pick(d2.total), [4, 4, 3, 1, 1, 1]);
-  assert.deepEqual(d1.byPath.CLASSIC.rates, { finished: 50, finished10m: 0, firstLink24h: 50, firstPaid72h: 50, payout72h: 0 });
-  assert.deepEqual(d2.byPath.ONE_STEP.rates, { finished: 100, finished10m: 66.7, firstLink24h: 33.3, firstPaid72h: 33.3, payout72h: 33.3 });
-  assert.deepEqual(d1.byPath.ONE_STEP.rates, { finished: null, finished10m: null, firstLink24h: null, firstPaid72h: null, payout72h: null }, 'nothing opened: no rate, never 0%');
+  assert.deepEqual(d1.byPath.CLASSIC.rates, { finished: 50, finished10m: 0, firstLink24h: 50, firstPaid72h: 50, genuinePaid72h: 0, payout72h: 0 });
+  assert.deepEqual(d2.byPath.ONE_STEP.rates, { finished: 100, finished10m: 66.7, firstLink24h: 33.3, firstPaid72h: 33.3, genuinePaid72h: 0, payout72h: 33.3 });
+  assert.deepEqual(d1.byPath.ONE_STEP.rates, { finished: null, finished10m: null, firstLink24h: null, firstPaid72h: null, genuinePaid72h: null, payout72h: null }, 'nothing opened: no rate, never 0%');
   assert.deepEqual(pick(f.summary.byPath.CLASSIC), [3, 2, 1, 1, 1, 0]);
   assert.deepEqual(pick(f.summary.byPath.ONE_STEP), [3, 3, 2, 1, 1, 1]);
   assert.deepEqual(pick(f.summary.total), [6, 5, 3, 2, 2, 1]);
@@ -91,8 +91,8 @@ test('the funnel on fixture data: per day, per path, the rates and the summary',
 test('a young day is marked, so it is never read as a bad one', () => {
   const f = computeFunnel({ accounts: ACCOUNTS, ...FACTS, ...WINDOW, now: new Date('2026-10-22T12:00:00.000Z') });
   const d2 = f.days[1];
-  assert.deepEqual(d2.complete, { finished10m: true, firstLink24h: false, firstPaid72h: false, payout72h: false });
-  assert.deepEqual(f.days[0].complete, { finished10m: true, firstLink24h: true, firstPaid72h: false, payout72h: false });
+  assert.deepEqual(d2.complete, { finished10m: true, firstLink24h: false, firstPaid72h: false, genuinePaid72h: false, payout72h: false });
+  assert.deepEqual(f.days[0].complete, { finished10m: true, firstLink24h: true, firstPaid72h: false, genuinePaid72h: false, payout72h: false });
 });
 
 test('the window: YYYY-MM-DD, both days included, 14 days by default, a year at most', () => {
@@ -175,4 +175,37 @@ test('the routes and the card: internal key on the funnel, the admin session on 
   for (const src of [internal, admin]) assert.ok(!/msisdn|waId|displayName/.test(src), 'no customer identifier in the routes');
   // Pre-registered payers who never wrote are not counted as contacts on the Growth tab.
   assert.match(read('../pages/api/admin/growth.js'), /WHERE coalesce\(a\."profile"->'origin'->>'kind', ''\) <> 'PAYER' OR \(a\."profile"->'onboarding'->>'startedAt'\) IS NOT NULL/);
+});
+
+test('genuinePaid72h counts only a first link paid by someone else (2026-10-23): own number and unknown payers do not count', async () => {
+  const day = '2026-10-20T08:00:00.000Z';
+  const accounts = [
+    { id: 'g1', waId: '27831110001', createdAt: new Date(day), onboardingState: 'S5_COMPLETED', profile: {} },
+    { id: 'g2', waId: '27831110002', createdAt: new Date(day), onboardingState: 'S5_COMPLETED', profile: {} },
+    { id: 'g3', waId: '27831110003', createdAt: new Date(day), onboardingState: 'S5_COMPLETED', profile: {} },
+  ];
+  const paidAt = new Date('2026-10-20T10:00:00.000Z');
+  const prisma = {
+    account: { findMany: async () => accounts },
+    paymentRequest: {
+      groupBy: async (args) => (args.where.status === 'PAID' ? accounts.map((a) => ({ accountId: a.id, _min: { paidAt } })) : accounts.map((a) => ({ accountId: a.id, _min: { createdAt: new Date(day) } }))),
+      findMany: async () => [
+        { id: 'PRAAAAAA', accountId: 'g1', paidAt, payerRef: 'PAYFAST:1' },
+        { id: 'PRBBBBBB', accountId: 'g2', paidAt, payerRef: 'PAYFAST:2' },
+        { id: 'PRCCCCCC', accountId: 'g3', paidAt, payerRef: 'PAYFAST:3' },
+      ],
+    },
+    providerRequest: {
+      groupBy: async () => [],
+      findMany: async () => [
+        { id: 'pfreq-PRAAAAAA', metadata: { payerMsisdn: '0729990001' } },
+        { id: 'pfreq-PRBBBBBB', metadata: { payerMsisdn: '0831110002' } },
+        { id: 'pfreq-PRCCCCCC', metadata: { payerMsisdn: null } },
+      ],
+    },
+    consent: { groupBy: async () => [] },
+  };
+  const f = await loadFunnel({ prisma, since: new Date('2026-10-20T00:00:00Z'), until: new Date('2026-10-21T00:00:00Z'), now: new Date('2026-10-25T00:00:00Z') });
+  assert.equal(f.summary.total.firstPaid72h, 3, 'any paid link');
+  assert.equal(f.summary.total.genuinePaid72h, 1, 'only g1: someone else paid; g2 gave its own number, g3 none');
 });
