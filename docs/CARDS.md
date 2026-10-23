@@ -258,6 +258,107 @@ Then test online purchases, 3DS, the SMS alerts and how card details arrive. No 
 wallet is involved, so the ledger is untouched. The WhatsApp integration waits for the API
 docs and sandbox.
 
+### 0.9 Staging API v2.1.5, static IPs, products and prices (2026-10-23)
+
+Odette (PayCentral) sent the "Staging Platform API Specification v2.1.5" (34 pages), the
+onboarding document and the white-label deck. Diego Langeveldt is the sales contact and
+Shyanne Hendricks the onboarding coordinator. The documents are not in the repo; this section
+is the working summary. The reply is `EMAIL_TO_PAYCENTRAL_2_STAGING.txt`.
+
+**Products chosen by the founder:** **DigiCentral** (virtual) and **CashCentral+** (physical,
+reloadable, ATM access), with the white-label pack to follow.
+
+**Standard prices (onboarding document; negotiate, do not build on these):**
+
+| Card | Card | Load | Monthly | Other |
+|---|---|---|---|---|
+| DigiCentral | none | 5.00% (R1 to R249,999) down to 3.75% (above R5M), by volume band | none | SMS load alert R1.50; dormancy R15 after 6 months; valid 3 years |
+| CashCentral+ | R50 excl VAT | **R45 incl VAT per load** | R9 incl VAT | Load limit R50,000 a month; PIN reset R13.50; valid 5 years; dormancy R15 |
+| CashCentral | R50 excl VAT | R17 incl VAT | R9 incl VAT | Load limit R25,000 a month |
+| BeyondCentral (international) | R50 excl VAT | 7.5% | R9 | R2.50 per transaction alert; international till use R20 + 1% |
+
+At our ticket size (R50 to R500 loads) both standard models are unusable: R45 on a R200 load
+is 22.5%. The white-label quote must be a flat fee per load or per active card per month.
+
+**Static IP (mandatory).** The API admits only whitelisted IPs ("IP whitelisting as a primary
+security measure").
+- PayCentral's fees: staging R950 excl VAT for 3 months, including an R100 profile load and
+  two cards; production R1,500 a month excl VAT.
+- Vercel functions have no fixed outbound IP by default.
+- **Plan: Vercel Static IPs.** It is a Pro or Enterprise add-on at $100 per project per month
+  plus $0.15 per GB (Vercel pricing and KB, read 2026-10-23). It gives a pair of IPs per active
+  region; ours is `arn1`. No code change.
+- **Trade-off:** the pair comes from a pool shared with other Vercel customers. PayCentral
+  still requires our credentials, so the whitelist is not the only lock.
+- **If PayCentral wants a dedicated address:** use Vercel Secure Compute (Enterprise) or a
+  dedicated static-IP egress proxy used only for PayCentral calls (a small code change: a
+  proxy agent on that client).
+- **Testing:** calls work only from the whitelisted IPs, so staging tests run on Vercel
+  deployments, not on laptops.
+
+**The API (REST/JSON).**
+- **Base URL:** `https://staging-api.paycentral.co.za`; production URL to come.
+- **Auth:** `POST /authenticate` with email and password, which returns a bearer JWT.
+
+| Our need | Endpoint | Notes |
+|---|---|---|
+| Issue a virtual card | `POST /card/virtualAllocate` (cellphoneNumber, firstName, lastName, idOrPassportNumber, loadAmount) | Returns `card_no`, `seq_no`, `expiry_date` **and `secure_code` (the CVV)**. See PCI below |
+| Assign a physical card | `POST /card/allocate` (cardIdentifier of a pre-printed card, names, ID/passport, **emailId required**, cell, address, optional base64 ID and address documents) | Cards come in stock; we allocate them |
+| Add money to a card | `POST /card/load` (cardIdentifier, amount, notes, `reference_no` "any 12 digit (unique)") | The reference is our idempotency handle |
+| Confirm a load after a timeout | `POST /get/auditlog` (reference number) | Returns the original request and response: the status check before any release (BUGLOG #15 pattern) |
+| Move money back from a card | `POST /card/transfertoprofile` (cardIdentifier, amount, notes) | **No reference_no:** not idempotent as specified. Ask for one before using it |
+| Card balance | `GET /card/balance` | "Balance amount in Rands" |
+| History, alerts | `POST /card/cards_statement` (dates DD/MM/YYYY) | Types 0 fee, 1 load, 2 fee (in the example), 3 ATM/POS. **No webhooks are documented**, so alerts mean polling |
+| Freeze / unfreeze | `POST /card/cancel` (stopReasonID: lost, stolen, pending query, consolidate, no longer active, PIN tries, fraud, emergency replacement) / `POST /card/stopcancel` | The ID numbers are not given; ask which ones are reversible |
+| Close a card | `POST /card/deactivate` | |
+| PIN (physical) | `POST /card/resetpin` | |
+| Change the cell number | `POST /cardholder/updatecontact` | PayCentral's SMS alerts go to this number |
+| Cardholder lookup | `GET /card/info` | Returns the **full card number and ID number** |
+| Per-card wallet | `GET /wallet/balance`, `POST /card/wallet_statement`, `POST /card/load_card_from_wallet` | What "wallet" means relative to profile and card is unclear; ask |
+
+Ignore `/card/dunloopallocate` (a client-specific flow) and `/card/uploaddocument` (KYC
+documents per card).
+
+**What the spec changes in section 0.3:**
+
+1. **Card data (PCI).**
+   - `virtualAllocate` returns the CVV, and many calls accept or return the full card number.
+   - Rule: identify cards by `seq_no`, store only `seq_no` and the last four digits, and redact
+     every PayCentral response before it is logged or stored.
+   - **Never store or forward the CVV.** The customer gets the card details from PayCentral
+     directly (SMS), or from a one-time secure page if PayCentral offers one. Never in
+     WhatsApp (invariant 8).
+   - Ask PayCentral to deliver the details itself and to drop the CVV from the response.
+2. **Amounts.** Fields say "Integer ... in Rands", but the examples load "0.1". Confirm that
+   cents are accepted before converting from our integer cents; refuse non-whole-rand loads
+   until then.
+3. **References.**
+   - `reference_no` is described as 12 digits, while the examples show "REF123456789" and a
+     15-digit number.
+   - Derive it deterministically from the load's idemKey, for example 12 digits from a hash.
+     A standalone 12-digit run does not trip the epoch guard.
+   - Ask whether a repeated reference is refused rather than loaded twice.
+4. **Personal data.** Allocation sends the customer's name, ID or passport and cellphone to
+   PayCentral. That needs the main agreement's POPIA terms, the ID read from the vault at the
+   moment of use (golden thread §3), and the customer's consent in the flow.
+5. **No webhooks.** Purchase alerts in WhatsApp need a polling job over active cards
+   (`lib/jobs.js`). Ask for webhooks and the allowed polling rate.
+6. **Email is required** on physical allocation. Most of our customers have none; ask whether
+   it is optional.
+7. **Float.** No profile-balance endpoint is documented. Ask for one: the Mission Control float
+   card and the daily reconciliation need it.
+
+**Next steps:**
+1. Founder: enable Vercel Static IPs and send the pair to PayCentral.
+2. Founder: send the reply (`EMAIL_TO_PAYCENTRAL_2_STAGING.txt`) with the signed onboarding
+   document, an ID copy and the CIPC documents, and pay the R950 staging fee.
+3. Build, once the staging credentials and whitelist are live, on a branch behind
+   `WAPAY_CARDS_ENABLED` and an allowlist:
+   - `packages/providers/paycentral`;
+   - the card-load flow on the two-phase pattern with audit-log recovery;
+   - "get a card", "add money to my card", "my card", freeze;
+   - the float card.
+
 ---
 
 ## Paymentology direct (2026-10-15; the route at 30,000 cards)

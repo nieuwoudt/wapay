@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-10-23 (125) — Cards: PayCentral's staging API read, products chosen (DigiCentral + CashCentral+), static IP plan, reply to Odette (docs only)
+
+PayCentral sent the staging API specification v2.1.5, its onboarding document and the
+white-label deck, plus the static-IP whitelisting fees: staging R950 excl VAT for 3 months,
+production R1,500 a month excl VAT. `docs/CARDS.md` §0.9 covers:
+- the standard prices, which are unusable at our ticket size (DigiCentral 5% to 3.75%,
+  CashCentral+ R45 per load), so we negotiate the white-label pack;
+- the static IP plan: Vercel Static IPs on `arn1` ($100 per project per month, a pair from a
+  shared pool), with a dedicated proxy or Secure Compute as the fallback;
+- every endpoint mapped to our flows;
+- what the spec changes: the CVV comes back from `virtualAllocate`, so cards are keyed on
+  `seq_no` and responses redacted; cents still to confirm; `reference_no` and `/get/auditlog`
+  as the load's idempotency and timeout recovery; the deduct call has no reference; no
+  webhooks, so alerts mean polling; email required on physical allocation; no profile-balance
+  endpoint.
+
+`EMAIL_TO_PAYCENTRAL_2_STAGING.txt` is the reply: staging go-ahead, products, the white-label
+ask and 14 API questions. The onboarding form was pre-filled for the founder (not in the
+repo). CAPABILITIES' PayCentral row updated.
+
+---
+
 ## 2026-10-20 (124) — Cards: PayCentral's NDA reviewed and filled, the product deck read; the cards branch brought up to main (docs only)
 
 PayCentral sent its standard NDA and product deck and told the founder WaPay can start issuing
