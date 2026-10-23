@@ -4,6 +4,14 @@
 
 ---
 
+## 140. Stolen cards were cashed out through payment links: R20,466 with fake payer details on 22 October, R43,551 paid out before PayFast stopped card payments
+
+- **Symptom (found 2026-10-24 from PayFast's transaction export):** from 22:22 SAST on 22 October PayFast accepted no typed-card payment; only Apple Pay went through (R107, then the founder's R20). The export showed why: 61 pay-link payments with fake payer details (34 throwaway e-mails at example.com, drsonny.org and keyboard-mash domains, made-up cells such as 073 123 4567, one cell paying 10 links in an hour), R20,466, to 16 accounts opened that day, none from the ad; plus 13 payments, R36,300, where people paid their own links by card (the R3,000 pattern; one customer said the cards were international).
+- **Money:** the 24 accounts behind those payments were credited R56,342 net; R43,551 had been paid out to banks or cash by 24 October; R10,865 was still in their balances; about R11,300 circulated between them by sends.
+- **Root cause:** a payment link takes any card with any payer details and the money can leave the same day: no velocity limit per payer or per new account, no hold on card-funded money, KYC only from R3,000 in one pay-out or R10,000 a day, so many R300 payments and small pay-outs stayed under every line.
+- **Fix:** 28 accounts frozen for pay-outs and sends on 24 October (founder's instruction; list in `~/Projects/wapay-ops/frozen-2026-10-24.json`; receiving stays open); founder to confirm PayFast's block and discuss chargebacks and any reserve.
+- **Guard (open, founder's decision):** card-funded money in an account younger than seven days waits 72 hours, or needs the ID check, before it can be paid out; refuse a payer number that is the recipient's own; cap card payments per payer and per new account per hour. Apple Pay still works at PayFast, so the same ring can return through new accounts until one of these is in.
+
 ## 139. Turning Adumo on for its live tests would have sent every pay-page payer to Adumo
 
 - **Symptom (found 2026-10-23 before any env changed):** the go-live plan enables Adumo with `WAPAY_PRIMARY_CARD_RAIL=PAYFAST` so that only the founder's R5 tests use it. The pay page would still have shown "Pay by card, Instant EFT or Capitec Pay" (Adumo) as its main button, with PayFast as "Other ways to pay", for every customer link, before any live payment had reconciled and before SHB had accepted the pay-link model in writing.
