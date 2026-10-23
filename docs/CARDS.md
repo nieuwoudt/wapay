@@ -267,8 +267,11 @@ is the working summary. The reply is `EMAIL_TO_PAYCENTRAL_2_STAGING.txt`.
 
 **Products chosen by the founder:** **DigiCentral** (virtual) and **CashCentral+** (physical,
 reloadable, ATM access), with the white-label pack to follow. **FuelCentral** (fuel card) was
-added the same day to power the UniFuel fuel product (`docs/UNIFUEL_INTEGRATION.md`); it uses
-the same API.
+added the same day to power the UniFuel fuel product (`docs/UNIFUEL_INTEGRATION.md`). On the
+documents it is a **physical** chip-and-PIN card (chip card fee, PIN reset fee, fuel-station swipes)
+listed under "International & Filtering", so probably limited to fuel merchants. DigiCentral is the
+only virtual card offered. Whether a virtual FuelCentral exists, whether its spend is fuel-only and
+whether it uses the same API calls is email question o.
 
 **Standard prices (onboarding document; negotiate, do not build on these):**
 

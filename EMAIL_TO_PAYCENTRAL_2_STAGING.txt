@@ -42,6 +42,7 @@ k. How does a DigiCentral cardholder complete 3-D Secure for online purchases?
 l. Can merchant categories such as gambling and cryptocurrency be blocked for our cards?
 m. Can CashCentral+ cards be couriered to each cardholder, or are they dispatched to us in bulk?
 n. What is the card "wallet" (/wallet/balance, /card/load_card_from_wallet), relative to our profile and the card?
+o. Is FuelCentral available as a virtual card as well, or physical only? Is its spending limited to fuel stations, and is it issued, loaded and managed through the same API calls as the other cards?
 
 Thank you, and I look forward to working with you all.
 
