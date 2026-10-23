@@ -966,29 +966,29 @@ async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCe
     });
     const to = waIdFromMsisdn(targetMsisdn);
 
-    // sendWhatsAppTemplate never throws; failure is signalled via ok:false.
-    const templateRes = await sendWhatsAppTemplate({
-      to,
-      templateName: note.templateName,
-      language: note.languageCode,
-      components: [
-        { type: 'body', parameters: note.bodyParams.map((text) => ({ type: 'text', text })) },
-      ],
-    });
-
-    if (!templateRes?.ok) {
-      const textRes = await sendWhatsAppText({ to, text: note.fallbackText });
-      if (!textRes?.ok) {
-        logStructured('gift_notify_failed', {
-          accountId: account?.id,
-          product,
-          amountCents,
-          recipientMasked: maskMsisdn(targetMsisdn),
-          templateError: templateRes?.error || 'TEMPLATE_SEND_FAILED',
-          textError: textRes?.error || 'TEXT_SEND_FAILED',
-        });
-        return;
-      }
+    // WaPay never starts a conversation (2026-10-23, after Meta's "Sending spam" restriction):
+    // the recipient hears from WaPay only when they wrote to us in the last 24 hours, and then as
+    // one plain message. Someone who never wrote is told by the sender (the sender's receipt says
+    // so). The old path sent them a MARKETING template (wapay_voucher_received) out of nowhere.
+    const recipientAccount = await prisma.account.findFirst({ where: { waId: to }, select: { id: true } }).catch(() => null);
+    const lastInbound = recipientAccount
+      ? await prisma.conversationTurn.findFirst({ where: { accountId: recipientAccount.id, role: 'user' }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }).catch(() => null)
+      : null;
+    const windowOpen = !!(lastInbound && Date.now() - new Date(lastInbound.createdAt).getTime() < 24 * 60 * 60 * 1000);
+    if (!windowOpen) {
+      logStructured('gift_notify_skipped_no_window', { accountId: account?.id, product, amountCents, recipientMasked: maskMsisdn(targetMsisdn) });
+      return;
+    }
+    const textRes = await sendWhatsAppText({ to, text: note.fallbackText });
+    if (!textRes?.ok) {
+      logStructured('gift_notify_failed', {
+        accountId: account?.id,
+        product,
+        amountCents,
+        recipientMasked: maskMsisdn(targetMsisdn),
+        textError: textRes?.error || 'TEXT_SEND_FAILED',
+      });
+      return;
     }
 
     logStructured('gift_sent', {

@@ -13,6 +13,6 @@
 // Export template seeding and catalog functions
 export { seedWhatsappTemplates } from './seedTemplates.js';
 export { buildCatalog, resolveLanguage, isApproved, getAvailableTemplates, getAvailableLanguages } from './templateCatalog.js';
-export { sendWhatsAppTemplate, sendWhatsAppText, sendWhatsAppCtaUrl, buildCtaUrlPayload, sendWhatsAppReplyButtons, buildReplyButtonsPayload, sendWhatsAppUtilityDirect, directSendEnabled, authTemplateComponents, sendTypingIndicator, outboundSendCount, runWithSendScope } from './send.js';
+export { sendWhatsAppTemplate, sendWhatsAppText, sendWhatsAppCtaUrl, buildCtaUrlPayload, sendWhatsAppReplyButtons, buildReplyButtonsPayload, sendWhatsAppUtilityDirect, directSendEnabled, authTemplateComponents, sendTypingIndicator, outboundSendCount, runWithSendScope, MARKETING_TEMPLATES, marketingTemplateBlocked, marketingTemplatesAllowed } from './send.js';
 export type { SendTemplateArgs, SendTextArgs, SendCtaUrlArgs } from './send.js';
 

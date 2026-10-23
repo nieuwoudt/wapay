@@ -392,6 +392,11 @@ export default async function handler(req, res) {
                   // answerable from the database.
                   const errCode = status.errors?.[0]?.code;
                   await webhookPulse(`status-${status.status || 'unknown'}${errCode ? `-${errCode}` : ''}`);
+                  // What Meta bills each message as (marketing / utility / authentication / service /
+                  // referral_conversion), once per message on its "sent" status: the daily compliance
+                  // check reads these, and any MARKETING is a red line (2026-10-23, lib/meta-compliance.js).
+                  const priceCat = String(status.pricing?.category || '').toLowerCase().replace(/[^a-z_]/g, '').slice(0, 30);
+                  if (status.status === 'sent' && priceCat) await webhookPulse(`price-${priceCat}`);
                   // Meta's own words for a failure (title + error_data.details), so a
                   // lock or a billing stop is diagnosed from the database instead of
                   // guessed from the code alone (2026-10-21, the 131031 morning,

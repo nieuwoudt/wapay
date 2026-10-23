@@ -1989,6 +1989,13 @@ function QualityCard({ tick = 0 }) {
           </div>
           <div className="vs">{q && q.delivery && q.delivery.verdict !== 'UNKNOWN' ? (q.delivery.verdict === 'OK' ? `delivery ok · 24 h: ${q.delivery.last24h.ok} delivered, ${q.delivery.last24h.failed} failed` : `${q.delivery.verdict}${q.delivery.code ? ` · Meta code ${q.delivery.code}` : ''}${q.delivery.last24h?.firstFailAt ? ` · since ${dt(q.delivery.last24h.firstFailAt)}` : ''}`) : 'from Meta\'s delivery statuses on the webhook'}</div>
         </div>
+        <div className="card" style={{ borderColor: q && q.compliance && q.compliance.verdict === 'RED' ? 'var(--crit)' : undefined }}>
+          <div className="k">Meta compliance, last 24 h</div>
+          <div className="v" style={{ color: q && q.compliance ? (q.compliance.verdict === 'GREEN' ? 'var(--good)' : q.compliance.verdict === 'AMBER' ? 'var(--warn, #e3b341)' : q.compliance.verdict === 'RED' ? 'var(--crit)' : 'var(--ink3)') : undefined }}>
+            {!q ? '…' : q.compliance ? q.compliance.verdict : 'unknown'}
+          </div>
+          <div className="vs">{q && q.compliance ? (q.compliance.reasons && q.compliance.reasons.length ? q.compliance.reasons.slice(0, 3).map((r) => r.text).join(' ') : 'every rule held: no marketing, no reminders, stop honoured, one reply per message') : 'checked daily; alerts ops when anything drifts'}</div>
+        </div>
         <div className="card"><div className="k">Support contact on the profile</div><div className="v" style={{ color: q && q.profile ? (q.profile.hasSupportContact ? 'var(--good)' : 'var(--crit)') : undefined }}>{q && q.profile ? (q.profile.hasSupportContact ? 'yes' : 'missing') : '…'}</div><div className="vs">{q && q.profile ? [q.profile.email, ...(q.profile.websites || [])].filter(Boolean).join(' · ') || 'the Messaging Policy asks for an e-mail or website' : ''}</div></div>
       </div>
     </div>

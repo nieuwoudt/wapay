@@ -216,6 +216,31 @@ export default async function handler(req, res) {
       console.error(JSON.stringify({ type: 'cron_whatsapp_quality_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
     }
 
+    try {
+      // The daily WhatsApp compliance check (lib/meta-compliance.js, founder 2026-10-23) runs in
+      // its own invocation, like the audit below: fire it with the key and stop waiting after 4 s.
+      let complianceHandoff = null;
+      try {
+        const ckey = process.env.WAPAY_INTERNAL_API_KEY || '';
+        if (ckey) {
+          const { apiUrl: complianceUrl } = await import('../../../lib/api-url.js');
+          const cc = new AbortController();
+          const ct = setTimeout(() => cc.abort(), 4000);
+          try {
+            const r = await fetch(complianceUrl('/api/internal/compliance-check?alert=1', req), { method: 'GET', headers: { 'x-internal-api-key': ckey }, signal: cc.signal });
+            complianceHandoff = { ok: r.ok, handoff: true, status: r.status };
+          } catch (e) {
+            complianceHandoff = e?.name === 'AbortError' ? { ok: true, handoff: true, status: 'RUNNING' } : { ok: false, error: e?.message || String(e) };
+          } finally { clearTimeout(ct); }
+        }
+      } catch (e) {
+        console.error(JSON.stringify({ type: 'cron_compliance_handoff_failed', error: e?.message || String(e) }));
+      }
+      console.log(JSON.stringify({ type: 'cron_compliance_handoff', ...(complianceHandoff || { ok: false, skipped: 'NO_KEY' }) }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_compliance_handoff_failed', error: e?.message || String(e) }));
+    }
+
     // The daily conversation audit (docs/audits/DAILY_AUDIT.md, 2026-10-19):
     // the conversations since the last run swept by the rules and read by the
     // reviewer, findings stored with their recurrence, the ops summary sent.

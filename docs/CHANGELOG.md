@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-10-23 (122) — Guardrails so Meta has nothing to restrict: no marketing template can leave, nobody hears from WaPay first, a daily compliance check
+
+Founder 2026-10-23: "make sure the guardrails are in place so that Meta never, ever blocks us again".
+The audit of every send path found two live marketing paths: the onboarding welcome `onboarding_step_1`
+(MARKETING) to every new person who writes without an ad, and the recipient notice of a money, airtime or
+voucher send, which sent the MARKETING template `wapay_voucher_received` to people who had never written
+to WaPay. Fixes: `sendWhatsAppTemplate` refuses every MARKETING template on the account
+(`MARKETING_TEMPLATES`, `WAPAY_ALLOW_MARKETING_TEMPLATES` to lift); the recipient notice is one plain text
+inside the recipient's own 24-hour window or nothing, and the sender's receipt asks them to let the person
+know. The webhook records Meta's pricing category per message (`price-<category>`). `lib/meta-compliance.js`
++ `GET /api/internal/compliance-check` measure every rule daily from Meta's view and our own behaviour,
+e-mail a summary, alert ops on WhatsApp for a new reason, and feed a Health-tab card; the 02:00 cron hands it
+off to its own invocation. docs/WHATSAPP_POLICY_COMPLIANCE.md has the rules and thresholds.
+tests/meta-compliance.test.mjs. Also submitted the UTILITY template `wapay_payment_receipt_v2` (in review).
+
 ## 2026-10-22 (121) — One-step sign-up, the PIN on demand, the payer's reply, and the sign-up funnel (switches, default off)
 
 The founder's brief of 22 October (`docs/briefs/ONE_STEP_ONBOARDING_BRIEF.md`): of 739 ad arrivals since

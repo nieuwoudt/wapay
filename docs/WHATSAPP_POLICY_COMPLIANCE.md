@@ -76,3 +76,35 @@ A restriction shows first in Meta's delivery statuses, not in our logs: the API 
 ## 2026-10-21 addendum: the 30-day restriction and what changed
 
 Meta restricted the number for "Sending spam" from 20 October 21:30 UTC for 30 days (no replies to customers). Review requested 21 October. Two onboarding templates Meta files under MARKETING (`consent_terms_`, `welcome_new_user_account_activation`) are now off by default (`WAPAY_ONBOARDING_MARKETING_TEMPLATES`), replaced by one plain line each inside the customer's own window. Where the enforcement shows: Business Support Home → the WhatsApp account's Account overview (the Health Status API and the portfolio issues page do not show it).
+
+## 2026-10-23: guardrails in code and the daily check
+
+**In code (cannot be bypassed by any feature):**
+- **No marketing template can be sent.** `MARKETING_TEMPLATES` in `packages/whatsapp/src/send.ts` lists every
+  template Meta files as MARKETING on WaPay's account (ten as of 23 October); `sendWhatsAppTemplate` refuses them
+  before any network call (`MARKETING_TEMPLATE_BLOCKED`). `WAPAY_ALLOW_MARKETING_TEMPLATES=on` lifts it; never
+  while the quality rating is not GREEN. The onboarding welcome (`onboarding_step_1`) now falls back to one plain
+  text inside the customer's window.
+- **Nobody hears from WaPay unless they wrote first.** The money/airtime/voucher recipient notice used to send the
+  MARKETING template `wapay_voucher_received` to people who had never written to WaPay. It now sends one plain text
+  only when the recipient wrote in the last 24 hours; otherwise nothing, and the sender's receipt says "WaPay does
+  not message them, so let them know you sent it."
+- New templates can only be created as UTILITY or AUTHENTICATION (`/api/internal/template-create`).
+
+**Every day (`lib/meta-compliance.js`, `GET /api/internal/compliance-check`, run by the 02:00 UTC cron):**
+- Meta's view: quality rating, messaging limit tier (and whether it fell), number health, every template's category
+  and status; RED if a template the code sends is filed as MARKETING, AMBER for a new MARKETING template not yet on
+  the block list or a paused template.
+- What Meta billed: the webhook records each message's pricing category (`price-<category>` pulse rows); any
+  MARKETING message is RED.
+- Meta's refusals: 131031 restricted, 131042 billing, 131049 marketing limit (RED); 131047 outside the window (AMBER
+  from five minutes a day); account events (RED).
+- Our behaviour over the last 24 hours, ops numbers and QA numbers excluded: reminders (must be 0), messages after a
+  stop (must be 0), complaint words (AMBER from three), customer messages that got three or more replies (AMBER above
+  8%; 4.8% on 23 October).
+- One summary e-mail a day; a WhatsApp alert to ops when the verdict is not GREEN and a reason is new since yesterday.
+  The Health tab shows the verdict live ("Meta compliance, last 24 h").
+
+**What no code can promise:** Meta decides on people's reports and can change its rules. These guardrails keep
+WaPay's own behaviour inside every rule and raise the alarm the first day anything drifts; the delivery stall
+check (every ten minutes) catches a restriction within minutes.
