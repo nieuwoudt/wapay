@@ -322,7 +322,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
                 type="submit"
                 name="rail"
                 value={adumo ? 'adumo' : 'payfast'}
-                style={{ ...styles.btn, ...(numberLooksOk ? styles.cardReady : styles.primary), marginTop: 10 }}
+                style={{ ...styles.btn, ...(numberLooksOk ? styles.cardReady : styles.secondary), marginTop: 10 }}
               >
                 {adumo ? `Pay ${rands(amountCents)} by card, Instant EFT or Capitec Pay` : `Pay ${rands(amountCents)} by card or instant EFT`}
               </button>
@@ -338,7 +338,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
             </div>
             <div style={styles.fine}>
               No fees for you: you pay exactly {rands(amountCents)}. Payments are processed securely by PayFast{adumo ? ' or Adumo (Nedbank)' : ''}; no WaPay account is needed.
-              Your number is used for your WhatsApp receipt.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
+              Your number is used to send your receipt on WhatsApp and to offer you your own free WaPay, which you're welcome to ignore.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
             </div>
             <div style={styles.fine}>
               Have a WaPay account? <a href="https://app.wapay.co.za" style={{ color: '#359853', fontWeight: 600 }}>Log in at app.wapay.co.za</a> to see your balance, get paid and pay out.
