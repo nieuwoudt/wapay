@@ -11,6 +11,75 @@ import { getPrisma } from '@wapay/domain';
 
 export type ConsentType = 'TERMS_AND_CONDITIONS' | 'PRIVACY_POLICY' | 'MARKETING';
 
+/** The terms and privacy versions every sign-up path records (the classic "I accept" writes the same). */
+export const TERMS_VERSION = 'v1.0';
+export const PRIVACY_VERSION = 'v1.0';
+export const TERMS_URL = 'https://wapay.co.za/legal/terms';
+/** How the one-step sign-up's consent was given: by carrying on after the notice. */
+export const IMPLIED_BY_USE = 'IMPLIED_BY_USE';
+
+/**
+ * Consent by continuing (one-step sign-up, WAPAY_ONBOARDING_ONE_STEP,
+ * 2026-10-22). The reply to the customer's first message ended with "By using
+ * WaPay you agree to our Terms & Privacy Policy: <TERMS_URL>", and WhatsApp
+ * accepted it before this runs. Written:
+ *   - two consent rows, TERMS_AND_CONDITIONS and PRIVACY_POLICY, granted, this
+ *     version, whose userAgent carries the evidence: "IMPLIED_BY_USE wa:<inbound
+ *     message id>" (the table has no note column; a web consent keeps its
+ *     browser there), grantedAt now;
+ *   - one audit row CONSENT_IMPLIED with the inbound message id in its own
+ *     column and, in metadata, the method, both versions, the URL, the notice's
+ *     outbound message id, the consent row ids and the time.
+ * Throws when a write fails, so the caller's transaction opens nothing: an
+ * account never becomes active without its consent on file. `prisma` is the
+ * transaction client when called inside one.
+ */
+export async function recordImpliedConsent(args: {
+  accountId: string;
+  waMessageId?: string | null;
+  noticeMessageId?: string | null;
+  via?: string | null;
+  now?: Date;
+  prisma?: any;
+}): Promise<{ consentIds: string[]; auditId: string }> {
+  const db = args.prisma || getPrisma();
+  const now = args.now || new Date();
+  const inbound = args.waMessageId ? String(args.waMessageId).slice(0, 200) : null;
+  const evidence = `${IMPLIED_BY_USE} wa:${inbound || 'unknown'}`;
+  const stamp = () => `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const rows: Array<{ type: ConsentType; version: string }> = [
+    { type: 'TERMS_AND_CONDITIONS', version: TERMS_VERSION },
+    { type: 'PRIVACY_POLICY', version: PRIVACY_VERSION },
+  ];
+  const consentIds: string[] = [];
+  for (const row of rows) {
+    const consent = await db.consent.create({
+      data: { id: `consent_${stamp()}`, accountId: args.accountId, consentType: row.type, granted: true, version: row.version, userAgent: evidence, grantedAt: now },
+    });
+    consentIds.push(consent.id);
+  }
+  const audit = await db.auditLog.create({
+    data: {
+      id: `audit_${stamp()}`,
+      accountId: args.accountId,
+      event: 'CONSENT_IMPLIED',
+      waMessageId: inbound,
+      metadata: {
+        method: IMPLIED_BY_USE,
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
+        termsUrl: TERMS_URL,
+        noticeMessageId: args.noticeMessageId ? String(args.noticeMessageId).slice(0, 200) : null,
+        consentIds,
+        via: args.via || null,
+        at: now.toISOString(),
+      },
+      timestamp: now,
+    },
+  });
+  return { consentIds, auditId: audit.id };
+}
+
 /**
  * Record consent
  */

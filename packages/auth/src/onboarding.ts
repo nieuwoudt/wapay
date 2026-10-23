@@ -16,7 +16,7 @@ import { getPrisma } from '@wapay/domain';
 import { sendWhatsAppTemplate, sendWhatsAppText } from '@wapay/whatsapp';
 import { sendOTP, verifyOTP } from './otp.js';
 import { setPIN, validatePINFormat, resetPIN, isPINLocked } from './pin.js';
-import { recordConsent, hasRequiredConsents } from './consent.js';
+import { recordConsent, hasRequiredConsents, recordImpliedConsent, TERMS_VERSION } from './consent.js';
 import { logAuditEvent } from './audit.js';
 
 export type OnboardingState =
@@ -108,6 +108,16 @@ async function sendPinCreationPrompt(args: { waId: string; displayName: string }
 }
 
 /**
+ * The consent step when the PIN is deferred (WAPAY_PIN_ON_DEMAND, 2026-10-22):
+ * no PIN at sign-up, so no "PIN set" line, and the PIN is named as what it is
+ * now, something chosen the first time money leaves. Always the plain line: the
+ * consent template speaks of a PIN that was never set.
+ */
+export function deferredPinConsentText(displayName: string, { codeVerified = false }: { codeVerified?: boolean } = {}): string {
+  return `${codeVerified ? '✅ Code verified!\n\n' : ''}Last step, ${displayName}: please read our Terms & Privacy Policy at https://wapay.co.za/legal/terms and reply *I accept* to activate your account. You choose your WaPay PIN later, the first time you pay out or send money.`;
+}
+
+/**
  * S0 → S1: Send welcome template (ONLY send once)
  */
 export async function handleS0Initial(args: {
@@ -181,15 +191,16 @@ export async function startOnboardingFromAd(args: {
   waId: string;
   msisdn: string;
   displayName: string;
+  deferPin?: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
-  const { accountId, waId, msisdn, displayName } = args;
+  const { accountId, waId, msisdn, displayName, deferPin = false } = args;
   try {
     await transitionState({ accountId, from: 'S0_INITIAL', to: 'S1_WELCOME_SENT', metadata: { adEntry: true, welcomeSkipped: true } });
   } catch (error) {
     console.error('❌ startOnboardingFromAd: transition failed', error);
     return { ok: false, error: 'STATE' };
   }
-  return handleS1WelcomeSent({ accountId, waId, msisdn, displayName, userMessage: 'continue' });
+  return handleS1WelcomeSent({ accountId, waId, msisdn, displayName, userMessage: 'continue', deferPin });
 }
 
 export async function handleS1WelcomeSent(args: {
@@ -198,9 +209,11 @@ export async function handleS1WelcomeSent(args: {
   msisdn: string;
   displayName: string;
   userMessage: string;
+  /** WAPAY_PIN_ON_DEMAND covers this number: no PIN step at sign-up. */
+  deferPin?: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
-  const { accountId, waId, msisdn, displayName, userMessage } = args;
-  
+  const { accountId, waId, msisdn, displayName, userMessage, deferPin = false } = args;
+
   try {
     console.log(`📝 S1 → S2: User responded: "${userMessage}"`);
     
@@ -213,7 +226,14 @@ export async function handleS1WelcomeSent(args: {
       // User said something else - provide guidance (but don't block them)
       console.log(`⚠️ User message doesn't match continue words, but proceeding anyway: "${userMessage}"`);
     }
-    
+
+    if (deferPin && onboardingOtpDisabled()) {
+      // WAPAY_PIN_ON_DEMAND (2026-10-22): no OTP and no PIN at sign-up; the consent step is next.
+      await sendWhatsAppText({ to: waId, text: deferredPinConsentText(displayName) });
+      await transitionState({ accountId, from: 'S1_WELCOME_SENT', to: 'S4_PIN_SET', metadata: { otpSkipped: true, pinDeferred: true } });
+      return { ok: true };
+    }
+
     if (onboardingOtpDisabled()) {
       console.log(`⏭️ OTP step skipped (WAPAY_ONBOARDING_OTP=off) for ${displayName}`);
       await sendPinCreationPrompt({ waId, displayName });
@@ -293,8 +313,10 @@ export async function handleS2OtpSent(args: {
   waId: string;
   displayName: string;
   userMessage: string;
+  /** WAPAY_PIN_ON_DEMAND covers this number: no PIN step at sign-up. */
+  deferPin?: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
-  const { accountId, waId, displayName, userMessage } = args;
+  const { accountId, waId, displayName, userMessage, deferPin = false } = args;
   
   try {
     console.log(`📝 S2 → S3: Verifying OTP: ${userMessage.substring(0, 2)}****`);
@@ -329,7 +351,14 @@ export async function handleS2OtpSent(args: {
     }
     
     console.log(`✅ OTP verified successfully for ${displayName}`);
-    
+
+    if (deferPin) {
+      // WAPAY_PIN_ON_DEMAND (2026-10-22): no PIN at sign-up; the consent step is next.
+      await sendWhatsAppText({ to: waId, text: deferredPinConsentText(displayName, { codeVerified: true }) });
+      await transitionState({ accountId, from: 'S2_OTP_SENT', to: 'S4_PIN_SET', metadata: { pinDeferred: true } });
+      return { ok: true };
+    }
+
     // Send PIN creation template (onboarding_step_3_pin_creation)
     console.log(`📤 Sending PIN creation template to ${displayName}`);
     const pinResult = await sendWhatsAppTemplate({
@@ -386,17 +415,25 @@ export async function handleS3OtpVerified(args: {
   waId: string;
   displayName: string;
   userMessage: string;
+  /** WAPAY_PIN_ON_DEMAND covers this number: a PIN typed here is kept, anything else moves on without one. */
+  deferPin?: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
-  const { accountId, waId, displayName, userMessage } = args;
-  
+  const { accountId, waId, displayName, userMessage, deferPin = false } = args;
+
   try {
     console.log(`📝 S3 → S4: Setting PIN`);
-    
+
     // Extract PIN (remove spaces/dashes)
     const pin = userMessage.replace(/[\s-]/g, '');
-    
+
     // Validate PIN format
     const validation = validatePINFormat(pin);
+    if (!validation.valid && deferPin) {
+      // WAPAY_PIN_ON_DEMAND (2026-10-22): the PIN can wait until money first leaves; consent is next.
+      await sendWhatsAppText({ to: waId, text: deferredPinConsentText(displayName) });
+      await transitionState({ accountId, from: 'S3_OTP_VERIFIED', to: 'S4_PIN_SET', metadata: { pinDeferred: true } });
+      return { ok: true };
+    }
     if (!validation.valid) {
       await sendWhatsAppText({
         to: waId,
@@ -564,6 +601,74 @@ export async function handleS4PinSet(args: {
       ok: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
+  }
+}
+
+/**
+ * One-step sign-up (WAPAY_ONBOARDING_ONE_STEP, and a payer pre-registered under
+ * WAPAY_PAYER_PREREGISTER; 2026-10-22, docs/ONBOARDING.md §5). The processor calls
+ * this only after its reply to the customer's message, the one that ends with
+ * the terms line, was accepted by WhatsApp, so a consent row never exists for a
+ * notice that did not go out. One transaction:
+ *   - S5_COMPLETED (status ACTIVE) from whatever state the account was in: a
+ *     brand-new S0, or an S1–S4 sign-up the switch now completes;
+ *   - profile.onboarding: path (kept when the row already carries one, else
+ *     ONE_STEP) and startedAt (kept, else now), then completedAt, completedVia
+ *     ONE_STEP, consent IMPLIED_BY_USE, termsVersion, pinDeferred and via; and the
+ *     WhatsApp profile name when the row only holds the "Friend" placeholder (a
+ *     payer pre-registered before they ever wrote);
+ *   - the consent rows and the CONSENT_IMPLIED audit row (recordImpliedConsent);
+ *   - the STATE_TRANSITION and ONBOARDING_COMPLETED audit rows.
+ * No name step, no PIN, no "I accept": the PIN is chosen when money first leaves.
+ * Replay-safe: an account already at S5 is left alone ({ already: true }).
+ * `prisma` is injectable for tests.
+ */
+export async function completeOneStepOnboarding(args: {
+  accountId: string;
+  waMessageId?: string | null;
+  noticeMessageId?: string | null;
+  via?: string;
+  pinDeferred?: boolean;
+  displayName?: string | null;
+  now?: Date;
+  prisma?: any;
+}): Promise<{ ok: boolean; already?: boolean; from?: string; consentIds?: string[]; error?: string }> {
+  const db = args.prisma || getPrisma();
+  const now = args.now || new Date();
+  const via = String(args.via || 'FIRST_MESSAGE').slice(0, 40);
+  const pinDeferred = args.pinDeferred !== false;
+  const name = String(args.displayName || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 60);
+  const inbound = args.waMessageId ? String(args.waMessageId).slice(0, 200) : null;
+  const auditId = () => `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  try {
+    return await db.$transaction(async (tx: any) => {
+      const acc = await tx.account.findUnique({ where: { id: args.accountId }, select: { id: true, onboardingState: true } });
+      if (!acc) return { ok: false, error: 'NO_ACCOUNT' };
+      const from = (acc.onboardingState || 'S0_INITIAL') as OnboardingState;
+      if (from === 'S5_COMPLETED') return { ok: true, already: true, from };
+      const defaults = JSON.stringify({ path: 'ONE_STEP', startedAt: now.toISOString() });
+      const completion = JSON.stringify({ completedAt: now.toISOString(), completedVia: 'ONE_STEP', consent: 'IMPLIED_BY_USE', termsVersion: TERMS_VERSION, pinDeferred, via });
+      const moved = await tx.$executeRaw`
+        UPDATE "Account"
+        SET "onboardingState" = 'S5_COMPLETED',
+            status = 'ACTIVE',
+            "displayName" = CASE WHEN ("displayName" IS NULL OR "displayName" = 'Friend') AND ${name} <> '' THEN ${name} ELSE "displayName" END,
+            profile = jsonb_set(
+              coalesce(profile, '{}'::jsonb),
+              '{onboarding}',
+              ${defaults}::jsonb || coalesce(profile->'onboarding', '{}'::jsonb) || ${completion}::jsonb,
+              true)
+        WHERE id = ${args.accountId} AND "onboardingState" IS DISTINCT FROM 'S5_COMPLETED'`;
+      if (!moved) return { ok: true, already: true, from };
+      const consent = await recordImpliedConsent({ accountId: args.accountId, waMessageId: inbound, noticeMessageId: args.noticeMessageId, via, now, prisma: tx });
+      await tx.auditLog.create({ data: { id: auditId(), accountId: args.accountId, event: 'STATE_TRANSITION', waMessageId: inbound, metadata: { from, to: 'S5_COMPLETED', oneStep: true, via, pinDeferred }, timestamp: now } });
+      await tx.auditLog.create({ data: { id: auditId(), accountId: args.accountId, event: 'ONBOARDING_COMPLETED', waMessageId: inbound, metadata: { path: 'ONE_STEP', via, pinDeferred, consentIds: consent.consentIds }, timestamp: now } });
+      console.log(`🎉 One-step sign-up completed: ${args.accountId} ${from} → S5_COMPLETED (${via})`);
+      return { ok: true, from, consentIds: consent.consentIds };
+    });
+  } catch (error) {
+    console.error(JSON.stringify({ type: 'one_step_commit_failed', accountId: args.accountId, error: error instanceof Error ? error.message : 'Unknown error' }));
+    return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 

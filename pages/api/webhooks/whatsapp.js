@@ -299,7 +299,11 @@ export default async function handler(req, res) {
                       })
                     );
 
-                    await runTurn({ text: buttonText || buttonPayload || 'continue' });
+                    // The v2 receipt template's "My receipt" tap (WAPAY_PAYER_PREREGISTER, 2026-10-22) carries the
+                    // request code in its payload: that is the turn's text, so the receipt it asks for is known.
+                    // Every other button keeps its title, as before.
+                    const receiptTap = /^WAPAY_RECEIPT:PR[A-HJKMNP-Z]{6}$/.test(String(buttonPayload));
+                    await runTurn({ text: receiptTap ? buttonPayload : buttonText || buttonPayload || 'continue' });
                   }
 
                   // Interactive messages (button_reply, list_reply, product selection)
@@ -316,7 +320,9 @@ export default async function handler(req, res) {
                         JSON.stringify({ id: buttonId, title: buttonTitle })
                       );
 
-                      await runTurn({ text: buttonTitle || buttonId || 'continue' });
+                      // The same receipt payload, should it ever come back as an interactive reply id.
+                      const receiptTap = /^WAPAY_RECEIPT:PR[A-HJKMNP-Z]{6}$/.test(String(buttonId));
+                      await runTurn({ text: receiptTap ? buttonId : buttonTitle || buttonId || 'continue' });
                     }
 
                     if (interactiveType === 'list_reply') {

@@ -4,6 +4,46 @@
 
 ---
 
+## 2026-10-22 (121) — One-step sign-up, the PIN on demand, the payer's reply, and the sign-up funnel (switches, default off)
+
+The founder's brief of 22 October (`docs/briefs/ONE_STEP_ONBOARDING_BRIEF.md`): of 739 ad arrivals since
+18 October, 177 never answered the welcome, 79 stopped at the PIN step and 32 at the consent step. Three
+switches, each `on` or a comma list of numbers, all unset by default, with the chat byte-identical while
+unset (docs/ONBOARDING.md §5, `lib/onboarding-flags.js`):
+
+- **A, `WAPAY_ONBOARDING_ONE_STEP`**: the first message opens the account in ONE message (the ad answer and
+  the first-link question, or the home card, then "By using WaPay you agree to our Terms & Privacy Policy:
+  https://wapay.co.za/legal/terms"). Sent first; only then `completeOneStepOnboarding` (auth package) moves
+  the account to S5 with two consent rows `IMPLIED_BY_USE wa:<inbound message id>`, an audit row
+  `CONSENT_IMPLIED`, the profile stamp and the audit trail, in one transaction. S1 to S4 accounts complete
+  the same way on their next message. No template, no model call, no PIN.
+- **B, `WAPAY_PIN_ON_DEMAND`**: no PIN at sign-up (the classic flow skips its PIN step); at the pay-out's,
+  the send's or the paid link's PIN step an account with no PIN chooses one (twice), then the step continues
+  with it in the same turn through its own `verifyPIN` (`lib/pin-setup.js`; "PIN set" rides on the step's
+  reply via `withLeadLine` in `lib/say.js`). `setPIN` is the only store and never overwrites a PIN; "PIN"
+  starts it on its own. The web portal's failed login says "Set your WaPay PIN in the WhatsApp chat first
+  (say *PIN*), then log in here." in the same words for every failure; the reset-by-ID never sets a first
+  PIN. The agent prompt and the registry describe the PIN as set on the first pay-out or send.
+- **C, `WAPAY_PAYER_PREREGISTER`**: a card payer's number with no account gets an S0 record with
+  `profile.origin = { kind: 'PAYER', requestCode, paidAt }` (`lib/payer-preregister.js`, POPIA note in the
+  code); their first message, or their tap on the v2 receipt's **My receipt** (payload `WAPAY_RECEIPT:<code>`,
+  handed over by the webhook as the text), opens the account with "🧾 You paid R250 to Thandi on 22 Oct,
+  reference …" on top. The v2 template is specified in `docs/templates/wapay_payment_receipt_v2.md` (UTILITY,
+  not created here) and goes only when `WAPAY_TEMPLATE_PAYMENT_RECEIPT_V2` names it and C covers the payer.
+  Pre-registered payers who never wrote are kept out of the Growth tab's contacts; a payer's first message
+  starts the account (`createdAt` and `profile.onboarding.startedAt`), so the new-account pay-out cap counts
+  from then; "You paid" only to the number that paid.
+- **D, always on**: every new account is stamped `profile.onboarding.path` (`ONE_STEP` | `CLASSIC`, older =
+  CLASSIC) and `startedAt`; `GET /api/internal/funnel?since&until` (internal key) gives per day and path the
+  accounts opened, finished, finished in 10 minutes, first link in 24 hours, first link paid in 72 hours,
+  pay-out in 72 hours, with rates and a summary (`lib/signup-funnel.js`); a "Sign-up funnel" card on the
+  Growth tab (`/api/admin/signup-funnel`); one line in the nightly audit summary with yesterday's finished
+  rate by path. `GET /api/internal/flags` shows the three switches as counts.
+
+Tests: `tests/one-step-onboarding.test.mjs`, `tests/pin-on-demand.test.mjs`, `tests/payer-preregister.test.mjs`,
+`tests/signup-funnel.test.mjs`; harness scenarios 9 to 11 in `tests/e2e/chat-qa.mjs`. Golden thread 2.14.
+The founder's end-to-end script: `docs/testing/one-step-onboarding-2026-10-22.md`. Branch `feat/one-step-onboarding`.
+
 ## 2026-10-22 (120) — The float morning: a probe, a throttle, and the web line on every home card
 
 The pay-out float ran empty on 21 October at 15:27 UTC after seven pay-outs in a day and stayed
