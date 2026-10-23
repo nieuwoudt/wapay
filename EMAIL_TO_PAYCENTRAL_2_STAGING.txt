@@ -22,7 +22,7 @@ Our platform runs on Vercel, so our API calls leave through a fixed pair of stat
 Please confirm that the staging fee covers both addresses, and that production (R1,500 per month excluding VAT) will whitelist the same pair.
 
 2. Products and onboarding
-We would like the standard costing for CashCentral+ (physical) and DigiCentral (virtual) for now. Shyanne, the completed and signed onboarding document is attached, with a copy of my ID and our company registration documents. The signed NDA is attached as well.
+We would like the standard costing for CashCentral+ (physical) and DigiCentral (virtual) for our wallet customers, and FuelCentral for our UniFuel fuel product, for now. Shyanne, the completed and signed onboarding document is attached, with a copy of my ID and our company registration documents. The signed NDA is attached as well.
 
 3. White-label pack
 What we are building is the white-label solution we discussed: WaPay-branded cards that our customers request, load and manage inside WaPay on WhatsApp, through your API. Our customers load small amounts, typically R50 to R500. At that size a load fee of 4% to 5%, or R45 per load on CashCentral+, does not work for consumers. Please price the white-label pack with a flat fee per load or per active card per month, and include card art, the SMS sender name and the minimum order for branded cards.

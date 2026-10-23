@@ -266,7 +266,9 @@ Shyanne Hendricks the onboarding coordinator. The documents are not in the repo;
 is the working summary. The reply is `EMAIL_TO_PAYCENTRAL_2_STAGING.txt`.
 
 **Products chosen by the founder:** **DigiCentral** (virtual) and **CashCentral+** (physical,
-reloadable, ATM access), with the white-label pack to follow.
+reloadable, ATM access), with the white-label pack to follow. **FuelCentral** (fuel card) was
+added the same day to power the UniFuel fuel product (`docs/UNIFUEL_INTEGRATION.md`); it uses
+the same API.
 
 **Standard prices (onboarding document; negotiate, do not build on these):**
 
@@ -275,6 +277,7 @@ reloadable, ATM access), with the white-label pack to follow.
 | DigiCentral | none | 5.00% (R1 to R249,999) down to 3.75% (above R5M), by volume band | none | SMS load alert R1.50; dormancy R15 after 6 months; valid 3 years |
 | CashCentral+ | R50 excl VAT | **R45 incl VAT per load** | R9 incl VAT | Load limit R50,000 a month; PIN reset R13.50; valid 5 years; dormancy R15 |
 | CashCentral | R50 excl VAT | R17 incl VAT | R9 incl VAT | Load limit R25,000 a month |
+| FuelCentral | R50 excl VAT | R25 incl VAT per load | none | Fuel station swipes free; SMS load alert R1.50; load limit R25,000 a month; valid 5 years; dormancy R15 after 12 months |
 | BeyondCentral (international) | R50 excl VAT | 7.5% | R9 | R2.50 per transaction alert; international till use R20 + 1% |
 
 At our ticket size (R50 to R500 loads) both standard models are unusable: R45 on a R200 load

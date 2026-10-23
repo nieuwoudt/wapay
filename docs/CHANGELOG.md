@@ -22,7 +22,7 @@ production R1,500 a month excl VAT. `docs/CARDS.md` §0.9 covers:
 
 `EMAIL_TO_PAYCENTRAL_2_STAGING.txt` is the reply: staging go-ahead, products, the white-label
 ask and 14 API questions. The onboarding form was pre-filled for the founder (not in the
-repo). CAPABILITIES' PayCentral row updated.
+repo). FuelCentral was added the same day to power UniFuel. CAPABILITIES' PayCentral row updated.
 
 ---
 
