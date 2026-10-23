@@ -4,6 +4,94 @@
 
 ---
 
+## 2026-10-23 (125) — Cards: PayCentral's staging API read, products chosen (DigiCentral + CashCentral+), static IP plan, reply to Odette (docs only)
+
+PayCentral sent the staging API specification v2.1.5, its onboarding document and the
+white-label deck, plus the static-IP whitelisting fees: staging R950 excl VAT for 3 months,
+production R1,500 a month excl VAT. `docs/CARDS.md` §0.9 covers:
+- the standard prices, which are unusable at our ticket size (DigiCentral 5% to 3.75%,
+  CashCentral+ R45 per load), so we negotiate the white-label pack;
+- the static IP plan: Vercel Static IPs on `arn1` ($100 per project per month, a pair from a
+  shared pool), with a dedicated proxy or Secure Compute as the fallback;
+- every endpoint mapped to our flows;
+- what the spec changes: the CVV comes back from `virtualAllocate`, so cards are keyed on
+  `seq_no` and responses redacted; cents still to confirm; `reference_no` and `/get/auditlog`
+  as the load's idempotency and timeout recovery; the deduct call has no reference; no
+  webhooks, so alerts mean polling; email required on physical allocation; no profile-balance
+  endpoint.
+
+`EMAIL_TO_PAYCENTRAL_2_STAGING.txt` is the reply: staging go-ahead, products, the white-label
+ask and 17 API questions. The onboarding form was pre-filled for the founder (not in the
+repo). Products as decided the same day: DigiCentral and CashCentral first, CashCentral+ and BeyondCentral for selected customers, FuelCentral as a standalone UniFuel test. CAPABILITIES' PayCentral row updated.
+
+---
+
+## 2026-10-20 (124) — Cards: PayCentral's NDA reviewed and filled, the product deck read; the cards branch brought up to main (docs only)
+
+PayCentral sent its standard NDA and product deck and told the founder WaPay can start issuing
+virtual and physical cards. `docs/CARDS.md` §0.8 records:
+- the NDA's terms: mutual, perpetual, uncapped mutual indemnity, AFSA arbitration in
+  Johannesburg, changes only by hand signature, advisors allowed, no exclusivity, not a POPIA
+  agreement;
+- what was filled in for WaPay. The filled PDF is not in the repo;
+- the deck's facts: Bank Zero now listed beside Standard Bank; seven products including
+  FuelCentral; physical cards dispatched in bulk to the client; cardholders assigned with ID or
+  passport; PayCentral-branded SMS alerts, app and support;
+- four new open questions, and a no-code pilot through the portal with company money.
+
+CAPABILITIES' PayCentral row updated. The branch merged `main` (the credentials scrub and
+pay-out rules). This branch's entries are renumbered after main's (first 88 and 89, then 109 to 111, now 122 to 124), the same way the scrub's were.
+
+---
+
+## 2026-10-16 (123) — Cards: the route is PayCentral (Paymentology direct needs 30,000 cards); plan rewritten for a pre-funded card (docs only)
+
+On the founder's call Paymentology set a 30,000-card minimum for direct work and referred
+WaPay to PayCentral. PayCentral is a South African programme manager on Paymentology's
+processing, with Standard Bank as issuer, virtual (DigiCentral) and physical (CashCentral)
+Mastercard cards, a one-card minimum and its own API. `docs/CARDS.md` section 0:
+- what PayCentral is, and what changes against the Paymentology plan;
+- the model: cards are pre-funded, so the card is a destination we load from the wallet with
+  the payout-style two-phase flow, not a rail that spends our balance. The authorisation
+  endpoint, STIP, the hold lifecycle work, the PaySecure page and SFTP all drop out;
+- new ledger builders, and a loaded card treated as money out under the payouts counsel brief;
+- the published fees: 4% to 5% per virtual load, which our flat-fee model cannot carry, so
+  negotiate;
+- branding, the sandbox, and the next steps.
+
+`EMAIL_TO_PAYCENTRAL_1_ONBOARDING.txt` is the first email, with 17 questions. The Paymentology
+email is marked superseded. CAPABILITIES lists PayCentral as the current card route and
+Paymentology direct as parked. Their sites are blocked from this environment, so the research
+is search-sourced and labelled.
+
+---
+
+## 2026-10-15 (122) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
+
+The founder asked whether WaPay can issue customers virtual cards through Paymentology,
+how it maps onto the product, and what to send Paymentology's sales form.
+`docs/CARDS.md`:
+- the parties: Paymentology processes, Bank Zero is the sponsor through the April 2026
+  alliance, Mastercard is the scheme;
+- the balance decision: ActiveFAST, so our ledger approves each authorisation and there is one
+  balance, against PassiveFAST, a separate card balance;
+- the regulatory and funds questions for counsel and Bank Zero, including the wallet's
+  closed-loop framing and identity checks being off for withdrawals;
+- every FAST message mapped onto `reserveHold`, new `adjustHold` and `captureFromHold`, and
+  `postEntry`;
+- the gaps: the one-shot hold, forced posts, idemKeys from TID/RID against the epoch guard, a
+  verified cardholder identity, the authorisation endpoint's cold-start latency, a
+  browser-decrypted PaySecure card page, client-hosted SFTP reports, 3DS without SMS, and
+  alert template costs;
+- the founder's architecture brief reconciled against the codebase; branding (yes, with Bank
+  Zero and Mastercard approval of the art); commercials (none published); a gated build plan.
+
+`EMAIL_TO_PAYMENTOLOGY_1_ONBOARDING.txt` holds the form text (long and short) and a 22-question
+follow-up email. Paymentology's sites were blocked by this session's network policy, so their
+pages were read through search extracts and every fact carries its source. CAPABILITIES lists
+Paymentology as discovery. No code changed.
+
+---
 ## 2026-10-22 (121) — One-step sign-up, the PIN on demand, the payer's reply, and the sign-up funnel (switches, default off)
 
 The founder's brief of 22 October (`docs/briefs/ONE_STEP_ONBOARDING_BRIEF.md`): of 739 ad arrivals since
