@@ -126,8 +126,10 @@ test('checkout: the receipt destination rides the SIGNED PayFast session (custom
 });
 
 test('checkout: return URL is ?r=1, cancel URL stays bare, redirect is 303', () => {
-  assert.match(checkoutSource, /returnUrl: `\$\{base\}\/pay\/\$\{code\}\?r=1`/);
-  assert.match(checkoutSource, /cancelUrl: `\$\{base\}\/pay\/\$\{code\}`/);
+  assert.match(checkoutSource, /returnUrl: `\$\{payBase\}\/pay\/\$\{code\}\?r=1`/);
+  assert.match(checkoutSource, /const payBase = String\(process\.env\.PAYLINK_BASE_URL \|\| ''\)/, 'payers return to the pay link address, not the deployment address (2026-10-24)');
+  assert.match(checkoutSource, /notifyUrl: `\$\{base\}\/api\/payfast\/itn`/, 'the server-to-server notice stays on the API base');
+  assert.match(checkoutSource, /cancelUrl: `\$\{payBase\}\/pay\/\$\{code\}`/);
   assert.match(checkoutSource, /res\.redirect\(303, checkoutUrl\)/);
 });
 

@@ -161,6 +161,8 @@ export default async function handler(req, res) {
   );
 
   const base = String(process.env.APP_BASE_URL || '').replace(/\/+$/, '');
+  // Payer-facing addresses use the pay link's own host (2026-10-24); see the return URLs below.
+  const payBase = String(process.env.PAYLINK_BASE_URL || '').trim().replace(/\/+$/, '') || base;
 
   if (rail === 'ADUMO') {
     // One merchant reference per ATTEMPT (a declined try must not collide
@@ -204,8 +206,11 @@ export default async function handler(req, res) {
     // ?r=1 = "back from PayFast": the page shows a confirming state with no
     // pay buttons while the ITN is in flight (double-charge guard). The
     // cancel URL stays bare so a cancelled payer gets the buttons back.
-    returnUrl: `${base}/pay/${code}?r=1`,
-    cancelUrl: `${base}/pay/${code}`,
+    // The payer comes back to the pay link's own address (pleasepayme.co.za), never to the
+    // API's deployment address (founder 2026-10-24: payers landed on wapay-api-finfy-ai.vercel.app
+    // after paying). PayFast's server-to-server notify stays on the API base.
+    returnUrl: `${payBase}/pay/${code}?r=1`,
+    cancelUrl: `${payBase}/pay/${code}`,
     notifyUrl: `${base}/api/payfast/itn`,
   });
 
