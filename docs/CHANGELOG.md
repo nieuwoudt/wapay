@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-10-24 (124) — Global pay-out hold: nothing leaves WaPay until the founder reopens pay-outs
+
+Founder, 24 October, after the stolen-card cash-out (BUGLOG #140): "don't do any more payouts until I say we
+can". `lib/payout-hold.js` is one switch for every pay-out route. A row `payout-hold:global` in
+`processed_messages` means held; no job purges that table by age, so the hold stays until it is lifted on
+purpose. `requestPayout` refuses with `PAYOUT_HOLD` right after the per-account freeze (a frozen account keeps
+its own words) and before the pay-out rules, the idempotency replay, any ledger move and any rail call. The
+chat's withdraw flow does not start, and a flow in progress ends at its next reply (saving details after a
+pay-out the rail already accepted carries on). The web app shows the pause on the pay-out screen and refuses
+the check and the request with 423. The operator pay-out lists `PAYOUT_HOLD` as its first blocker. The
+business portal answers 503 with its own line. The customer copy makes no time promise. The read is cached for
+five seconds per database client and fails closed: if the switch cannot be read, pay-outs are held.
+
+`GET /api/internal/payout-hold` reads it. `POST { held, by, reason }` switches it, and every switch writes a
+log row (`payout-hold:log:<iso>|on|<by>|<reason>`), so who reopened pay-outs, and why, stays in the database
+rather than in function logs that expire. `/api/internal/flags` shows `payoutHold`. Getting paid, sends between
+members, and the reconcile sweep (which only asks OTT for a status and never submits again) are untouched.
+Switched on in production at 23:07 UTC on 23 October (01:07 SAST on 24 October), before the deploy, so the new
+code found it on.
+
+Tests: Prisma loads the fast copy's `.env` by itself, so a test that uses the default client reads the
+production database. Five withdraw-flow test files now pin the hold off with `_pinPayoutHoldForTests(false)`, a
+test-only seam that no environment variable reaches and that a source scan proves application code never
+calls. The switch route's test only ever sends bodies that are refused or that switch the hold on, so no
+regression can lift the real hold. `tests/payout-hold.test.mjs` (9 tests). Full suite 1354/1354 with the
+production hold on; build green.
+
 ## 2026-10-23 (123) — Adumo ready for the live R5 tests: the pay page follows the primary rail, one price on every rail, the production run sheet
 
 SHB/Adumo approved WaPay on 23 October (merchant WAPAY, no 4741443, MCC 4814). Going live is env changes plus a

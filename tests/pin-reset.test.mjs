@@ -12,6 +12,9 @@
  * never sent. Adversarial review of 2026-10-14 folded in.
  */
 import test from 'node:test';
+// The global pay-out hold (lib/payout-hold.js) is read from production through Prisma's own .env
+// loading; these tests are about the withdraw flow, so the hold is pinned off for this file.
+(await import('../lib/payout-hold.js'))._pinPayoutHoldForTests(false);
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

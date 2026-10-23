@@ -1175,7 +1175,7 @@ function Payouts() {
       else if (r.error === 'KYC_REQUIRED') setErr('Pay-outs need identity verification first. Ask WaPay to send you the verification link on WhatsApp.');
       else if (r.error === 'INSUFFICIENT_FUNDS') setErr(`Not enough balance: ${R(r.totalCents || quote.totalCents)} is needed including the fee.`);
       else if (r.error === 'BAD_RECIPIENT') setErr(`Please fill in the recipient's ${String(r.field || 'details').replace('_', ' ')}.`);
-      else setErr(r.error === 'DISABLED' ? 'Pay-outs are not switched on yet.' : r.error === 'NO_PROVIDER' ? 'That pay-out method is not available right now.' : `The pay-out did not go through (${r.error || 'error'}). Nothing has left your balance.`);
+      else setErr(r.error === 'DISABLED' ? 'Pay-outs are not switched on yet.' : r.error === 'PAYOUT_HOLD' ? 'Pay-outs are paused while we run safety checks. Nothing has left your balance.' : r.error === 'NO_PROVIDER' ? 'That pay-out method is not available right now.' : `The pay-out did not go through (${r.error || 'error'}). Nothing has left your balance.`);
     } catch { setErr('No connection. Try again.'); } finally { setBusy(false); }
   };
   const hist = st.history || [];

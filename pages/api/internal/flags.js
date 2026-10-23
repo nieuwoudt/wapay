@@ -19,6 +19,7 @@ import { appAuthConfigured } from '../../../lib/app-auth.js';
 import { configuredAppHost } from '../../../lib/app-host.js';
 import { bannerFor, supportEmail } from '../../../lib/app-portal.js';
 import { onboardingFlagsReadout } from '../../../lib/onboarding-flags.js';
+import { readPayoutHold } from '../../../lib/payout-hold.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
@@ -26,6 +27,7 @@ export default async function handler(req, res) {
   if (!requireInternalAuth(req, res)) return;
   const env = process.env;
   const quality = await readWhatsAppQuality().catch(() => null);
+  const hold = await readPayoutHold().catch(() => null);
   return res.status(200).json({
     ok: true,
     commit: env.VERCEL_GIT_COMMIT_SHA ? String(env.VERCEL_GIT_COMMIT_SHA).slice(0, 7) : null,
@@ -36,6 +38,8 @@ export default async function handler(req, res) {
     vasLive: { airtime: VAS_LIVE.AIRTIME, data: VAS_LIVE.DATA, electricity: VAS_LIVE.ELECTRICITY, ...Object.fromEntries(Object.keys(RAILS).map((r) => [r, isRailLive(r)])) },
     fuelLive: isWicodeLive(),
     withdrawLive: payoutLive(),
+    // The global pay-out hold (founder 2026-10-24): on until the founder lifts it.
+    payoutHold: hold ? { held: hold.held, since: hold.since, last: hold.last } : null,
     opsAlertRecipients: opsAlertRecipients().length,
     adminHost: !!(env.WAPAY_ADMIN_HOST || '').trim(),
     // The personal web portal (2026-10-21): signs in only with a session secret; the banner is on until switched off.

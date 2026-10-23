@@ -75,7 +75,7 @@ export default async function handler(req, res) {
         businessId: business.id,
         authorization: step.proof || null,
       });
-      const status = out.ok ? 200 : out.error === 'KYC_REQUIRED' ? 403 : out.error === 'INSUFFICIENT_FUNDS' ? 402 : ['DISABLED', 'NOT_CONFIGURED', 'NO_PROVIDER'].includes(out.error) ? 503 : 400;
+      const status = out.ok ? 200 : out.error === 'KYC_REQUIRED' ? 403 : out.error === 'INSUFFICIENT_FUNDS' ? 402 : ['DISABLED', 'NOT_CONFIGURED', 'NO_PROVIDER', 'PAYOUT_HOLD'].includes(out.error) ? 503 : 400;
       console.log(JSON.stringify({ type: 'business_payout', businessId: business.id, via: step.via, ok: out.ok, status: out.status || out.error, reference: out.reference || null }));
       return res.status(status).json(out);
     }
