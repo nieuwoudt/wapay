@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-10-23 (123) — Adumo ready for the live R5 tests: the pay page follows the primary rail, one price on every rail, the production run sheet
+
+SHB/Adumo approved WaPay on 23 October (merchant WAPAY, no 4741443, MCC 4814). Going live is env changes plus a
+Redeploy, but enabling Adumo for the tests (`WAPAY_ADUMO_ENABLED=true`, `WAPAY_PRIMARY_CARD_RAIL=PAYFAST`) would
+have put the Adumo button in front of every payer, because the pay page asked only whether Adumo was enabled
+(BUGLOG #139). It now offers Adumo only when Adumo is the primary rail; tests reach it through
+`/api/pay/checkout?code=<CODE>&rail=adumo`. Founder ruling: the requester pays the same fee on every rail, so
+`cardRailFee('ADUMO')` defaults to the PayFast fee (R2.30 + 4.20%, free under R50) instead of R1 + 2.5%;
+`WAPAY_ADUMO_FEE_*` still override. Money Map 1.4: Adumo rows at the new price, foreign card and Capitec Pay
+rows added, Ozow and Capitec Pay costs from the signed application, every Adumo cost still PROPOSED until SHB
+puts the MSC in writing. `scripts/adumo-live-check.mjs` (read-only) reconciles a test link across the request,
+the intent, the `LOAD_ADUMO` entry and Adumo's `getState`; `docs/testing/adumo-production-2026-10-23.md` is the
+run sheet; `docs/ADUMO.md` sections 1, 3, 5 and 8 (portal settings, identifiers, open SHB items). White
+W-mark for the hosted page's green header: `marketing/brand/wapay-mark-256-white.png`. Verified on a local
+build against a pending link: PayFast primary shows the PayFast button only, Adumo primary shows both.
+
 ## 2026-10-23 (122) — Guardrails so Meta has nothing to restrict: no marketing template can leave, nobody hears from WaPay first, a daily compliance check
 
 Founder 2026-10-23: "make sure the guardrails are in place so that Meta never, ever blocks us again".

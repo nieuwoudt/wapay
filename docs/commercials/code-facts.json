@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-04T08:23:59.671Z",
-  "build": "bea9856",
+  "generatedAt": "2026-10-23T09:46:33.203Z",
+  "build": "bc7fc6e",
   "vatBps": 1500,
   "feeStyle": "FLAT",
   "deposit": {
@@ -15,8 +15,8 @@
       "fixedCents": 230
     },
     "ADUMO": {
-      "bps": 250,
-      "fixedCents": 100
+      "bps": 420,
+      "fixedCents": 230
     }
   },
   "payreqFreeBelowCents": 5000,
@@ -219,7 +219,7 @@
       "depositFeeCents": 1100,
       "paymentRequestFeeCents": {
         "PAYFAST": 1070,
-        "ADUMO": 600
+        "ADUMO": 1070
       },
       "cashout": {
         "PAYAT": {
@@ -275,7 +275,7 @@
       "depositFeeCents": 2400,
       "paymentRequestFeeCents": {
         "PAYFAST": 2330,
-        "ADUMO": 1350
+        "ADUMO": 2330
       },
       "cashout": {
         "PAYAT": {
@@ -331,7 +331,7 @@
       "depositFeeCents": 4500,
       "paymentRequestFeeCents": {
         "PAYFAST": 4430,
-        "ADUMO": 2600
+        "ADUMO": 4430
       },
       "cashout": {
         "PAYAT": {
@@ -387,7 +387,7 @@
       "depositFeeCents": 12900,
       "paymentRequestFeeCents": {
         "PAYFAST": 12830,
-        "ADUMO": 7600
+        "ADUMO": 12830
       },
       "cashout": {
         "PAYAT": {
@@ -440,8 +440,8 @@
       }
     }
   },
-  "rowsVersion": "1.3",
-  "rowsDate": "2026-10-04",
+  "rowsVersion": "1.4",
+  "rowsDate": "2026-10-23",
   "referenceAmountsCents": [
     5000,
     20000,
@@ -911,47 +911,47 @@
         "costUnknown": false
       },
       "20000": {
-        "price": 600,
+        "price": 1070,
         "credited": null,
         "costEx": 370,
         "costIncl": 426,
         "commission": null,
         "booked": null,
-        "margin": 174,
-        "marginBooked": 174,
+        "margin": 644,
+        "marginBooked": 644,
         "costUnknown": false
       },
       "50000": {
-        "price": 1350,
+        "price": 2330,
         "credited": null,
         "costEx": 805,
         "costIncl": 926,
         "commission": null,
         "booked": null,
-        "margin": 424,
-        "marginBooked": 424,
+        "margin": 1404,
+        "marginBooked": 1404,
         "costUnknown": false
       },
       "100000": {
-        "price": 2600,
+        "price": 4430,
         "credited": null,
         "costEx": 1530,
         "costIncl": 1760,
         "commission": null,
         "booked": null,
-        "margin": 840,
-        "marginBooked": 840,
+        "margin": 2670,
+        "marginBooked": 2670,
         "costUnknown": false
       },
       "300000": {
-        "price": 7600,
+        "price": 12830,
         "credited": null,
         "costEx": 4430,
         "costIncl": 5095,
         "commission": null,
         "booked": null,
-        "margin": 2505,
-        "marginBooked": 2505,
+        "margin": 7735,
+        "marginBooked": 7735,
         "costUnknown": false
       }
     },
@@ -968,47 +968,104 @@
         "costUnknown": false
       },
       "20000": {
-        "price": 600,
+        "price": 1070,
         "credited": null,
         "costEx": 570,
         "costIncl": 656,
         "commission": null,
         "booked": null,
-        "margin": -56,
-        "marginBooked": -56,
+        "margin": 414,
+        "marginBooked": 414,
         "costUnknown": false
       },
       "50000": {
-        "price": 1350,
+        "price": 2330,
         "credited": null,
         "costEx": 1305,
         "costIncl": 1501,
         "commission": null,
         "booked": null,
-        "margin": -151,
-        "marginBooked": -151,
+        "margin": 829,
+        "marginBooked": 829,
         "costUnknown": false
       },
       "100000": {
-        "price": 2600,
+        "price": 4430,
         "credited": null,
         "costEx": 2530,
         "costIncl": 2910,
         "commission": null,
         "booked": null,
-        "margin": -310,
-        "marginBooked": -310,
+        "margin": 1520,
+        "marginBooked": 1520,
         "costUnknown": false
       },
       "300000": {
-        "price": 7600,
+        "price": 12830,
         "credited": null,
         "costEx": 7430,
         "costIncl": 8545,
         "commission": null,
         "booked": null,
-        "margin": -945,
-        "marginBooked": -945,
+        "margin": 4285,
+        "marginBooked": 4285,
+        "costUnknown": false
+      }
+    },
+    "in.adumo.international_card": {
+      "5000": {
+        "price": 100,
+        "credited": null,
+        "costEx": 225,
+        "costIncl": 259,
+        "commission": null,
+        "booked": null,
+        "margin": -159,
+        "marginBooked": -159,
+        "costUnknown": false
+      },
+      "20000": {
+        "price": 1070,
+        "credited": null,
+        "costEx": 660,
+        "costIncl": 759,
+        "commission": null,
+        "booked": null,
+        "margin": 311,
+        "marginBooked": 311,
+        "costUnknown": false
+      },
+      "50000": {
+        "price": 2330,
+        "credited": null,
+        "costEx": 1530,
+        "costIncl": 1760,
+        "commission": null,
+        "booked": null,
+        "margin": 570,
+        "marginBooked": 570,
+        "costUnknown": false
+      },
+      "100000": {
+        "price": 4430,
+        "credited": null,
+        "costEx": 2980,
+        "costIncl": 3427,
+        "commission": null,
+        "booked": null,
+        "margin": 1003,
+        "marginBooked": 1003,
+        "costUnknown": false
+      },
+      "300000": {
+        "price": 12830,
+        "credited": null,
+        "costEx": 8780,
+        "costIncl": 10097,
+        "commission": null,
+        "booked": null,
+        "margin": 2733,
+        "marginBooked": 2733,
         "costUnknown": false
       }
     },
@@ -1016,57 +1073,114 @@
       "5000": {
         "price": 100,
         "credited": null,
-        "costEx": null,
-        "costIncl": null,
+        "costEx": 195,
+        "costIncl": 224,
         "commission": null,
         "booked": null,
-        "margin": null,
-        "marginBooked": null,
-        "costUnknown": true
+        "margin": -124,
+        "marginBooked": -124,
+        "costUnknown": false
       },
       "20000": {
-        "price": 600,
+        "price": 1070,
         "credited": null,
-        "costEx": null,
-        "costIncl": null,
+        "costEx": 420,
+        "costIncl": 483,
         "commission": null,
         "booked": null,
-        "margin": null,
-        "marginBooked": null,
-        "costUnknown": true
+        "margin": 587,
+        "marginBooked": 587,
+        "costUnknown": false
       },
       "50000": {
-        "price": 1350,
+        "price": 2330,
         "credited": null,
-        "costEx": null,
-        "costIncl": null,
+        "costEx": 870,
+        "costIncl": 1001,
         "commission": null,
         "booked": null,
-        "margin": null,
-        "marginBooked": null,
-        "costUnknown": true
+        "margin": 1329,
+        "marginBooked": 1329,
+        "costUnknown": false
       },
       "100000": {
-        "price": 2600,
+        "price": 4430,
         "credited": null,
-        "costEx": null,
-        "costIncl": null,
+        "costEx": 1620,
+        "costIncl": 1863,
         "commission": null,
         "booked": null,
-        "margin": null,
-        "marginBooked": null,
-        "costUnknown": true
+        "margin": 2567,
+        "marginBooked": 2567,
+        "costUnknown": false
       },
       "300000": {
-        "price": 7600,
+        "price": 12830,
         "credited": null,
-        "costEx": null,
-        "costIncl": null,
+        "costEx": 4620,
+        "costIncl": 5313,
         "commission": null,
         "booked": null,
-        "margin": null,
-        "marginBooked": null,
-        "costUnknown": true
+        "margin": 7517,
+        "marginBooked": 7517,
+        "costUnknown": false
+      }
+    },
+    "in.adumo.capitec_pay": {
+      "5000": {
+        "price": 100,
+        "credited": null,
+        "costEx": 220,
+        "costIncl": 253,
+        "commission": null,
+        "booked": null,
+        "margin": -153,
+        "marginBooked": -153,
+        "costUnknown": false
+      },
+      "20000": {
+        "price": 1070,
+        "credited": null,
+        "costEx": 520,
+        "costIncl": 598,
+        "commission": null,
+        "booked": null,
+        "margin": 472,
+        "marginBooked": 472,
+        "costUnknown": false
+      },
+      "50000": {
+        "price": 2330,
+        "credited": null,
+        "costEx": 1120,
+        "costIncl": 1288,
+        "commission": null,
+        "booked": null,
+        "margin": 1042,
+        "marginBooked": 1042,
+        "costUnknown": false
+      },
+      "100000": {
+        "price": 4430,
+        "credited": null,
+        "costEx": 2120,
+        "costIncl": 2438,
+        "commission": null,
+        "booked": null,
+        "margin": 1992,
+        "marginBooked": 1992,
+        "costUnknown": false
+      },
+      "300000": {
+        "price": 12830,
+        "credited": null,
+        "costEx": 6120,
+        "costIncl": 7038,
+        "commission": null,
+        "booked": null,
+        "margin": 5792,
+        "marginBooked": 5792,
+        "costUnknown": false
       }
     },
     "in.ott.voucher_load": {

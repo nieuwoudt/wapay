@@ -39,8 +39,12 @@ function rands(cents) {
 
 export async function getServerSideProps({ params, query }) {
   const code = String(params.code || '').toUpperCase();
-  const { adumoEnabled } = await import('../../lib/adumo.js');
-  const adumo = adumoEnabled();
+  const { adumoEnabled, primaryCardRail } = await import('../../lib/adumo.js');
+  // Adumo is offered to payers only once it is the primary rail. While it is
+  // enabled for the live R5 tests (WAPAY_PRIMARY_CARD_RAIL=PAYFAST) the page
+  // stays PayFast-only, and a test reaches Adumo through
+  // /api/pay/checkout?code=…&rail=adumo (docs/ADUMO.md section 5).
+  const adumo = adumoEnabled() && primaryCardRail() === 'ADUMO';
   // Back from a declined / cancelled hosted-page attempt: a short reason, no PII.
   const declined = typeof query?.e === 'string' ? String(query.e).replace(/[^A-Za-z_ ]/g, '').slice(0, 24) : null;
   if (!/^[A-Z]{6,12}$/.test(code)) return { notFound: true };

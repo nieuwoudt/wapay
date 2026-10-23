@@ -74,36 +74,33 @@ test('response decision: only a signed token with matching claims and a success 
   assert.equal(verifyAdumoResponse({ fields: mk({ cuid: cfg.merchantId, auid: cfg.applicationId, mref: 'PRFMXNPV-1', amount: '38.00', status: 'SETTLED' }), expected: { mref: 'PRFMXNPV-1', amountCents: 3800 }, config: cfg }).approved, true, 'string amount + status-only claims (webhook shape) still decide');
 });
 
-test('fees per rail: PayFast unchanged, Adumo R1 + 2.5% by default (the floor), free under R50 on both, both env-tunable', () => {
+test('fees per rail: one price on every rail (founder 2026-10-23), free under R50, still env-tunable', () => {
   delete process.env.WAPAY_ADUMO_FEE_BPS; delete process.env.WAPAY_ADUMO_FEE_FIXED_CENTS;
   assert.deepEqual(cardRailFee('PAYFAST'), { bps: 420, fixedCents: 230 });
-  assert.deepEqual(cardRailFee('ADUMO'), { bps: 250, fixedCents: 100 });
+  assert.deepEqual(cardRailFee('ADUMO'), cardRailFee('PAYFAST'), 'Adumo charges what PayFast charges: the rail is never a price difference');
   assert.equal(paymentRequestFeeCents(10000), 650, 'PayFast: R2.30 + 4.20% → R6.50');
-  assert.equal(paymentRequestFeeCents(10000, 'ADUMO'), 350, 'Adumo: R1 + 2.5% → R3.50');
-  assert.equal(paymentRequestFeeCents(50000, 'ADUMO'), 1350);
-  // Headline beats every competitor's headline; in real (VAT-inclusive) terms it beats
-  // iKhokha (2.85% ex VAT) from about R130 up and PayFast (3.2% + R2) at every amount.
-  assert.ok(paymentRequestFeeCents(20000, 'ADUMO') < Math.ceil(20000 * 0.0285 * 1.15), 'cheaper than iKhokha incl VAT at R200');
-  assert.ok(paymentRequestFeeCents(5000, 'ADUMO') < Math.ceil(200 + 5000 * 0.032) * 1.15, 'cheaper than PayFast at R50');
+  for (const c of [5000, 10000, 50000, 72000, 300000]) assert.equal(paymentRequestFeeCents(c, 'ADUMO'), paymentRequestFeeCents(c), `same fee at ${c}`);
   assert.equal(paymentRequestFeeCents(4900, 'ADUMO'), 0, 'free under R50 on every rail');
-  // Adumo blended true cost incl VAT (60% debit / 40% credit): R0.92 + 2.13%. Margin-positive at every amount R50–R3000.
-  // (R50–R60 is the taper across the free threshold: a deliberate, bounded subsidy so NET never falls as the amount rises.)
+  // Adumo's true cost incl the VAT we cannot recover: debit R0.92 + 1.6675%, credit R0.92 + 2.8175%,
+  // international R0.92 + 3.335%, Ozow R1.38 + 1.725%, Capitec Pay R1.38 + 2.30%. At the PayFast price
+  // every method is margin-positive from R60 up. (R50 to R60 is the taper across the free threshold:
+  // a deliberate, bounded subsidy so NET never falls as the amount rises.)
   for (let c = 6000; c <= 300000; c += 2500) {
-    const cost = 92 + Math.ceil(c * 0.0213);
-    assert.ok(paymentRequestFeeCents(c, 'ADUMO') - cost > 0, `blended margin at ${c}`);
+    for (const [fixed, rate, method] of [[92, 0.016675, 'debit'], [92, 0.028175, 'credit'], [92, 0.03335, 'international'], [138, 0.01725, 'Ozow'], [138, 0.023, 'Capitec Pay']]) {
+      assert.ok(paymentRequestFeeCents(c, 'ADUMO') - (fixed + Math.ceil(c * rate)) > 0, `${method} margin at ${c}`);
+    }
   }
-  // A pure credit-card ticket (R0.92 + 2.82%) loses a bounded few rand at the top of the range: known and accepted.
-  assert.ok(paymentRequestFeeCents(300000, 'ADUMO') - (92 + Math.ceil(300000 * 0.0282)) > -1000, 'credit-only loss stays under R10 at R3000');
+  // A later price decision stays an env change.
   process.env.WAPAY_ADUMO_FEE_BPS = '300'; process.env.WAPAY_ADUMO_FEE_FIXED_CENTS = '150';
   assert.equal(paymentRequestFeeCents(10000, 'ADUMO'), 450);
   delete process.env.WAPAY_ADUMO_FEE_BPS; delete process.env.WAPAY_ADUMO_FEE_FIXED_CENTS;
-  // VAT registration day: one switch grosses every card fee up by 15% (R3.50 → R4.03 → R4.10 after 10c rounding); off = unchanged.
+  // VAT registration day: one switch grosses every card fee up by 15% (R6.50 → R7.48 → R7.50 after 10c rounding); off = unchanged.
   process.env.WAPAY_VAT_REGISTERED = 'true';
-  assert.equal(paymentRequestFeeCents(10000, 'ADUMO'), 410);
+  assert.equal(paymentRequestFeeCents(10000, 'ADUMO'), 750);
   assert.equal(paymentRequestFeeCents(10000), 750, 'PayFast R6.50 → R7.48 → R7.50');
   assert.equal(paymentRequestFeeCents(4900, 'ADUMO'), 0, 'still free under R50');
   delete process.env.WAPAY_VAT_REGISTERED;
-  assert.equal(paymentRequestFeeCents(10000, 'ADUMO'), 350);
+  assert.equal(paymentRequestFeeCents(10000, 'ADUMO'), 650);
   assert.equal(RAIL.ADUMO, 'ADUMO');
   const e = buildLoad({ accountId: 'a1', rail: RAIL.ADUMO, faceCents: 3420, customerFeeCents: 380, idemKey: 'wapay-payreq-PRX' });
   assert.equal(e.postings.find((p) => p.accountCode === ACCT.clearing('ADUMO')).debitCents, 3800, 'gross lands in Adumo clearing');
@@ -137,4 +134,6 @@ test('routes: checkout books the chosen rail and its fee; the return + webhook s
   const page = read('../pages/pay/[code].js');
   assert.match(page, /name="rail"\s+value=\{adumo \? 'adumo' : 'payfast'\}/);
   assert.match(page, /Other ways to pay \(PayFast\)/);
+  // Enabled is not offered: while WAPAY_PRIMARY_CARD_RAIL=PAYFAST (the live R5 tests) payers see PayFast only.
+  assert.match(page, /const adumo = adumoEnabled\(\) && primaryCardRail\(\) === 'ADUMO';/);
 });

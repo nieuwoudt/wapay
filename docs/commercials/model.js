@@ -31,7 +31,7 @@ const MoneyMap = (() => {
 
   const CARD_RAIL = {
     PAYFAST: { bps: 420, fixedCents: 230 },
-    ADUMO: { bps: 250, fixedCents: 100 },
+    ADUMO: { bps: 420, fixedCents: 230 }, // the PayFast fee: one price on every rail (founder 2026-10-23)
   };
   const PAYREQ_FREE_BELOW_CENTS = 5000;
 
@@ -244,7 +244,7 @@ const MoneyMap = (() => {
     if (!p) return '';
     switch (p.kind) {
       case 'depositFee': return '4.20% + R2.30 on top, rounded up to the next rand';
-      case 'payreq': return p.rail === 'ADUMO' ? 'R1 + 2.5% off the receiver, 10c rounding, free under R50' : 'R2.30 + 4.20% off the receiver, 10c rounding, free under R50';
+      case 'payreq': { const r = CARD_RAIL[p.rail] || CARD_RAIL.PAYFAST; return `R${(r.fixedCents / 100).toFixed(2)} + ${(r.bps / 100).toFixed(2)}% off the receiver, 10c rounding, free under R50`; }
       case 'bands':
         if (p.bands.length === 1) return `${rand(p.bands[0][1])} flat`.replace(/\.00/g, '');
         return p.bands.map(([max, fee]) => (max == null ? `${rand(fee)} above` : `${rand(fee)} up to ${rand(max)}`)).join(', ').replace(/\.00/g, '');

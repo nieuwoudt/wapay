@@ -4,6 +4,13 @@
 
 ---
 
+## 139. Turning Adumo on for its live tests would have sent every pay-page payer to Adumo
+
+- **Symptom (found 2026-10-23 before any env changed):** the go-live plan enables Adumo with `WAPAY_PRIMARY_CARD_RAIL=PAYFAST` so that only the founder's R5 tests use it. The pay page would still have shown "Pay by card, Instant EFT or Capitec Pay" (Adumo) as its main button, with PayFast as "Other ways to pay", for every customer link, before any live payment had reconciled and before SHB had accepted the pay-link model in writing.
+- **Root cause:** `pages/pay/[code].js` set `adumo = adumoEnabled()`, and the main button posts `rail=adumo` explicitly, which outranks the primary rail in checkout. The primary-rail switch governed only checkout's default, the fee quote and the portal, not the page.
+- **Fix:** `adumo = adumoEnabled() && primaryCardRail() === 'ADUMO'` (CHANGELOG 123). Verified on a local production build with Adumo enabled: PayFast primary renders one PayFast button and no Adumo text; Adumo primary renders both buttons.
+- **Guard:** `tests/adumo.test.mjs` asserts the gate. Lesson: a switch named "primary" must be read by every surface that chooses a rail, not only the one it was written for.
+
 ## 138. Paid-link receipts to payers who never wrote to WaPay were dropped by Meta while WaPay counted them as sent
 
 - **Symptom (found 2026-10-23 by the new daily compliance check):** Meta refused messages with 131047 ("more than 24 hours since the customer last replied") in 10 minutes of a single day. Of the 41 receipts sent to payers other than the recipient, 38 went to payers with no open 24-hour window; no payer had become an account holder.
