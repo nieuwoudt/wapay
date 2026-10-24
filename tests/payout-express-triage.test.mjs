@@ -189,8 +189,8 @@ test('triage levels: genuine, self-funded, a frozen destination, money moved wit
   p.journalEntry.findMany = async () => [{ lines: [{ accountCode: 'WALLET:acc-frozen-2:SPEND' }, { accountCode: `WALLET:${oldVerified.id}:SPEND` }] }];
   assert.ok((await payoutTriage({ prisma: p, account: oldVerified, amountCents: 20000, method: 'PAYSHAP', recipient, now: NOW })).level >= 4);
   assert.deepEqual([levelOf(-3), levelOf(0), levelOf(1), levelOf(3), levelOf(5), levelOf(7), levelOf(12)], [1, 1, 2, 3, 4, 5, 5]);
-  assert.equal(reviewLevel({}), 5); assert.equal(reviewLevel({ WAPAY_PAYOUT_REVIEW_LEVEL: '4' }), 4); assert.equal(reviewLevel({ WAPAY_PAYOUT_REVIEW_LEVEL: 'off' }), null);
-  assert.equal(reviewNeeded({ triage: { level: 5, cleared: null }, env: {} }), true); assert.equal(reviewNeeded({ triage: { level: 5, cleared: { until: 'x' } }, env: {} }), false); assert.equal(reviewNeeded({ triage: { level: 4 }, env: {} }), false);
+  assert.equal(reviewLevel({}), 4, 'review from level 4 after the 22 October replay'); assert.equal(reviewLevel({ WAPAY_PAYOUT_REVIEW_LEVEL: '5' }), 5); assert.equal(reviewLevel({ WAPAY_PAYOUT_REVIEW_LEVEL: 'off' }), null);
+  assert.equal(reviewNeeded({ triage: { level: 5, cleared: null }, env: {} }), true); assert.equal(reviewNeeded({ triage: { level: 5, cleared: { until: 'x' } }, env: {} }), false); assert.equal(reviewNeeded({ triage: { level: 4 }, env: {} }), true); assert.equal(reviewNeeded({ triage: { level: 3 }, env: {} }), false);
   assert.equal(clearanceOf({ payouts: { clearedUntil: new Date(NOW - 1000).toISOString() } }, NOW), null, 'an expired clearance does not count');
   assert.notEqual(destinationKey('PAYSHAP', { account_number: '62012345678' }), destinationKey('CASHSEND', { mobile: '62012345678' }));
   assert.equal(destinationKey('CASHSEND', { mobile: '0731234567' }), destinationKey('NEDCASH', { mobile: '27731234567' }), 'a phone is the same phone in either form');
@@ -254,11 +254,19 @@ test('an operator pay-out never carries the express fee; the business portal quo
   assert.match(read('../pages/business/index.js'), /recipient: rec, feeCents: quote\.feeCents,/);
 });
 
+test('Mission Control can clear or freeze from the card; the action is JSON only and admin only', () => {
+  const api = read('../pages/api/admin/payout-requests.js');
+  assert.match(api, /JSON_ONLY/); assert.match(api, /setPayoutClearance\(\{ prisma, accountId: b\.accountId, hours: 72/); assert.match(api, /setPayoutFreeze\(\{ prisma, accountId: b\.accountId, frozen: true/);
+  assert.ok(api.indexOf('requireAdmin(req)') < api.indexOf("req.method === 'POST'"), 'the session is checked before any action');
+  const ui = read('../pages/admin/index.js');
+  assert.match(ui, /onClick=\{\(\) => act\(q, 'clear'\)\}>Clear 72 h<\/button>/); assert.match(ui, /onClick=\{\(\) => act\(q, 'freeze'\)\}>Freeze<\/button>/);
+});
+
 test('the readouts: the bot quotes the rules, the flags show them, Mission Control lists the requests, the review route needs a reason', () => {
   assert.equal(withdrawRulesLine({ WAPAY_PAYOUT_KYC: 'threshold' }), 'Money that reached your balance less than 2 hours ago costs double the fee to withdraw. You can withdraw up to R3000 in any 24 hours, and more than R1000 in 24 hours needs a once-off ID check.');
   assert.match(read('../pages/api/internal/flags.js'), /payoutRules: \(\(\) =>/);
   assert.match(read('../pages/admin/index.js'), /<h2>Pay-out requests<\/h2>\n\s+<PayoutRequests tick=\{tick\} \/>/);
-  assert.match(read('../pages/api/admin/payout-requests.js'), /requireAdmin\(req\)\.ok/);
+  assert.match(read('../pages/api/admin/payout-requests.js'), /const auth = requireAdmin\(req\);\n\s+if \(!auth\.ok\) return res\.status\(401\)/);
   const review = read('../pages/api/internal/payout-review.js');
   assert.match(review, /requireInternalAuth\(req, res\)/); assert.match(review, /NEED_REASON/);
   const payouts = read('../lib/payouts.js');

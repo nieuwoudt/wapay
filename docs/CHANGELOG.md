@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-10-24 (126) — Fraud review from level 4, after replaying the 22 October cash-outs; Clear and Freeze in Mission Control
+
+The triage of CHANGELOG 125 was replayed against production, read-only, at the moment of each frozen
+account's first pay-out (frozen signals taken out, since no account was frozen then). Of the 21 that paid
+out: level 5 for 4, level 4 for 12, level 3 for 4, level 2 for 1. Review at level 5 would have held 4 of
+21; at level 4 it holds 16 of 21. `WAPAY_PAYOUT_REVIEW_LEVEL` now defaults to 4. The price: a new
+customer paid once by a friend who withdraws within two hours also scores 4 and waits for a check, so the
+Mission Control card gained two buttons per level-4 or level-5 row: **Clear 72 h** (past the review for
+three days; the cap, the ID check and the pause still apply) and **Freeze** (the same freeze as
+`/api/internal/payout-freeze`). `POST /api/admin/payout-requests` takes `{ accountId, decision }`, JSON
+only, behind the admin session (SameSite=Strict). Every time window in the triage and in
+`recentReceipts` is now bounded at the moment scored, so a score for a past moment never counts later
+rows. Today, with the time-based signals faded, the same 28 accounts score 2 to 5; the live triage reads
+them at the moment of each request.
+
 ## 2026-10-24 (125) — Pay-out rules for the reopening: R3,000 a day, the ID check over R1,000, double fee on money under two hours old, fraud triage 1 to 5 on every request; tests can no longer reach production
 
 Founder, 24 October: "maximum withdrawals can happen per day is 3k, every customer doing a withdrawal over

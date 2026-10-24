@@ -2068,19 +2068,31 @@ const PAYOUT_OUTCOME = { SETTLED: 'paid', PENDING: 'with the bank', REVIEW: 'hel
 function PayoutRequests({ tick }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
+  const [busy, setBusy] = useState('');
+  const [again, setAgain] = useState(0);
   useEffect(() => {
     fetch('/api/admin/payout-requests?days=7').then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then(setD).catch((e) => setErr(e.message || 'failed'));
-  }, [tick]);
+  }, [tick, again]);
+  const act = async (q, decision) => {
+    const what = decision === 'clear' ? `Clear ${q.phone || 'this account'} past the review for 72 hours? The cap, the ID check and the pause still apply.` : `Freeze pay-outs and sends for ${q.phone || 'this account'}? Receiving money stays open.`;
+    if (!window.confirm(what)) return;
+    setBusy(`${q.accountId}:${decision}`);
+    try {
+      const r = await fetch('/api/admin/payout-requests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: q.accountId, decision }) });
+      if (!r.ok) setErr(`That did not work (${r.status}).`);
+      setAgain((n) => n + 1);
+    } finally { setBusy(''); }
+  };
   if (err) return <p className="err">Pay-out requests could not be read ({err}).</p>;
   if (!d) return <p className="empty">Loading pay-out requests…</p>;
   return (
     <>
       {d.hold?.held ? <p className="pill r" style={{ fontSize: 12.5, padding: '6px 12px', marginBottom: 10 }}>⏸ Pay-outs are paused for everyone since {new Date(d.hold.since).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}. Nothing leaves until you reopen them.</p> : null}
-      <p className="note" style={{ marginTop: 0 }}>Last 7 days by fraud level: {[5, 4, 3, 2, 1].map((l) => `${l}: ${d.byLevel?.[l] ?? 0}`).join(' · ')}. Level 5 waits for your check; you get every request on WhatsApp and e-mail.</p>
+      <p className="note" style={{ marginTop: 0 }}>Last 7 days by fraud level: {[5, 4, 3, 2, 1].map((l) => `${l}: ${d.byLevel?.[l] ?? 0}`).join(' · ')}. Level 4 and 5 wait for your check (Clear lets one account through for 72 hours); you get every request on WhatsApp and e-mail.</p>
       {!d.requests?.length ? <p className="empty">No pay-out requests in the last 7 days.</p> : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ minWidth: 760 }}>
-            <thead><tr><th>When</th><th>Account</th><th className="n">Amount</th><th>Level</th><th>Why</th><th>Result</th></tr></thead>
+            <thead><tr><th>When</th><th>Account</th><th className="n">Amount</th><th>Level</th><th>Why</th><th>Result</th><th></th></tr></thead>
             <tbody>
               {d.requests.map((q, i) => (
                 <tr key={`${q.accountId}-${i}`}>
@@ -2090,6 +2102,12 @@ function PayoutRequests({ tick }) {
                   <td>{q.level ? <span className={`pill ${LEVEL_PILL[q.level] || 'y'}`}>{q.level}/5 {q.label}</span> : '–'}</td>
                   <td>{q.reasons?.length ? q.reasons.join('; ') : 'nothing unusual'}</td>
                   <td>{PAYOUT_OUTCOME[q.outcome] || q.outcome || '–'}{q.cleared ? ' (cleared)' : ''}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{(q.level >= 4 || q.outcome === 'REVIEW') && !q.frozen ? (
+                    <>
+                      <button className="linkish" disabled={!!busy} onClick={() => act(q, 'clear')}>Clear 72 h</button>{' · '}
+                      <button className="linkish" disabled={!!busy} style={{ color: 'var(--crit)' }} onClick={() => act(q, 'freeze')}>Freeze</button>
+                    </>
+                  ) : null}</td>
                 </tr>
               ))}
             </tbody>
