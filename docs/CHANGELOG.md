@@ -4,6 +4,72 @@
 
 ---
 
+## 2026-10-24 (127) — Payment links: every link says what it is for, one message to forward, "my links" with reminders, a tap-to-send link instead of WaPay writing to the payer
+
+Founder, 24 October: "the customer has to put in a description of the payment request they send and create for
+the payee"; "when we generate a link, we only generate one message that the customer can forward, not two"; "track
+their payment links online on the web version like we do for our business accounts and in the WhatsApp menus, i.e.
+send reminders"; and whether WaPay can message the payer on the requester's behalf.
+
+**Every link says what it is for.** `lib/link-description.js` cleans the description for the payer (WhatsApp
+markdown, newlines, control and invisible characters go) and refuses it, in one plain sentence, when it carries a
+link, a domain or an e-mail address, a run of 7 or more digits (a phone or account number), wording that reads as
+WaPay or an authority (WaPay, SARS, support, admin, official, helpdesk, also spaced or with lookalike letters;
+"child support" is allowed) or more than 60 characters (refused, never cut). It is required wherever a personal link
+is made. The chat reads it from the ask ("please pay me R150 for braids", "request R200 from 082 123 4567 for
+plumbing") or asks one question in the new state `REQUEST_MONEY_NOTE`, where "cancel", a question, "my links" or
+another request always get out. The Pay agent's `start_pay_link` has a `description` argument (the slot set gains
+`description`); the flow checks it like any other and prefers the customer's own words. The ad first-link prompt
+asks "How much, and what is it for?", so "250 braids" makes the link in one answer (the words left over are the
+description now; a name only where it is marked with "from" or "owes me"). The web app's "What it is for" is
+required, checked before the PIN step, and `createLink` refuses with `DESCRIPTION` (400) before its claim. The fee
+choice names it ("Get paid R150 for braids"); a change of amount and the option-2 replacement keep it. The pay page
+shows "For: braids" and puts it in the link preview. Business links already carry a note, line items and a
+reference, so the business portal is unchanged.
+
+**One message after a link is made** (`lib/pay-links.js`), written to make sense forwarded as is: "🙏 *Thandi
+•••567 is asking you to pay R150*", "For: braids", "Pay here: <link>" as plain text, "No fee for you: pay by card,
+Instant EFT and more, or from a WaPay balance." It replaces the call-to-action card plus the forwardable text (and
+the third message on the member path). What the requester receives by card stays at the fee choice, before the
+link exists. It goes through say() with the link as its reference, so the chat remembers it (BUGLOG #120). "That
+link is already live" stays one message; the option-2 replacement and "change my amount" no longer send a cancel
+line of their own: the new link ends "This link replaces the earlier R100 link, which no longer works." and a
+question asked in that same turn starts "Your R100 link is cancelled and no longer works."
+
+**Tracking.** WhatsApp: "my links" lists the open links (amount, what for, how long ago, code) in one message;
+"remind 2" answers with one reminder to forward (the card marked as a reminder, with the date the link closes);
+"cancel 2", "cancel PRXXXXXX" and "cancel request PRXXXXXX" cancel through `cancelPaymentRequest`. They run before
+the Pay agent, so its pilot numbers get them too (BUGLOG #92, and "cancel request <code>" had never reached them);
+a number means the list the customer was shown (kept 30 minutes with the conversation). The help and home lines
+name "my links". Web: `/app/links`, a new Links tab, also on Pay and home: every link with its status, what it is
+for, the amount, when it was made, when it closes or when and how it was paid; an open link has Copy link, Share,
+Send reminder (the phone's share sheet, or `https://wa.me/?text=` so WhatsApp asks who to send it to) and Cancel.
+`GET /api/app/links` returns `shareText`, `reminderText` and `remindUrl` with each open link.
+
+**WaPay does not write to the payer for the requester.** Meta restricted the number for "sending spam" on 20 October
+and the rating is still RED; and anyone could make WaPay send "please pay R500" to any number. When the requester
+names a number ("request R200 from 082 123 4567 for plumbing"), the one message carries a tap-to-send link,
+`https://wa.me/27821234567?text=<the card>`, that opens the requester's own chat with that person, the request
+ready to send; one saved person matched by name works the same. The number is not stored on the request. The
+member-to-member note (a member the requester has sent money to before) stays, but only inside that member's
+24-hour window (`serviceWindowOpen`, now exported from `lib/request-notify.js`; BUGLOG #138): outside it nothing is
+sent. The requester's message is the same in every case, so it never tells whether a number is a member. Found on
+the way: "request from 082 123 4567 R200" read the phone's 082 as the amount (an R82 link), and "request R200 for
+plumbing" was not read as a request at all because the slot parser sees the "mb" in "plumbing" as a data bundle;
+the ask is now read by `parseLinkAsk`, and the request matcher judges product words only outside the description.
+
+Golden thread: no new model call (the one-message text is translated by the existing localizer, once); the agent's
+tool argument is the customer's own words, tokenised by the boundary like the rest of their message; descriptions
+reach a model only inside the customer's own record, as notes of web and business links already did. Nothing here
+moves money. The daily audit counts the new card and prompt as known-correct templates.
+
+Tests: `tests/pay-links.test.mjs` (21) and `tests/pay-links-chat.test.mjs` (11: the real processor in a child
+process with the WhatsApp transport captured, the database in memory and the Pay agent's turn scripted, asserting
+each turn's messages); the app portal suite (+1 and the description refusals). Locks of the old two-message copy,
+the CTA card, the old first-link prompt and the old ad created copy were updated to the new behaviour. 1387/1387,
+build green. `pnpm qa:chat` scenarios 1, 2, 7 and 9 updated to the new copy (not run here: it drives the
+production database).
+
 ## 2026-10-24 (126) — Fraud review from level 4, after replaying the 22 October cash-outs; Clear and Freeze in Mission Control
 
 The triage of CHANGELOG 125 was replayed against production, read-only, at the moment of each frozen

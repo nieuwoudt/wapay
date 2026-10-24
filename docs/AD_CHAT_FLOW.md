@@ -53,12 +53,12 @@ WaPay account; it is not a bank account; a nominal 16 and above, not enforced.
    template (`startOnboardingFromAd` in `packages/auth`: S0 to S1 recorded silently, the
    OTP step runs at once). Completion fires `LeadSubmitted`.
 3. **Create the first payment link straight away.** On completion an ad arrival is asked
-   "Who owes you, and how much? Just type it like this: R250 from Thandi for the birthday
-   gift." (conversation state `AD_FIRST_LINK`). The answer goes into the existing
-   please-pay-me flow, which still shows the cost and asks 1 or 2 above R50, as the Q3
-   answer promises. The link fires `QualifiedLead`. This is the activation moment.
-4. **Forward and wait:** the link message tells them to forward it; first money in fires
-   `Purchase` and the paid message for an ad arrival is the short shape (section 7).
+   how much and what it is for (conversation state `AD_FIRST_LINK`; the wording is in
+   section 8). The answer goes into the existing please-pay-me flow, which still shows the
+   cost and asks 1 or 2 above R50, as the Q3 answer promises. The link fires
+   `QualifiedLead`. This is the activation moment.
+4. **Forward and wait:** the link comes as one message to forward (section 8); first money
+   in fires `Purchase` and the paid message for an ad arrival is the short shape (section 9).
 5. **Next steps:** the next link, and the tips, one at a time.
 
 Nothing is put in front of step 3 once onboarding is complete: the "for you, or for a
@@ -122,17 +122,28 @@ button.
 
 ## 8. The moment onboarding completes: the first link
 
-> You're all set, {first_name}. Let's get you paid. Who owes you, and how much? Just type
-> it like this: R250 from Thandi for the birthday gift.
+> You're all set, {first_name}. Let's get you paid. How much, and what is it for? Type the
+> amount and a few words, and I'll make a link you can forward.
 
-`parseFirstLinkAsk` reads the amount, the "from" name and the "for" note. The amount goes
-to the existing please-pay-me creation (`handleCreatePaymentRequest`), which quotes the
-cost above R50 and mints exactly one link; for an ad arrival the created-link message is
-the short shape: "Here's your payment link for R250: <link>. Forward it to Thandi in your
-chat with them. They can pay with any bank card, Instant EFT, Capitec Pay, SnapScan and
-more, and they don't need WaPay. I'll message you the moment it's paid." A message in this
-state without an amount gets one retry line; anything that reads as a different intent
-leaves the state and is routed normally.
+(2026-10-24, founder: every link says what it is for, and the payer sees it; the prompt
+asks for both so one answer makes the link.) `parseFirstLinkAsk` reads the amount, the
+note (what it is for) and a name only where the customer marked one ("from Thandi",
+"Thandi owes me"): "250 braids", "braids 250", "R250 for the birthday gift" and "250 from
+Sipho for rent" all carry the note. The amount and the note go to the existing please-pay-me
+creation (`handleCreatePaymentRequest`), which checks the note like every description
+(`lib/link-description.js`), asks "What is the R250 for?" once when there is none, quotes
+the cost above R50 and mints exactly one link. The created link is the one message every
+customer gets, written to be forwarded as is:
+
+> 🙏 *Thandi •••567 is asking you to pay R250*
+> For: braids
+>
+> Pay here: https://pleasepayme.co.za/PRXXXXXX
+> No fee for you: pay by card, Instant EFT and more, or from a WaPay balance.
+
+A message in this state without an amount gets one retry line ("Just the amount in rands and
+a few words about what it is for."); anything that reads as a different intent leaves the
+state and is routed normally.
 
 ## 9. After the first link
 
@@ -155,8 +166,8 @@ Meta's automatic follow-up is switched off in the ad, so the bot owns this
 - About 20 hours after their last message (20 to 23.5 hours): inside WhatsApp's 24-hour
   window, no template, and inside the 72-hour free window an ad conversation gets.
 - Mid-onboarding: "Hi {first_name}, you're one step away from your WaPay account. Want to
-  finish?" No link yet: "Ready for your first payment link? Just tell me who owes you and
-  how much."
+  finish?" No link yet: "Ready for your first payment link? Just tell me how much and what
+  it is for." (2026-10-24)
 - Sent once, ever (`attribution.reminderSentAt` is written before the send). "stop" (or
   "unsubscribe", "no more") sets `attribution.reminderOptOut` and is answered once; the
   stop hook runs only for ad arrivals and never inside a PIN, PIN-reset or confirm step.
@@ -217,13 +228,23 @@ payment arrives through the card rails as before.
   "Let's open your account. You only need this phone, and it's three quick steps." and the PIN
   step follows in the same turn. No open-account button on these two answers any more. A member
   asking the same question later gets the answer alone.
-- **The first-link prompt has no example sentence.** "You're all set, {name}. Let's get you paid.
-  Who owes you, and how much? Type the amount and their name." The parser takes amount and name
-  in either order ("250 Thandi", "Thandi R250", "Thandi owes me 250", "250 from Sipho for rent").
-  The retry line: "Just the amount and the name of the person who owes you, the amount in rands
-  first." The old example sentence is still recognised and answered with "That was just our
-  example. Who really owes you, and how much? Type the amount and their name.", and no link is
-  created from it.
+- **The first-link prompt has no example sentence.** (2026-10-20; the wording changed again on
+  2026-10-24, section 8 and below.) The old example sentence is still recognised and answered with
+  "That was just our example. How much are you really asking for, and what is it for? Type the
+  amount and a few words.", and no link is created from it.
 - **Loans.** "WaPay doesn't offer loans. You can get paid, top up, pay other WaPay users and pay
   out. To get paid, tell me who owes you and how much, and I make the link you forward to them."
   Matched before the agent (`matchLoanAsk`), never a referral to a lender.
+
+## 2026-10-24: what the link is for, one message, my links (founder; CHANGELOG 127)
+
+- **The first link asks what it is for.** Prompt: "How much, and what is it for? Type the amount
+  and a few words, and I'll make a link you can forward." One answer ("250 braids") makes the link;
+  an amount alone gets "What is the R250 for? The person paying sees it on the link." once. The
+  words left over after the amount are the note now, not a name (the old prompt asked for a name).
+- **The created link is the card above** (`lib/pay-links.js`), the same for ad arrivals as for
+  everyone, within section 11's words (`tests/ad-flow.test.mjs` checks it). The old short shape
+  ("Here's your payment link... Forward it to Thandi... I'll message you the moment it's paid") is
+  gone: it was not forwardable as is.
+- **The reminder** (off by default, section 10) now asks for "how much and what it is for".
+- "my links", "remind 2" and "cancel 2" work for ad arrivals like for everyone.

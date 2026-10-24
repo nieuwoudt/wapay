@@ -153,7 +153,8 @@ test('VOUCHER_LOAD needs the OTT merchant key AND its switch; DEPOSIT_VOUCHER fo
 // live products get their line; everything off is named once in the coming-soon line.
 const BUY_ALL = `🛒 *Buy*: airtime, data, electricity`;
 const SEND = `💸 *Send*: "send R50 to 083..."`;
-const GET_PAID = `🙏 *Get Paid*: "please pay me R50" → share your link`;
+// 2026-10-24: every link says what it is for, and "my links" tracks them (founder).
+const GET_PAID = `🙏 *Get Paid*: "please pay me R150 for braids" → forward your link · "my links" to track them`;
 const DEPOSIT_BLU = `💳 *Deposit*: "deposit R100" or a Blu voucher`;
 const DEPOSIT_CARD = `💳 *Deposit*: "deposit R100" by card or Instant EFT`;
 const HOME_TAIL = `📄 *Transactions* · ⚙️ *Settings*`;
@@ -202,7 +203,7 @@ const HELP_HEAD = [
   `📶 *Data* - "Buy 1GB data"`,
   `💡 *Electricity* - "Buy R100 electricity"`,
   `💸 *Send money* - "Send R50 to 083...", or just share a contact from your phone`,
-  `🙏 *Get paid* - "please pay me R50" and share the link`,
+  `🙏 *Get paid* - "please pay me R150 for braids", then forward the link. "my links" to track them`,
   `💳 *Deposit* - "Deposit R100"`,
   `🎟️ *Voucher* - "Redeem voucher"`,
 ];
@@ -210,7 +211,7 @@ const HELP_HEAD = [
 const HELP_HEAD_HOLD = [
   `💰 *Balance* - "What's my balance?"`,
   `💸 *Send money* - "Send R50 to 083...", or just share a contact from your phone`,
-  `🙏 *Get paid* - "please pay me R50" and share the link`,
+  `🙏 *Get paid* - "please pay me R150 for braids", then forward the link. "my links" to track them`,
   `💳 *Deposit* - "Deposit R100"`,
 ];
 const HELP_WITHDRAW = `🏧 *Withdraw* - "withdraw R200" to your bank or as cash at an ATM`;

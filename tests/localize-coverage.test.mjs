@@ -42,7 +42,9 @@ test('key money surfaces are localized', () => {
     'Confirm Electricity', // electricity confirm preview
     'Confirm OTT Voucher', // voucher self-purchase confirm
     'Voucher Redeemed Successfully', // Blu redemption receipt
-    'Tap the link to pay', // the forwardable pay-request message (copy rewritten 2026-08-27: Pay-name-now style)
+    // The one forwardable link message (2026-10-24): composed in lib/pay-links.js, localized through the
+    // processor's own hook handed to sendCreatedLink, right above this line of the call.
+    'windowOpen: (waId) => serviceWindowOpen(',
   ];
   for (const marker of surfaces) {
     const idx = src.indexOf(marker);

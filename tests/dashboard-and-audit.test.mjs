@@ -41,10 +41,16 @@ test('BUGLOG #120: a button message the chat sent is remembered as the assistant
   configureSay({ transport: null, prisma: null });
 });
 
-test('the processor remembers both button cards and explains an out-of-range request amount', () => {
+test('the processor remembers the deposit button card and the link message, and explains an out-of-range request amount', () => {
   const p = read('../pages/api/webhooks/message-processor-v2.js');
   assert.match(p, /import \{ rememberSent \} from '\.\.\/\.\.\/\.\.\/lib\/say\.js';/);
-  assert.match(p, /buttonText: 'View my payment page',\s*url,\s*\}\);\s*if \(interactive\?\.ok\) \{\s*\/\/[^\n]*\n\s*await rememberSent\(\{ to: from, text: `🙏 \*\$\{randsShort\(amountCents\)\} requested\*/);
+  // 2026-10-24 (founder: one message the customer can forward): a new link is ONE plain text through say(), which
+  // remembers it with the link as its reference by construction (BUGLOG #120); no button card, so no rememberSent.
+  const created = p.slice(p.indexOf('async function handleCreatePaymentRequest('), p.indexOf('async function tapToSendTarget('));
+  assert.ok(!/sendWhatsAppCtaUrl|buttonText|rememberSent/.test(created), 'no button card for a link');
+  assert.match(created, /await sendCreatedLink\(\{\s*send: sendWhatsAppText,/);
+  assert.match(p, /import \{ sendWhatsAppText, recordInbound \} from '\.\.\/\.\.\/\.\.\/lib\/say\.js';/, 'the remembering transport');
+  assert.match(read('../lib/pay-links.js'), /await deps\.send\(\{ to, text: msg\.text, kind, refs: \{ request: request\.id \}/);
   assert.match(p, /url: checkoutUrl,\s*\}\);\s*\/\/[^\n]*\n\s*if \(interactive\?\.ok\) await rememberSent\(\{ to: from, text: `💳 Add money to WaPay[^\n]*\n\s*if \(interactive\?\.ok\) return interactive;/);
   // BUGLOG #121
   assert.match(p, /is more than one payment link can carry\. A link can be for R5 up to \$\{randsShort\(MAX_REQUEST_CENTS\)\}\. Ask for \$\{randsShort\(MAX_REQUEST_CENTS\)\} now and make another link for the rest, or tell me a smaller amount\./);
@@ -115,8 +121,13 @@ test('BUGLOG #124: a link made minutes ago is not minted twice, and its grossed-
   const p = read('../pages/api/webhooks/message-processor-v2.js');
   assert.match(p, /const recent = await latestPendingLink\(\{ accountId: account\.id \}\)\.catch\(\(\) => null\);/);
   assert.match(p, /if \(recent\.amountCents === amountCents\) \{[\s\S]{0,400}That link is already live for/);
-  assert.match(p, /grossedUpRequestCents\(recent\.amountCents\) === amountCents\) \{\s*await cancelPendingLink\(\{ code: recent\.id, accountId: account\.id \}\)/);
-  assert.match(p, /confirmed: true, adPayerName \}\);\s*\}\s*\}\s*\}\s*\n\s*\/\/ CONFIRM BEFORE CREATE/);
+  assert.match(p, /grossedUpRequestCents\(recent\.amountCents\) === amountCents\) \{\s*const cancelled = await cancelPendingLink\(\{ code: recent\.id, accountId: account\.id \}\)/);
+  // One message (2026-10-24): the replacement is made in the same turn and says it replaces the old link; no separate cancel line.
+  assert.match(p, /confirmed: true, adPayerName, note: describedAs \|\| recent\.note \|\| null, payer: payerTarget, replacedCents: cancelled \? recent\.amountCents : null, replacedNow: cancelled \}\);/);
+  assert.ok(!/I cancelled your \$\{randsShort\(recent\.amountCents\)\} link and made/.test(p), 'the old second message is gone');
+  const f = p.slice(p.indexOf('async function handleCreatePaymentRequest('));
+  assert.ok(f.indexOf('const recent = await latestPendingLink') < f.indexOf('EVERY LINK SAYS WHAT IT IS FOR'), 'the recent link is checked before the description is asked for');
+  assert.ok(f.indexOf('EVERY LINK SAYS WHAT IT IS FOR') < f.indexOf('// CONFIRM BEFORE CREATE'), 'the description is settled before the fee choice');
 });
 
 test('BUGLOG #125: "close my account" is matched plainly, answered once without a fake step, and raises the person alert', () => {

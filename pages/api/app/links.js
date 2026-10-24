@@ -1,20 +1,25 @@
 /**
  * WaPay personal portal: get paid (2026-10-21).
  *
- * GET                                                       → { links (open and paid, newest first) }
+ * GET                                                       → { links (every status, newest first); an open link also
+ *                                                             carries shareText, reminderText and remindUrl (2026-10-24) }
  * POST {action:'prepare', amountCents}                      → the quote (both ways) and the intent the PIN approves
- * POST {action:'create', intentId, amountCents, label?, note?, proof} → { link, shareText }
+ * POST {action:'create', intentId, amountCents, label?, note, proof} → { link, shareText }; note (what it is for) is
+ *                                                             required since 2026-10-24, refused with a plain line
  * POST {action:'cancel', code}                              → an open link of this customer's, cancelled
  *
  * Money never moves here: the link is an ordinary payment request that the
  * pay page settles. Creating one still needs the PIN proof (brief, binding),
  * checked before anything is written; the intent creates one link only.
+ * A reminder is a text the customer sends themselves (the share sheet, or a
+ * wa.me link where WhatsApp asks who to send it to): WaPay sends nothing.
  */
 import { appDeps } from '../../../lib/app-deps.js';
 import { gate, reply, intOf } from '../../../lib/app-http.js';
 import { linksOf, webLine } from '../../../lib/app-portal.js';
 import { capabilityById } from '../../../lib/capabilities.js';
 import { linkPrepare, createLink, cancelLink } from '../../../lib/app-money.js';
+import { webLinkTexts } from '../../../lib/pay-links.js';
 
 export const config = { maxDuration: 15 };
 
@@ -26,7 +31,10 @@ export function createLinksHandler(depsOverride = null) {
     const account = g.session.account;
     if (req.method === 'GET') {
       try {
-        return res.status(200).json({ ok: true, links: await linksOf(deps, account, { now: deps.now() }), feeLine: `${webLine(capabilityById('REQUEST_MONEY')?.feeLine?.() || '')} Links last 7 days.`.trim() });
+        const links = (await linksOf(deps, account, { now: deps.now() })).map((l) => (l.status === 'OPEN'
+          ? { ...l, ...webLinkTexts({ account, request: { id: l.code, amountCents: l.amountCents, note: l.note, expiresAt: l.expiresAt } }) }
+          : l));
+        return res.status(200).json({ ok: true, links, feeLine: `${webLine(capabilityById('REQUEST_MONEY')?.feeLine?.() || '')} Links last 7 days.`.trim() });
       } catch (error) {
         console.error(JSON.stringify({ type: 'app_links_error', accountId: account.id, error: error?.message }));
         return res.status(500).json({ ok: false, error: 'TRY_AGAIN' });

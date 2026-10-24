@@ -7,7 +7,9 @@
  * - every string the module can produce is free of the campaign's banned words
  *   ("any bank card" excepted), em dashes and percentage claims;
  * - the fee example is computed from the live fee table, never typed in;
- * - the first-link parser reads amount, who and note;
+ * - the first-link parser reads amount, who and note (since 2026-10-24 the words left over are what
+ *   the link is for, the prompt asks for it); the created link is the one forwardable card every
+ *   customer gets (lib/pay-links.js), within the campaign words;
  * - reminders: due only 20 to 23.5 hours after the customer's own last message, only
  *   for ad arrivals who stopped mid-onboarding or never made a link, locked before the
  *   send so they go once, and never after "stop".
@@ -18,8 +20,9 @@ import assert from 'node:assert/strict';
 import {
   AD_QUESTIONS, AD_BUTTONS, classifyAdEntry, firstNameFrom, adEntryReply, feeExample, firstLinkPrompt,
   parseFirstLinkAsk, firstLinkRetry, adPaidCopy, reminderCopy, matchesStop, STOP_REPLY, BANNED_COPY, TIPS, buttonsAsText,
-  copyViolations, firstLinkCreatedCopy, FAQ_KINDS, OPEN_FIRST, CAN_DO,
+  copyViolations, FAQ_KINDS, OPEN_FIRST, CAN_DO, EXAMPLE_ECHO_REPLY,
 } from '../lib/ad-flow.js';
+import { requestCardText, cardRequesterLabel, PAY_WAYS_LINE } from '../lib/pay-links.js';
 import { paymentRequestFeeCents } from '../lib/deposits.js';
 import { dueAdReminders, sendAdReminders, REMINDER_AFTER_MS, REMINDER_LATEST_MS } from '../lib/ad-reminders.js';
 
@@ -79,7 +82,10 @@ test('every reply is short, carries at most three buttons of 20 characters, and 
   }
   all.push(firstLinkPrompt('Thandi'), firstLinkPrompt(null), firstLinkRetry(), adPaidCopy({ amountCents: 25000 }), adPaidCopy({ amountCents: 25000, payerName: 'Thandi' }),
     reminderCopy('mid_onboarding', 'Thandi'), reminderCopy('no_link'), STOP_REPLY, ...TIPS, buttonsAsText([AD_BUTTONS.OPEN, AD_BUTTONS.COST]),
-    firstLinkCreatedCopy({ amountCents: 25000, url: 'https://pleasepayme.co.za/PRABCDEF', payerName: 'Thandi' }), firstLinkCreatedCopy({ amountCents: 4000, url: 'https://pleasepayme.co.za/PRABCDEF' }), OPEN_FIRST);
+    // The created link (section 8) is the one forwardable card since 2026-10-24, the same for ad arrivals.
+    requestCardText({ label: cardRequesterLabel({ msisdn: '0821112567', displayName: 'Thandi Nkosi' }), amountCents: 25000, description: 'braids', url: 'https://pleasepayme.co.za/PRABCDEF' }),
+    requestCardText({ label: cardRequesterLabel({ msisdn: '0821112567' }), amountCents: 4000, description: 'lunch', url: 'https://pleasepayme.co.za/PRABCDEF', reminder: true, openUntil: new Date() }),
+    EXAMPLE_ECHO_REPLY, OPEN_FIRST);
   for (const text of all) {
     assert.deepEqual(copyViolations(text), [], `section 11 words in: ${text}`);
     assert.doesNotMatch(text, /welcome to wapay/i, 'no second welcome');
@@ -102,7 +108,11 @@ test('every reply is short, carries at most three buttons of 20 characters, and 
   assert.ok(!adEntryReply('FAQ_PAY_SOMEONE', { hasAccount: true }).text.includes(OPEN_FIRST));
   assert.match(adEntryReply('Q2').text, /Instant EFT, Capitec Pay, SnapScan and more/);
   assert.match(adEntryReply('Q4').text, /coming soon/);
-  assert.match(firstLinkCreatedCopy({ amountCents: 25000, url: 'https://x', payerName: 'Thandi' }), /^Here's your payment link for R250: https:\/\/x\n\nForward it to Thandi/);
+  // One message after the link is made, readable when forwarded: who asks, the amount, what for, the link, how to pay.
+  assert.equal(
+    requestCardText({ label: 'Thandi •••567', amountCents: 25000, description: 'braids', url: 'https://x' }),
+    `🙏 *Thandi •••567 is asking you to pay R250*\nFor: braids\n\nPay here: https://x\n${PAY_WAYS_LINE}`,
+  );
   // Q1 to Q4 go straight to onboarding (Q2/Q3 after their answer, since 2026-10-20); free text offers the open-account button.
   assert.equal(adEntryReply('Q1').startOnboarding, true);
   assert.equal(adEntryReply('Q4').startOnboarding, true);
@@ -137,13 +147,23 @@ test('the first-link ask parses amount, who and note; the retry line asks for th
   assert.equal(parseFirstLinkAsk('who owes me?'), null);
   assert.equal(parseFirstLinkAsk(''), null);
   assert.ok(!/Thandi|R250/.test(firstLinkRetry()) && !/Thandi|R250/.test(firstLinkPrompt('Sipho')), 'no example sentence to copy (creative review 2026-10-20)');
-  // the example-free prompt accepts amount and name in either order, with or without "from" / "owes me"
-  assert.deepEqual(parseFirstLinkAsk('R20 Thandi'), { amountCents: 2000, payerName: 'Thandi', note: null });
-  assert.deepEqual(parseFirstLinkAsk('Thandi R250'), { amountCents: 25000, payerName: 'Thandi', note: null });
+  // 2026-10-24: the prompt asks for the amount and what it is for, so the words left over are the note
+  // (what it is for), in either order; a name is read only where the customer marked it ("from", "owes me").
+  assert.deepEqual(parseFirstLinkAsk('250 braids'), { amountCents: 25000, payerName: null, note: 'braids' });
+  assert.deepEqual(parseFirstLinkAsk('braids 250'), { amountCents: 25000, payerName: null, note: 'braids' });
+  assert.deepEqual(parseFirstLinkAsk('R20 lunch please'), { amountCents: 2000, payerName: null, note: 'lunch' });
+  assert.deepEqual(parseFirstLinkAsk('250 rand braids'), { amountCents: 25000, payerName: null, note: 'braids' });
+  assert.deepEqual(parseFirstLinkAsk('R20 Thandi'), { amountCents: 2000, payerName: null, note: 'Thandi' });
   assert.deepEqual(parseFirstLinkAsk('Thandi owes me 250'), { amountCents: 25000, payerName: 'Thandi', note: null });
-  assert.deepEqual(parseFirstLinkAsk('my brother 200'), { amountCents: 20000, payerName: 'brother', note: null });
+  assert.deepEqual(parseFirstLinkAsk('Thandi owes me 250 for braids'), { amountCents: 25000, payerName: 'Thandi', note: 'braids' });
+  assert.deepEqual(parseFirstLinkAsk('my brother 200'), { amountCents: 20000, payerName: null, note: 'my brother' });
   assert.deepEqual(parseFirstLinkAsk('250 from Sipho for rent'), { amountCents: 25000, payerName: 'Sipho', note: 'rent' });
   assert.equal(parseFirstLinkAsk('250').payerName, null, 'an amount alone has no name');
+  assert.equal(parseFirstLinkAsk('250').note, null, 'an amount alone has no note: the flow asks what it is for');
+  // The prompt asks for both in one answer and carries no example sentence to copy.
+  assert.match(firstLinkPrompt('Thandi'), /^You're all set, Thandi\. Let's get you paid\. How much, and what is it for\? Type the amount and a few words/);
+  assert.match(firstLinkRetry(), /amount in rands and a few words about what it is for/);
+  assert.match(EXAMPLE_ECHO_REPLY, /what is it for\?/);
 });
 
 test('stop words: only a plain stop, never cancel or PIN-reset words', () => {
@@ -174,7 +194,7 @@ test('reminders: due only in the 20 to 23.5 hour window, once, and never after s
   const out = await sendAdReminders({ prisma, now, enabled: true, send: async (m) => { sent.push(m); return { ok: true }; } });
   assert.equal(out.sent, 2);
   assert.equal(sent[0].text, 'Hi Thandi, you\'re one step away from your WaPay account. Want to finish?');
-  assert.equal(sent[1].text, 'Ready for your first payment link? Just tell me who owes you and how much.');
+  assert.equal(sent[1].text, 'Ready for your first payment link? Just tell me how much and what it is for.');
   assert.equal(captured.marks.length, 2, 'the lock is written before each send');
   for (const m of captured.marks) assert.match(JSON.stringify(m), /reminderSentAt/);
   for (const m of sent) assert.doesNotMatch(m.text, BANNED_COPY);

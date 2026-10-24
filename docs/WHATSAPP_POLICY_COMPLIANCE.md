@@ -108,3 +108,21 @@ Meta restricted the number for "Sending spam" from 20 October 21:30 UTC for 30 d
 **What no code can promise:** Meta decides on people's reports and can change its rules. These guardrails keep
 WaPay's own behaviour inside every rule and raise the alarm the first day anything drifts; the delivery stall
 check (every ten minutes) catches a restriction within minutes.
+
+## 2026-10-24: payment requests never come from WaPay (CHANGELOG 127)
+
+The founder asked whether WaPay could message the payer itself ("request payment from this number ... the payer
+gets a message from WaPay: please pay this person X for Y"). It does not: that is WaPay starting a conversation
+with someone who never asked to hear from it (rule 1 above), on a number restricted for "sending spam" four days
+earlier, and it would let anyone make WaPay send "please pay R500" to any number. Instead:
+
+- After a link is made the requester gets **one** message, the card to forward (rule 2).
+- When they name the payer's number, that same message carries a tap-to-send link
+  (`https://wa.me/<number>?text=<the card>`): it opens the requester's own chat with that person, the request
+  ready to send, so the payer hears from someone they know. WaPay sends that number nothing, and the number is
+  not stored on the request.
+- The one exception that stays: a WaPay member the requester has already sent money to gets WaPay's
+  informational note, and only while that member's own 24-hour window is open (they wrote to WaPay in the last
+  24 hours). Outside it nothing is sent (Meta would refuse it with 131047, BUGLOG #138). The requester's message
+  is the same either way, so it never tells whether a number is on WaPay.
+- Reminders ("remind 2" in the chat, "Send reminder" on the web) are a message the customer sends themselves.

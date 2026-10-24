@@ -10,10 +10,10 @@
  * - the home screen and CHECK_BALANCE render the voucher line ONLY when
  *   there is something to show, and the copy says "bought" — OTT gives us
  *   no redemption visibility yet, so we never promise "unspent";
- * - the requester's pay-link copy is a CTA BUTTON with a plain-text
- *   fallback, while the FORWARDABLE message keeps the visible URL
- *   (WhatsApp strips interactive buttons on forward — the link is the
- *   payer's only road in);
+ * - the requester gets ONE plain message after a link is made (founder
+ *   2026-10-24; it was a CTA button card plus a forwardable text), and it
+ *   keeps the visible URL (WhatsApp strips interactive buttons on forward,
+ *   the link is the payer's only road in);
  * - the ITN requester confirm falls back to the env-gated
  *   WAPAY_TEMPLATE_REQUEST_PAID template when free-form is rejected
  *   (requests can be paid days later, outside the service window).
@@ -67,18 +67,17 @@ test('CHECK_BALANCE: voucher line rides the deterministic balance answer', () =>
 // Pay-link CTA
 // ---------------------------------------------------------------------------
 
-test('pay-link: requester sees a CTA button, with a plain-text fallback', () => {
+test('pay-link: the requester gets ONE plain message to forward, never a button card (founder 2026-10-24)', () => {
   const body = fnBody('handleCreatePaymentRequest');
-  assert.match(body, /sendWhatsAppCtaUrl\(\{/);
-  assert.match(body, /buttonText: 'View my payment page'/);
-  assert.match(body, /if \(!interactive\?\.ok\)/, 'presentation must never block a request');
+  assert.ok(!/sendWhatsAppCtaUrl|buttonText/.test(body), 'a button is stripped on forward and makes a second message');
+  assert.match(body, /await sendCreatedLink\(\{/);
 });
 
-test('pay-link: the forwardable message keeps the visible URL', () => {
-  const body = fnBody('handleCreatePaymentRequest');
-  const fwd = body.indexOf('const forwardable');
-  assert.ok(fwd > -1);
-  assert.match(body.slice(fwd), /\$\{url\}/, 'forwarded buttons are stripped by WhatsApp — the payer needs the link as text');
+test('pay-link: the forwardable message keeps the visible URL', async () => {
+  // WhatsApp strips interactive buttons when a message is forwarded, so the payer needs the link as text.
+  const { cardForLink } = await import('../lib/pay-links.js');
+  const card = cardForLink({ account: { msisdn: '0821112567', displayName: 'Thandi' }, request: { id: 'PRABCDEF', amountCents: 15000, note: 'braids' } });
+  assert.match(card, /\nPay here: https:\/\/pleasepayme\.co\.za\/PRABCDEF\n/);
 });
 
 // ---------------------------------------------------------------------------

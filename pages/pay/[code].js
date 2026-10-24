@@ -224,7 +224,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
         <meta property="og:title" content={ogTitle} />
         <meta
           property="og:description"
-          content="Tap to pay on WaPay. Free from a WaPay balance, or pay securely by card."
+          content={`${status === 'PENDING' && note ? `For ${String(note).replace(/[\s.!]+$/, '')}. ` : ''}Tap to pay on WaPay. Free from a WaPay balance, or pay securely by card.`}
         />
         <meta property="og:site_name" content="Please Pay Me™ with WaPay" />
         <meta property="og:type" content="website" />
@@ -270,7 +270,8 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
                 {reference ? <div style={{ color: '#666', fontSize: 12.5, marginTop: items.length ? 6 : 0 }}>Ref: {reference}</div> : null}
               </div>
             ) : null}
-            {note ? <div style={styles.note}>“{note}”</div> : null}
+            {/* What the link is for (founder 2026-10-24: every personal link carries one; the payer reads it here). */}
+            {note ? <div style={styles.note}>For: {note}</div> : null}
             {requesterTail ? (
               <div style={{ ...styles.fine, color: '#1f3b2a', background: '#eef6f0', borderRadius: 10, padding: '8px 12px', marginTop: 10 }}>
                 Check the number. This request comes from the WaPay account on a number ending {requesterTail}.

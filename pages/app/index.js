@@ -1,12 +1,13 @@
 /**
  * WaPay personal portal: home (2026-10-21). The balance (available = spend +
  * cash, the two lines underneath), the four quick actions, the status banner,
- * the last five movements and the coming-soon tiles.
+ * the open payment links (2026-10-24), the last five movements and the
+ * coming-soon tiles.
  */
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import Shell from '../../components/app/Shell.js';
-import { ActivityRow, Banner, Icon, Logo, Notice, Pill, R, Spinner, api } from '../../components/app/kit.js';
+import { ActivityRow, Banner, Icon, Logo, Notice, Pill, R, Row, Rs, Spinner, api, shortDate } from '../../components/app/kit.js';
 
 const ACTIONS = [
   { href: '/app/get-paid', label: 'Get paid', icon: 'in' },
@@ -17,10 +18,14 @@ const ACTIONS = [
 
 function HomeScreen() {
   const [home, setHome] = useState(null);
+  const [links, setLinks] = useState(null);
   const [error, setError] = useState('');
   useEffect(() => {
     api('/api/app/home').then((r) => (r.ok ? setHome(r.data) : setError('Your balance could not be loaded just now. Pull down or try again in a moment.')));
+    // The open payment links, tracked on their own page (2026-10-24); the home card never waits for them.
+    api('/api/app/links').then((r) => { if (r.ok) setLinks(r.data.links || []); });
   }, []);
+  const open = (links || []).filter((l) => l.status === 'OPEN');
   if (error) return <Notice tone="error">{error}</Notice>;
   if (!home) return <Spinner />;
   const b = home.balance;
@@ -47,6 +52,17 @@ function HomeScreen() {
         ))}
       </nav>
       <Banner banner={home.banner} />
+      {links ? (
+        <>
+          <h3>Payment links <Link href="/app/links">See all</Link></h3>
+          <div className="card tight">
+            {open.length
+              ? open.slice(0, 2).map((l) => <Row key={l.code} href="/app/links" icon="link" title={`${Rs(l.amountCents)}${l.note ? ` for ${l.note}` : ''}`} sub={`Open until ${shortDate(l.expiresAt)} · ${l.code}`} right={<Pill tone="amber">Open</Pill>} />)
+              : <Row href="/app/links" icon="link" title="No open links" sub="See paid links, or make a new one" right="›" />}
+            {open.length > 2 ? <Row href="/app/links" icon="link" title={`${open.length - 2} more open`} sub="Reminders and cancel on Your links" right="›" /> : null}
+          </div>
+        </>
+      ) : null}
       <h3>Recent {home.recent?.length ? <Link href="/app/activity">See all</Link> : null}</h3>
       <div className="card tight">
         {home.recent?.length

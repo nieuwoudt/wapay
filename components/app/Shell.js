@@ -1,7 +1,7 @@
 /**
  * The personal portal's frame (2026-10-21): the head, the stylesheet, the
- * centred 420 px column, the bottom navigation (Home, Pay, Activity,
- * Profile) and the sign-in guard. A signed-in screen renders nothing of the
+ * centred 420 px column, the bottom navigation (Home, Pay, Links, Activity,
+ * Profile; Links since 2026-10-24) and the sign-in guard. A signed-in screen renders nothing of the
  * customer's until /api/app/auth says the session is good; otherwise it goes
  * to /app/login and comes back after.
  */
@@ -17,6 +17,7 @@ export const useAppSession = () => useContext(SessionContext);
 const TABS = [
   { key: 'home', href: '/app', label: 'Home', icon: 'home' },
   { key: 'pay', href: '/app/pay', label: 'Pay', icon: 'pay' },
+  { key: 'links', href: '/app/links', label: 'Links', icon: 'link' },
   { key: 'activity', href: '/app/activity', label: 'Activity', icon: 'activity' },
   { key: 'profile', href: '/app/profile', label: 'Profile', icon: 'profile' },
 ];
