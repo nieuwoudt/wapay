@@ -20,6 +20,7 @@ import {
   payoutEnabled, payoutConfigured, kycRequired, accountKycVerified, quotePayout, resolveProviders,
   payoutBalances, listPayouts, requestPayout, PAYOUT_METHODS, MIN_PAYOUT_CENTS, MAX_PAYOUT_CENTS,
 } from '../../../lib/payouts.js';
+import { expressFor, recentReceipts, expressFeeLine } from '../../../lib/payout-express.js';
 
 export const config = { maxDuration: 30 };
 
@@ -58,7 +59,13 @@ export default async function handler(req, res) {
   const body = req.body || {};
   try {
     if (body.action === 'quote') {
-      return res.status(200).json({ ok: true, quote: quotePayout({ method: String(body.method || ''), amountCents: Number(body.amountCents) }) });
+      // The express fee (lib/payout-express.js, 2026-10-24) is quoted here, so the owner sees it before confirming.
+      const method = String(body.method || ''); const amountCents = Number(body.amountCents);
+      const base = quotePayout({ method, amountCents });
+      const [bal, receipts] = await Promise.all([payoutBalances({ accountId: account.id }).catch(() => null), recentReceipts({ prisma, accountId: account.id }).catch(() => [])]);
+      const ex = bal ? expressFor({ balanceCents: bal.totalCents, receipts, amountCents, normalFeeCents: base.feeCents }) : null;
+      const quote = ex?.express ? quotePayout({ method, amountCents, feeMultiplier: ex.multiplier }) : base;
+      return res.status(200).json({ ok: true, quote: { ...quote, feeNote: ex?.express ? expressFeeLine(ex) : null } });
     }
     if (body.action === 'request') {
       if (!payoutEnabled()) return res.status(503).json({ ok: false, error: 'DISABLED' });
@@ -74,8 +81,10 @@ export default async function handler(req, res) {
         recipient: body.recipient || {},
         businessId: business.id,
         authorization: step.proof || null,
+        // The fee the owner saw in the quote: a higher one is refused, never charged (2026-10-24).
+        expectedFeeCents: Number.isInteger(body.feeCents) ? body.feeCents : null,
       });
-      const status = out.ok ? 200 : out.error === 'KYC_REQUIRED' ? 403 : out.error === 'INSUFFICIENT_FUNDS' ? 402 : ['DISABLED', 'NOT_CONFIGURED', 'NO_PROVIDER', 'PAYOUT_HOLD'].includes(out.error) ? 503 : 400;
+      const status = out.ok ? 200 : out.error === 'KYC_REQUIRED' ? 403 : out.error === 'INSUFFICIENT_FUNDS' ? 402 : ['DISABLED', 'NOT_CONFIGURED', 'NO_PROVIDER', 'PAYOUT_HOLD'].includes(out.error) ? 503 : ['FEE_CHANGED', 'DAILY_CAP'].includes(out.error) ? 409 : out.error === 'REVIEW' ? 423 : 400;
       console.log(JSON.stringify({ type: 'business_payout', businessId: business.id, via: step.via, ok: out.ok, status: out.status || out.error, reference: out.reference || null }));
       return res.status(status).json(out);
     }

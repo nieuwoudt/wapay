@@ -2062,6 +2062,44 @@ function AuditPanel({ tick = 0 }) {
   );
 }
 
+/* ---------------- Pay-out requests with the fraud triage (founder 2026-10-24) ---------------- */
+const LEVEL_PILL = { 1: 'g', 2: 'g', 3: 'y', 4: 'r', 5: 'r' };
+const PAYOUT_OUTCOME = { SETTLED: 'paid', PENDING: 'with the bank', REVIEW: 'held for your check', FROZEN: 'refused: frozen', PAYOUT_HOLD: 'refused: paused', DAILY_CAP: 'refused: daily cap', KYC_REQUIRED: 'refused: ID check', FEE_CHANGED: 'stopped: fee changed', INSUFFICIENT_FUNDS: 'refused: balance', FLOAT_SHORT: 'refused: float empty', NOT_AUTHORISED: 'refused: no PIN' };
+function PayoutRequests({ tick }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    fetch('/api/admin/payout-requests?days=7').then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then(setD).catch((e) => setErr(e.message || 'failed'));
+  }, [tick]);
+  if (err) return <p className="err">Pay-out requests could not be read ({err}).</p>;
+  if (!d) return <p className="empty">Loading pay-out requests…</p>;
+  return (
+    <>
+      {d.hold?.held ? <p className="pill r" style={{ fontSize: 12.5, padding: '6px 12px', marginBottom: 10 }}>⏸ Pay-outs are paused for everyone since {new Date(d.hold.since).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}. Nothing leaves until you reopen them.</p> : null}
+      <p className="note" style={{ marginTop: 0 }}>Last 7 days by fraud level: {[5, 4, 3, 2, 1].map((l) => `${l}: ${d.byLevel?.[l] ?? 0}`).join(' · ')}. Level 5 waits for your check; you get every request on WhatsApp and e-mail.</p>
+      {!d.requests?.length ? <p className="empty">No pay-out requests in the last 7 days.</p> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ minWidth: 760 }}>
+            <thead><tr><th>When</th><th>Account</th><th className="n">Amount</th><th>Level</th><th>Why</th><th>Result</th></tr></thead>
+            <tbody>
+              {d.requests.map((q, i) => (
+                <tr key={`${q.accountId}-${i}`}>
+                  <td>{new Date(q.at).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                  <td>{q.phone || '•••'}{q.name ? ` ${q.name}` : ''}{q.frozen ? <span className="pill r" style={{ marginLeft: 6 }}>frozen</span> : null}</td>
+                  <td className="n">{q.amountCents != null ? R(q.amountCents) : '–'}{q.method ? ` ${q.method}` : ''}{q.express ? ' · double fee' : ''}</td>
+                  <td>{q.level ? <span className={`pill ${LEVEL_PILL[q.level] || 'y'}`}>{q.level}/5 {q.label}</span> : '–'}</td>
+                  <td>{q.reasons?.length ? q.reasons.join('; ') : 'nothing unusual'}</td>
+                  <td>{PAYOUT_OUTCOME[q.outcome] || q.outcome || '–'}{q.cleared ? ' (cleared)' : ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
 function FloatsTab() {
   const [tick, setTick] = useState(0);
   const [m] = useMetrics('30', tick);
@@ -2075,6 +2113,10 @@ function FloatsTab() {
       <div className="grid kpis">
         <FloatTile balancesCents={m?.vitals?.balancesCents ?? m?.vitals?.floatCents ?? 0} tick={tick} />
         <div className="card"><div className="k">Customer balances</div><div className="v">{m ? R(m.vitals?.balancesCents ?? m.vitals?.floatCents) : '…'}</div><div className="vs">what the pay-out float must cover</div></div>
+      </div>
+      <div className="card" style={{ marginTop: 14 }}>
+        <h2>Pay-out requests</h2>
+        <PayoutRequests tick={tick} />
       </div>
       <div className="card" style={{ marginTop: 14 }} key={`floats-${tick}`}>
         <h2>Supplier floats</h2>

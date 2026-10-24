@@ -4,6 +4,13 @@
 
 ---
 
+## 141. The test suite read the production database through Prisma's own .env loading
+
+- **Symptom (found 2026-10-24 while shipping the global pay-out hold):** 29 withdraw-flow tests failed the moment the hold row existed in production. They had never set a database: `node --test` passes no `DATABASE_URL`, but Prisma Client loads the project's `.env` by itself, and the fast copy's `.env` holds the production connection string. Every test that called code with a default client (`lib/prisma.js`, `getPrisma()` in `packages/domain`, the WhatsApp package's template catalogue, seven VAS routes with their own client) read production, took pooler connections and depended on production state.
+- **Root cause:** a convenience default (Prisma's automatic `.env`) met a fast copy whose `.env` is the operator's production toolbox. Nothing marked a test process as different.
+- **Fix (CHANGELOG 125):** under `node --test` (`NODE_TEST_CONTEXT`) every client points at `TEST_DATABASE_URL` or a closed local port; the VAS routes use the shared client; `pnpm test` loads `.env.test` when present. The suite passes with no database at all.
+- **Guard:** `tests/test-db-guard.test.mjs` asserts both shared clients refuse at the closed port and that every `new PrismaClient(` in the app carries the guard. Lesson: a test run must not be able to reach production by default; isolation belongs in the client, not in how someone remembers to start the tests.
+
 ## 140. Stolen cards were cashed out through payment links: R20,466 with fake payer details on 22 October, R43,551 paid out before PayFast stopped card payments
 
 - **Symptom (found 2026-10-24 from PayFast's transaction export):** from 22:22 SAST on 22 October PayFast accepted no typed-card payment; only Apple Pay went through (R107, then the founder's R20). The export showed why: 61 pay-link payments with fake payer details (34 throwaway e-mails at example.com, drsonny.org and keyboard-mash domains, made-up cells such as 073 123 4567, one cell paying 10 links in an hour), R20,466, to 16 accounts opened that day, none from the ad; plus 13 payments, R36,300, where people paid their own links by card (the R3,000 pattern; one customer said the cards were international).

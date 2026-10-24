@@ -1165,16 +1165,19 @@ function Payouts() {
     setErr('');
     if (!quote || quote.error) { setErr('Enter an amount within the limits first.'); return; }
     if (!stepUp) { setErr(st.hasPassword ? 'Enter your portal password to confirm.' : 'Enter a one-time code to confirm.'); return; }
-    if (!window.confirm(`Pay out ${R(amountCents)} by ${m.label} to ${rec.firstname} ${rec.surname}? Fee ${R(quote.feeCents)}, ${R(quote.totalCents)} leaves your balance.`)) return;
+    if (!window.confirm(`Pay out ${R(amountCents)} by ${m.label} to ${rec.firstname} ${rec.surname}? Fee ${R(quote.feeCents)}${quote.express ? ' (double: money under 2 hours old)' : ''}, ${R(quote.totalCents)} leaves your balance.`)) return;
     setBusy(true);
     try {
-      const r = await api('/api/business/payout', { action: 'request', intentId, method, amountCents, recipient: rec, ...(st.hasPassword ? { currentPassword: stepUp } : { code: stepUp }) });
+      const r = await api('/api/business/payout', { action: 'request', intentId, method, amountCents, recipient: rec, feeCents: quote.feeCents, ...(st.hasPassword ? { currentPassword: stepUp } : { code: stepUp }) });
       setResult(r);
       if (r.ok) { setAmount(''); setStepUp(''); setIntentId(newIntentId()); load(); }
       else if (r.error === 'STEP_UP_FAILED') setErr('That password or code did not work.');
       else if (r.error === 'KYC_REQUIRED') setErr('Pay-outs need identity verification first. Ask WaPay to send you the verification link on WhatsApp.');
       else if (r.error === 'INSUFFICIENT_FUNDS') setErr(`Not enough balance: ${R(r.totalCents || quote.totalCents)} is needed including the fee.`);
       else if (r.error === 'BAD_RECIPIENT') setErr(`Please fill in the recipient's ${String(r.field || 'details').replace('_', ' ')}.`);
+      else if (r.error === 'FEE_CHANGED') setErr(`The fee is now ${R(r.feeCents)} because money reached your balance less than 2 hours ago. Nothing has left your balance. Check the new fee and confirm again.`);
+      else if (r.error === 'DAILY_CAP') setErr(`Pay-outs are limited to ${R(r.capCents)} in any 24 hours; up to ${R(r.remainingCents || 0)} more works now. Nothing has left your balance.`);
+      else if (r.error === 'REVIEW') setErr('This pay-out needs a check by a person at WaPay before it can go. Nothing has left your balance.');
       else setErr(r.error === 'DISABLED' ? 'Pay-outs are not switched on yet.' : r.error === 'PAYOUT_HOLD' ? 'Pay-outs are paused while we run safety checks. Nothing has left your balance.' : r.error === 'NO_PROVIDER' ? 'That pay-out method is not available right now.' : `The pay-out did not go through (${r.error || 'error'}). Nothing has left your balance.`);
     } catch { setErr('No connection. Try again.'); } finally { setBusy(false); }
   };
@@ -1215,7 +1218,7 @@ function Payouts() {
           <div className="total">
             <div>
               <div className="k">Leaves your balance</div>
-              {quote && !quote.error && <div className="note" style={{ margin: '4px 0 0' }}>{R(quote.amountCents)} to the recipient + {R(quote.feeCents)} fee</div>}
+              {quote && !quote.error && <div className="note" style={{ margin: '4px 0 0' }}>{R(quote.amountCents)} to the recipient + {R(quote.feeCents)} fee{quote.express ? ` (double the usual ${R(quote.normalFeeCents)})` : ''}{quote.feeNote ? <><br />{quote.feeNote}</> : null}</div>}
               {quote?.error === 'BAD_AMOUNT' && <div className="err" style={{ marginTop: 4 }}>Between {R(quote.minCents)} and {R(quote.maxCents)} per pay-out.</div>}
             </div>
             <b>{quote && !quote.error ? R(quote.totalCents) : 'R0.00'}</b>

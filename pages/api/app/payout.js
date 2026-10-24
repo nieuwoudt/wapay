@@ -47,7 +47,7 @@ export function createPayoutHandler(depsOverride = null) {
     try {
       if (b.action === 'check') return reply(res, await payoutCheck(deps, { account, ...shape(b) }));
       if (b.action === 'request') {
-        const out = await payoutRequest(deps, { account, intentId: String(b.intentId || ''), ...shape(b), save: b.save === true, nickname: b.nickname || null, proof: b.proof });
+        const out = await payoutRequest(deps, { account, intentId: String(b.intentId || ''), ...shape(b), save: b.save === true, nickname: b.nickname || null, proof: b.proof, feeCents: intOf(b.feeCents) });
         console.log(JSON.stringify({ type: 'app_payout', accountId: account.id, ok: !!out.ok, payoutStatus: out.payoutStatus || null, error: out.error || null, reference: out.reference || null }));
         return reply(res, out);
       }

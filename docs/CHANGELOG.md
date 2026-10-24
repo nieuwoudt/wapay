@@ -4,6 +4,63 @@
 
 ---
 
+## 2026-10-24 (125) — Pay-out rules for the reopening: R3,000 a day, the ID check over R1,000, double fee on money under two hours old, fraud triage 1 to 5 on every request; tests can no longer reach production
+
+Founder, 24 October: "maximum withdrawals can happen per day is 3k, every customer doing a withdrawal over
+1000 needs to do a KYC, and if you want to do a withdrawal within 2hrs of receipt you need to pay 2x the
+current fee"; "keep me updated whenever someone requests a payout ... levels of triage 1-5 of how likely it's
+fraud"; and, for the tests, "create a database for the test". Pay-outs stay paused (CHANGELOG 124); all of
+this applies the moment the founder reopens them.
+
+- **Limits** (`lib/payout-rules.js`): every account may pay out at most `WAPAY_PAYOUT_DAILY_CAP_CENTS`
+  (R3,000) in any 24 hours, ID-checked or not; the new-account cap applies only when it is lower. With
+  `WAPAY_PAYOUT_KYC=threshold`, a pay-out over `WAPAY_PAYOUT_KYC_SINGLE_CENTS` (R1,000), or more than
+  `WAPAY_PAYOUT_KYC_DAILY_CENTS` (R1,000) in 24 hours, needs the ID check, so three R1,000 pay-outs cannot
+  dodge it. Without the check a customer can take up to R1,000 a day; with it, up to R3,000. The wording
+  changed with it ("Pay-outs over R1,000 need a once-off identity check").
+- **Express fee** (`lib/payout-express.js`): money that reached the balance from outside less than
+  `WAPAY_PAYOUT_EXPRESS_WINDOW_MINUTES` (120) ago can leave at `WAPAY_PAYOUT_EXPRESS_FEE_MULTIPLIER` (2)
+  times the method's fee, PayShap R16 instead of R8, but only when the older balance cannot cover the
+  pay-out and its normal fee. Fresh money is a paid link or top-up (`LOAD_*`), a Blu voucher load, a send
+  from a member, a claimed gift, a manual credit, a referral reward; never the SPEND to CASH upgrade, a
+  refund or a reversal. The chat reads it once when a withdrawal starts and every quote, affordable amount
+  and the confirmation use it ("Fee: R16 (double the usual R8)" and the time the normal fee is back); the
+  web app and the business portal quote it before the PIN or the password. `requestPayout` decides it again
+  from the ledger and refuses with `FEE_CHANGED`, before any row, hold or rail call, when the fee is higher
+  than the one the customer confirmed (`expectedFeeCents`); a lower fee is simply charged. The hold, the
+  settlement (`buildCashout` now takes the agreed `feeCents`) and the row carry the doubled fee. Operator
+  pay-outs never carry it (`allowExpress: false`): the founder chose the timing. The bot's fee answer says
+  it, with the limits (`withdrawRulesLine`).
+- **Fraud triage** (`lib/payout-triage.js`): every request with a valid PIN is scored from rows WaPay
+  already keeps: account age, ID check, money under two hours old, links paid with the account's own
+  number, card payments in 24 hours, a payer who also paid other accounts this week, money moved with a
+  frozen account, a payer who is a frozen account, a destination shared with other accounts or with a
+  frozen one (a keyed hash, `destKey`, now written on every pay-out row; never the number), a cash code to
+  another person's phone, a first pay-out that takes nearly everything, many attempts. Score to level 1 to
+  5; a frozen account's destination is always 5. At `WAPAY_PAYOUT_REVIEW_LEVEL` (5; "off" disables) the
+  request waits for a person: `REVIEW`, nothing written, held or sent, and the customer is told a person
+  checks it first, with no time promise. Calibrated on the 22 October rows: burst accounts and
+  self-funders score 7 or more; a new customer paid once by a friend scores 2 to 5.
+- **Reporting**: `requestPayout` is now a thin wrapper around `requestPayoutCore` that writes an audit row
+  (event `PAYOUT_REQUEST`: level, reasons, amount, fee, express, result) and sends one alert to the ops
+  numbers with its e-mail twin (`opsPayoutRequest`) for every request except replays and while pay-outs
+  are switched off or paused: "🔴 Pay-out request, fraud level 5/5 (very likely)", the amount, method and
+  fee, the masked account, the reasons and the result. Mission Control's Supplier Floats tab opens with a
+  "Pay-out requests" card (levels, reasons, results, the pause banner; `/api/admin/payout-requests`).
+  `GET /api/internal/payout-review` lists them or triages one account; `POST { accountId, decision:
+  'clear' | 'unclear', hours, by, reason }` lets an account past the review for a while (default 72 h).
+  Freezing stays on `/api/internal/payout-freeze`. `/api/internal/flags` shows `payoutRules`.
+- **Tests and production** (BUGLOG #141): Prisma loads the fast copy's `.env`, which holds the production
+  database, so tests using a default client read production. Every place that builds a client
+  (`lib/prisma.js`, `packages/domain/src/db.ts`, the two in `packages/whatsapp`) now points at
+  `TEST_DATABASE_URL` or a closed local port whenever `node --test` runs it (`NODE_TEST_CONTEXT`); the
+  seven VAS routes that built their own client use the shared one; `pnpm test` loads `.env.test` when
+  present. No test needs a database: the suite passes with none. `tests/test-db-guard.test.mjs` proves
+  both shared clients refuse at the closed port and that no client is built without the guard.
+
+Tests: `tests/payout-express-triage.test.mjs` (12), `tests/test-db-guard.test.mjs` (3), the rules tests
+rewritten for the new limits. Full suite 1368/1368; build green.
+
 ## 2026-10-24 (124) — Global pay-out hold: nothing leaves WaPay until the founder reopens pay-outs
 
 Founder, 24 October, after the stolen-card cash-out (BUGLOG #140): "don't do any more payouts until I say we

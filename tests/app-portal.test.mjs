@@ -468,7 +468,7 @@ test("pay out: a frozen account, the daily cap and the KYC threshold refuse in t
   assert.equal(h.calls.requestPayout.length, 0, 'frozen: no rail call');
   delete h.t.account[0].profile.payouts;
 
-  const cap = { ok: false, error: 'DAILY_CAP', capCents: 1000000, usedCents: 900000, remainingCents: 100000, newAccountDays: 7, isNew: true, verified: false };
+  const cap = { ok: false, error: 'DAILY_CAP', capCents: 1000000, usedCents: 900000, remainingCents: 100000, newAccount: true, newAccountDays: 7, isNew: true, verified: false };
   const h2 = harness({ async checkPayoutRules() { return cap; } });
   const s2 = await signedIn(h2);
   const capped = await checked(h2, s2);
@@ -482,7 +482,7 @@ test("pay out: a frozen account, the daily cap and the KYC threshold refuse in t
   const s3 = await signedIn(h3);
   const needs = await checked(h3, s3);
   assert.equal(needs.statusCode, 403);
-  assert.ok(needs.body.line.includes('Pay-outs of R3,000 or more need a once-off identity check on your phone.'));
+  assert.ok(needs.body.line.includes('Pay-outs over R3,000 need a once-off identity check on your phone.'), 'the threshold is read from the rule result');
   assert.ok(needs.body.line.endsWith('Verify your ID below, or choose a smaller amount.'));
   assert.equal(needs.body.kyc.canVerify, true);
   assert.ok(kycThresholdCopy(kyc).includes('Reply *VERIFY*'), 'the chat keeps its own instruction');
@@ -739,7 +739,7 @@ test('profile: remove touches only your own destination; change PIN needs the cu
 // ---------------------------------------------------------------------------
 
 test("webLine keeps the chat's rule sentences and drops only the chat's instructions", () => {
-  const cap = dailyCapCopy({ capCents: 1000000, usedCents: 900000, remainingCents: 100000 });
+  const cap = dailyCapCopy({ capCents: 1000000, usedCents: 900000, remainingCents: 100000, newAccount: true });
   assert.equal(webLine(cap), '⏸ New accounts can pay out up to R10,000 in any 24 hours. You have paid out R9,000 in the last 24 hours, so up to R1,000 more works now. Choose a smaller amount.');
   const frozen = webLine(FROZEN_PAYOUT_COPY);
   assert.ok(frozen.startsWith('⏸ Pay-outs on this account are paused while we check a recent payment. Nothing has left your balance and your money is safe.'));

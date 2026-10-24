@@ -86,7 +86,7 @@ function PayOutScreen() {
       const step1 = await api('/api/app/pin', { method: 'POST', body: { purpose: 'payout', intentId: check.intentId, amountCents: check.amountCents, pin } });
       setPin('');
       if (!step1.ok) { setError(pinError(step1)); return; }
-      const r = await api('/api/app/payout', { method: 'POST', body: { action: 'request', intentId: check.intentId, ...body(), save, nickname: save ? nickname : null, proof: step1.data.proof } });
+      const r = await api('/api/app/payout', { method: 'POST', body: { action: 'request', intentId: check.intentId, ...body(), save, nickname: save ? nickname : null, proof: step1.data.proof, feeCents: check.feeCents } });
       if (r.ok) { setResult(r.data); setStep('done'); setIdent({ fullName: '', idNumber: '', countryOfIssue: '' }); setDetails({ bank: '', accountNumber: '', mine: true, mobile: '' }); return; }
       if (r.data.error === 'KYC_REQUIRED') { setProblem({ line: r.data.line, kyc: !!r.data.kyc?.canVerify, error: r.data.error }); setStep('amount'); return; }
       setError(r.data.line || 'The pay-out did not go through. Nothing has left your balance.');
@@ -235,7 +235,8 @@ function PayOutScreen() {
           {header('Confirm your pay-out', null, 'amount')}
           <div className="card">
             <Kv k="Amount" v={R(check.amountCents)} />
-            <Kv k="Fee" v={R(check.feeCents)} />
+            <Kv k="Fee" v={check.express ? `${R(check.feeCents)} (double the usual ${R(check.normalFeeCents)})` : R(check.feeCents)} />
+            {check.feeNote ? <p className="note">{check.feeNote}</p> : null}
             <Kv k="Total from your balance" v={R(check.totalCents)} strong />
             <Kv k="To" v={`${check.destinationLabel} · ${check.methodLabel}`} />
             {check.nameOnAccount ? <Kv k="Name on the account" v={check.nameOnAccount} /> : null}

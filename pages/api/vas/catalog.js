@@ -5,9 +5,8 @@
  * Does NOT require authentication - this is product information.
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../lib/prisma.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Structured logging helper

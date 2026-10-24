@@ -5,13 +5,12 @@
  * Validates meter number and shows purchase details.
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../../lib/prisma.js';
 import { isCategoryEnabledForWaId } from '../../../../lib/vas-config.js';
 import { BluVasExtendedClient } from '@wapay/providers-blu';
 import { buildElectricityDraft } from '../../../../lib/electricity-utils.js';
 import { requireInternalAuth } from '../../../../lib/internal-auth.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Structured logging helper
