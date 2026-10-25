@@ -107,6 +107,15 @@ export default async function handler(req, res) {
       console.error(JSON.stringify({ type: 'cron_turns_purge_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
     }
 
+    // Link visits retention (lib/link-visits.js, 2026-10-25): areas of link opens are kept 90 days.
+    try {
+      const { pruneLinkVisits } = await import('../../../lib/link-visits.js');
+      const pruned = await pruneLinkVisits({ prisma });
+      console.log(JSON.stringify({ type: 'cron_link_visits_pruned', ...pruned, timestamp: new Date().toISOString() }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_link_visits_prune_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
     // Balance integrity (docs/AGENT_ARCHITECTURE_V2.md C17): stored vs derived
     // for every wallet; drift is logged for Mission Control, never corrected here.
     let integrity = null;

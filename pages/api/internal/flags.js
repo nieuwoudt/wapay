@@ -19,7 +19,7 @@ import { appAuthConfigured } from '../../../lib/app-auth.js';
 import { configuredAppHost } from '../../../lib/app-host.js';
 import { bannerFor, supportEmail } from '../../../lib/app-portal.js';
 import { onboardingFlagsReadout } from '../../../lib/onboarding-flags.js';
-import { readPayoutHold } from '../../../lib/payout-hold.js';
+import { readPayoutHold, payoutTestNumbers } from '../../../lib/payout-hold.js';
 import { payoutRules } from '../../../lib/payout-rules.js';
 import { expressRules } from '../../../lib/payout-express.js';
 import { reviewLevel } from '../../../lib/payout-triage.js';
@@ -42,7 +42,7 @@ export default async function handler(req, res) {
     fuelLive: isWicodeLive(),
     withdrawLive: payoutLive(),
     // The global pay-out hold (founder 2026-10-24): on until the founder lifts it.
-    payoutHold: hold ? { held: hold.held, since: hold.since, last: hold.last } : null,
+    payoutHold: hold ? { held: hold.held, since: hold.since, last: hold.last, testNumbers: payoutTestNumbers(env).length } : null,
     // The pay-out rules in force (2026-10-24): numbers and switches only.
     payoutRules: (() => { const r = payoutRules(env); const x = expressRules(env); return { dailyCapCents: r.dailyCapCents, newAccountDailyCapCents: r.newAccountDailyCapCents, kycSingleCents: r.kycSingleCents, kycDailyCents: r.kycDailyCents, kycMode: r.kycMode, kycConfigured: r.kycConfigured, expressWindowMinutes: Math.round(x.windowMs / 60000), expressFeeMultiplier: x.multiplier, reviewLevel: reviewLevel(env) }; })(),
     opsAlertRecipients: opsAlertRecipients().length,

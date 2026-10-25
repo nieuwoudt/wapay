@@ -19,6 +19,7 @@ import { gate, reply, intOf } from '../../../lib/app-http.js';
 import { linksOf, webLine } from '../../../lib/app-portal.js';
 import { capabilityById } from '../../../lib/capabilities.js';
 import { linkPrepare, createLink, cancelLink } from '../../../lib/app-money.js';
+import { recordLinkVisit } from '../../../lib/link-visits.js';
 import { webLinkTexts } from '../../../lib/pay-links.js';
 
 export const config = { maxDuration: 15 };
@@ -49,6 +50,8 @@ export function createLinksHandler(depsOverride = null) {
       if (b.action === 'create') {
         const out = await createLink(deps, { account, intentId: String(b.intentId || ''), amountCents: intOf(b.amountCents), label: b.label, note: b.note, proof: b.proof });
         if (out.ok) console.log(JSON.stringify({ type: 'app_link_created', accountId: account.id, code: out.link?.code, replayed: !!out.replayed }));
+        // Where it was made (lib/link-visits.js, 2026-10-25).
+        if (out.ok && !out.replayed && out.link?.code) await recordLinkVisit({ prisma: deps.prisma, req, kind: 'CREATED', code: out.link.code, accountId: account.id, source: 'web' });
         return reply(res, out);
       }
       if (b.action === 'cancel') return reply(res, await cancelLink(deps, { account, code: b.code }));

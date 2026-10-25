@@ -615,3 +615,36 @@ model AuditFinding {
   @@index([lastSeenRunId])
   @@map("audit_findings")
 }
+
+// Where payment links travel (founder 2026-10-25: "where these links are being created, which parts of the
+// country, where they're sending it to, and if that person opens the links, where that person is"). One row
+// per device per link per kind per day. The area is what Vercel's edge reads from the request's IP: country,
+// province, city and a city-level point, never GPS and never the IP itself (visitorKey is a keyed hash of the
+// IP, the browser and the day, so a device cannot be followed from one day to the next). Rows older than 90
+// days are deleted by the daily cron. Written by the pay page (OPEN, PREVIEW), checkout (CHECKOUT), link
+// creation on the web app and the business portal (CREATED) and the web app's signed-in requests (SEEN, the
+// requester's own area). Read by Mission Control's Links tab (GET /api/admin/link-map). lib/link-visits.js.
+model LinkVisit {
+  id         String   @id @default(cuid())
+  kind       String // OPEN | PREVIEW | CHECKOUT | CREATED | SEEN
+  code       String   @default("") // the payment request (PRXXXXXX); "" for SEEN
+  accountId  String? // the link's requester, or the signed-in account for SEEN
+  source     String? // the door: the link's ?s= tag (r reminder, t tap-to-send, w web share, b business), or web | business for CREATED
+  country    String? // ISO 3166-1 alpha-2
+  region     String? // ISO 3166-2 subdivision without the country (GP, WC, KZN, ...)
+  city       String?
+  latitude   Float? // city-level, from the IP, rounded to two decimals
+  longitude  Float?
+  device     String? // mobile | tablet | desktop
+  os         String?
+  browser    String?
+  app        String? // the app the link was opened or previewed in (WhatsApp, Facebook, Instagram, ...)
+  visitorKey String
+  createdAt  DateTime @default(now())
+
+  @@unique([kind, code, visitorKey])
+  @@index([createdAt])
+  @@index([code])
+  @@index([accountId, createdAt])
+  @@map("link_visits")
+}

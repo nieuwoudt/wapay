@@ -25,6 +25,7 @@ import Head from 'next/head';
 import { useRef, useState } from 'react';
 
 import { getPaymentRequest, maskedRequesterLabel, requesterNumberTail } from '../../lib/payment-requests.js';
+import { recordLinkVisit, sourceTag } from '../../lib/link-visits.js';
 import { paymentRequestFeeCents } from '../../lib/deposits.js';
 import prisma from '../../lib/prisma.js';
 
@@ -37,7 +38,7 @@ function rands(cents) {
   return `R${(cents / 100).toFixed(2).replace(/\.00$/, '')}`;
 }
 
-export async function getServerSideProps({ params, query }) {
+export async function getServerSideProps({ params, query, req }) {
   const code = String(params.code || '').toUpperCase();
   const { adumoEnabled, primaryCardRail } = await import('../../lib/adumo.js');
   // Adumo is offered to payers only once it is the primary rail. While it is
@@ -51,6 +52,9 @@ export async function getServerSideProps({ params, query }) {
 
   const request = await getPaymentRequest({ code });
   if (!request) return { notFound: true };
+  // Where links are opened (lib/link-visits.js, founder 2026-10-25): the area from the IP, the device and the
+  // door (?s=); once per device per link per day; best effort and capped, never in the way of the page.
+  await recordLinkVisit({ req, kind: 'OPEN', code, accountId: request.accountId, source: sourceTag(query?.s) });
 
   let requesterLabel = 'A WaPay user';
   // Pay-link identity (2026-10-20): the name is the requester's own WhatsApp
@@ -344,6 +348,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
             <div style={styles.fine}>
               No fees for you: you pay exactly {rands(amountCents)}. Payments are processed securely by PayFast{adumo ? ' or Adumo (Nedbank)' : ''}; no WaPay account is needed.
               Your number is used to send your receipt on WhatsApp and to offer you your own free WaPay, which you're welcome to ignore.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
+              {' '}To protect payers and stop fraud, WaPay notes the rough area this page is opened from (from your internet connection, never your exact location) and keeps it for 90 days.
             </div>
             <div style={styles.fine}>
               Have a WaPay account? <a href="https://app.wapay.co.za" style={{ color: '#359853', fontWeight: 600 }}>Log in at app.wapay.co.za</a> to see your balance, get paid and pay out.

@@ -262,6 +262,31 @@ test('Mission Control can clear or freeze from the card; the action is JSON only
   assert.match(ui, /onClick=\{\(\) => act\(q, 'clear'\)\}>Clear 72 h<\/button>/); assert.match(ui, /onClick=\{\(\) => act\(q, 'freeze'\)\}>Freeze<\/button>/);
 });
 
+test('a test number goes through the pause and every check, then stops before any money moves; the founder hears it', async () => {
+  env();
+  const { isPayoutHeldFor, isPayoutTestNumber, payoutTestNumbers } = await import('../lib/payout-hold.js');
+  const { testRunCopy } = await import('../lib/payout-chat.js');
+  const held = stubPrisma({ account: oldVerified });
+  held.processedMessage = { async findUnique({ where }) { return where.waMessageId === 'payout-hold:global' ? { id: 'h' } : null; } };
+  process.env.WAPAY_PAYOUT_TEST_NUMBERS = '0731234567, +27 82 000 0000';
+  try {
+    assert.deepEqual(payoutTestNumbers(), ['731234567', '820000000'], 'any spelling of a number');
+    assert.equal(isPayoutTestNumber({ waId: '27731234567' }), true);
+    assert.equal(isPayoutTestNumber({ waId: '27831112222' }), false);
+    assert.equal(await isPayoutHeldFor({ prisma: held, account: oldVerified }), false, 'the test number passes the pause');
+    assert.equal(await isPayoutHeldFor({ prisma: held, account: { waId: '27831112222' } }), true, 'everyone else stays paused');
+    const ledger = stubLedger(); const seen = []; const alerts = [];
+    const out = await pay({ prisma: held, ledger, client: settleRail(seen), receipts: [{ cents: 25000, at: NOW - 30 * MIN }], alerts });
+    assert.equal(out.ok, false); assert.equal(out.error, 'TEST_RUN'); assert.equal(out.feeCents, 1600); assert.equal(out.express, true); assert.equal(out.level, 1);
+    assert.deepEqual(held._prs, [], 'no pay-out row'); assert.deepEqual(ledger.calls, [], 'no hold, no ledger move'); assert.equal(seen.length, 0, 'no rail call');
+    assert.match(alerts[0].text, /Result: test run for a test number, nothing sent/);
+    assert.equal(held._audits[0].metadata.outcome, 'TEST_RUN');
+    assert.match(testRunCopy(out), /^🧪 Test pay-out: every check passed for R100 with a fee of R16 \(double the usual R8, money under 2 hours old\), and the fraud check scored it 1 of 5\. This number is a test number, so nothing was sent and your balance has not changed\.$/);
+    const frozenTester = stubPrisma({ account: { ...oldVerified, profile: { ...oldVerified.profile, payouts: { frozen: true } } } });
+    assert.equal((await pay({ prisma: frozenTester, intentId: 'intent-t0002' })).error, 'FROZEN', 'a frozen test number stays frozen');
+  } finally { delete process.env.WAPAY_PAYOUT_TEST_NUMBERS; }
+});
+
 test('the readouts: the bot quotes the rules, the flags show them, Mission Control lists the requests, the review route needs a reason', () => {
   assert.equal(withdrawRulesLine({ WAPAY_PAYOUT_KYC: 'threshold' }), 'Money that reached your balance less than 2 hours ago costs double the fee to withdraw. You can withdraw up to R3000 in any 24 hours, and more than R1000 in 24 hours needs a once-off ID check.');
   assert.match(read('../pages/api/internal/flags.js'), /payoutRules: \(\(\) =>/);

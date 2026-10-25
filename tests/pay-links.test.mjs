@@ -164,7 +164,8 @@ test('the tap-to-send link opens the requester\'s own chat with that number, the
   const out = await composeLinkCreated({ card: CARD, tapMsisdn: '0821234567' });
   const [shown, link] = [out.text.slice(0, out.text.lastIndexOf('\n')), out.text.slice(out.text.lastIndexOf('\n') + 1)];
   assert.equal(shown, `${CARD}\n\n📲 Tap to send it to 082 123 4567 from your own WhatsApp:`);
-  assert.equal(link, tapToSendUrl({ msisdn: '0821234567', text: CARD }));
+  // The prefill's link carries ?s=t, so an open that came through the tap-to-send message is counted as one (2026-10-25).
+  assert.equal(link, tapToSendUrl({ msisdn: '0821234567', text: CARD.replace('/PRABCDEF\n', '/PRABCDEF?s=t\n') }));
   assert.equal(out.recordAs, `${CARD}\n\n[tap-to-send link to 082•••567]`, 'memory keeps the card and a masked number, not the long link');
   const none = await composeLinkCreated({ card: CARD });
   assert.deepEqual(none, { text: CARD, recordAs: null });
@@ -174,9 +175,9 @@ test('the tap-to-send prefill follows a translation, and falls back to the Engli
   const zu = (t) => t.replace('is asking you to pay', 'ucela ukuthi umkhokhele').replace('Tap to send it to', 'Thepha ukuze uthumele ku');
   const out = await composeLinkCreated({ card: CARD, tapMsisdn: '0821234567', localize: async (t) => zu(t) });
   const prefill = decodeURIComponent(out.text.split('?text=')[1]);
-  assert.equal(prefill, zu(CARD), 'the payer gets the card the requester reads');
+  assert.equal(prefill, zu(CARD).replace('/PRABCDEF\n', '/PRABCDEF?s=t\n'), 'the payer gets the card the requester reads, its link tagged ?s=t');
   const flattened = await composeLinkCreated({ card: CARD, tapMsisdn: '0821234567', localize: async (t) => t.replace(/\n\n/g, ' ') });
-  assert.equal(decodeURIComponent(flattened.text.split('?text=')[1]), CARD);
+  assert.equal(decodeURIComponent(flattened.text.split('?text=')[1]), CARD.replace('/PRABCDEF\n', '/PRABCDEF?s=t\n'));
 });
 
 function stubDeps({ windowOpen = true } = {}) {
@@ -271,10 +272,10 @@ test('relativeDay counts South African calendar days; dateShort is South African
 
 test('the reminder is the same card, marked as a reminder, with the date the link closes; the web gets the same texts', () => {
   const reminder = reminderCardFor({ account: ACCOUNT, request: LINK });
-  assert.equal(reminder, `🔔 *Reminder: Thandi Nkosi •••567 is asking you to pay R150*\nFor: braids\n\nPay here: https://pleasepayme.co.za/PRABCDEF\n${PAY_WAYS_LINE}\nOpen until 31 Oct.`);
+  assert.equal(reminder, `🔔 *Reminder: Thandi Nkosi •••567 is asking you to pay R150*\nFor: braids\n\nPay here: https://pleasepayme.co.za/PRABCDEF?s=r\n${PAY_WAYS_LINE}\nOpen until 31 Oct.`);
   assert.ok(!REQUESTER_ONLY.test(reminder));
   const web = webLinkTexts({ account: ACCOUNT, request: LINK });
-  assert.deepEqual(web, { shareText: CARD, reminderText: reminder, remindUrl: `https://wa.me/?text=${encodeURIComponent(reminder)}` });
+  assert.deepEqual(web, { shareText: CARD.replace('/PRABCDEF\n', '/PRABCDEF?s=w\n'), reminderText: reminder, remindUrl: `https://wa.me/?text=${encodeURIComponent(reminder)}` });
   assert.equal(displayDescription('x'.repeat(100)).length, 80, 'an older 120-character note is shortened for display');
 });
 

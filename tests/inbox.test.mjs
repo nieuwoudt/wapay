@@ -45,9 +45,9 @@ test('the inbox and conversation routes are admin-guarded, bounded, and never lo
   assert.match(read('../pages/api/admin/customer-turns.js'), /if \(!\/\^\[a-z0-9\]\{20,40\}\$\/i\.test\(id\)\) return res\.status\(400\)/);
 });
 
-test('Mission Control: six tabs, deep links, the refresh, the period tiles, the inbox, the conversation card, the health and floats tabs', () => {
+test('Mission Control: seven tabs (the Link map since 2026-10-25), deep links, the refresh, the period tiles, the inbox, the conversation card, the health and floats tabs', () => {
   const page = read('../pages/admin/index.js');
-  assert.match(page, /const TABS = \[\['dashboard', 'Dashboard'\], \['growth', 'Valuation Metrics'\], \['inbox', 'Inbox'\], \['customer', 'Customers'\], \['health', 'Health'\], \['floats', 'Supplier Floats'\]\];/);
+  assert.match(page, /const TABS = \[\['dashboard', 'Dashboard'\], \['growth', 'Valuation Metrics'\], \['inbox', 'Inbox'\], \['customer', 'Customers'\], \['links', 'Link map'\], \['health', 'Health'\], \['floats', 'Supplier Floats'\]\];/);
   assert.match(page, /const c = q\.get\('customer'\); if \(c\) \{ setInitialCustomer\(c\); setTab\('customer'\); \}/);
   assert.match(page, /\['1', '7', '30', '90', 'all'\]\.map/);
   assert.match(page, /↻ Refresh/);

@@ -660,8 +660,8 @@ test('your links (2026-10-24): every link with its status; an open one carries t
   const paid = r.body.links.find((l) => l.code === 'PRDEMOCD');
   assert.equal(open.status, 'OPEN');
   assert.ok(open.createdAt && open.expiresAt, 'when it was made and when it closes');
-  assert.match(open.shareText, /^🙏 \*Demo Customer •••919 is asking you to pay R250\*\n\nPay here: https:\/\/pleasepayme\.co\.za\/PRDEMOEF\n/);
-  assert.match(open.reminderText, /^🔔 \*Reminder: Demo Customer •••919 is asking you to pay R250\*\n\nPay here: https:\/\/pleasepayme\.co\.za\/PRDEMOEF\n[^\n]+\nOpen until \d{1,2} [A-Z][a-z]{2}\.$/);
+  assert.match(open.shareText, /^🙏 \*Demo Customer •••919 is asking you to pay R250\*\n\nPay here: https:\/\/pleasepayme\.co\.za\/PRDEMOEF\?s=w\n/);
+  assert.match(open.reminderText, /^🔔 \*Reminder: Demo Customer •••919 is asking you to pay R250\*\n\nPay here: https:\/\/pleasepayme\.co\.za\/PRDEMOEF\?s=r\n[^\n]+\nOpen until \d{1,2} [A-Z][a-z]{2}\.$/);
   assert.equal(open.remindUrl, `https://wa.me/?text=${encodeURIComponent(open.reminderText)}`, 'WhatsApp asks the customer who to send it to: WaPay sends nothing');
   assert.equal(paid.status, 'PAID');
   assert.equal(paid.paidBy, 'card');

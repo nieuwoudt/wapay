@@ -95,7 +95,7 @@ test('a number the requester typed: the tap-to-send link rides in the same one m
   const [label, url] = tap.split('\n');
   assert.equal(label, 'Tap to send it to 082 123 4567 from your own WhatsApp:');
   assert.ok(url.startsWith('https://wa.me/27821234567?text='), url);
-  assert.equal(decodeURIComponent(url.slice(url.indexOf('?text=') + 6)), card, 'the payer receives the card, from the requester\'s own WhatsApp');
+  assert.equal(decodeURIComponent(url.slice(url.indexOf('?text=') + 6)), card.replace(/(\/PR[A-HJKMNP-Z]{6})\n/, '$1?s=t\n'), 'the payer receives the card, from the requester\'s own WhatsApp, its link tagged ?s=t');
   assert.deepEqual(s5.links.map((l) => l.note), ['plumbing'], 'the number is used for the link only, never stored');
   assert.ok(!JSON.stringify(s5.links).includes('0821234567'));
 });
@@ -124,7 +124,7 @@ test('"my links", "remind 2", "cancel 1": one message each, and they act on the 
   const list = one(s8.list, '27600010008');
   assert.match(list, /^🔗 \*Your open payment links\*\n1\. R30 for taxi · today · PR[A-HJKMNP-Z]{6}\n2\. R40 for lunch · today · PR[A-HJKMNP-Z]{6}\n\nReply \*remind 1\* for a reminder to forward, or \*cancel 1\* to close that link\.\nAll your links: app\.wapay\.co\.za\/app\/links$/);
   const [taxi, lunch] = [s8.links.find((l) => l.note === 'taxi'), s8.links.find((l) => l.note === 'lunch')];
-  assert.equal(one(s8.remind, '27600010008'), `🔔 *Reminder: Thandi Nkosi •••008 is asking you to pay R40*\nFor: lunch\n\nPay here: https://pleasepayme.co.za/${lunch.id}\n${PAY_WAYS_LINE}\n${one(s8.remind, '27600010008').split('\n').pop()}`);
+  assert.equal(one(s8.remind, '27600010008'), `🔔 *Reminder: Thandi Nkosi •••008 is asking you to pay R40*\nFor: lunch\n\nPay here: https://pleasepayme.co.za/${lunch.id}?s=r\n${PAY_WAYS_LINE}\n${one(s8.remind, '27600010008').split('\n').pop()}`);
   assert.match(one(s8.remind, '27600010008'), /\nOpen until \d{1,2} [A-Z][a-z]{2}\.$/);
   assert.equal(one(s8.cancel, '27600010008'), `👍 Cancelled: R30 for taxi (${taxi.id}). That link no longer works.`);
   assert.equal(taxi.status, 'CANCELLED', 'through cancelPaymentRequest, the same path as "cancel request <code>"');

@@ -4,6 +4,47 @@
 
 ---
 
+## 2026-10-25 (128) — Where links travel: a Link map in Mission Control; test numbers for pay-outs
+
+Founder, 25 October: "where all these links are being created, which parts of the country, and also where
+they're sending it to, and if that person opens the links, where that person is", with a description of the
+founder's other project (tagged links, a backend that catches the click, IP geolocation, an admin map); and
+"how can I test this".
+
+- **What is recorded** (`lib/link-visits.js`, table `link_visits`, migration `20261025_link_visits`, applied
+  to production before the deploy): the pay page records every OPEN, or a PREVIEW when a phone fetches the page
+  to draw WhatsApp's link preview (that phone is where the link was pasted, so it shows where it was sent
+  from); checkout records CHECKOUT (where the payment came from); link creation on the web app and the business
+  portal records CREATED; the web app's home records SEEN once a day (the requester's own area). Crawlers,
+  including Meta's, are not recorded. One row per device per link per kind per day.
+- **Where the area comes from:** Vercel's edge headers (`x-vercel-ip-country`, `-country-region`, `-city`,
+  `-latitude`, `-longitude`), so no outside lookup service, no extra call and no extra cost. It is IP-based:
+  town or city on Wi-Fi and fibre, often the network's hub city on South African mobile data, the VPN's city
+  behind a VPN, never GPS. WhatsApp shares no location and hides forwards: a link made in WhatsApp carries no
+  area of its own, and "where it was sent to" is where it was opened.
+- **The doors** (the other project's tags): `paymentRequestUrl(code, source)` adds `?s=r` to reminders,
+  `?s=t` to the tap-to-send copy, `?s=w` to web app shares and `?s=b` to business links; the plain link is
+  the chat's one message. The pay page reads the tag into the visit.
+- **Privacy** (POPIA: location is personal information): the IP is never stored; `visitorKey` is a keyed
+  hash of IP, browser and day, so a device cannot be followed across days; rows are deleted after 90 days by
+  the daily cron (`pruneLinkVisits`); the pay page tells payers in its fine print. Nothing goes to a model.
+- **Mission Control, Link map tab** (`components/admin/LinkMapTab.js`, `GET /api/admin/link-map`): links
+  made, opened, shared and paid; an OpenStreetMap map (Leaflet 1.9.4, bundled, never loaded from a CDN into
+  the admin console) with opened, paid-from, shared-from and requester areas; provinces; top towns; opens from
+  outside South Africa called out; doors; devices and apps; recent links with made in, shared from, opened in
+  and paid from; one link's journey by code; CSV export (areas and devices only).
+- **Fraud:** the triage adds FOREIGN_PAYER (+2) when a card payer pressed pay from outside South Africa.
+- **Test numbers for pay-outs** (`WAPAY_PAYOUT_TEST_NUMBERS`, any spelling): a test number goes through the
+  pause and the whole withdrawal (fees with the express fee, the ID check, the cap, the confirmation, the PIN,
+  the fraud triage and the founder's alert), and requestPayout stops before any row, hold, ledger move or rail
+  call with TEST_RUN ("🧪 Test pay-out: every check passed … nothing was sent"). A frozen test number stays
+  frozen. The flags show how many test numbers are set. The test guide is
+  `docs/testing/founder-test-2026-10-25.md`.
+
+Tests: `tests/link-visits.test.mjs` (9), the test-number case in `tests/payout-express-triage.test.mjs`, the
+tagged addresses in the link tests. Full suite 1413/1413; build green; the Links tab rendered locally with
+made-up data (map, markers, tables) before shipping.
+
 ## 2026-10-24 (127) — Payment links: every link says what it is for, one message to forward, "my links" with reminders, a tap-to-send link instead of WaPay writing to the payer
 
 Founder, 24 October: "the customer has to put in a description of the payment request they send and create for

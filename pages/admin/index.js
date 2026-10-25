@@ -12,6 +12,9 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Head from 'next/head';
+import dynamic from 'next/dynamic';
+// The Links tab (2026-10-25): Leaflet touches the window, so the tab renders in the browser only.
+const LinkMapTab = dynamic(() => import('../../components/admin/LinkMapTab.js'), { ssr: false });
 import { fmtR, fmtN, simulate, preset, budgetFn, BUDGET_DEFAULT } from '../../lib/scale-model.js';
 import { Bars, WeeklyFlows, TakeRate, StackBars, DailyBars, DailyLines, PathChart, ValuationPath } from '../../lib/admin-charts.js';
 
@@ -2064,7 +2067,7 @@ function AuditPanel({ tick = 0 }) {
 
 /* ---------------- Pay-out requests with the fraud triage (founder 2026-10-24) ---------------- */
 const LEVEL_PILL = { 1: 'g', 2: 'g', 3: 'y', 4: 'r', 5: 'r' };
-const PAYOUT_OUTCOME = { SETTLED: 'paid', PENDING: 'with the bank', REVIEW: 'held for your check', FROZEN: 'refused: frozen', PAYOUT_HOLD: 'refused: paused', DAILY_CAP: 'refused: daily cap', KYC_REQUIRED: 'refused: ID check', FEE_CHANGED: 'stopped: fee changed', INSUFFICIENT_FUNDS: 'refused: balance', FLOAT_SHORT: 'refused: float empty', NOT_AUTHORISED: 'refused: no PIN' };
+const PAYOUT_OUTCOME = { SETTLED: 'paid', PENDING: 'with the bank', REVIEW: 'held for your check', TEST_RUN: 'test run, nothing sent', FROZEN: 'refused: frozen', PAYOUT_HOLD: 'refused: paused', DAILY_CAP: 'refused: daily cap', KYC_REQUIRED: 'refused: ID check', FEE_CHANGED: 'stopped: fee changed', INSUFFICIENT_FUNDS: 'refused: balance', FLOAT_SHORT: 'refused: float empty', NOT_AUTHORISED: 'refused: no PIN' };
 function PayoutRequests({ tick }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
@@ -2307,7 +2310,7 @@ function Inbox() {
   );
 }
 
-const TABS = [['dashboard', 'Dashboard'], ['growth', 'Valuation Metrics'], ['inbox', 'Inbox'], ['customer', 'Customers'], ['health', 'Health'], ['floats', 'Supplier Floats']];
+const TABS = [['dashboard', 'Dashboard'], ['growth', 'Valuation Metrics'], ['inbox', 'Inbox'], ['customer', 'Customers'], ['links', 'Link map'], ['health', 'Health'], ['floats', 'Supplier Floats']];
 
 export default function Admin() {
   const [authed, setAuthed] = useState(null);
@@ -2364,7 +2367,7 @@ export default function Admin() {
       {authed === null && <div className="card"><div className="empty">…</div></div>}
       {authed === false && <Login configured={configured} passwordLogin={passwordLogin} onDone={probe} />}
       {authed === true && (
-        tab === 'dashboard' ? <Dashboard /> : tab === 'growth' ? <Growth /> : tab === 'inbox' ? <Inbox /> : tab === 'health' ? <Health /> : tab === 'floats' ? <FloatsTab /> : <Customer initialQuery={initialCustomer} />
+        tab === 'dashboard' ? <Dashboard /> : tab === 'growth' ? <Growth /> : tab === 'inbox' ? <Inbox /> : tab === 'health' ? <Health /> : tab === 'floats' ? <FloatsTab /> : tab === 'links' ? <LinkMapTab /> : <Customer initialQuery={initialCustomer} />
       )}
     </div>
   );

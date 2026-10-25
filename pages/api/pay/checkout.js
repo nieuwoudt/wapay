@@ -23,6 +23,7 @@ import { buildCheckoutUrl } from '@wapay/providers-payfast';
 
 import prisma from '../../../lib/prisma.js';
 import { getPaymentRequest } from '../../../lib/payment-requests.js';
+import { recordLinkVisit } from '../../../lib/link-visits.js';
 import { paymentRequestFeeCents } from '../../../lib/deposits.js';
 import { adumoEnabled, primaryCardRail, buildVirtualCheckout, adumoMerchantReference, autoSubmitHtml, adumoFlow } from '../../../lib/adumo.js';
 import { businessRequestPayable } from '../../../lib/business.js';
@@ -63,6 +64,8 @@ export default async function handler(req, res) {
   if (!requester || !(await businessRequestPayable({ request }))) {
     return res.status(410).send('requester unavailable');
   }
+  // Where the payment came from (lib/link-visits.js, 2026-10-25): best effort and capped, never in the way.
+  await recordLinkVisit({ req, kind: 'CHECKOUT', code, accountId: request.accountId });
 
   // FEE DIRECTION (founder decision 2026-08-22): the PAYER pays exactly
   // the request amount — the card fee is deducted from what the REQUESTER
