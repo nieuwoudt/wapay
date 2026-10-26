@@ -4,6 +4,13 @@
 
 ---
 
+## 143. The Link map drew every marker and showed none: Mission Control's page-wide SVG rule squeezed Leaflet's marker layer to 0px
+
+- **Symptom (founder's screenshot, 2026-10-26):** the Link map tab showed tiles and no markers, while the abroad box listed 60 opens from 13 countries.
+- **Root cause:** `pages/admin/index.js` styles every `svg` as `display:block;width:100%`. Leaflet draws `circleMarker`s into one SVG inside its overlay pane, a 0×0 box, so 100% of it is 0px: 42 circles drawn, none visible. The local preview of CHANGELOG 128 rendered the tab without the admin page's CSS, which is why it passed.
+- **Fix (CHANGELOG 130):** HTML markers (`L.divIcon`), so no SVG layer exists, plus a scoped reset (`.lm-map .leaflet-pane svg{width:auto;height:auto}`) as a second guard.
+- **Guard:** `tests/link-visits.test.mjs` locks both by source. Lesson: preview a component under the page's real global CSS, not a clean page.
+
 ## 142. A frozen account could still move its money: paying someone's link from a balance is a send the freeze did not check
 
 - **Symptom (found 2026-10-26 in the founder's morning check):** on 25 October at 17:27 and 17:32 SAST two of the 28 frozen accounts (•••0522, •••8951) paid R285 each from their balances into an account opened that hour (•••8207) by paying its payment links ("Just money", "rent"). •••8207 tried to withdraw at 17:34, met the pause, and at 17:37 paid R570 back into •••0522 through •••0522's own link ("Cash").

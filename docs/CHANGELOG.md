@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-10-26 (130) — The Link map shows its pins: WaPay pins coloured by the link, the whole world, flags abroad
+
+Founder, 26 October, with a screenshot of an empty map: "I'm not seeing the links, or the areas where these links
+are getting paid, popping up on this interactive map. Maybe have a little WaPay icon showing where these links are.
+If I hover over them, show 'requested'. Do a colour difference: paid green, requested blue." And on the abroad box:
+"include the flags for these countries ... and show the colour status of the link."
+
+- **Why the map was empty** (BUGLOG #143): Mission Control's page-wide `svg{display:block;width:100%}` made
+  Leaflet's SVG marker layer 0px wide (100% of a 0×0 pane), so every circle was drawn and none was visible. The
+  local preview of CHANGELOG 128 did not carry the admin page's CSS, so it looked fine there.
+- **Pins** (`components/admin/LinkMapTab.js`, built by an agent in a worktree and reviewed): HTML markers
+  (`L.divIcon`, no SVG layer) carrying the white WaPay W-mark (`public/brand/wapay-mark-64-white.png`), coloured
+  by the LINK: green paid, blue requested, grey closed (cancelled, or pending past its expiry). A link appears
+  where it was made or its requester's area, where it was shared from, opened and paid from; pins at one place
+  and status group with a count, nearby places cluster at low zoom and split on click. The hover card says Paid
+  or Requested with up to five links (code, amount, what happened there), all escaped. The tab also resets any
+  SVG inside the map as a second guard.
+- **The world:** a "South Africa | Whole world" switch; the legend filters by status.
+- **Abroad:** each country with its flag, name, opens and pay presses, and its links by status in the pin
+  colours; a click flies the map there.
+- `linkMapView` now returns `pins` and `statuses` (the old `points` is gone), looks up the status of older links
+  still being opened, labels a pay press on an unpaid link "pressed pay", and shows a pending link past its
+  expiry as expired in Recent links.
+
+Tests: `tests/link-visits.test.mjs` (colours, grouping, flags, the older-link lookup, the SVG guard). Full suite
+1427/1427; build green; checked in light, dark and phone width under the admin page's real CSS.
+
 ## 2026-10-26 (129) — Every pay-out approved by hand; the freeze holes closed; numbers we should be watching
 
 Founder, 26 October: "check the legitimacy of the payment that's being received today and notify me of any

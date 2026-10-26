@@ -302,7 +302,7 @@ export default function LinkMapTab() {
         </div>
         <div ref={mapBox}><LinkMap pins={d.pins} statuses={statuses} show={show} focus={focus} /></div>
         <p className="note" style={{ marginTop: 8 }}>A link shows at every place it touched: where it was made (or its requester's area), shared from, opened and paid from, coloured by the link. Hover a pin for its links; nearby places share a pin until you zoom in.</p>
-        <p className="note">Areas come from the internet connection, never GPS. On Wi-Fi and fibre that is the town or city; on mobile data South African networks often show their hub city (Johannesburg, Cape Town, Durban), and a VPN shows the VPN. WhatsApp hides forwards, so a link is placed where it is opened; a link made in WhatsApp shows its requester's area only once they use the web app or paste the link into a chat. {t.unknownArea ? `${t.unknownArea} opens had no area.` : ''}</p>
+        <p className="note">Areas come from the internet connection, never GPS. On Wi-Fi and fibre that is the town or city; on mobile data South African networks often show their hub city (Johannesburg, Cape Town, Durban), and a VPN shows the VPN. WhatsApp hides forwards, so a link is placed where it is opened; a link made in WhatsApp shows its requester's area only once they use the web app or paste the link into a chat. {t.unknownArea ? `${t.unknownArea} ${t.unknownArea === 1 ? 'open' : 'opens'} had no area.` : ''}</p>
       </div>
       {d.abroad?.length ? (
         <div className="card" style={{ marginTop: 14, borderColor: 'var(--crit)' }}>
