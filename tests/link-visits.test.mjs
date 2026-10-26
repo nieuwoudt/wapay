@@ -3,11 +3,11 @@
 // Control draws it; the triage reads where payers paid from; visits are deleted after 90 days.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const { geoOf, classifyVisitor, visitorKeyOf, recordLinkVisit, recordAccountSeen, pruneLinkVisits, sourceTag, provinceName, sastDay } = await import('../lib/link-visits.js');
-const { linkMapView, linkTimeline, linkVisitsCsv } = await import('../lib/link-map.js');
+const { linkMapView, linkTimeline, linkVisitsCsv, PIN_STATUSES, pinStatusOf, groupPins, flagOf, countryName } = await import('../lib/link-map.js');
 const { paymentRequestUrl } = await import('../lib/payment-requests.js');
 const { payoutTriage } = await import('../lib/payout-triage.js');
 
@@ -137,12 +137,18 @@ const mapDb = { linkVisit: { async findMany({ where }) { return where?.code ? VI
 test('the map: where links were made, shared, opened and paid from; provinces, towns, doors, devices; abroad flagged', async () => {
   const v = await linkMapView({ prisma: mapDb, days: 30, now: NOW });
   assert.deepEqual(v.totals, { made: 2, madeOnWeb: 1, madeForBusiness: 0, opened: 2, opens: 4, shared: 1, checkouts: 1, paid: 1, unknownArea: 1 });
-  assert.deepEqual(v.points.find((p) => p.group === 'opened' && p.city === 'Durban'), { group: 'opened', lat: -29.86, lng: 31.02, city: 'Durban', province: 'KwaZulu-Natal', country: 'ZA', count: 1 });
-  assert.ok(v.points.some((p) => p.group === 'paid' && p.city === 'Durban'));
-  assert.ok(v.points.some((p) => p.group === 'shared' && p.city === 'Johannesburg'));
-  assert.ok(v.points.some((p) => p.group === 'requester' && p.city === 'Cape Town'));
+  // The pins (2026-10-26): each link at every place it touched, coloured by the link (PRAAAAAA paid, PRBBBBBB requested).
+  const pin = (status, city) => v.pins.find((p) => p.status === status && p.city === city);
+  assert.deepEqual(pin('paid', 'Durban'), { status: 'paid', lat: -29.86, lng: 31.02, city: 'Durban', province: 'KwaZulu-Natal', country: 'ZA', place: 'Durban, KwaZulu-Natal', flag: '', count: 1, codes: ['PRAAAAAA'], links: [{ code: 'PRAAAAAA', amountCents: 15000, at: at(1).toISOString(), did: ['opened', 'paid from'] }] });
+  assert.deepEqual(pin('paid', 'Johannesburg').links[0].did, ["requester's area", 'shared from'], "made in WhatsApp: shown at its requester's web app area, and where it was shared from");
+  assert.deepEqual(pin('paid', 'Soweto').links[0].did, ['opened']);
+  assert.deepEqual(pin('requested', 'Cape Town').links[0].did, ['made'], 'made on the web app: shown where it was made');
+  assert.deepEqual([pin('requested', 'San Jose').place, pin('requested', 'San Jose').flag], ['San Jose, United States', '🇺🇸']);
+  assert.equal(v.pins.length, 5, 'an open without an area has no pin');
+  assert.deepEqual(v.statuses.map((s) => [s.status, s.colour, s.links]), [['paid', '#359853', 1], ['requested', '#2a78d6', 1], ['closed', '#8a948d', 0]]);
+  assert.ok(!/accountId|"a1"|"a2"/.test(JSON.stringify(v.pins)), 'link codes, amounts and areas only: no account on the map');
   assert.deepEqual(v.provinces.find((p) => p.province === 'Gauteng'), { province: 'Gauteng', opened: 1, paid: 0, shared: 1, requesters: 1 });
-  assert.deepEqual(v.abroad, [{ country: 'US', count: 1 }]);
+  assert.deepEqual(v.abroad, [{ country: 'US', flag: '🇺🇸', name: 'United States', count: 1, links: { paid: 0, requested: 1, closed: 0 } }]);
   assert.deepEqual(v.doors.map((d) => d.door).sort(), ['first message', 'reminder', 'web app share']);
   const a = v.recent.find((l) => l.code === 'PRAAAAAA');
   assert.deepEqual({ madeIn: a.madeIn, basis: a.madeInBasis, sharedFrom: a.sharedFrom, paidFrom: a.paidFrom, channel: a.channel }, { madeIn: 'Johannesburg, Gauteng', basis: "requester's web app area", sharedFrom: 'Johannesburg, Gauteng', paidFrom: 'Durban, KwaZulu-Natal', channel: 'WhatsApp' });
@@ -158,6 +164,62 @@ test('the map: where links were made, shared, opened and paid from; provinces, t
   assert.equal(csv.split('\n')[0], 'time_utc,event,link,door,country,province,city,device,os,browser,app');
   assert.match(csv.split('\n')[1], /,OPEN,PRAAAAAA,reminder,ZA,KwaZulu-Natal,"Durban, ""North""",mobile,Android,Chrome,$/);
   assert.ok(!csv.includes('a1'), 'no account ids in the export');
+});
+
+test('pin colours: green when the link is paid, blue while requested, grey once cancelled or expired', () => {
+  const now = Date.parse('2026-10-26T08:00:00Z');
+  assert.deepEqual(PIN_STATUSES.map((s) => [s.status, s.label, s.colour]), [['paid', 'Paid', '#359853'], ['requested', 'Requested', '#2a78d6'], ['closed', 'Closed', '#8a948d']]);
+  assert.equal(new Set(PIN_STATUSES.map((s) => s.colour)).size, 3);
+  assert.equal(pinStatusOf({ status: 'PAID' }, now), 'paid');
+  assert.equal(pinStatusOf({ status: 'PENDING', expiresAt: new Date(now + 3600e3) }, now), 'requested');
+  assert.equal(pinStatusOf({ status: 'PENDING' }, now), 'requested');
+  assert.equal(pinStatusOf({ status: 'PENDING', expiresAt: new Date(now - 1) }, now), 'closed', 'pending past its expiry is expired, as getPaymentRequest reads it');
+  assert.equal(pinStatusOf({ status: 'CANCELLED' }, now), 'closed');
+  assert.equal(pinStatusOf({ status: 'EXPIRED' }, now), 'closed');
+  assert.equal(pinStatusOf(undefined, now), null, 'no link, no pin');
+  assert.equal(pinStatusOf({ status: 'SOMETHING_NEW' }, now), null);
+});
+
+test('grouping: one pin per place and status, each link counted once, the newest five described', () => {
+  const JHB = { lat: -26.2, lng: 28.05, city: 'Johannesburg', province: 'Gauteng', country: 'ZA' };
+  const DBN_AT = { lat: -29.86, lng: 31.02, city: 'Durban', province: 'KwaZulu-Natal', country: 'ZA' };
+  const placed = (code, status, did, h, where = JHB, amountCents = 500) => ({ code, amountCents, status, did, at: at(h), ...where });
+  const placements = [
+    placed('PRAAAAAA', 'requested', 'opened', 5, JHB, 1000), placed('PRAAAAAA', 'requested', 'opened', 4, JHB, 1000), placed('PRAAAAAA', 'requested', 'shared from', 6, JHB, 1000),
+    placed('PRBBBBBB', 'paid', 'paid from', 3), placed('PRBBBBBB', 'paid', 'opened', 3, DBN_AT),
+    ...['PRCCCCCC', 'PRDDDDDD', 'PREEEEEE', 'PRFFFFFF', 'PRGGGGGG', 'PRHHHHHH'].map((code, i) => placed(code, 'requested', 'opened', 10 + i)),
+    placed('PRIIIIII', 'requested', 'opened', 1, { lat: null, lng: null, city: null, province: null, country: null }),
+  ];
+  const pins = groupPins(placements);
+  assert.deepEqual(pins.map((p) => [p.status, p.city, p.count]), [['requested', 'Johannesburg', 7], ['paid', 'Durban', 1], ['paid', 'Johannesburg', 1]], 'busiest first; a placement without a point has no pin');
+  const busy = pins[0];
+  assert.equal(busy.codes.length, 7, 'PRAAAAAA counts once however often it touched Johannesburg');
+  assert.deepEqual(busy.links[0], { code: 'PRAAAAAA', amountCents: 1000, at: at(4).toISOString(), did: ['shared from', 'opened ×2'] });
+  assert.deepEqual(busy.links.map((l) => l.code), ['PRAAAAAA', 'PRCCCCCC', 'PRDDDDDD', 'PREEEEEE', 'PRFFFFFF'], 'the hover card describes the newest five; the count stays exact');
+  assert.equal(busy.place, 'Johannesburg, Gauteng');
+  assert.deepEqual(pins.slice(1).map((p) => p.links[0].did), [['opened'], ['paid from']], 'one link, two places, two pins');
+  assert.equal(groupPins(placements, { cap: 2 })[0].links.length, 2);
+});
+
+test('flags: a country code becomes its flag from regional-indicator letters, and its name', () => {
+  assert.equal(flagOf('US'), '🇺🇸'); assert.equal(flagOf('ke'), '🇰🇪'); assert.equal(flagOf(' pk '), '🇵🇰');
+  assert.equal(flagOf('ZA'), '\u{1F1FF}\u{1F1E6}');
+  for (const bad of ['ZAF', '1A', '<b', '', null, undefined]) assert.equal(flagOf(bad), '', String(bad));
+  assert.equal(countryName('KE'), 'Kenya'); assert.equal(countryName('us'), 'United States'); assert.equal(countryName('nope'), null);
+});
+
+test("older links still being opened are looked up for their status; the window's totals stay the window's", async () => {
+  const asked = [];
+  const old = { id: 'PROLDAAA', accountId: 'a9', amountCents: 65000, status: 'PENDING', createdAt: new Date(NOW - 40 * 86400e3), paidAt: null, expiresAt: new Date(NOW - 86400e3), businessId: null };
+  const db = {
+    linkVisit: { async findMany() { return [{ kind: 'OPEN', code: 'PROLDAAA', accountId: 'a9', source: null, country: 'KE', region: '30', city: 'Nairobi', latitude: -1.29, longitude: 36.82, device: 'mobile', os: 'Android', browser: 'Chrome', app: null, createdAt: at(2) }]; } },
+    paymentRequest: { async findMany({ where }) { asked.push(where); return where.id ? [old].filter((l) => where.id.in.includes(l.id)) : []; } },
+  };
+  const v = await linkMapView({ prisma: db, days: 30, now: NOW });
+  assert.deepEqual(asked[1], { id: { in: ['PROLDAAA'] } });
+  assert.equal(v.totals.made, 0, 'made 40 days ago: not one of the 30-day window');
+  assert.deepEqual(v.pins.map((p) => [p.status, p.place, p.flag, p.count]), [['closed', 'Nairobi, Kenya', '🇰🇪', 1]], 'pending past its expiry shows grey');
+  assert.deepEqual(v.abroad, [{ country: 'KE', flag: '🇰🇪', name: 'Kenya', count: 1, links: { paid: 0, requested: 0, closed: 1 } }]);
 });
 
 test('triage: a card payer who pressed pay from outside South Africa adds to the fraud score', async () => {
@@ -190,6 +252,13 @@ test('source locks: every door records, the payer is told, the cron deletes, Mis
   const tab = read('../components/admin/LinkMapTab.js');
   assert.match(tab, /await import\('leaflet'\)/); assert.match(tab, /import 'leaflet\/dist\/leaflet\.css';/);
   assert.ok(!/<script|cdnjs|unpkg|jsdelivr/.test(tab), 'the map library is bundled, never fetched from a CDN into the admin console');
+  // The admin page styles every svg width:100%, which squashed Leaflet's vector pane to 0px and hid the first
+  // map's circle markers (founder 2026-10-26): the pins are HTML markers, and any svg on the map is reset.
+  assert.match(tab, /L\.divIcon\(/); assert.ok(!/circleMarker|L\.circle\(|L\.polyline|L\.polygon/.test(tab), 'no SVG vector markers');
+  assert.match(tab, /\.lm-map \.leaflet-pane svg\{width:auto;height:auto\}/);
+  assert.ok(existsSync(fileURLToPath(new URL('../public/brand/wapay-mark-64-white.png', import.meta.url))), 'the white W-mark the pins carry');
+  const card = tab.slice(tab.indexOf('function tipHtml('), tab.indexOf('function LinkMap('));
+  for (const [, expr] of card.slice(card.indexOf('return `')).matchAll(/\$\{([^}]*)/g)) assert.match(expr, /^(esc|colourOf)\(/, `hover card text is escaped: ${expr}`);
   assert.match(read('../package.json'), /"leaflet": "1\.9\.4"/, 'pinned');
   assert.match(read('../packages/domain/prisma/migrations/20261025_link_visits/migration.sql'), /CREATE TABLE IF NOT EXISTS "link_visits"/);
 });
