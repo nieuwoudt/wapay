@@ -1227,7 +1227,7 @@ function Payouts() {
           <input type={st.hasPassword ? 'password' : 'text'} autoComplete={st.hasPassword ? 'current-password' : 'one-time-code'} value={stepUp} onChange={(e) => setStepUp(e.target.value)} />
           <button className="btn p" style={{ width: '100%', marginTop: 12, padding: 14, fontSize: 15 }} disabled={busy || !quote || quote.error || !st.kyc.verified && st.kyc.required} onClick={submit}>{busy ? 'Paying out…' : 'Pay out'}</button>
           {err && <div className="err">{err}</div>}
-          {result?.ok && <div className="ok">{result.status === 'SETTLED' ? `Paid. Reference ${result.reference}.` : `Accepted by the bank rail, reference ${result.reference}. It shows as paid below as soon as the bank confirms.`}</div>}
+          {result?.ok && <div className="ok">{result.status === 'AWAITING_APPROVAL' ? `Waiting for approval: a person at WaPay checks every pay-out before it goes. The amount and the fee are set aside; reference ${result.reference}.` : result.status === 'SETTLED' ? `Paid. Reference ${result.reference}.` : `Accepted by the bank rail, reference ${result.reference}. It shows as paid below as soon as the bank confirms.`}</div>}
         </div>
       )}
       <div className="card mt">

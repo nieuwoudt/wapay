@@ -4,6 +4,13 @@
 
 ---
 
+## 142. A frozen account could still move its money: paying someone's link from a balance is a send the freeze did not check
+
+- **Symptom (found 2026-10-26 in the founder's morning check):** on 25 October at 17:27 and 17:32 SAST two of the 28 frozen accounts (•••0522, •••8951) paid R285 each from their balances into an account opened that hour (•••8207) by paying its payment links ("Just money", "rent"). •••8207 tried to withdraw at 17:34, met the pause, and at 17:37 paid R570 back into •••0522 through •••0522's own link ("Cash").
+- **Root cause:** the freeze (BUGLOG #133) was checked by sendMoney, requestPayout, the chat's withdraw flow and the web app, but the chat's pay-a-link-from-balance leg (`handlePayRequestStart` and the PAYREQ PIN step, `buildSend` with `wapay-payreq-<code>`) and the five VAS execute routes never read it. Receiving stays open by design; spending was the hole.
+- **Fix (CHANGELOG 129):** the freeze is read before the confirmation and again before the debit on the pay-a-link leg, and `refuseSpendIfFrozen` runs before any hold in the airtime, data, electricity, fuel and voucher execute routes. Net leakage before the fix: R0 (the R570 ended back inside the frozen group).
+- **Guard:** `tests/payout-approval.test.mjs` locks both checks by source order. Lesson: a freeze must be enforced where money leaves a wallet (every debit path), not per feature.
+
 ## 141. The test suite read the production database through Prisma's own .env loading
 
 - **Symptom (found 2026-10-24 while shipping the global pay-out hold):** 29 withdraw-flow tests failed the moment the hold row existed in production. They had never set a database: `node --test` passes no `DATABASE_URL`, but Prisma Client loads the project's `.env` by itself, and the fast copy's `.env` holds the production connection string. Every test that called code with a default client (`lib/prisma.js`, `getPrisma()` in `packages/domain`, the WhatsApp package's template catalogue, seven VAS routes with their own client) read production, took pooler connections and depended on production state.

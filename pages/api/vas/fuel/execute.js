@@ -31,6 +31,7 @@
  */
 
 import prisma from '../../../../lib/prisma.js';
+import { refuseSpendIfFrozen } from '../../../../lib/payout-freeze.js';
 import { verifyPIN } from '@wapay/auth';
 import { BALANCE } from '../../../../lib/ledger-core.js';
 import { reserveHold, releaseHold, ensureWallet } from '../../../../lib/ledger-post.js';
@@ -140,6 +141,8 @@ export default async function handler(req, res) {
 
     const { amountCents, feeCents, totalCents } = metadata;
 
+    // A frozen account's money stays where it is (lib/payout-freeze.js, 2026-10-26).
+    if (await refuseSpendIfFrozen({ prisma, accountId, res })) return undefined;
     await ensureWallet({ accountId, balanceType: BALANCE.SPEND });
 
     // Deterministic keys per purchase: retries replay, never double-charge.

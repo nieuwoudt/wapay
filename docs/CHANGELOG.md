@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-10-26 (129) — Every pay-out approved by hand; the freeze holes closed; numbers we should be watching
+
+Founder, 26 October: "check the legitimacy of the payment that's being received today and notify me of any
+payout requests. I think we should manually approve the payout requests instead of just running with them,
+to make sure it doesn't seem like fraud and it's not from the same numbers that we expected as fraud in the
+past. Also flag those numbers for me in the dashboard under the appropriate section: numbers we should be
+watching."
+
+- **The morning's check** (read-only, recorded in BUGLOG #142): four payments since Saturday, none clean. Two
+  frozen accounts paid R285 each from their balances into a new account by paying its links; that account
+  tried to withdraw two minutes later, met the pause, and paid R570 back into one of them. A R300 card payment
+  at 05:07 SAST went to an account opened on 22 October; its link had been opened from Kenya, El Salvador,
+  Denmark and Singapore and pay pressed from El Salvador, Pretoria and Newcastle; the account tried to withdraw
+  two hours later. During the pause 33 withdrawals from 23 accounts met the pause line.
+- **The freeze holes, closed** (BUGLOG #142): a frozen account can no longer pay someone's link from its
+  balance (checked at the confirmation and again before the debit), nor buy airtime, data, electricity, fuel or
+  vouchers (`refuseSpendIfFrozen` before any hold in the five VAS execute routes).
+- **Approval mode** (`lib/payout-hold.js` `payout-mode:approval`, `lib/payout-approval.js`): every customer
+  pay-out runs every check, the customer's PIN and the fraud triage, has its money set aside (CASH, held) and
+  waits as `AWAITING_APPROVAL`, with where it goes kept encrypted (`lib/pii-vault.js`). The founder approves
+  (the freeze is read again; the float must cover it, otherwise it keeps waiting; the request is claimed
+  atomically; it is sent through the same rail step as an immediate pay-out, `railAndSettle`) or rejects (the
+  hold released, the money back to SPEND). The customer hears "⏳ Waiting for approval…" with no time promise,
+  "status" answers it, the web app and the business portal say it, and the outcome goes out through
+  `notifyCustomer` (inside the 24-hour window; outside it only once `WAPAY_TEMPLATE_PAYOUT_OUTCOME` is set).
+  Approval mode outranks the pause; operator pay-outs and test numbers never wait. The founder's alert carries
+  a signed link (three days, one pay-out) to `/ops/approve`. Switch: `POST /api/internal/payout-hold
+  { approval: true|false, by, reason }`; the flags show the mode.
+- **Mission Control → Pay-outs** (new tab): the mode, the pay-outs waiting for approval with Approve and pay /
+  Reject, the pay-out request log with fraud levels (moved from Supplier Floats), and **Numbers we should be
+  watching** (`lib/watchlist.js`, `GET /api/admin/watchlist`): accounts not frozen but tied to the fraud
+  (money moved with a frozen account, pay pressed or links opened from abroad, own-card links, a frozen
+  account's pay-out destination, a triage of 4 or 5, three or more withdrawal attempts during the pause) with
+  Freeze and Customer card; payer numbers that paid frozen accounts or three or more accounts; the frozen
+  accounts with what they hold. The founder's own and test numbers are never listed. The customer card opens
+  by account id too.
+
+Tests: `tests/payout-approval.test.mjs` (10). Full suite 1423/1423; build green.
+
 ## 2026-10-25 (128) — Where links travel: a Link map in Mission Control; test numbers for pay-outs
 
 Founder, 25 October: "where all these links are being created, which parts of the country, and also where

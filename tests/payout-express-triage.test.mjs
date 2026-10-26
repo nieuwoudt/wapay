@@ -247,7 +247,7 @@ test('an operator pay-out never carries the express fee; the business portal quo
   const prisma = stubPrisma({ account: oldVerified });
   const out = await requestPayout({ prisma, ledger: stubLedger(), client: settleRail(), account: oldVerified, intentId: 'intent-op001', method: 'PAYSHAP', amountCents: 10000, recipient, providers, readFloat: async () => null, authorization: proofFor(oldVerified, { intentId: 'intent-op001', amountCents: 10000 }), receipts: [{ cents: 25000, at: NOW - 30 * MIN }], allowExpress: false, alertRequest: async () => {} });
   assert.equal(out.ok, true); assert.equal(out.feeCents, 800, 'the founder chose the timing, not the customer');
-  assert.match(read('../lib/ops-payout.js'), /authorization, allowExpress: false \}\);/);
+  assert.match(read('../lib/ops-payout.js'), /authorization, allowExpress: false, allowApproval: false \}\);/);
   const biz = read('../pages/api/business/payout.js');
   assert.match(biz, /expectedFeeCents: Number\.isInteger\(body\.feeCents\) \? body\.feeCents : null/);
   assert.match(biz, /feeNote: ex\?\.express \? expressFeeLine\(ex\) : null/);
@@ -290,7 +290,7 @@ test('a test number goes through the pause and every check, then stops before an
 test('the readouts: the bot quotes the rules, the flags show them, Mission Control lists the requests, the review route needs a reason', () => {
   assert.equal(withdrawRulesLine({ WAPAY_PAYOUT_KYC: 'threshold' }), 'Money that reached your balance less than 2 hours ago costs double the fee to withdraw. You can withdraw up to R3000 in any 24 hours, and more than R1000 in 24 hours needs a once-off ID check.');
   assert.match(read('../pages/api/internal/flags.js'), /payoutRules: \(\(\) =>/);
-  assert.match(read('../pages/admin/index.js'), /<h2>Pay-out requests<\/h2>\n\s+<PayoutRequests tick=\{tick\} \/>/);
+  assert.match(read('../pages/admin/index.js'), /<h2>Pay-out requests<\/h2><PayoutRequests tick=\{tick\} \/>/, 'on the Pay-outs tab since 2026-10-26');
   assert.match(read('../pages/api/admin/payout-requests.js'), /const auth = requireAdmin\(req\);\n\s+if \(!auth\.ok\) return res\.status\(401\)/);
   const review = read('../pages/api/internal/payout-review.js');
   assert.match(review, /requireInternalAuth\(req, res\)/); assert.match(review, /NEED_REASON/);

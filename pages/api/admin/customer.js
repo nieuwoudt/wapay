@@ -28,14 +28,17 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'method' });
   if (!requireAdmin(req).ok) return res.status(401).json({ error: 'UNAUTHORIZED' });
 
-  const t = tail9(req.query.q);
-  if (!t) return res.status(400).json({ error: 'Give me a phone number (at least 9 digits).' });
+  // An account id opens the card too (2026-10-26): the Pay-outs tab's watchlist links by id, never by full number.
+  const rawQ = String(req.query.q || '').trim();
+  const byId = /^c[a-z0-9]{20,30}$/.test(rawQ) ? await prisma.account.findUnique({ where: { id: rawQ } }).catch(() => null) : null;
+  const t = byId ? tail9(byId.waId || byId.msisdn) : tail9(req.query.q);
+  if (!t && !byId) return res.status(400).json({ error: 'Give me a phone number (at least 9 digits).' });
 
-  const candidates = await prisma.account.findMany({
+  const candidates = byId ? [byId] : await prisma.account.findMany({
     where: { OR: [{ msisdn: { endsWith: t } }, { waId: { endsWith: t } }] },
     take: 3,
   });
-  const account = candidates.find((a) => tail9(a.msisdn) === t || tail9(a.waId) === t);
+  const account = byId || candidates.find((a) => tail9(a.msisdn) === t || tail9(a.waId) === t);
   if (!account) return res.status(404).json({ error: 'No account with that number.' });
 
   const walletCode = `WALLET:${account.id}:SPEND`;

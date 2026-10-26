@@ -4062,6 +4062,15 @@ async function handlePayRequestStart({ from, account, code, rawText = '' }) {
       text: await localizeOutbound(`🙂 That's your own payment request. Forward the link to the person who owes you.`, await userLang(account)),
     });
   }
+  // A frozen account's money stays where it is (2026-10-26): paying someone's link from a balance is a send, and
+  // two frozen accounts moved R570 out this way on 25 October before this check existed.
+  {
+    const { readPayoutFreeze, FROZEN_SEND_COPY } = await import('../../../lib/payout-freeze.js');
+    if (await readPayoutFreeze({ prisma, accountId: account.id, fallbackProfile: account.profile || null })) {
+      logStructured('payrequest_pay_refused_frozen', { accountId: account.id, code: request.id });
+      return await sendWhatsAppText({ to: from, text: await localizeOutbound(FROZEN_SEND_COPY, await userLang(account)) });
+    }
+  }
   if (request.status !== 'PENDING') {
     const why = request.status === 'PAID' ? 'has already been paid' : 'is no longer active';
     return await sendWhatsAppText({ to: from, text: await localizeOutbound(`⏳ That payment request ${why}.`, await userLang(account)) });
@@ -4770,7 +4779,11 @@ async function handlePayoutStatus({ from, account, payout, altLine = '' }) {
   const { balance } = await getUserBalance(from);
 
   let text;
-  if (status === 'SUCCESS') {
+  if (status === 'AWAITING_APPROVAL' || status === 'REJECTING') {
+    // Approval mode (lib/payout-approval.js, 2026-10-26): it has not gone to the bank; a person checks it first.
+    const setAside = randsShort(Number(payout.amountCents || 0) + Number(payout.feeCents || 0));
+    text = `⏳ Your withdrawal of ${amount} by ${label} (reference ${payout.reference}) is waiting for approval: a person at WaPay checks every pay-out before it goes. ${setAside} is set aside for it and nothing has left WaPay.\n\n💰 Balance: R${balance}`;
+  } else if (status === 'SUCCESS') {
     text = `✅ Your withdrawal of ${amount} by ${label} was paid (reference ${payout.reference}).\n\n💰 Balance: R${balance}`;
   } else if (status === 'FAILED') {
     text =
@@ -5199,6 +5212,14 @@ async function handleConversationState({ from, text, state, data, account }) {
           to: from,
           text: await localizeOutbound(`⏳ That payment request is no longer open. Nothing was paid.`, await userLang(account)),
         });
+      }
+      // Read the freeze again right before the debit: an account frozen between the confirm and the PIN pays nothing.
+      {
+        const { readPayoutFreeze, FROZEN_SEND_COPY } = await import('../../../lib/payout-freeze.js');
+        if (await readPayoutFreeze({ prisma, accountId: account.id, fallbackProfile: account.profile || null })) {
+          logStructured('payrequest_pay_refused_frozen', { accountId: account.id, code: request.id, at: 'pin' });
+          return await sendWhatsAppText({ to: from, text: await localizeOutbound(FROZEN_SEND_COPY, await userLang(account)) });
+        }
       }
 
       // The request code IS the idempotency key: exactly one payer's debit
