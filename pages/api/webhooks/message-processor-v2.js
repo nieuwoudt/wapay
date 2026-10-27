@@ -108,7 +108,7 @@ import {
 import { matchFeeAsk, feeAnswer, feeAskAmountCents, feeFacts } from '../../../lib/fee-facts.js';
 import { matchHowItWorksAsk, howItWorksAnswer, howItWorksBrief, wantsSteps, detectMethod, looksLikeQuestion, TOPICS as HOWTO_TOPICS } from '../../../lib/how-it-works.js';
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
-import { reconcileElectricityPurchases, undeliveredElectricityTokens, markElectricityTokenDelivered } from '../../../lib/electricity-settlement.js';
+import { reconcileElectricityPurchases, undeliveredElectricityTokens, markElectricityTokenDelivered, markElectricityTokenUndelivered } from '../../../lib/electricity-settlement.js';
 import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
 import { isValidSaMsisdn, normaliseMsisdn, bluCanVendTo } from '../../../lib/msisdn.js';
 import { agentV3For } from '../../../lib/shadow-list.js';
@@ -1656,7 +1656,13 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       select: { id: true },
     });
     if (stuckElectricity) {
-      for (const u of await undeliveredElectricityTokens({ account })) {
+      // One extra message per turn (WhatsApp policy, 2026-10-27): a receipt
+      // may accompany the normal reply, a third message may not. A second
+      // token waits for the next message; a refund in the same turn rides
+      // inside the receipt.
+      let extraMessages = 0;
+      const refundLine = `💚 An earlier electricity purchase could not be completed, so nothing was charged for it. Your money is back in your balance.`;
+      for (const u of await undeliveredElectricityTokens({ account, limit: 1 })) {
         const formattedToken = String(u.token || '').replace(/(.{4})/g, '$1 ').trim();
         await sendReceipt({
           to: from,
@@ -1671,11 +1677,16 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           extraLines: [`⚡ Token: *${formattedToken}*`, `🔋 Units: ${u.units || 'N/A'} kWh`],
         });
         await markElectricityTokenDelivered({ previewId: u.previewId });
+        extraMessages += 1;
       }
       // One short-bounded attempt per row, at most every two minutes: this
       // runs inside the webhook turn, so it must never blow Meta's window.
       const recon = await reconcileElectricityPurchases({ account, opportunistic: true });
       for (const d of recon.delivered) {
+        if (extraMessages) {
+          await markElectricityTokenUndelivered({ previewId: d.previewId });
+          continue;
+        }
         const formattedToken = String(d.token || '').replace(/(.{4})/g, '$1 ').trim();
         await sendReceipt({
           to: from,
@@ -1687,17 +1698,16 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           reference: d.providerRef,
           newBalanceCents: d.newBalanceCents || 0,
           dateTime: d.dateTime || new Date(),
-          extraLines: [`⚡ Token: *${formattedToken}*`, `🔋 Units: ${d.units || 'N/A'} kWh`],
+          extraLines: [`⚡ Token: *${formattedToken}*`, `🔋 Units: ${d.units || 'N/A'} kWh`, ...(recon.failed > 0 ? [refundLine] : [])],
         });
+        extraMessages += 1;
       }
-      if (recon.failed > 0) {
+      if (recon.failed > 0 && !extraMessages) {
         await sendWhatsAppText({
           to: from,
-          text: await localizeOutbound(
-            `💚 Quick update: an electricity purchase from earlier could not be completed, so nothing was charged. Your money is back in your balance.`,
-            await userLang(account)
-          ),
+          text: await localizeOutbound(refundLine, await userLang(account)),
         });
+        extraMessages += 1;
       }
       if (recon.pending > 0) {
         const { enqueueJob } = await import('../../../lib/jobs.js');

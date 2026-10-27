@@ -175,7 +175,10 @@ test('the customer copy for a timeout states both truths and names no date or su
   assert.match(lookup, /Nothing was charged/);
   assert.ok(!lookup.includes('—'));
   // The next message delivers the token or the refund through the opportunistic hook.
-  assert.ok(processor.includes("route: 'electricity-preview', status: { in: ['RECONCILE', 'EXECUTING'] }"), 'inbound hook must look for stuck electricity rows');
+  const hookGate = processor.slice(processor.indexOf('const stuckElectricity = await prisma.providerRequest.findFirst'), processor.indexOf('const stuckElectricity = await prisma.providerRequest.findFirst') + 600);
+  assert.match(hookGate, /route: 'electricity-preview'/, 'inbound hook must look for stuck electricity rows');
+  assert.match(hookGate, /status: \{ in: \['RECONCILE', 'EXECUTING'\] \}/, 'parked and dead-invocation rows');
+  assert.match(hookGate, /tokenUndelivered/, 'and tokens the cron could not deliver');
   assert.ok(processor.includes("kind: 'electricity-reconcile'"), 'a still-pending row queues a job for the cron');
   assert.ok(processor.includes('reconcileElectricityPurchases({ account, opportunistic: true })'), 'the on-turn re-send is the short-bounded, throttled one');
 });
@@ -192,9 +195,14 @@ test('the cron marks an undelivered token instead of retrying; the next message 
   assert.match(handler, /if \(!sent\?\.ok\) await markElectricityTokenUndelivered\(\{ previewId: d\.previewId \}\)/, 'ok:false marks the row');
   assert.equal((handler.match(/notifyCustomer\(/g) || []).length, 2, 'no retry of the token send (one send for the token, one for a refund)');
   const processor = await read('pages/api/webhooks/message-processor-v2.js');
-  const hook = processor.slice(processor.indexOf('const stuckElectricity = await prisma.providerRequest.findFirst'), processor.indexOf('const stuckElectricity = await prisma.providerRequest.findFirst') + 2200);
+  const hook = processor.slice(processor.indexOf('const stuckElectricity = await prisma.providerRequest.findFirst'), processor.indexOf('const stuckElectricity = await prisma.providerRequest.findFirst') + 3800);
   assert.match(hook, /metadata: \{ path: \['tokenUndelivered'\], equals: true \}/, 'the hook looks for undelivered tokens');
-  assert.ok(hook.indexOf('undeliveredElectricityTokens({ account })') < hook.indexOf('markElectricityTokenDelivered({ previewId: u.previewId })'), 'deliver, then clear');
+  assert.ok(hook.indexOf('undeliveredElectricityTokens({ account, limit: 1 })') < hook.indexOf('markElectricityTokenDelivered({ previewId: u.previewId })'), 'deliver one, then clear');
+  // One extra message per turn (spam-strike rule): a second token waits for the next message, and a
+  // refund in the same turn rides inside the receipt instead of a third message.
+  assert.match(hook, /let extraMessages = 0;/);
+  assert.match(hook, /if \(extraMessages\) \{\n\s*await markElectricityTokenUndelivered\(\{ previewId: d\.previewId \}\);/, 'a second settled token is marked for the next message');
+  assert.match(hook, /recon\.failed > 0 && !extraMessages/, 'the refund line is a message only when no receipt went out');
   assert.match(hook, /sendReceipt\(\{[\s\S]*?targetValue: u\.meterNumber/, 'the stored receipt is sent');
 });
 
