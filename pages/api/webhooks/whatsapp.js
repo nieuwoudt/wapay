@@ -107,7 +107,11 @@ export default async function handler(req, res) {
       const first = claim !== null && claim !== false && !(claim && (claim.claimed === false || claim.replayed === true || claim.duplicate === true));
       if (first) {
         const { deliveryStallCheck } = await import('../../../lib/delivery-health.js');
-        await Promise.race([deliveryStallCheck({ prisma }), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 4000))]);
+        // The number's quality, tier and status every ten minutes, alerting on any change at once
+        // (BUGLOG #144: the phone_number_quality_update field is not subscribed, and a daily read
+        // told the founder six hours late).
+        const { qualityWatch } = await import('../../../lib/meta-alerts.js');
+        await Promise.race([Promise.all([deliveryStallCheck({ prisma }), qualityWatch({ prisma })]), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 4000))]);
       }
     } catch {
       // diagnostics never change the webhook's behaviour
@@ -370,6 +374,14 @@ export default async function handler(req, res) {
                   Array.isArray(v.restriction_info) ? v.restriction_info.map((r) => r?.restriction_type).filter(Boolean).join('+') : null,
                   v.ban_info?.waba_ban_state, v.violation_info?.violation_type].filter(Boolean).map(String).join(':');
                 await webhookPulse(`account-${bits.replace(/[^\w:+.-]/g, '_').slice(0, 120)}`);
+                // Tell the founder now, by e-mail and WhatsApp, not at the 02:00 run (BUGLOG #144: the
+                // spam strikes of 23 and 26 October sat in this table for six hours each).
+                try {
+                  const { metaEventAlert } = await import('../../../lib/meta-alerts.js');
+                  await Promise.race([metaEventAlert({ field: change.field, value: v, prisma }), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 6000))]);
+                } catch {
+                  // diagnostics never change the webhook's behaviour
+                }
               }
               // Delivery statuses arrive under field "messages" as value.statuses
               // (the Cloud API has no "message_status" field; that check never
@@ -397,6 +409,17 @@ export default async function handler(req, res) {
                   // check reads these, and any MARKETING is a red line (2026-10-23, lib/meta-compliance.js).
                   const priceCat = String(status.pricing?.category || '').toLowerCase().replace(/[^a-z_]/g, '').slice(0, 30);
                   if (status.status === 'sent' && priceCat) await webhookPulse(`price-${priceCat}`);
+                  // A message Meta billed as business-initiated (utility, marketing, authentication) must
+                  // have gone to someone who wrote to WaPay; one to a stranger is counted RED and alerted
+                  // (BUGLOG #144). Independent of the code path that sent it.
+                  if (status.status === 'sent' && priceCat && priceCat !== 'service' && priceCat !== 'referral_conversion') {
+                    try {
+                      const { strangerCheck } = await import('../../../lib/meta-alerts.js');
+                      await Promise.race([strangerCheck({ prisma, status }), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 4000))]);
+                    } catch {
+                      // diagnostics never change the webhook's behaviour
+                    }
+                  }
                   // Meta's own words for a failure (title + error_data.details), so a
                   // lock or a billing stop is diagnosed from the database instead of
                   // guessed from the code alone (2026-10-21, the 131031 morning,

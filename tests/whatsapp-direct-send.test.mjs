@@ -22,7 +22,8 @@ function mockPrisma(meta) {
       update: async () => ({}),
     },
     wallet: { findFirst: async () => null },
-    account: { findUnique: async () => ({ displayName: 'Niev' }) },
+    // Every number here wrote to WaPay before (BUGLOG #144: rails outside a reply need that).
+    account: { findUnique: async () => ({ displayName: 'Niev' }), findFirst: async () => ({ id: 'a1', profile: {} }) },
   };
 }
 

@@ -72,6 +72,7 @@ A rule that has only a comment is not on this thread.
 | 4.2 | **A model never says a pay-out is under way unless the record has one pending.** The replacement is `nothingPendingLine` with the real balance. | `outputGate` `MONEY_CLAIM` with `payoutPending` from the pack, on both brains | same, plus `tests/phase2.test.mjs` and `tests/phase2-review.test.mjs` (both reply sites) |
 | 4.3 | **Receipt-shaped model replies are blocked**, and finalised pay-out wording has a single source. | `looksLikeReceipt`, `payoutOutcomeMessage` | existing |
 | 4.4 | **No time promises, no partner named in customer copy.** | copy tests | `tests/how-it-works.test.mjs`, `tests/payout-round5.test.mjs` |
+| 4.6 | **WaPay never writes first to a number that never wrote to it** (BUGLOG #144, Meta's second spam strike). A number typed on a form (the pay page, a business customer row, an ops list) is not consent; outside a reply only the receipt of the person's own transaction goes, and only to someone who wrote to WaPay. A pre-registered payer record does not count. | `businessInitiatedAllowed` (`lib/outbound-guard.js`) in every business-initiated rail; `strangerCheck` (`lib/meta-alerts.js`) on what Meta bills | `tests/spam-strike-guard.test.mjs` (every template or Direct Send path listed and gated), `tests/notify.test.mjs`, `tests/payer-registration.test.mjs` |
 
 ## 5. The chat never traps a customer
 

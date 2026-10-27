@@ -83,8 +83,9 @@ test('pay page: PAID state carries the receipt + onboarding deep link', () => {
   assert.match(payPageSource, /Get my receipt \+ my own WaPay/);
 });
 
-test('pay page: fine print honestly discloses BOTH uses of the number', () => {
-  assert.match(payPageSource, /number is used to send your\s+receipt on WhatsApp and to offer you your own free WaPay/);
+test('pay page: fine print honestly says what the number is for, and that WaPay never writes first (BUGLOG #144)', () => {
+  assert.match(payPageSource, /Your number stays with this payment as its receipt\. If you already chat with WaPay, the receipt comes to that chat; if not, tap Get my receipt after paying\. WaPay never messages a number that has not written to it\./);
+  assert.ok(!/offer you your own free WaPay/.test(payPageSource), 'no promise of an unasked-for message');
 });
 
 // ---------------------------------------------------------------------------
@@ -211,7 +212,8 @@ test('notify (behavioral): repairs a lost send, then never double-sends', async 
       update: async ({ data }) => { intentRow.metadata = data.metadata; return intentRow; },
     },
     wallet: { findFirst: async () => ({ availableCents: 8500 }) },
-    account: { findUnique: async () => ({ displayName: 'Nieuwoudt', msisdn: '27787051175' }) },
+    // The payer's number wrote to WaPay before (BUGLOG #144: only such a number gets a receipt).
+    account: { findUnique: async () => ({ displayName: 'Nieuwoudt', msisdn: '27787051175' }), findFirst: async () => ({ id: 'payer1', profile: {} }) },
   };
   const sends = [];
   const send = { text: async (a) => { sends.push(['text', a.to]); return { ok: true }; }, template: async (a) => { sends.push(['tpl', a.to]); return { ok: true }; } };
@@ -227,7 +229,7 @@ test('notify (behavioral): repairs a lost send, then never double-sends', async 
   assert.equal(sends.length, 2, 'a redelivery never double-sends');
 });
 
-test('notify (behavioral): out-of-window payer falls back to the approved template', async () => {
+test('notify (behavioral): a payer who wrote to WaPay before, now outside the window, gets the approved template', async () => {
   const { deliverRequestPaidNotifications } = await import('../lib/request-notify.js');
   process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT = 'wapay_payment_receipt';
   const intentRow = { idemKey: 'wapay-payreq-PRTESTAC', providerRef: 'pf1', metadata: { waId: '27787051175', accountId: 'acc1', amountCents: 900, grossCents: 1000, payerMsisdn: '0726252243', requesterNotifiedAt: '2026-08-25' } };
@@ -235,7 +237,7 @@ test('notify (behavioral): out-of-window payer falls back to the approved templa
     paymentRequest: { findUnique: async () => ({ id: 'PRTESTAC', status: 'PAID', amountCents: 1000, accountId: 'acc1' }) },
     providerRequest: { findUnique: async () => ({ ...intentRow, metadata: { ...intentRow.metadata } }), update: async ({ data }) => { intentRow.metadata = data.metadata; return intentRow; } },
     wallet: { findFirst: async () => null },
-    account: { findUnique: async () => ({ msisdn: '27787051175' }) },
+    account: { findUnique: async () => ({ msisdn: '27787051175' }), findFirst: async () => ({ id: 'payer1', profile: {} }) },
   };
   const sends = [];
   const send = {
@@ -362,26 +364,31 @@ test('new copy: no betting words, no cash-out promises', () => {
   }
 });
 
-test('a payer who never wrote gets the approved receipt template, not a plain text that Meta drops with 131047 (2026-10-23)', async () => {
+test('a payer number that never wrote to WaPay gets nothing: no plain text, no Direct Send, no template (BUGLOG #144, 2026-10-27)', async () => {
   const { deliverRequestPaidNotifications } = await import('../lib/request-notify.js');
   process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT = 'wapay_payment_receipt';
+  process.env.WHATSAPP_DIRECT_SEND = 'true';
   const calls = [];
   const send = {
     text: async (a) => { calls.push(['text', a.to]); return { ok: true }; },
     template: async (a) => { calls.push(['template', a.to, a.templateName]); return { ok: true }; },
-    direct: async () => ({ ok: false }),
+    direct: async (a) => { calls.push(['direct', a.to]); return { ok: true }; },
   };
   const intent = { idemKey: 'wapay-payreq-PRWINDOW', status: 'SUCCESS', providerRef: '123', metadata: { accountId: 'req1', waId: '27830000001', payerMsisdn: '0729990002', amountCents: 9500, grossCents: 10000, requesterNotifiedAt: true } };
+  const refusals = [];
   const prisma = {
     paymentRequest: { findUnique: async () => ({ id: 'PRWINDOW', accountId: 'req1', status: 'PAID', amountCents: 10000, businessId: null, note: null }) },
     providerRequest: { findUnique: async () => intent, update: async ({ data }) => { Object.assign(intent.metadata, data.metadata || {}); return intent; } },
     account: { findFirst: async () => null, findUnique: async () => ({ id: 'req1', waId: '27830000001', displayName: 'Thandi', profile: {} }) },
     conversationTurn: { findFirst: async () => null },
     wallet: { findFirst: async () => null },
+    processedMessage: { create: async ({ data }) => { refusals.push(data.waMessageId); return data; } },
   };
-  await deliverRequestPaidNotifications({ code: 'PRWINDOW', prisma, send, preRegisterPayer: async () => null });
+  const out = await deliverRequestPaidNotifications({ code: 'PRWINDOW', prisma, send, preRegisterPayer: async () => null });
   delete process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT;
-  const toPayer = calls.filter((c) => c[1] === '27729990002');
-  assert.ok(!toPayer.some((c) => c[0] === 'text'), 'no plain text to a payer outside the window');
-  assert.ok(toPayer.some((c) => c[0] === 'template' && c[2] === 'wapay_payment_receipt'), 'the approved template goes');
+  delete process.env.WHATSAPP_DIRECT_SEND;
+  assert.equal(out.payer, 'never_wrote');
+  assert.deepEqual(calls.filter((c) => c[1] === '27729990002'), [], 'nothing to a number that never wrote');
+  assert.ok(!intent.metadata.payerNotifiedAt, 'not marked as told');
+  assert.ok(refusals.some((k) => /^bi-refused:payer-receipt:/.test(k)), 'the refusal is counted for the compliance check');
 });

@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-10-27 (133) — CODE RED, Meta's second spam strike: WaPay never writes first to a number that never wrote to it, and Meta's verdict reaches the founder in minutes
+
+Founder, 27 October, after Meta's e-mail of 26 October ("identified as sending spam … may face restrictions or
+be disabled"): "Identify the issue, log it, and make sure that it's implemented and not slipping past. I thought
+we have audit checks running daily." BUGLOG #144 has the numbers. In short: since 23 October 3,996 of WaPay's
+4,053 messages to account holders were replies within five minutes; one UTILITY receipt template went to a payer
+number typed during the 22 October stolen-card wave that had never written to WaPay; 86% of what Meta billed was
+click-to-WhatsApp ad arrivals; Meta flagged the number on 23 October 20:03 and 26 October 20:04 UTC, and the daily
+check reported both six hours later inside a RED it had shown every day since 20 October.
+
+- **The rule in code** (`lib/outbound-guard.js`): `businessInitiatedAllowed` refuses any business-initiated send
+  (template, Direct Send, a notice outside a reply) to a number that never wrote to WaPay: no account, a
+  pre-registered payer record without a message of theirs, or an unreadable answer. Each refusal is a
+  `bi-refused:<purpose>` row. Wired into the payer receipt (after the pre-registration record, before any rail),
+  the requester notice's template rails, `notifyCustomer` outside the window, the ops reply after the window
+  (`force` does not override it) and the business nudge (off in production). The payer's receipt comes when they
+  tap "Get my receipt" on the pay page, which opens their own chat with WaPay; the fine print now says WaPay
+  never messages a number that has not written to it.
+- **Told at once** (`lib/meta-alerts.js`): every Meta account event (`account_update`, `account_alerts`,
+  reviews, quality) is alerted from the webhook as it lands, by e-mail and WhatsApp, "🛑 ACTION NOW" for
+  enforcement, with the strikes of the last 7 days and the billing mix; the number's quality, limit tier and
+  status are read every ten minutes from the webhook and any change is alerted; every status Meta bills as
+  utility, marketing or authentication is checked against the database, and one to a number that never wrote
+  is counted (`stranger-<category>`) and alerted. Each alert stores whether the e-mail and the WhatsApp line went
+  (`alert-out:` rows).
+- **The daily check** (`lib/meta-compliance.js`): enforcement events count for 7 days with their dates, each
+  strike with its own code (`META_STRIKE_<minute>`) so a second strike is news; `SENT_TO_STRANGER` is RED;
+  refusals are reported; `AD_TRAFFIC_WHILE_RED` (AMBER) names the ad share while the rating is not GREEN; the
+  summary leads with what is new and the e-mail subject names it; the e-mail outcome is stored.
+- **Diagnosis:** `/api/internal/meta-status?node=<id>` reads what a Meta id named in an e-mail is (type, name,
+  WhatsApp accounts, numbers) with the messaging and the ads token.
+- **Not changed (the founder's decisions):** the ad, Meta settings, Vercel envs, frozen accounts.
+- Tests: `tests/spam-strike-guard.test.mjs` (10); never-wrote cases added to the notify, ops-reply,
+  payer-registration and payer-preregister tests; 1,440 pass; `pnpm build` passes.
+
 ## 2026-10-27 (132) — The Blu voucher client says what Blu answered
 
 Blu thread. Phuti asked for evidence of the 12-digit QA PIN redemptions; the production

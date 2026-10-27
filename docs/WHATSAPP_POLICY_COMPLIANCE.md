@@ -126,3 +126,31 @@ earlier, and it would let anyone make WaPay send "please pay R500" to any number
   24 hours). Outside it nothing is sent (Meta would refuse it with 131047, BUGLOG #138). The requester's message
   is the same either way, so it never tells whether a number is on WaPay.
 - Reminders ("remind 2" in the chat, "Send reminder" on the web) are a message the customer sends themselves.
+
+## 2026-10-27: the second strike, and the rule moved into the rails (BUGLOG #144, CHANGELOG 133)
+
+Meta flagged the number for spam again: `ACCOUNT_VIOLATION` / `SPAM` at 20:03 UTC on 23 October and 20:04 UTC on
+26 October (e-mail of 26 October). Since 23 October WaPay's messages were replies to the person's own message,
+with one exception: a UTILITY receipt template to a payer number typed during the 22 October stolen-card wave,
+a number that had never written to WaPay. 86% of what Meta billed went to click-to-WhatsApp ad arrivals.
+
+**Rule 1 is now enforced where the message leaves.** `lib/outbound-guard.js` refuses every business-initiated
+send (template, Direct Send, a notice outside a reply) to a number that never wrote to WaPay. A number typed on
+a form (the pay page, a business customer row, an ops list) is not consent: anyone can type anyone's number.
+A pre-registered payer record does not count until the person writes. A payer gets their receipt by tapping
+"Get my receipt", which opens their own chat. A new sending path must call `businessInitiatedAllowed`;
+`tests/spam-strike-guard.test.mjs` fails the build for any file that can send a template or Direct Send and is
+not on its reviewed list.
+
+**Meta's verdict reaches the founder in minutes.** An `account_update` or other account event is e-mailed and
+sent on WhatsApp as it arrives ("🛑 ACTION NOW" for enforcement); quality, limit tier and status are read every
+ten minutes and any change is alerted; a message Meta bills as utility, marketing or authentication to a number
+that never wrote is counted RED (`stranger-<category>`) and alerted. Whether each alert went is stored
+(`alert-out:` rows). The WhatsApp line reaches the founder only inside his own 24-hour window until
+`WAPAY_TEMPLATE_OPS_ALERT` names an approved utility template; the e-mail always goes.
+
+**What the founder does when a strike lands:** open Business Support Home → the WhatsApp account WaPay →
+Account overview, and WhatsApp Manager → Account quality; request a review where it is offered; decide on the
+ad (ad arrivals are people who did not know WaPay, and their blocks and reports are what Meta counts); send
+nothing to catch up. Subscribe the app's webhook to `phone_number_quality_update` so a quality change arrives
+as an event as well as by the ten-minute read.

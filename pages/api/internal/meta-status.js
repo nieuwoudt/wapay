@@ -167,5 +167,34 @@ export default async function handler(req, res) {
     out.phone = { skipped: 'no phone number id in this deployment' };
   }
 
+  // ?node=<id> (2026-10-27, BUGLOG #144): what is a Meta id named in an e-mail? Meta's second spam
+  // notice named "WhatsApp Business account WaPay – 1047882684677958", the id we knew as the ads
+  // portfolio. Read-only: its type and name, the WhatsApp accounts it owns or manages, and, for a
+  // WhatsApp account, its numbers and owner. Tried with the messaging token and the ads token.
+  const node = String(req.query?.node || '').trim();
+  if (/^\d{6,20}$/.test(node)) {
+    out.node = { id: node };
+    const tokens = { messaging: token, ads: process.env.META_ADS_ACCESS_TOKEN || '' };
+    await Promise.all(Object.entries(tokens).map(async ([label, tk]) => {
+      if (!tk) { out.node[label] = { skipped: 'no token' }; return; }
+      const [meta, owned, client, phones, owner] = await Promise.all([
+        graph(node, tk, { metadata: '1', fields: 'id,name' }),
+        graph(`${node}/owned_whatsapp_business_accounts`, tk, { fields: 'id,name,account_review_status' }),
+        graph(`${node}/client_whatsapp_business_accounts`, tk, { fields: 'id,name' }),
+        graph(`${node}/phone_numbers`, tk, { fields: 'display_phone_number,verified_name,quality_rating,status' }),
+        graph(node, tk, { fields: 'owner_business_info' }),
+      ]);
+      out.node[label] = {
+        type: meta?.metadata?.type || null,
+        name: meta?.name || null,
+        error: meta?.error || null,
+        ownedWhatsAppAccounts: owned.error ? { error: owned.error } : (owned.data || []),
+        clientWhatsAppAccounts: client.error ? { error: client.error } : (client.data || []),
+        phoneNumbers: phones.error ? { error: phones.error } : (phones.data || []),
+        owner: owner.error ? { error: owner.error } : (owner.owner_business_info || null),
+      };
+    }));
+  }
+
   return res.status(200).json(out);
 }

@@ -347,7 +347,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
             </div>
             <div style={styles.fine}>
               No fees for you: you pay exactly {rands(amountCents)}. Payments are processed securely by PayFast{adumo ? ' or Adumo (Nedbank)' : ''}; no WaPay account is needed.
-              Your number is used to send your receipt on WhatsApp and to offer you your own free WaPay, which you're welcome to ignore.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
+              Your number stays with this payment as its receipt. If you already chat with WaPay, the receipt comes to that chat; if not, tap Get my receipt after paying. WaPay never messages a number that has not written to it.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
               {' '}To protect payers and stop fraud, WaPay notes the rough area this page is opened from (from your internet connection, never your exact location) and keeps it for 90 days.
             </div>
             <div style={styles.fine}>
