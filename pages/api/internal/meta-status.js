@@ -186,6 +186,7 @@ export default async function handler(req, res) {
       ]);
       out.node[label] = {
         type: meta?.metadata?.type || null,
+        resolvedId: meta?.id || null, // differs from the id asked for when Graph resolves an alias
         name: meta?.name || null,
         error: meta?.error || null,
         ownedWhatsAppAccounts: owned.error ? { error: owned.error } : (owned.data || []),

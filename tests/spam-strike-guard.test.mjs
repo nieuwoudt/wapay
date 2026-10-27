@@ -171,6 +171,7 @@ test('compliance: strikes count for seven days with their dates and a code that 
   assert.ok(v.newCodes.includes('META_STRIKE_202610262004'), 'the second strike is news even though the first was already reported');
   assert.ok(codes.includes('SENT_TO_STRANGER'));
   assert.ok(codes.includes('AD_TRAFFIC_WHILE_RED'));
+  assert.deepEqual(codes.slice(0, 2), ['META_STRIKE_202610262004', 'SENT_TO_STRANGER'], 'enforcement and strangers lead (the Health card shows three)');
   assert.equal(v.verdict, 'RED');
   const text = summaryText({ ...v, meta: { quality: 'RED' }, pulses, behaviour: {}, at: '2026-10-27T02:00:00Z' });
   assert.match(text.split('\n')[0], /NEW red reason/);
