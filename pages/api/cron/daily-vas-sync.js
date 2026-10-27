@@ -156,7 +156,7 @@ export default async function handler(req, res) {
     try {
       const { drainJobs } = await import('../../../lib/jobs.js');
       const { reconcileFuelPurchases } = await import('../../../lib/fuel-settlement.js');
-      const { reconcileElectricityPurchases } = await import('../../../lib/electricity-settlement.js');
+      const { reconcileElectricityPurchases, markElectricityTokenUndelivered } = await import('../../../lib/electricity-settlement.js');
       const { notifyCustomer } = await import('../../../lib/notify.js');
       jobs = await drainJobs({
         prisma,
@@ -189,12 +189,15 @@ export default async function handler(req, res) {
             if (account.waId) {
               for (const d of recon.delivered) {
                 const formattedToken = String(d.token || '').replace(/(.{4})/g, '$1 ').trim();
-                await notifyCustomer({
+                const sent = await notifyCustomer({
                   to: account.waId,
                   accountId: account.id,
                   text: `✅ Electricity purchase successful!\n\n📟 Meter: ${d.meterNumber}\n💰 Amount: R${(Number(d.amountCents || 0) / 100).toFixed(2)}\n⚡ Token: *${formattedToken}*\n🔋 Units: ${d.units || 'N/A'} kWh\n🧾 Reference: ${d.providerRef}\n\n💳 New balance: R${(Number(d.newBalanceCents || 0) / 100).toFixed(2)}`,
                   kind: 'receipt',
                 });
+                // Window closed and no template: the token stays on the row and
+                // the customer's next message delivers it (never re-sent here).
+                if (!sent?.ok) await markElectricityTokenUndelivered({ previewId: d.previewId });
               }
               if (recon.failed > 0) {
                 await notifyCustomer({

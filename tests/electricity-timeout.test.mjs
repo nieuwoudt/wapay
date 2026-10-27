@@ -19,6 +19,9 @@ import {
   reconcileElectricityPurchases,
   electricityExecKey,
   electricitySpendKey,
+  markElectricityTokenUndelivered,
+  undeliveredElectricityTokens,
+  markElectricityTokenDelivered,
 } from '../lib/electricity-settlement.js';
 
 const read = (p) => readFile(new URL(`../${p}`, import.meta.url), 'utf8');
@@ -176,3 +179,45 @@ test('the customer copy for a timeout states both truths and names no date or su
   assert.ok(processor.includes("kind: 'electricity-reconcile'"), 'a still-pending row queues a job for the cron');
   assert.ok(processor.includes('reconcileElectricityPurchases({ account, opportunistic: true })'), 'the on-turn re-send is the short-bounded, throttled one');
 });
+
+// ---------------------------------------------------------------------------
+// 2026-10-27 (spam-strike rule): a token settled by the cron whose receipt is
+// refused outside the 24-hour window is marked, never re-sent by the cron, and
+// delivered in-window by the customer's next message.
+// ---------------------------------------------------------------------------
+test('the cron marks an undelivered token instead of retrying; the next message delivers it and clears the mark', async () => {
+  const cron = await read('pages/api/cron/daily-vas-sync.js');
+  const handler = cron.slice(cron.indexOf("'electricity-reconcile': async (job) => {"), cron.indexOf("'electricity-reconcile': async (job) => {") + 1800);
+  assert.match(handler, /const sent = await notifyCustomer\(/, 'the notify result is read');
+  assert.match(handler, /if \(!sent\?\.ok\) await markElectricityTokenUndelivered\(\{ previewId: d\.previewId \}\)/, 'ok:false marks the row');
+  assert.equal((handler.match(/notifyCustomer\(/g) || []).length, 2, 'no retry of the token send (one send for the token, one for a refund)');
+  const processor = await read('pages/api/webhooks/message-processor-v2.js');
+  const hook = processor.slice(processor.indexOf('const stuckElectricity = await prisma.providerRequest.findFirst'), processor.indexOf('const stuckElectricity = await prisma.providerRequest.findFirst') + 2200);
+  assert.match(hook, /metadata: \{ path: \['tokenUndelivered'\], equals: true \}/, 'the hook looks for undelivered tokens');
+  assert.ok(hook.indexOf('undeliveredElectricityTokens({ account })') < hook.indexOf('markElectricityTokenDelivered({ previewId: u.previewId })'), 'deliver, then clear');
+  assert.match(hook, /sendReceipt\(\{[\s\S]*?targetValue: u\.meterNumber/, 'the stored receipt is sent');
+});
+
+test('undelivered-token helpers: mark, list from the stored result, clear', async () => {
+  const rows = { 'p-1': { id: 'p-1', status: 'SUCCESS', metadata: { meterNumber: '000001020001', amountCents: 2000 }, providerRef: 'BLU-E-9', responseJson: JSON.stringify({ token: '12345678901234567890', units: 18.2, dateTime: '2026-10-27T01:00:00Z' }), requestTs: new Date() } };
+  const db = {
+    providerRequest: {
+      findUnique: async ({ where }) => rows[where.id] || null,
+      update: async ({ where, data }) => { rows[where.id] = { ...rows[where.id], ...data }; return rows[where.id]; },
+      findMany: async () => Object.values(rows).filter((r) => r.status === 'SUCCESS' && r.metadata?.tokenUndelivered === true),
+    },
+  };
+  assert.equal(await markElectricityTokenUndelivered({ previewId: 'p-1', deps: { prisma: db } }), true);
+  assert.equal(rows['p-1'].metadata.tokenUndelivered, true);
+  const list = await undeliveredElectricityTokens({ account: { id: 'a' }, deps: { prisma: db } });
+  assert.equal(list.length, 1);
+  assert.equal(list[0].token, '12345678901234567890');
+  assert.equal(list[0].providerRef, 'BLU-E-9');
+  assert.equal(list[0].meterNumber, '000001020001');
+  assert.equal(await markElectricityTokenDelivered({ previewId: 'p-1', deps: { prisma: db } }), true);
+  assert.equal(rows['p-1'].metadata.tokenUndelivered, undefined);
+  assert.ok(rows['p-1'].metadata.tokenDeliveredAt);
+  assert.equal((await undeliveredElectricityTokens({ account: { id: 'a' }, deps: { prisma: db } })).length, 0);
+  assert.equal(await markElectricityTokenUndelivered({ previewId: 'missing', deps: { prisma: db } }), false);
+});
+

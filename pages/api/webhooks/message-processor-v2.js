@@ -108,7 +108,7 @@ import {
 import { matchFeeAsk, feeAnswer, feeAskAmountCents, feeFacts } from '../../../lib/fee-facts.js';
 import { matchHowItWorksAsk, howItWorksAnswer, howItWorksBrief, wantsSteps, detectMethod, looksLikeQuestion, TOPICS as HOWTO_TOPICS } from '../../../lib/how-it-works.js';
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
-import { reconcileElectricityPurchases } from '../../../lib/electricity-settlement.js';
+import { reconcileElectricityPurchases, undeliveredElectricityTokens, markElectricityTokenDelivered } from '../../../lib/electricity-settlement.js';
 import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
 import { isValidSaMsisdn, normaliseMsisdn, bluCanVendTo } from '../../../lib/msisdn.js';
 import { agentV3For } from '../../../lib/shadow-list.js';
@@ -1644,10 +1644,34 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   // parked and a job is queued so the nightly cron keeps trying.
   try {
     const stuckElectricity = await prisma.providerRequest.findFirst({
-      where: { accountId: account.id, route: 'electricity-preview', status: { in: ['RECONCILE', 'EXECUTING'] } },
+      where: {
+        accountId: account.id,
+        route: 'electricity-preview',
+        OR: [
+          { status: { in: ['RECONCILE', 'EXECUTING'] } },
+          // settled by the cron, receipt refused outside the window: deliver now, in-window
+          { status: 'SUCCESS', metadata: { path: ['tokenUndelivered'], equals: true } },
+        ],
+      },
       select: { id: true },
     });
     if (stuckElectricity) {
+      for (const u of await undeliveredElectricityTokens({ account })) {
+        const formattedToken = String(u.token || '').replace(/(.{4})/g, '$1 ').trim();
+        await sendReceipt({
+          to: from,
+          productLabel: 'Electricity',
+          targetLabel: '📟 Meter',
+          targetValue: u.meterNumber,
+          network: 'Electricity',
+          amountCents: u.amountCents,
+          reference: u.providerRef,
+          newBalanceCents: Math.round(parseFloat((await getUserBalance(from)).balance) * 100) || 0,
+          dateTime: u.dateTime || new Date(),
+          extraLines: [`⚡ Token: *${formattedToken}*`, `🔋 Units: ${u.units || 'N/A'} kWh`],
+        });
+        await markElectricityTokenDelivered({ previewId: u.previewId });
+      }
       // One short-bounded attempt per row, at most every two minutes: this
       // runs inside the webhook turn, so it must never blow Meta's window.
       const recon = await reconcileElectricityPurchases({ account, opportunistic: true });
