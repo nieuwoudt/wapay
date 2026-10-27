@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-10-27 (132) — The Blu voucher client says what Blu answered
+
+Blu thread. Phuti asked for evidence of the 12-digit QA PIN redemptions; the production
+status probe found Blu's voucher endpoint refusing us since 6 October (AUTH / RETRYABLE)
+while the VAS API key still works, and the voucher client's errors carried no status or
+reason. `packages/providers/blu/src/client.ts` `checkStatus` now attaches Blu's HTTP status
+and a masked reason to AUTH and RETRYABLE, and names a transport failure when there is no
+HTTP answer. No behaviour change in the chat.
+
+## 2026-10-27 (131) — Finfy Pay US mode: a separate +1 number for "get paid for work" (built, not switched on)
+
+Founder, 23 to 27 October: take the WhatsApp "please pay me" link to the US on Finfy Pay's Stripe rails, for
+freelancers and small businesses, starting with the pay-me link before anything bank-like. Brand Finfy Pay
+until a US trademark attorney clears "WaPay" (WhatsApp Inc. won TTAB opposition 91229413 against "WPAY WAPAY
+WHAT APP PAY").
+
+- **Routing:** a webhook change addressed to `FINFY_US_PHONE_NUMBER_ID` goes to `lib/us-finfy` and never to the
+  SA brain (one guarded `if` in `pages/api/webhooks/whatsapp.js`; unset env = nothing changes). A separate
+  endpoint, `/api/webhooks/whatsapp-us`, serves the number if it gets its own Meta app.
+- **Conversation** (`lib/us-finfy/turn.js`): sign-up by name, work and e-mail code (Finfy files the application
+  for approval); "$50 for logo design to Jane" is quoted at Finfy's price (4.9% + $1.49, the same table both
+  repos test), confirmed as payment for work, then created; balance, links and cash out answered from Finfy;
+  first cash out sends Stripe's verification link. Deterministic, no model; person-to-person refused; "start
+  over", "help" and "stop" work from any step.
+- **Notices** (`/api/finfy/events`): Finfy's signed payment.captured / payment.disputed events, deduped; free-form
+  inside the 24-hour window, the utility template outside it when configured, otherwise held for the next reply.
+- **Golden thread:** 1.8 (no model), 2.15 (no WaPay money; cash out only to the business's own verified bank),
+  4.5 (states only what Finfy's ledger says), §6 (`FINFY_CHAT_API_SECRET` has no default).
+- **To switch on:** `docs/FINFY_US_MODE.md` (Twilio, Meta, template, migration `20261027_finfy_us_chats`, env).
+- Tests: `tests/finfy-us.test.mjs` (21).
+
 ## 2026-10-26 (130) — The Link map shows its pins: WaPay pins coloured by the link, the whole world, flags abroad
 
 Founder, 26 October, with a screenshot of an empty map: "I'm not seeing the links, or the areas where these links
