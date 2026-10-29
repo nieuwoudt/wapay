@@ -93,6 +93,7 @@ test('requestPayout on REQUEST_INVALID: released, money back, FAILED row keeps t
   const prs = [];
   const prisma = { providerRequest: {
     async findUnique({ where }) { return prs.find((x) => x.idemKey === where.idemKey) || null; },
+    async findMany() { return []; },
     async create({ data }) { const row = { id: 'pr1', requestTs: new Date(), providerRef: null, ...data }; prs.push(row); return row; },
     async update({ where, data }) { const r = prs.find((x) => x.idemKey === where.idemKey); Object.assign(r, data); return r; },
   } };
@@ -115,8 +116,10 @@ test('requestPayout on REQUEST_INVALID: released, money back, FAILED row keeps t
 
 test('the customer hears that the fault is ours, and nothing left the balance', async () => {
   const out = await executeWithdraw({ account: { id: 'acc-1', displayName: 'Nieuwoudt Gresse', profile: {} }, data: { intentId: 'wa-x', method: 'NEDCASH', amountCents: 2000, recipient: {} }, pinProof: proofFor({ id: 'acc-1', displayName: 'Nieuwoudt Gresse', profile: {} }, { intentId: 'wa-x', method: 'NEDCASH', amountCents: 2000, recipient: {} }), deps: { requestPayout: async () => ({ ok: false, status: 'FAILED', error: 'REQUEST_INVALID', reference: 'WPX' }) } });
-  assert.match(out.text, /could not read our request \(our side, not yours\)/);
-  assert.match(out.text, /Nothing has left your balance/);
+  // The reason now comes from lib/payout-reasons.js (BUGLOG #146): our fault, said plainly, the money back.
+  assert.match(out.text, /because of a problem on our side, not with your bank/);
+  assert.match(out.text, /The R20 is back in your WaPay balance/);
+  assert.ok(!/bank rail/.test(out.text));
 });
 
 test('static: the sandbox probe route is gated, sandbox-only, ledger-free, single-shot and masked', () => {

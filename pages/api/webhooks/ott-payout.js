@@ -7,7 +7,7 @@
 import { sendWhatsAppText } from '../../../lib/say.js';
 import prisma from '../../../lib/prisma.js';
 import { verifyPayoutWebhook } from '../../../lib/ott-payout.js';
-import { finalisePayout, payoutOutcomeMessage } from '../../../lib/payouts.js';
+import { finalisePayout, payoutOutcomeMessage, payoutBalances } from '../../../lib/payouts.js';
 
 export const config = { maxDuration: 25 };
 
@@ -27,6 +27,8 @@ export default async function handler(req, res) {
     if (out.accountId && (out.status === 'SETTLED' || out.status === 'FAILED') && !out.noop) {
       const account = await prisma.account.findUnique({ where: { id: out.accountId }, select: { waId: true } }).catch(() => null);
       if (account?.waId) {
+        // A failure names the balance the money came back to (BUGLOG #146); the reason rides on out (providerStatus, message).
+        if (out.status === 'FAILED') out.balanceCents = (await payoutBalances({ accountId: out.accountId }).catch(() => null))?.totalCents ?? null;
         await sendWhatsAppText({ to: account.waId, text: payoutOutcomeMessage(out) }).catch(() => null);
       }
     }

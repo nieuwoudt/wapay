@@ -60,3 +60,56 @@ Contributing: the express fee (R16 rather than R8 within 2 hours of money arrivi
 - [ ] Waive the fee on her next withdrawal and process it with her once the cause is understood.
 - [ ] Ask her to change her WaPay PIN and delete the message with the old one.
 - [ ] Reply to her invite-link request.
+
+## What was fixed (CHANGELOG 134, branch `claude/incident-2026-10-28-payshap-withdrawal`)
+
+| Incident fix | Bug | Where it lives | Build rule |
+|---|---|---|---|
+| P1 missing-money intent, before the Pay agent and the withdraw matcher | #145 | `lib/missing-money.js`, processor `handleMissingMoney` / `handlePayoutStatus` | 4 |
+| P1 every rejection code has a reason and a next step, as data; unknown codes alert ops | #146 | `lib/payout-reasons.js`, `payoutOutcomeMessage`, `opsPayoutFailed` | 5 |
+| P1 one open withdrawal per account, in the code and in the database; cancel while waiting | #147 | `requestPayoutCore` `OPEN_PAYOUT`, migration `20261028_one_open_payout`, `rejectPayout` by the customer | 1, 2, 3 |
+| P1 PIN: interim line at the PIN step (the structural move is below, not built) | #149 | `PIN_PRIVACY_LINE` | 6 |
+| P2 what is set aside, shown beside what is available | #147 | `balanceLine`, `openPayoutCopy`, `moneySituation` sees AWAITING_APPROVAL | 2 |
+| P2 one status vocabulary, never ✅ before the bank confirms | #148 | `lib/payout-status-copy.js`, `approvedCopy` | 4 |
+| P2 after a ❌, a way to a person | #146 | "Reply *person*" in every failure, `handlePersonAsk` | |
+| P2 ops told of every rail failure | #146 | `opsPayoutFailed` from `railAndSettle` and `finalisePayout` | 5 |
+| Rule 7: this incident is a test | all | `tests/payout-incident-chat.test.mjs` (real processor), `tests/payout-incident-2026-10-28.test.mjs` | 7 |
+
+Not built here (left for later, each still open in the Permanent fixes list): the alert for a pay-out reserved more than 10 minutes before it reaches the rail (P2; in approval mode the wait is the founder's own queue), the own-number send going straight into withdraw (P3), the express fee explained before the amount is chosen (P3), the unanswered-message alert (P3, #150). The rail's state machine is the existing row lifecycle (INIT, AWAITING_APPROVAL, PENDING, SUCCESS / FAILED, REJECTING, NEEDS_OPERATOR) with every transition stamped on the row. Rule 1 asks for "created, reserved, submitted, paid, failed, reversed" names. Renaming states is a migration of every pay-out row and every reader, and it was not needed to fix this incident, so it is proposed here, not done.
+
+## PIN entry off chat (Build rule 6): the design, not built
+
+Today the PIN step is a chat message. WaPay never stores it, but the customer's own phone keeps it. Two ways off chat, both ending at the same proof (`verifyPIN` → `issuePinProof`, golden thread 2.1):
+
+1. **One-time signed link (recommended).** At the confirmation, the chat sends a link to an app.wapay.co.za page. The link is HMAC-signed, names this account, intent and amount, lasts 5 minutes and works once. The page shows the withdrawal and asks for the PIN. The existing `/api/app/pin` step issues the proof, and the server runs the same `executeWithdraw` from the sealed flow state (golden thread 3.2). The chat then says the outcome. It reuses the web portal's lockouts and proof (2.13), and Meta needs nothing approved.
+2. **WhatsApp Flows.** A native form, but the Flow JSON must be approved by Meta and needs an encrypted endpoint, while the number's quality rating is RED. Later.
+
+Either is a new money path under 2.1 and 2.13 and needs the founder's go-ahead. Until then the PIN step carries the interim line.
+
+## Deploy (the founder; nothing here has touched production)
+
+1. Read-only pre-check (must return no rows), then apply the migration: see the header of `packages/domain/prisma/migrations/20261028_one_open_payout/migration.sql`. The code is safe with or without it.
+2. Merge the branch to `main` (push to `main` deploys Vercel). Suite 1456/1456 and `pnpm build` pass on the branch.
+3. Optional: set `WAPAY_SUPPORT_WHATSAPP` (the number a customer is given when no ops alert can be sent), and make sure `WAPAY_OPS_ALERT_MSISDNS` and `ALERT_EMAIL` are set so "person" and the failure alerts reach you.
+
+## Founder test script (production, from your own phone; approval mode on)
+
+1. "Nothing is coming in to my bank account" → "🔎 I checked your withdrawals" with your recent ones, or "I can't see a withdrawal … in the last 7 days". It must never be the "🏦 PayShap to your bank account … How much?" opener.
+2. "withdraw R50", PayShap, your own account, YES. The PIN step shows the "WaPay never keeps your PIN" line. Enter your PIN → "⏳ Waiting for approval".
+3. "withdraw R50" again → "⏳ You already have a withdrawal waiting for approval … R58 is set aside … Say *cancel withdrawal* …" and nothing new in Mission Control.
+4. "did my withdrawal go through" → the waiting line with the balance split ("R… available and R58 set aside").
+5. "cancel withdrawal" → "↩️ *Cancelled.* … are back in your WaPay balance"; Mission Control's queue no longer shows it.
+6. Repeat step 2 and approve it in Mission Control → "⏳ *Approved and on its way.*" (never a ✅), then "✅ … has been paid" from the webhook, or "❌ *Didn't go through.* … because …" with the balance. You get a "❌ Pay-out failed" alert for any failure.
+7. "person" → your ops number and e-mail get "🙋 … asked to talk to a person"; the phone gets "🙋 I have asked a person from the WaPay team …".
+
+## Message to the customer (draft for the founder to send from the WaPay business inbox)
+
+Her last message was at 22:13 on the incident evening, so a free-form message reaches her until 22:13 SAST the next day. After that only an approved template does (golden thread 4.6). Fill in the reason once the code is read (first open question):
+
+> Hi Lisa, this is Nieuwoudt from WaPay. I'm sorry about last night, and I have checked everything myself. Your R100 withdrawal at 21:40 did not go through because [reason], and the R100 and the R16 fee came straight back to your WaPay balance. Nothing was lost: you have R420 in WaPay right now and nothing else is waiting. The R228 you saw at 21:20 was never sent, because it was not confirmed. We have fixed the messages that made this confusing. Your next withdrawal is free, and I'm happy to do it with you now: just reply here.
+>
+> For your safety, please also change your WaPay PIN (say *forgot PIN*) and delete the earlier chat message that has your old PIN in it (press and hold the message, then *Delete for me*). And you asked for an invite link on 21 October and our reply never reached you: say *invite* and it comes straight away.
+
+## Consultation record
+
+On 29 October the client issue-resolution thread messaged three sessions with the findings, the plan and the read-only questions above: the valuation and main build thread (session `…LNarxf94S47d6vszJ1mKSh`), the v1.3 orchestration loop that built the Pay Agent Architecture (`…ResSjWQPpiutd4qVAcTRTX`, unarchived for this), and the pay-outs end-to-end thread (`…Gi9XuVRURWLkNFETUCQdk4`). All three messages were delivered. When this was written none had answered: the first was idle with the message waiting, and the other two were disconnected because their computer side was not running. The design follows the code those threads wrote and keeps every test they left green. Their answers, and the production facts in the open questions, are to be added here when they arrive.

@@ -116,7 +116,9 @@ import { localizeOutbound, matchLanguageSwitch, LANGUAGE_CONFIRMATIONS } from '.
 import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEnabledForWaId, isRailLiveFor, ottLoadConfigured, launchScope, comingSoonReply, comingSoonPhrases, joinAnd } from '../../../lib/vas-config.js';
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
-import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders, getLatestPayout, reconcilePayout, reconcileInitPayout, payoutOutcomeMessage, PAYOUT_METHODS } from '../../../lib/payouts.js';
+import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders, getLatestPayout, listPayouts, payoutBalances, findOpenPayout, reconcilePayout, reconcileInitPayout, payoutOutcomeMessage, PAYOUT_METHODS } from '../../../lib/payouts.js';
+import { matchMissingMoney, matchCancelWithdrawal, matchPersonAsk, namesDeposit, namesBankOrWithdrawal } from '../../../lib/missing-money.js';
+import { missingMoneyReply, cancelledCopy, cannotCancelCopy, personAskedCopy, payoutPhase } from '../../../lib/payout-status-copy.js';
 import { forgetPayoutDetails } from '../../../lib/payout-beneficiaries.js';
 import { OttPayoutClient } from '../../../lib/ott-payout.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
@@ -1742,7 +1744,7 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     // Ask the rail at most every ten minutes from this hook (a pay-out can
     // sit at 98/99 for hours); a status question is left to the status
     // handler, which asks live and must not be answered twice.
-    if (parkedRef && matchDepositStatusRequest(text)) throw Object.assign(new Error('status ask'), { skipHook: true });
+    if (parkedRef && (matchDepositStatusRequest(text) || matchMissingMoney(text))) throw Object.assign(new Error('status ask'), { skipHook: true });
     const lastCheckedMs = parked?.metadata?.lastCheckedAt ? Date.parse(parked.metadata.lastCheckedAt) : 0;
     const recentlyChecked = lastCheckedMs > 0 && Date.now() - lastCheckedMs < 10 * 60 * 1000;
     if (parkedRef && !recentlyChecked) {
@@ -2127,6 +2129,15 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
       return await sendWhatsAppText({ to: from, text: await localizeOutbound(named.text, await userLang(account)) });
     }
   }
+
+  // MONEY THAT ALREADY MOVED (BUGLOG #145 to #147, the 28 October incident). "Nothing is coming in to my bank
+  // account" got the withdraw opener at 22:14 because the withdraw matcher read "to my bank" and ran before the
+  // status lookup. A complaint or a withdrawal status question, "cancel my withdrawal" and "talk to a person" are
+  // answered here from the ledger and the pay-out rows, before the Pay agent and before any withdraw matcher,
+  // so every customer gets the same deterministic answer and no model states a transaction's status.
+  if (matchCancelWithdrawal(text)) return await handleCancelWithdrawal({ from, account });
+  if (matchPersonAsk(text)) return await handlePersonAsk({ from, account, text });
+  if (matchMissingMoney(text)) return await handleMissingMoney({ from, account, rawText: text });
 
   // FEES (2026-09-13): "how much does it cost to deposit money?" is a price
   // question. Answered from the fee tables BEFORE the keyword router (which
@@ -4785,7 +4796,7 @@ async function handleTransactions({ from, account, text = '' }) {
   const balance = `💰 Balance: ${formatRands(pack.balances?.spendCents || 0)}${held > 0 ? ` (${formatRands(held)} held for a pending withdrawal)` : ''}`;
   const pp = pack.pendingPayout;
   const pendingPayoutLine = pp
-    ? `⏳ Pending pay-out: ${formatRands(pp.amountCents)} by ${PAYOUT_METHODS[pp.method]?.label || pp.method || 'bank'}, ref ${pp.reference || 'unknown'}; ${formatRands(pp.heldCents)} stays held until the bank rail answers.`
+    ? `⏳ Pending pay-out: ${formatRands(pp.amountCents)} by ${PAYOUT_METHODS[pp.method]?.label || pp.method || 'bank'}, ref ${pp.reference || 'unknown'}; ${formatRands(pp.heldCents)} stays set aside until your bank confirms it.`
     : '';
   const msg = [header, rows.map(transactionLine).join('\n'), pendingPayoutLine, balance, `Ask me about any of them, for example "did my payment go through".`].filter(Boolean).join('\n\n');
   logStructured('transactions_list', { from, accountId: account.id, rows: rows.length, kinds });
@@ -4794,54 +4805,101 @@ async function handleTransactions({ from, account, text = '' }) {
 }
 
 /**
- * The pay-out half of "did my payment go through". A PENDING pay-out is
- * reconciled with OTT first (GetPaymentStatus, never a second PerformPayout):
- * the webhook may never arrive (BUGLOG #53), and the customer must hear what
- * the rail says now, not what we hoped last night. The balance is read AFTER
- * the reconcile so a release shows up in the same reply.
+ * The pay-out half of "did my payment go through", and the answer to "Nothing is coming in to my bank account"
+ * (BUGLOG #145). The newest withdrawals of the last 7 days (at most three) in one message, each in plain words:
+ * waiting for approval, on its way, paid, or didn't go through and why (lib/payout-reasons.js), with where the
+ * money is now, the balance with what is set aside, and the one next step (lib/payout-status-copy.js
+ * missingMoneyReply). A PENDING pay-out is reconciled with OTT first (GetPaymentStatus, never a second
+ * PerformPayout): the webhook may never arrive (BUGLOG #53), and the customer must hear what the bank says now,
+ * not what we hoped last night. The balance is read AFTER the reconcile so a release shows up in the same reply.
  */
 async function handlePayoutStatus({ from, account, payout, altLine = '' }) {
-  const label = PAYOUT_METHODS[payout.method]?.label || 'your pay-out';
-  const amount = Number.isInteger(payout.amountCents) ? randsShort(payout.amountCents) : 'your withdrawal';
-  let status = payout.status;
-  let checked = null;
-  if (status === 'PENDING') {
-    checked = await reconcilePayout({ reference: payout.reference }).catch(() => null);
-    if (checked?.status === 'SETTLED') status = 'SUCCESS';
-    else if (checked?.status === 'FAILED') status = 'FAILED';
+  const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  let rows = (await listPayouts({ accountId: account.id, limit: 3 }).catch(() => [])).filter((r) => new Date(r.createdAt).getTime() >= since);
+  if (payout && !rows.some((r) => r.reference === payout.reference)) rows = [payout, ...rows].slice(0, 3);
+  const checks = {};
+  for (const r of rows.filter((x) => x.status === 'PENDING').slice(0, 1)) {
+    const checked = await reconcilePayout({ reference: r.reference }).catch(() => null);
+    checks[r.reference] = checked;
   }
-  const { balance } = await getUserBalance(from);
-
-  let text;
-  if (status === 'AWAITING_APPROVAL' || status === 'REJECTING') {
-    // Approval mode (lib/payout-approval.js, 2026-10-26): it has not gone to the bank; a person checks it first.
-    const setAside = randsShort(Number(payout.amountCents || 0) + Number(payout.feeCents || 0));
-    text = `⏳ Your withdrawal of ${amount} by ${label} (reference ${payout.reference}) is waiting for approval: a person at WaPay checks every pay-out before it goes. ${setAside} is set aside for it and nothing has left WaPay.\n\n💰 Balance: R${balance}`;
-  } else if (status === 'SUCCESS') {
-    text = `✅ Your withdrawal of ${amount} by ${label} was paid (reference ${payout.reference}).\n\n💰 Balance: R${balance}`;
-  } else if (status === 'FAILED') {
-    text =
-      `❌ Your withdrawal of ${amount} by ${label} did not go through (reference ${payout.reference}). The amount and the fee are back in your WaPay balance.\n\n` +
-      `💰 Balance: R${balance}\n\n` +
-      `Say "withdraw ${amount}" to try again.`;
-  } else {
-    const when = payout.createdAt
-      ? ` on ${new Date(payout.createdAt).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
-      : '';
-    const railWords = checked?.message && /^[\w .,'()-]{3,80}$/.test(checked.message) ? `"${checked.message}"` : '';
-    const railLine = checked?.checked
-      ? `I checked with the bank rail just now and it is still processing${railWords ? ` (${railWords})` : ''}.`
-      : `I could not reach the bank rail this second, so I will keep checking.`;
-    const held = randsShort(Number(payout.amountCents || 0) + Number(payout.feeCents || 0));
-    const fee = Number.isInteger(payout.feeCents) ? ` plus the ${randsShort(payout.feeCents)} fee` : '';
-    text =
-      `⏳ Your withdrawal of ${amount} by ${label}${when} (reference ${payout.reference}) has not been confirmed by the bank yet. ${railLine}\n\n` +
-      `${held} (the amount${fee}) is held aside for it, not lost: the moment it is paid I will message you, and if the bank rejects it the money comes straight back to your balance.\n\n` +
-      `💰 Balance: R${balance}`;
-  }
-
+  if (Object.keys(checks).length) rows = (await listPayouts({ accountId: account.id, limit: 3 }).catch(() => rows)).filter((r) => new Date(r.createdAt).getTime() >= since);
+  rows = rows.map((r) => (r.status === 'PENDING' && checks[r.reference] !== undefined ? { ...r, checked: checks[r.reference]?.checked ?? false } : r));
+  const bal = await payoutBalances({ accountId: account.id }).catch(() => null);
+  const text = missingMoneyReply({ payouts: rows, availableCents: bal?.totalCents ?? 0, heldCents: bal?.heldCents ?? 0 });
+  logStructured('payout_status_answered', { accountId: account.id, rows: rows.length, phases: rows.map((r) => payoutPhase(r)) });
   const localized = await localizeOutbound(text + altLine, await userLang(account));
   return await sendWhatsAppText({ to: from, text: localized });
+}
+
+/**
+ * "Nothing is coming in to my bank account", "I didn't receive my money", "where is my money", "did my withdrawal
+ * go through" (BUGLOG #145). About a withdrawal (or a bank) when the words say so or when one exists in the last
+ * 7 days; about a deposit when the words name one, or when there is no withdrawal and nothing names a bank.
+ */
+async function handleMissingMoney({ from, account, rawText = '' }) {
+  logStructured('missing_money_ask', { accountId: account.id });
+  if (namesDeposit(rawText)) return await handleDepositStatus({ from, account, rawText });
+  const latest = await getLatestPayout({ accountId: account.id }).catch(() => null);
+  const recent = latest && new Date(latest.createdAt).getTime() >= Date.now() - 7 * 24 * 60 * 60 * 1000;
+  if (!recent && !namesBankOrWithdrawal(rawText)) return await handleDepositStatus({ from, account, rawText });
+  return await handlePayoutStatus({ from, account, payout: recent ? latest : null });
+}
+
+/**
+ * "cancel my withdrawal" (BUGLOG #147): a withdrawal still waiting for approval is cancelled through the same step
+ * as the founder's reject (lib/payout-approval.js rejectPayout, by 'customer'): the hold released, the money back
+ * to SPEND, one message from here. One the bank already has cannot be stopped, and the reply says so.
+ */
+async function handleCancelWithdrawal({ from, account }) {
+  const open = await findOpenPayout({ accountId: account.id }).catch(() => null);
+  let text;
+  if (open && open.status === 'AWAITING_APPROVAL') {
+    const { rejectPayout } = await import('../../../lib/payout-approval.js');
+    const done = await rejectPayout({ reference: open.reference, by: 'customer', reason: 'cancelled by the customer in chat', outcome: 'CANCELLED_BY_CUSTOMER', tell: false }).catch((e) => ({ ok: false, error: e?.message }));
+    logStructured('withdrawal_cancelled_by_customer', { accountId: account.id, reference: open.reference, ok: !!done?.ok });
+    if (done?.ok) {
+      const bal = await payoutBalances({ accountId: account.id }).catch(() => null);
+      text = cancelledCopy({ ...open, outcome: 'CANCELLED_BY_CUSTOMER' }, { balanceCents: bal?.totalCents ?? null });
+    } else {
+      // Approved or cancelled by someone else a moment ago: say what it is now.
+      return await handlePayoutStatus({ from, account, payout: null });
+    }
+  } else {
+    text = cannotCancelCopy(open);
+  }
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(text, await userLang(account)) });
+}
+
+/**
+ * "person", "talk to a person" (BUGLOG #146: the failure message now offers it). The ops numbers and the ops
+ * e-mail get the account, the masked number and the newest withdrawal's state; the reply promises a person only
+ * when an alert actually went, otherwise it names WAPAY_SUPPORT_WHATSAPP when set (lib/payout-gate.js does the
+ * same at the third withdraw gate). Once per account per day.
+ */
+async function handlePersonAsk({ from, account }) {
+  const { opsPersonAlert } = await import('../../../lib/ops-alerts.js');
+  const { sendOpsAlert } = await import('../../../lib/email.js');
+  const latest = await getLatestPayout({ accountId: account.id }).catch(() => null);
+  const bal = await payoutBalances({ accountId: account.id }).catch(() => null);
+  const tail = String(account.waId || from || '').replace(/\D/g, '').slice(-4);
+  const R = (c) => `R${(Number(c || 0) / 100).toFixed(2).replace(/\.00$/, '')}`;
+  const name = String(account.displayName || '').trim().split(/\s+/)[0] || 'A customer';
+  const lines = [
+    `🙋 ${name} asked to talk to a person.`,
+    `Account ${account.id}, WhatsApp •••${tail}.`,
+    bal ? `Balance: ${R(bal.totalCents)} available, ${R(bal.heldCents || 0)} set aside.` : null,
+    latest ? `Newest withdrawal: ${R(latest.amountCents)} ${latest.method || ''}, ${latest.status}${latest.outcome ? ` (${latest.outcome})` : ''}, reference ${latest.reference}.` : 'No withdrawal on record.',
+    'Message them from the WaPay business inbox (a reply to this alert reaches the bot, not them).',
+  ].filter(Boolean);
+  const text = lines.join('\n');
+  const day = new Date().toISOString().slice(0, 10);
+  const [wa, mail] = await Promise.all([
+    opsPersonAlert({ text, key: `ask:${account.id}:${day}` }).catch(() => ({ sent: 0 })),
+    sendOpsAlert({ subject: `${name} asked to talk to a person`, detailsHtml: `<pre style="font-family:inherit;white-space:pre-wrap">${text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</pre>` }).catch(() => ({ success: false })),
+  ]);
+  const alerted = !!((wa && wa.sent) || (mail && mail.success));
+  logStructured('person_asked', { accountId: account.id, alerted });
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(personAskedCopy({ alerted, contact: process.env.WAPAY_SUPPORT_WHATSAPP || '' }), await userLang(account)) });
 }
 
 /**
