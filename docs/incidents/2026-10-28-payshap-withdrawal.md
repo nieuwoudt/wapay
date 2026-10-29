@@ -2,6 +2,8 @@
 
 *Opened 2026-10-28 by the client issue-resolution thread, from the founder's write-up and the customer's screenshots. Bugs: BUGLOG #145 to #150. This file is the repository's record; the shared incident doc is the founder's.*
 
+**Production facts (founder's read-only query, 29 October).** The pay-out row puts the evening on **27 October**; the write-up is dated 28 October. Row for `WP161EF3F64B2374`: `FAILED`, outcome `PROVIDER_97`, OTT's message `"Failed"`, with no HTTP status, no body and no providerStatus (it was finalised by the webhook). Requested at 20:48:14 SAST (her PIN). Approved at 21:39:54 SAST, after 51 minutes in the approval queue. Failed at 21:40:54 SAST, a minute after approval. Status 97 is "failed at provider": the PayShap and bank side refused it, and OTT passed on no reason. The customer is now told "because the bank's payment system did not complete it" (`lib/payout-reasons.js` BANK_DID_NOT_COMPLETE, fee waived). The real cause can only come from OTT: ask OTT support for the provider's reason for this reference. No `PAYOUT_REQUEST` was recorded after 21:40 SAST on 28 October.
+
 ## Summary
 
 No money was lost, but the customer had every reason to think it was. Lisa (a returning customer, BUGLOG #111, docs/testing/payouts-round5-2026-10-12.md) tried to move her WaPay balance to her own Capitec account (•••918). A R100 PayShap withdrawal (reference `WP161EF3F64B2374`) waited for the founder's approval with R116 set aside. It was approved at 21:40 and rejected by the bank in the same minute, and the R116 came back. A R228 withdrawal she was shown at 21:20 was never confirmed. When she wrote "Nothing is coming in to my bank account" at 22:13, the bot answered with the withdraw opener.
@@ -17,7 +19,7 @@ No money was lost, but the customer had every reason to think it was. Lisa (a re
 | earlier day, 18:04 to 18:05 | R325 PayShap withdrawal, PIN typed at the PIN step, paid at 18:05 (`WPED6D478285A1E9`) | normal chat flow; the PIN stays in her WhatsApp history (#149) |
 | 21 Oct, 09:13 | "I want an invite link" | `matchInviteAsk` → `handleInviteAsk` replied; 07:13 UTC is inside Meta's restriction (#136), so the reply failed on the phone (#150, to confirm) |
 | about 19:45 (inferred) | money reaches her balance | starts the 2-hour express fee window (CHANGELOG 125) |
-| before 21:06 (inferred) | a R100 PayShap withdrawal is requested and approved with her PIN | approval mode (CHANGELOG 129): `requestPayoutCore` moves R116 to CASH, holds it, row `AWAITING_APPROVAL`, the customer is told "⏳ Waiting for approval" (to confirm: the `PAYOUT_REQUEST` audit row's time) |
+| 20:48 (confirmed) | a R100 PayShap withdrawal is requested and approved with her PIN | approval mode (CHANGELOG 129): `requestPayoutCore` moves R116 to CASH, holds it, row `AWAITING_APPROVAL`, the customer is told "⏳ Waiting for approval" (to confirm: the `PAYOUT_REQUEST` audit row's time) |
 | 21:06 | "Send R360" to her own number; the bot points her to withdraw | `sendToSelfText` (#117 family) |
 | 21:18 to 21:20 | withdraw flow: Capitec •••918, R228 + R16 fee = R244, "Balance after R0" | `startWithdraw` has no open-pay-out check; balance = available only (#147) |
 | 21:20 to 21:40 | no YES or PIN from the customer | the R228 intent was never authorised, so no row exists (to confirm) |
@@ -44,9 +46,9 @@ Contributing: the express fee (R16 rather than R8 within 2 hours of money arrivi
 
 ## Open questions (answer from production before closing)
 
-- [ ] The rail's status code and message for `WP161EF3F64B2374` (row: `metadata.outcome`, `providerStatus`, `lastMessage`, `providerBody`).
-- [ ] When the R100 was requested (`PAYOUT_REQUEST` audit row, `approval.requestedAt`), and confirmation that it came from her own PIN.
-- [ ] Why it waited until 21:40: approval mode means it waited for the founder. The approval alert's time against the approval time.
+- [x] The rail's status code and message: **97, "Failed"** (failed at provider, no reason given). Ask OTT for the provider's reason.
+- [x] When the R100 was requested: **20:48:14 SAST on 27 October** (`approval.requestedAt`; only a correct PIN reaches that step).
+- [x] Why it waited until 21:40: **approval mode**. It sat 51 minutes in the founder's queue and was approved at 21:39:54.
 - [ ] Whether a row was ever created for the R228 (if one was, where it went).
 - [ ] Whether the R325's destination and name match the R100's (`destKey`, `recipient.name`). If they match, the name is not the cause.
 - [ ] `status-failed-131031` for the 21 October reply.
@@ -112,9 +114,9 @@ Either is a new money path under 2.1 and 2.13 and needs the founder's go-ahead. 
 
 ## Message to the customer (draft for the founder to send from the WaPay business inbox)
 
-Her last message was at 22:13 on the incident evening, so a free-form message reaches her until 22:13 SAST the next day. After that only an approved template does (golden thread 4.6). Fill in the reason once the code is read (first open question):
+Her last message was at 22:13 on 27 October, so the free-form window closed at 22:13 SAST on 28 October. Unless she has written since, only an approved utility template reaches her (golden thread 4.6), or a call. The reason below is OTT's code 97; replace it with the bank's words if OTT supplies them:
 
-> Hi Lisa, this is Nieuwoudt from WaPay. I'm sorry about last night, and I have checked everything myself. Your R100 withdrawal at 21:40 did not go through because [reason], and the R100 and the R16 fee came straight back to your WaPay balance. Nothing was lost: you have R420 in WaPay right now and nothing else is waiting. The R228 you saw at 21:20 was never sent, because it was not confirmed. We have fixed the messages that made this confusing. Your next withdrawal is free, and I'm happy to do it with you now: just reply here.
+> Hi Lisa, this is Nieuwoudt from WaPay. I'm sorry about Tuesday evening, and I have checked everything myself. Your R100 withdrawal at 21:40 did not go through because your bank's payment system did not complete it (we are asking our payment partner for the exact reason), and the R100 and the R16 fee came straight back to your WaPay balance. Nothing was lost: you have R420 in WaPay right now and nothing else is waiting. The R228 you saw at 21:20 was never sent, because it was not confirmed. We have fixed the messages that made this confusing. Your next withdrawal is free, and I'm happy to do it with you now: just reply here.
 >
 > For your safety, please also change your WaPay PIN (say *forgot PIN*) and delete the earlier chat message that has your old PIN in it (press and hold the message, then *Delete for me*). And you asked for an invite link on 21 October and our reply never reached you: say *invite* and it comes straight away.
 

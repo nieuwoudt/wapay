@@ -4,7 +4,7 @@
 
 ---
 
-*Bugs #145 to #150 are one incident: Lisa's failed PayShap withdrawal on the evening of 28 October 2026 (pay-out reference `WP161EF3F64B2374`). The full write-up, timeline and reconciliation are in `docs/incidents/2026-10-28-payshap-withdrawal.md`. No money was lost and the ledger balances; the customer was left believing it had been. These entries were written from the code and her screenshots before any fix (client issue-resolution thread, 2026-10-28). Production facts still to be read from the logs are marked **(to confirm)**.*
+*Bugs #145 to #150 are one incident: Lisa's failed PayShap withdrawal on the evening of 27 October 2026 (pay-out reference `WP161EF3F64B2374`; the write-up is dated 28 October). The full write-up, timeline and reconciliation are in `docs/incidents/2026-10-28-payshap-withdrawal.md`. No money was lost and the ledger balances; the customer was left believing it had been. These entries were written from the code and her screenshots before any fix (client issue-resolution thread, 2026-10-28). Production facts still to be read from the logs are marked **(to confirm)**.*
 
 ## 150. "I want an invite link" (21 October, 09:13 SAST) has no reply on the customer's phone
 
@@ -39,7 +39,7 @@
 
 - **Symptom (21:40 SAST):** "❌ Your withdrawal of R100 by PayShap could not be completed by the bank rail (reference WP161EF3F64B2374). The full amount and the fee are back in your WaPay balance." The message gave no reason, no next step, no balance and no way to reach a person.
 - **Root cause:** OTT's webhook sends a status code and a message. `finalisePayout` stores them on the pay-out row (`outcome: PROVIDER_<status>`, `lastMessage`), but `payoutOutcomeMessage` takes neither: one sentence covers every failure. `railAndSettle` keeps the code on an immediate failure but drops it from what it returns. The founder is not told when a pay-out he approved fails, and a code nobody has mapped raises no alert.
-- **Production facts (to confirm):** the status code and message on the row for `WP161EF3F64B2374`, and whether the earlier R325 (`WPED6D478285A1E9`, paid) used the same destination and name.
+- **Production facts (read 29 October):** `FAILED`, outcome `PROVIDER_97`, OTT's message "Failed", nothing more. It was requested at 20:48:14 SAST, approved at 21:39:54 and failed at 21:40:54. OTT passed on no bank reason, so the specific cause needs OTT support. Still to confirm: whether the earlier R325 (`WPED6D478285A1E9`, paid) used the same destination and name.
 - **Fix (CHANGELOG 134):** `lib/payout-reasons.js`, the rejection table as data: code or outcome to a reason, a next step that fits the method, a fault and a fee waiver, with a 97 refined by the bank's words when OTT gives them. `finalisePayout` and `railAndSettle` return `providerStatus`, `outcome` and `message`. `payoutOutcomeMessage` calls `failedCopy`, which states the reason, the money back, the balance (passed by the webhook) and the next step, ending "Reply *person* to talk to someone from WaPay" (`handlePersonAsk`). Every rail failure except an empty float (which has its own alert) sends `opsPayoutFailed` to the founder, masked, once per reference, flagged UNMAPPED when no row names the code.
 - **Guard:** `tests/payout-incident-2026-10-28.test.mjs` checks every row's shape and plain words; 97 with and without the bank's words; an unknown code flagged; and approve, PENDING, the webhook's 97, the copy with the reason and the balance, and the alert built from masks. The reconcile, chat and wire suites lock the new failure wording.
 
