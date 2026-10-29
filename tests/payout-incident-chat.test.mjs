@@ -49,7 +49,7 @@ test('21:18, a R100 waiting for approval: a second withdrawal names it and start
   assert.deepEqual(second.payouts, [{ status: 'AWAITING_APPROVAL', amountCents: 10000 }], 'no second row');
   const s = plain(one(status1.turn));
   assert.match(s, /⏳ R100 by PayShap to your bank account •••918, today at \d\d:\d\d: waiting for approval\./);
-  assert.ok(!/Nothing is on its way/.test(s));
+  assert.ok(!/Nothing else is on its way/.test(s));
 });
 
 test('22:13, "Nothing is coming in to my bank account": the withdrawals from the record, never the withdraw opener', () => {
@@ -58,7 +58,7 @@ test('22:13, "Nothing is coming in to my bank account": the withdrawals from the
   assert.match(text, /^🔎 I checked your withdrawals:/);
   assert.match(text, /❌ R100 by PayShap to your bank account •••918, today at \d\d:\d\d: didn't go through, because the bank's payment system did not complete it\. The R100 and the R16 fee came back to your balance\. \(WP161EF3F64B2374\)/);
   assert.match(text, /✅ R325 by PayShap to your bank account •••918, yesterday at \d\d:\d\d: paid\./);
-  assert.match(text, /Nothing is on its way to your bank right now\./);
+  assert.match(text, /Nothing else is on its way from your WaPay balance right now\./);
   assert.match(text, /💰 Balance: R420\./);
   assert.match(text, /Reply \*person\* to talk to someone from WaPay\./);
   assert.ok(!/🏦|How much\?|so up to/.test(text), 'not the PayShap opener of 22:14');
@@ -68,7 +68,7 @@ test('22:13, "Nothing is coming in to my bank account": the withdrawals from the
 
 test('"person" reaches a person; a fresh "withdraw R100" still starts the withdrawal', () => {
   const { person, fresh } = run();
-  assert.equal(one(person.turn), '🙋 To talk to a person from the WaPay team, WhatsApp 060 000 0000. Your money is safe.');
+  assert.equal(one(person.turn), '🙋 To talk to a person from the WaPay team, WhatsApp 060 000 0000.');
   const f = one(fresh.turn);
   assert.match(String(fresh.state || ''), /^PAYOUT_/, `the flow started: ${fresh.state}`);
   assert.ok(!/I checked your withdrawals|You already have a withdrawal/.test(f));

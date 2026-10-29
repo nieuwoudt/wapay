@@ -118,7 +118,7 @@ import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
 import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders, getLatestPayout, listPayouts, payoutBalances, findOpenPayout, reconcilePayout, reconcileInitPayout, payoutOutcomeMessage, PAYOUT_METHODS } from '../../../lib/payouts.js';
 import { matchMissingMoney, matchCancelWithdrawal, matchPersonAsk, namesDeposit, namesBankOrWithdrawal } from '../../../lib/missing-money.js';
-import { missingMoneyReply, cancelledCopy, cannotCancelCopy, personAskedCopy, payoutPhase } from '../../../lib/payout-status-copy.js';
+import { missingMoneyReply, cancelledCopy, cannotCancelCopy, personAskedCopy, payoutPhase, isOpenPayout } from '../../../lib/payout-status-copy.js';
 import { forgetPayoutDetails } from '../../../lib/payout-beneficiaries.js';
 import { OttPayoutClient } from '../../../lib/ott-payout.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
@@ -1744,7 +1744,8 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     // Ask the rail at most every ten minutes from this hook (a pay-out can
     // sit at 98/99 for hours); a status question is left to the status
     // handler, which asks live and must not be answered twice.
-    if (parkedRef && (matchDepositStatusRequest(text) || matchMissingMoney(text))) throw Object.assign(new Error('status ask'), { skipHook: true });
+    // Only a PENDING one: the handler checks that live. A stuck INIT row is checked here, since the handler does not.
+    if (parkedRef && parked.status === 'PENDING' && (matchDepositStatusRequest(text) || matchMissingMoney(text))) throw Object.assign(new Error('status ask'), { skipHook: true });
     const lastCheckedMs = parked?.metadata?.lastCheckedAt ? Date.parse(parked.metadata.lastCheckedAt) : 0;
     const recentlyChecked = lastCheckedMs > 0 && Date.now() - lastCheckedMs < 10 * 60 * 1000;
     if (parkedRef && !recentlyChecked) {
@@ -4815,14 +4816,16 @@ async function handleTransactions({ from, account, text = '' }) {
  */
 async function handlePayoutStatus({ from, account, payout, altLine = '' }) {
   const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  let rows = (await listPayouts({ accountId: account.id, limit: 3 }).catch(() => [])).filter((r) => new Date(r.createdAt).getTime() >= since);
+  // The last 7 days, and any withdrawal still open whatever its age (it still holds the customer's money).
+  const inView = (r) => isOpenPayout(r) || new Date(r.createdAt).getTime() >= since;
+  let rows = (await listPayouts({ accountId: account.id, limit: 3 }).catch(() => [])).filter(inView);
   if (payout && !rows.some((r) => r.reference === payout.reference)) rows = [payout, ...rows].slice(0, 3);
   const checks = {};
   for (const r of rows.filter((x) => x.status === 'PENDING').slice(0, 1)) {
     const checked = await reconcilePayout({ reference: r.reference }).catch(() => null);
     checks[r.reference] = checked;
   }
-  if (Object.keys(checks).length) rows = (await listPayouts({ accountId: account.id, limit: 3 }).catch(() => rows)).filter((r) => new Date(r.createdAt).getTime() >= since);
+  if (Object.keys(checks).length) rows = (await listPayouts({ accountId: account.id, limit: 3 }).catch(() => rows)).filter(inView);
   rows = rows.map((r) => (r.status === 'PENDING' && checks[r.reference] !== undefined ? { ...r, checked: checks[r.reference]?.checked ?? false } : r));
   const bal = await payoutBalances({ accountId: account.id }).catch(() => null);
   const text = missingMoneyReply({ payouts: rows, availableCents: bal?.totalCents ?? 0, heldCents: bal?.heldCents ?? 0 });
@@ -4839,10 +4842,10 @@ async function handlePayoutStatus({ from, account, payout, altLine = '' }) {
 async function handleMissingMoney({ from, account, rawText = '' }) {
   logStructured('missing_money_ask', { accountId: account.id });
   if (namesDeposit(rawText)) return await handleDepositStatus({ from, account, rawText });
-  const latest = await getLatestPayout({ accountId: account.id }).catch(() => null);
-  const recent = latest && new Date(latest.createdAt).getTime() >= Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const [latest, open] = await Promise.all([getLatestPayout({ accountId: account.id }).catch(() => null), findOpenPayout({ accountId: account.id }).catch(() => null)]);
+  const recent = open || (latest && new Date(latest.createdAt).getTime() >= Date.now() - 7 * 24 * 60 * 60 * 1000 ? latest : null);
   if (!recent && !namesBankOrWithdrawal(rawText)) return await handleDepositStatus({ from, account, rawText });
-  return await handlePayoutStatus({ from, account, payout: recent ? latest : null });
+  return await handlePayoutStatus({ from, account, payout: recent });
 }
 
 /**
@@ -4853,7 +4856,8 @@ async function handleMissingMoney({ from, account, rawText = '' }) {
 async function handleCancelWithdrawal({ from, account }) {
   const open = await findOpenPayout({ accountId: account.id }).catch(() => null);
   let text;
-  if (open && open.status === 'AWAITING_APPROVAL') {
+  // REJECTING too: a reject that stopped half-way is finished by the same idempotent step.
+  if (open && (open.status === 'AWAITING_APPROVAL' || open.status === 'REJECTING')) {
     const { rejectPayout } = await import('../../../lib/payout-approval.js');
     const done = await rejectPayout({ reference: open.reference, by: 'customer', reason: 'cancelled by the customer in chat', outcome: 'CANCELLED_BY_CUSTOMER', tell: false }).catch((e) => ({ ok: false, error: e?.message }));
     logStructured('withdrawal_cancelled_by_customer', { accountId: account.id, reference: open.reference, ok: !!done?.ok });
@@ -4893,11 +4897,20 @@ async function handlePersonAsk({ from, account }) {
   ].filter(Boolean);
   const text = lines.join('\n');
   const day = new Date().toISOString().slice(0, 10);
-  const [wa, mail] = await Promise.all([
-    opsPersonAlert({ text, key: `ask:${account.id}:${day}` }).catch(() => ({ sent: 0 })),
-    sendOpsAlert({ subject: `${name} asked to talk to a person`, detailsHtml: `<pre style="font-family:inherit;white-space:pre-wrap">${text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</pre>` }).catch(() => ({ success: false })),
-  ]);
-  const alerted = !!((wa && wa.sent) || (mail && mail.success));
+  // Once a day per account, and only once it actually reached someone: the marker is written after a delivery,
+  // so a later ask is told the truth ("earlier today") and a failed one is tried again (review 2026-10-29).
+  const marker = `person-asked-ok:${account.id}:${day}`;
+  const earlier = await prisma.processedMessage.findUnique({ where: { waMessageId: marker } }).catch(() => null);
+  let alerted = earlier ? 'EARLIER' : false;
+  if (!earlier) {
+    const bucket = Math.floor(Date.now() / (10 * 60 * 1000));
+    const [wa, mail] = await Promise.all([
+      opsPersonAlert({ text, key: `ask:${account.id}:${bucket}` }).catch(() => ({ sent: 0 })),
+      sendOpsAlert({ subject: `${name} asked to talk to a person`, detailsHtml: `<pre style="font-family:inherit;white-space:pre-wrap">${text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</pre>` }).catch(() => ({ success: false })),
+    ]);
+    alerted = !!((wa && wa.sent) || (mail && mail.success));
+    if (alerted) await prisma.processedMessage.create({ data: { waMessageId: marker, accountId: account.id } }).catch(() => {});
+  }
   logStructured('person_asked', { accountId: account.id, alerted });
   return await sendWhatsAppText({ to: from, text: await localizeOutbound(personAskedCopy({ alerted, contact: process.env.WAPAY_SUPPORT_WHATSAPP || '' }), await userLang(account)) });
 }

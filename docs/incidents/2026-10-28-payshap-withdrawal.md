@@ -67,7 +67,7 @@ Contributing: the express fee (R16 rather than R8 within 2 hours of money arrivi
 |---|---|---|---|
 | P1 missing-money intent, before the Pay agent and the withdraw matcher | #145 | `lib/missing-money.js`, processor `handleMissingMoney` / `handlePayoutStatus` | 4 |
 | P1 every rejection code has a reason and a next step, as data; unknown codes alert ops | #146 | `lib/payout-reasons.js`, `payoutOutcomeMessage`, `opsPayoutFailed` | 5 |
-| P1 one open withdrawal per account, in the code and in the database; cancel while waiting | #147 | `requestPayoutCore` `OPEN_PAYOUT`, migration `20261028_one_open_payout`, `rejectPayout` by the customer | 1, 2, 3 |
+| P1 one open withdrawal per account (INIT, AWAITING_APPROVAL, PENDING, REJECTING), in the code and in the database; cancel while waiting | #147 | `requestPayoutCore` `OPEN_PAYOUT`, migration `20261028_one_open_payout`, `rejectPayout` by the customer | 1, 2, 3 |
 | P1 PIN: interim line at the PIN step (the structural move is below, not built) | #149 | `PIN_PRIVACY_LINE` | 6 |
 | P2 what is set aside, shown beside what is available | #147 | `balanceLine`, `openPayoutCopy`, `moneySituation` sees AWAITING_APPROVAL | 2 |
 | P2 one status vocabulary, never ✅ before the bank confirms | #148 | `lib/payout-status-copy.js`, `approvedCopy` | 4 |
@@ -76,6 +76,14 @@ Contributing: the express fee (R16 rather than R8 within 2 hours of money arrivi
 | Rule 7: this incident is a test | all | `tests/payout-incident-chat.test.mjs` (real processor), `tests/payout-incident-2026-10-28.test.mjs` | 7 |
 
 Not built here (left for later, each still open in the Permanent fixes list): the alert for a pay-out reserved more than 10 minutes before it reaches the rail (P2; in approval mode the wait is the founder's own queue), the own-number send going straight into withdraw (P3), the express fee explained before the amount is chosen (P3), the unanswered-message alert (P3, #150). The rail's state machine is the existing row lifecycle (INIT, AWAITING_APPROVAL, PENDING, SUCCESS / FAILED, REJECTING, NEEDS_OPERATOR) with every transition stamped on the row. Rule 1 asks for "created, reserved, submitted, paid, failed, reversed" names. Renaming states is a migration of every pay-out row and every reader, and it was not needed to fix this incident, so it is proposed here, not done.
+
+## Found on the way, not changed here (follow-ups)
+
+- `tests/payout-approval.test.mjs` "the approval link" is flaky about 1 run in 1,000: it tampers the last two base64url characters of a random signature, and through padding bits the result can decode to the same bytes. Tamper a middle character instead.
+- `pages/api/internal/payout-reconcile.js` sweeps with a 35 s default deadline under a 25 s function limit, and tells customers only after the loop. A slow sweep can be killed after rows are FAILED, and those customers are never told. Lower the deadline below the limit, or tell each customer inside the loop.
+- `listAwaitingApproval` lists AWAITING_APPROVAL only, so a reject that stopped half-way (REJECTING) is invisible in Mission Control. The customer's "cancel withdrawal" now finishes one, but the founder cannot see it.
+- The business portal shows `OPEN_PAYOUT` as its generic error. The chat and the web app say what is open.
+- `pages/api/business/payout.js` was already near its 25 s limit (float read, a 20 s rail call, the request alert).
 
 ## PIN entry off chat (Build rule 6): the design, not built
 
@@ -89,7 +97,7 @@ Either is a new money path under 2.1 and 2.13 and needs the founder's go-ahead. 
 ## Deploy (the founder; nothing here has touched production)
 
 1. Read-only pre-check (must return no rows), then apply the migration: see the header of `packages/domain/prisma/migrations/20261028_one_open_payout/migration.sql`. The code is safe with or without it.
-2. Merge the branch to `main` (push to `main` deploys Vercel). Suite 1456/1456 and `pnpm build` pass on the branch.
+2. Merge the branch to `main` (push to `main` deploys Vercel). Suite 1457/1457 and `pnpm build` pass on the branch. A read-only adversarial review found nine issues before shipping; all are fixed and guarded (CHANGELOG 134).
 3. Optional: set `WAPAY_SUPPORT_WHATSAPP` (the number a customer is given when no ops alert can be sent), and make sure `WAPAY_OPS_ALERT_MSISDNS` and `ALERT_EMAIL` are set so "person" and the failure alerts reach you.
 
 ## Founder test script (production, from your own phone; approval mode on)

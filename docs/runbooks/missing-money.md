@@ -29,7 +29,7 @@ SELECT "balanceType", "availableCents", "pendingCents" FROM "Wallet" WHERE "acco
 SELECT status, "amountCents", "idemKey" FROM holds WHERE "idemKey" LIKE 'payout-<account id>-%' ORDER BY "createdAt" DESC LIMIT 5;
 ```
 
-Check that the last known balance, minus what is set aside, plus refunds, plus money in, equals what the customer sees. Available plus pending is the balance; pending is what is set aside for a withdrawal (or a purchase) in progress. A FAILED row's hold must be RELEASED. A row open for more than 10 minutes before it reached the rail is a stall: say so to the founder.
+Check that the last known balance, minus what is set aside, plus refunds, plus money in, equals what the customer sees. Available plus pending is the balance; pending is what is set aside for a withdrawal (or a purchase) in progress. A FAILED row's hold must be RELEASED. A row open for more than 10 minutes before it reached the rail is a stall: say so to the founder. Any open row (INIT, AWAITING_APPROVAL, PENDING, REJECTING) blocks the customer's next withdrawal until it is resolved, so resolve it here: reconcile it, approve or reject it, or finish the reject. A NEEDS_OPERATOR row does not block, but the customer is told a person is checking it, so check it.
 
 ## 4. Reply in one message, from the WaPay business inbox
 

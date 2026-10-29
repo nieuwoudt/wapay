@@ -37,7 +37,8 @@ then fixed in the core per the incident's Build rules, not patched around.
   in-progress line, the rejection and the web app's lines lost "bank rail". No time promise, no partner named, no
   em dash. The bank's name (not a secret) rides on the masked recipient (`recipient.bank`) for "your Capitec account".
 - **One open withdrawal per account (BUGLOG #147, Build rule 3).** `findOpenPayout` (INIT, AWAITING_APPROVAL,
-  PENDING, REJECTING, NEEDS_OPERATOR). `requestPayoutCore` refuses `OPEN_PAYOUT` after the replay and before any
+  PENDING, REJECTING; NEEDS_OPERATOR waits for a person and never blocks the customer, and the status answer says
+  "a person at WaPay is checking this one"). `requestPayoutCore` refuses `OPEN_PAYOUT` after the replay and before any
   row, cent, hold or rail call, so no refused request is reported to ops as a new one. `startWithdraw` names the
   open one, with what is set aside, and offers to wait or, while it is waiting for approval, "cancel withdrawal"
   (`rejectPayout` with `by: 'customer'`, outcome `CANCELLED_BY_CUSTOMER`, `tell: false`, answered by the chat in one
@@ -57,7 +58,17 @@ then fixed in the core per the incident's Build rules, not patched around.
   (with the old code it reproduces the 22:14 opener); `tests/payout-incident-2026-10-28.test.mjs` covers the
   matchers, the reason table, the copy rules, one-open with the index race, approve then the webhook's 97, the
   customer cancel, the money situation and the PIN line. Copy locks in the approval, chat, reconcile and wire suites
-  were updated to the new wording. 1456/1456 pass.
+  were updated to the new wording. 1457/1457 pass; `pnpm build` passes.
+- **A read-only review before shipping (2026-10-29)** found nine issues, all fixed here. "cancel withdrawal" also
+  fired on "please don't cancel …" and "how do I cancel …?", so it is now a request said as one. NEEDS_OPERATOR
+  could block a customer for good. The lookup could give a stale 98/99 reason instead of the final 97, so the
+  outcome's code now wins and is stamped on the row. Copy said "came back" when nothing had left, and bank words
+  were used for cash. A replay of a waiting request read as a failure (replays now return the row's real state).
+  An approval after a timeout said "on its way" (now "checking on it", BUGLOG #82). Open withdrawals older than
+  7 days were hidden. The matchers were too broad (incoming money, sends, purchases, hypothetical questions,
+  "agent"), and a stuck INIT row was skipped by the reconcile hook when the customer complained. The failure
+  alert had a 6 s cap (now 2.5 s). "person" e-mailed every time and said "Your money is safe" unconditionally.
+  Each fix has a guard in `tests/payout-incident-2026-10-28.test.mjs`.
 - **Before deploying:** run the pre-check query in the migration file (it must return no rows), then
   `node --env-file=.env scripts/apply-migration.mjs 20261028_one_open_payout`. No Prisma client change is needed,
   and the code deploys safely before or after it.

@@ -93,10 +93,16 @@ test('#145: her sentence is a missing-money complaint, never a withdrawal; real 
     assert.ok(matchWithdrawAsk(t), `still a withdrawal: "${t}"`);
     assert.ok(!matchMissingMoney(t), `not a complaint: "${t}"`);
   }
-  for (const t of ["I don't have a bank account", "I haven't got a bank account", 'did my deposit go through', 'I did not receive the OTP', 'no thanks', 'balance']) assert.ok(!matchMissingMoney(t), `not a complaint: "${t}"`);
+  for (const t of ["I don't have a bank account", "I haven't got a bank account", 'did my deposit go through', 'I did not receive the OTP', 'no thanks', 'balance',
+    // review 2026-10-29: money sent to them or by them, a purchase, and questions about how it works belong elsewhere
+    "My friend sent me money but it's not showing in my account", "I didn't get my electricity token but money left my account", 'I sent R100 to my mom, she didnt receive',
+    'send R50 to 0821234567 he has not got any money', 'What happens if my withdrawal fails?', 'is the fee refunded if my payout is declined']) assert.ok(!matchMissingMoney(t), `not a complaint: "${t}"`);
   assert.ok(namesDeposit('did my card top up go through') && !namesDeposit('Nothing is coming in to my bank account'));
-  assert.ok(matchCancelWithdrawal('cancel my withdrawal') && !matchCancelWithdrawal('cancel') && !matchCancelWithdrawal('cancel request PRABCDEF'));
-  assert.ok(matchPersonAsk('person') && matchPersonAsk('I want to speak to someone') && !matchPersonAsk('help') && !matchPersonAsk('personal loan'));
+  // The cancel acts at once, so only a request said as one cancels (review 2026-10-29).
+  for (const t of ['cancel withdrawal', 'cancel my withdrawal', 'please cancel the payout', 'I want to cancel my withdrawal', 'can you cancel my withdrawal please', 'cancel my withdrawal of R100']) assert.ok(matchCancelWithdrawal(t), `cancel: "${t}"`);
+  for (const t of ["Please don't cancel my withdrawal", "I don't want the withdrawal to be cancelled", 'How do I cancel a withdrawal?', 'Can I cancel my withdrawal if I change my mind?', 'stop withdrawal notifications', 'stop asking me about payouts', 'cancel', 'cancel request PRABCDEF']) assert.ok(!matchCancelWithdrawal(t), `not a cancel: "${t}"`);
+  assert.ok(matchPersonAsk('person') && matchPersonAsk('I want to speak to someone') && matchPersonAsk('talk to an agent'));
+  for (const t of ['help', 'personal loan', 'agent', 'I need an agent to deposit cash']) assert.ok(!matchPersonAsk(t), `not a person ask: "${t}"`);
 });
 
 test('#146: every rejection reason is a row of data; an unknown code is flagged, never guessed', () => {
@@ -120,16 +126,16 @@ test('#146: every rejection reason is a row of data; an unknown code is flagged,
 
 test('#148: one vocabulary; a ✅ only when the bank has paid; no jargon, no time promise, no em dash', () => {
   const p = { amountCents: 10000, feeCents: 1600, method: 'PAYSHAP', reference: 'WP161EF3F64B2374', recipient: { account: '•••918', bank: 'Capitec' } };
-  const way = copy.onItsWayCopy(p, { approved: true });
+  const way = copy.onItsWayCopy({ ...p, outcome: 'PENDING_FINALISATION' }, { approved: true });
   assert.equal(way, "⏳ *Approved and on its way.* Your R100 withdrawal by PayShap is on its way to your Capitec account •••918 (reference WP161EF3F64B2374). I'll message you here when your bank confirms it. If it does not go through, the R100 and the R16 fee come straight back to your balance.");
-  assert.equal(approvedCopy({ ...p, status: 'PENDING' }), way, 'the founder\'s approval of a PENDING is ⏳, never ✅ (21:40)');
+  assert.equal(approvedCopy({ ...p, status: 'PENDING', outcome: 'PENDING_FINALISATION' }), way, 'the founder\'s approval of a PENDING is ⏳, never ✅ (21:40)');
   const failed = payoutOutcomeMessage({ ...p, status: 'FAILED', outcome: 'PROVIDER_97', message: 'Fail at Provider', balanceCents: 36000 });
   assert.equal(failed, "❌ *Didn't go through.* Your R100 withdrawal by PayShap didn't reach your Capitec account •••918, because the bank's payment system did not complete it. The R100 and the R16 fee are back in your WaPay balance, so you have R360 available now. Say *withdraw* to try again a little later. Reply *person* to talk to someone from WaPay. (Reference WP161EF3F64B2374.)");
   const all = [way, failed, copy.cancelledCopy(p), copy.openPayoutCopy({ ...p, status: 'AWAITING_APPROVAL' }), copy.openPayoutCopy({ ...p, status: 'PENDING' }), copy.cannotCancelCopy({ ...p, status: 'PENDING' }), copy.cannotCancelCopy(null),
     ...['AWAITING_APPROVAL', 'PENDING', 'SUCCESS', 'FAILED'].map((status) => copy.payoutLine({ ...p, status, outcome: 'PROVIDER_97', createdAt: new Date() })), copy.personAskedCopy({ alerted: true }), copy.personAskedCopy({})];
   for (const t of all) assert.ok(!/bank rail|—|within|minute|instantly|seconds|pay-out/i.test(t), `plain words: ${t}`);
   for (const t of all.filter((x) => /✅/.test(x))) assert.match(t, /paid/);
-  assert.deepEqual(['AWAITING_APPROVAL', 'REJECTING', 'INIT', 'PENDING', 'NEEDS_OPERATOR', 'SUCCESS', 'FAILED'].map((status) => copy.payoutPhase({ status })), ['APPROVAL', 'APPROVAL', 'ON_ITS_WAY', 'ON_ITS_WAY', 'ON_ITS_WAY', 'PAID', 'FAILED']);
+  assert.deepEqual(['AWAITING_APPROVAL', 'REJECTING', 'INIT', 'PENDING', 'NEEDS_OPERATOR', 'SUCCESS', 'FAILED'].map((status) => copy.payoutPhase({ status })), ['APPROVAL', 'APPROVAL', 'ON_ITS_WAY', 'ON_ITS_WAY', 'CHECKING', 'PAID', 'FAILED']);
   assert.equal(copy.payoutPhase({ status: 'FAILED', outcome: 'CANCELLED_BY_CUSTOMER' }), 'CANCELLED');
 });
 
@@ -144,7 +150,7 @@ test('#145: the missing-money answer for her 22:13 state names the failure, the 
   });
   assert.match(text, /^🔎 I checked your withdrawals:\n\n❌ R100 by PayShap to your bank account •••918, today at \d\d:\d\d: didn't go through, because the bank's payment system did not complete it\./);
   assert.match(text, /\n\n✅ R325 by PayShap to your bank account •••918, yesterday at \d\d:\d\d: paid\./);
-  assert.match(text, /\n\nNothing is on its way to your bank right now\.\n\n💰 Balance: R420\.\n\nSay \*withdraw\* to try again a little later\. Reply \*person\* to talk to someone from WaPay\.$/);
+  assert.match(text, /\n\nNothing else is on its way from your WaPay balance right now\.\n\n💰 Balance: R420\.\n\nSay \*withdraw\* to try again a little later\. Reply \*person\* to talk to someone from WaPay\.$/);
 });
 
 test('#147: one open withdrawal per account, refused before any row, cent, hold or rail call; the index race is OPEN_PAYOUT too', async () => {
@@ -244,17 +250,54 @@ test('static: the processor answers money that already moved before the agent an
   assert.ok(at('if (matchPersonAsk(text)) return await handlePersonAsk({ from, account, text });') < hooks);
   assert.ok(hooks < at('if (agentV3For(from)) {\n    return await handleAgentTurn({ from, text, account, messageId });'), 'before the Pay agent');
   assert.ok(hooks < at("const { matchWithdrawAsk } = await import('../../../lib/payout-chat.js');"), 'before the withdraw matcher');
-  assert.match(p, /if \(parkedRef && \(matchDepositStatusRequest\(text\) \|\| matchMissingMoney\(text\)\)\) throw/, 'the reconcile hook leaves the ask to its handler, which checks live');
   const cancel = p.slice(p.indexOf('async function handleCancelWithdrawal'));
   assert.ok(cancel.indexOf("open.status === 'AWAITING_APPROVAL'") < cancel.indexOf('rejectPayout({'), 'only a withdrawal waiting for approval is cancelled');
   assert.match(cancel, /outcome: 'CANCELLED_BY_CUSTOMER', tell: false/);
   const person = p.slice(p.indexOf('async function handlePersonAsk'));
-  assert.match(person.slice(0, 2600), /const alerted = !!\(\(wa && wa\.sent\) \|\| \(mail && mail\.success\)\);/, 'a person is promised only when an alert went');
+  assert.match(person.slice(0, 3200), /alerted = !!\(\(wa && wa\.sent\) \|\| \(mail && mail\.success\)\);/, 'a person is promised only when an alert went');
   const sql = read('../packages/domain/prisma/migrations/20261028_one_open_payout/migration.sql');
-  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS "ProviderRequest_one_open_payout" ON "ProviderRequest"\("accountId"\) WHERE "route" = 'ott-payout' AND "status" IN \('INIT', 'AWAITING_APPROVAL', 'PENDING', 'REJECTING', 'NEEDS_OPERATOR'\);/);
-  assert.deepEqual([...copy.OPEN_PAYOUT_STATUSES], ['INIT', 'AWAITING_APPROVAL', 'PENDING', 'REJECTING', 'NEEDS_OPERATOR'], 'the index and the code name the same statuses');
+  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS "ProviderRequest_one_open_payout" ON "ProviderRequest"\("accountId"\) WHERE "route" = 'ott-payout' AND "status" IN \('INIT', 'AWAITING_APPROVAL', 'PENDING', 'REJECTING'\);/);
+  assert.deepEqual([...copy.OPEN_PAYOUT_STATUSES], ['INIT', 'AWAITING_APPROVAL', 'PENDING', 'REJECTING'], 'the index and the code name the same statuses; NEEDS_OPERATOR never blocks the customer');
+  assert.match(p, /if \(open && \(open\.status === 'AWAITING_APPROVAL' \|\| open\.status === 'REJECTING'\)\) \{/, 'a reject stopped half-way is finished by the customer\'s cancel');
+  assert.match(p, /if \(parkedRef && parked\.status === 'PENDING' && \(matchDepositStatusRequest\(text\) \|\| matchMissingMoney\(text\)\)\) throw/, 'a stuck INIT row is still checked by the hook');
+  assert.match(p, /const inView = \(r\) => isOpenPayout\(r\) \|\| new Date\(r\.createdAt\)\.getTime\(\) >= since;/, 'an open withdrawal is shown whatever its age');
+  assert.match(person.slice(0, 3200), /if \(alerted\) await prisma\.processedMessage\.create\(\{ data: \{ waMessageId: marker/, '"earlier today" only after a delivery');
   const core = read('../lib/payouts.js');
   const fn = core.slice(core.indexOf('async function requestPayoutCore'));
   const open = fn.indexOf('const open = await findOpenPayout(');
   assert.ok(open > fn.indexOf('const existing = await prismaClient.providerRequest.findUnique') && open < fn.indexOf('providerRequest.create(') && open < fn.indexOf('reserveHold(') && open < fn.indexOf('railAndSettle('), 'after the replay, before any row, hold or rail call');
+});
+
+test('review 2026-10-29: the push and the lookup give the same reason; nothing "came back" when nothing left; replays and timeouts say their real state; cash is not a bank', async () => {
+  // A row that sat at 99 and then failed with 97: the stale 99 must not win.
+  const row = { status: 'FAILED', providerStatus: '99', outcome: 'PROVIDER_97', message: 'Fail at Provider: account holder name mismatch', amountCents: 10000, feeCents: 1600, method: 'PAYSHAP', reference: 'WPX', recipient: { account: '•••918' } };
+  assert.equal(copy.reasonFor(row).key, 'NAME_MISMATCH');
+  assert.match(copy.payoutLine(row), /because the name did not match the bank account/);
+  assert.match(payoutOutcomeMessage(row), /because the name did not match the bank account/);
+  // Nothing moved: no "came back".
+  for (const outcome of ['INSUFFICIENT_FUNDS', 'FLOAT_SHORT']) {
+    const p = { status: 'FAILED', outcome, amountCents: 10000, feeCents: 800, method: 'PAYSHAP', reference: 'WPY' };
+    assert.match(copy.payoutLine(p), /Nothing left your balance for it\./); assert.ok(!/came back/.test(copy.payoutLine(p)));
+    assert.match(copy.failedCopy(p), /Nothing left your WaPay balance for it\./); assert.ok(!/are back/.test(copy.failedCopy(p)));
+  }
+  // A replay of a request still waiting for approval is not a failure.
+  env();
+  const prisma = db(); const led = ledger();
+  const first = await ask({ prisma, led, intentId: 'intent-rev-replay', amountCents: 10000 });
+  const again = await ask({ prisma, led, intentId: 'intent-rev-replay', amountCents: 10000 });
+  assert.deepEqual([first.status, again.replayed, again.status, again.ok], ['AWAITING_APPROVAL', true, 'AWAITING_APPROVAL', true]);
+  // Approved, but the bank's answer timed out: no "on its way" (BUGLOG #82).
+  const timeout = approvedCopy({ status: 'PENDING', outcome: 'TRANSPORT_INDETERMINATE', amountCents: 10000, feeCents: 1600, method: 'PAYSHAP', reference: 'WPZ' });
+  assert.match(timeout, /^⏳ \*Approved\.\* I could not get confirmation from your bank just now, so I am checking on it \(reference WPZ\)\. The R100 and the R16 fee stay set aside/);
+  assert.ok(!/on its way/.test(timeout));
+  // Cash methods are not a bank, and the statement is never promised to show our reference.
+  const cash = { amountCents: 10000, feeCents: 1800, method: 'CASHSEND', reference: 'WPC', recipient: { mobile: '•••1175' }, createdAt: new Date() };
+  for (const t of [copy.payoutLine({ ...cash, status: 'PENDING' }), copy.payoutLine({ ...cash, status: 'SUCCESS' }), copy.openPayoutCopy({ ...cash, status: 'PENDING' }), copy.cannotCancelCopy({ ...cash, status: 'PENDING' }), copy.onItsWayCopy({ ...cash, outcome: 'PENDING' }), copy.missingMoneyReply({ payouts: [{ ...cash, status: 'SUCCESS' }] })]) {
+    assert.ok(!/your bank|bank confirm|statement/.test(t), `no bank for cash: ${t}`);
+  }
+  assert.ok(!/statement|with the reference/.test(copy.missingMoneyReply({ payouts: [{ ...cash, method: 'PAYSHAP', recipient: { account: '•••918' }, status: 'SUCCESS' }] })));
+  // NEEDS_OPERATOR is a person's check, never "on its way".
+  assert.match(copy.payoutLine({ ...cash, status: 'NEEDS_OPERATOR' }), /a person at WaPay is checking this one/);
+  // "person" never promises what the record does not say.
+  for (const t of [copy.personAskedCopy({ alerted: true }), copy.personAskedCopy({ alerted: 'EARLIER' }), copy.personAskedCopy({ contact: '060' }), copy.personAskedCopy({})]) assert.ok(!/money is safe/i.test(t));
 });
