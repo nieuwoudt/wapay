@@ -62,7 +62,7 @@ function rail() {
   const calls = [];
   return {
     calls,
-    prisma: { providerRequest: { async findUnique() { return null; }, async create() { calls.push('row'); return {}; }, async update() { calls.push('update'); return {}; } } },
+    prisma: { providerRequest: { async findUnique() { return null; }, async findMany() { return []; }, async create() { calls.push('row'); return {}; }, async update() { calls.push('update'); return {}; } } },
     ledger: { async ensureWallet() { calls.push('ensureWallet'); }, async postEntry() { calls.push('post'); return {}; }, async reserveHold() { calls.push('hold'); return {}; }, async settleHold() { calls.push('settle'); return {}; }, async releaseHold() { calls.push('release'); return {}; } },
     client: { async performPayout() { calls.push('rail'); return { status: '100', settlement: 'SETTLE' }; } },
   };

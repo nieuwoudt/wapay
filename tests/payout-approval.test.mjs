@@ -130,7 +130,7 @@ test('reject: the hold released, the money back to SPEND, the customer told; ide
   assert.deepEqual({ ok: r.ok, status: r.status }, { ok: true, status: 'REJECTED' });
   assert.equal(prisma._prs[0].status, 'FAILED'); assert.equal(prisma._prs[0].metadata.approval.rejectedBy, 'founder'); assert.ok(!prisma._prs[0].metadata.approval.enc);
   assert.ok(led.calls.includes('releaseHold')); assert.ok(led.calls.includes('post:BALANCE_DOWNGRADE'));
-  assert.match(told[0].text, /^❌ Your pay-out request of R200 by PayShap was not approved \(reference WP[0-9A-F]{14}\)\. The R200 and the R8 fee are back in your WaPay balance\./);
+  assert.match(told[0].text, /^❌ \*Not approved\.\* Your R200 withdrawal by PayShap was not approved, so it was not sent \(reference WP[0-9A-F]{14}\)\. The R200 and the R8 fee are back in your WaPay balance\. Reply \*person\* to talk to someone from WaPay about it\.$/);
   assert.deepEqual(await rejectPayout({ prisma, ledger: led, reference: out.reference }), { ok: false, error: 'NOT_WAITING' });
   assert.ok(!/—/.test(rejectedCopy({ amountCents: 100, feeCents: 8, method: 'PAYSHAP', reference: 'WP1' })) && !/—/.test(approvedCopy({ status: 'PENDING', amountCents: 100, method: 'PAYSHAP', reference: 'WP1' })));
 });
@@ -221,7 +221,9 @@ test('the dashboard and the pages: a Pay-outs tab with approvals, requests and t
   assert.match(read('../pages/api/ops/approve.js'), /verifyApprovalToken\(token\)/);
   assert.match(read('../pages/ops/approve.js'), /Approve and pay/);
   const proc = read('../pages/api/webhooks/message-processor-v2.js');
-  assert.match(proc, /if \(status === 'AWAITING_APPROVAL' \|\| status === 'REJECTING'\) \{/);
+  // The chat's status answer reads the phase from the one copy module (BUGLOG #148).
+  assert.match(read('../lib/payout-status-copy.js'), /if \(s === 'AWAITING_APPROVAL' \|\| s === 'REJECTING'\) return 'APPROVAL';/);
+  assert.match(proc, /missingMoneyReply\(\{ payouts: rows/);
   assert.match(read('../lib/app-portal.js'), /'waiting for approval, set aside from your balance'/);
   assert.match(read('../lib/app-portal.js'), /'AWAITING_APPROVAL', 'REJECTING'\] \}/);
   assert.match(read('../lib/ops-payout.js'), /allowExpress: false, allowApproval: false/);

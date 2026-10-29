@@ -153,7 +153,7 @@ test('reconcilePayout: a failure code releases the hold and the money is back in
   assert.equal(out.status, 'FAILED'); assert.equal(prisma._prs[0].status, 'FAILED');
   assert.equal(ledger.holds.get('payout-acc-1-intent-7000-hold').status, 'RELEASED');
   assert.equal(ledger.spend, 100000, 'R50 + R8 fee back where they were'); assert.equal(ledger.cash, 0);
-  assert.match(payoutOutcomeMessage(out), /❌ Your withdrawal of R50 by PayShap could not be completed/);
+  assert.match(payoutOutcomeMessage(out), /^❌ \*Didn't go through\.\* Your R50 withdrawal by PayShap didn't reach your (?:FNB |bank )account/);
 });
 
 test('reconcilePayout: a transport failure is indeterminate — nothing changes, nothing is released', async () => {
@@ -227,7 +227,7 @@ test('INIT + OTT has no record + upgrade and hold posted: hold released, downgra
   assert.equal(ledger.spend, 100000, 'R50 + R8 fee back where they were'); assert.equal(ledger.cash, 0);
   const row = prisma._prs[0];
   assert.equal(row.status, 'FAILED'); assert.equal(row.metadata.outcome, 'INIT_ABANDONED_0'); assert.ok(row.metadata.finalisedAt); assert.ok(row.metadata.lastCheckedAt);
-  assert.match(payoutOutcomeMessage(out), /❌ Your withdrawal of R50 by PayShap could not be completed/);
+  assert.match(payoutOutcomeMessage(out), /^❌ \*Didn't go through\.\* Your R50 withdrawal by PayShap didn't reach your (?:FNB |bank )account/);
   assert.equal(c.calls.filter((x) => x[0] === 'perform').length, 0, 'never a PerformPayout from a reconcile');
   assert.equal(c.calls.at(-1)[1].yourUniqueReference, pr.reference, 'OTT asked with OUR reference');
   // a repeat is a no-op: the row is no longer INIT
@@ -333,7 +333,7 @@ test('sweepPayoutsAndNotify reconciles PENDING + INIT rows and tells each finali
   assert.deepEqual(out.counts, { backlog: 0, swept: 2, settled: 1, failed: 1, pending: 0, needsOperator: 0, unchecked: 0, errors: 0, notified: 2, notifyFailed: 0 });
   assert.deepEqual(out.notified.sort(), [i.reference, pendingRef].sort());
   assert.equal(sent.length, 2); assert.ok(sent.every((s) => s.to === '27731234567'));
-  assert.ok(sent.some((s) => /✅ .*has been paid/.test(s.text))); assert.ok(sent.some((s) => /❌ .*could not be completed/.test(s.text)));
+  assert.ok(sent.some((s) => /✅ .*has been paid/.test(s.text))); assert.ok(sent.some((s) => /❌ \*Didn't go through\.\*/.test(s.text)));
   assert.equal(c.calls.filter((x) => x[0] === 'perform').length, 1, 'only the original PerformPayout, never one from the sweep');
   const again = await sweepPayoutsAndNotify({ prisma, ledger, client: c, send, olderThanMs: 0, initOlderThanMs: 0, now: Date.now() + 5000 });
   assert.deepEqual(again.results, []); assert.equal(sent.length, 2, 'nobody is told twice');
@@ -373,7 +373,7 @@ test('static: the reconcile route is internal-key gated, asks OTT only GetPaymen
   assert.match(hook, /text: payoutOutcomeMessage\(out\)/, 'one source of customer wording for both finalisers');
 });
 
-test('static: the chat status handler consults the newest pay-out and reconciles a PENDING one live before answering', () => {
+test('static: the chat status handler consults the newest pay-outs and reconciles a PENDING one live before answering', () => {
   const p = read('../pages/api/webhooks/message-processor-v2.js');
   const start = p.indexOf('async function handleDepositStatus');
   const body = p.slice(start, p.indexOf('\nasync function ', start));
@@ -383,11 +383,11 @@ test('static: the chat status handler consults the newest pay-out and reconciles
   const ps = p.indexOf('async function handlePayoutStatus');
   assert.ok(ps > -1, 'the pay-out branch exists');
   const pbody = p.slice(ps, p.indexOf('\n/**', ps));
-  assert.match(pbody, /if \(status === 'PENDING'\) \{\s*\n\s*checked = await reconcilePayout\(\{ reference: payout\.reference \}\)/, 'PENDING is checked with OTT, not guessed');
-  assert.ok(pbody.indexOf('reconcilePayout(') < pbody.indexOf('getUserBalance(from)'), 'the balance is read AFTER the reconcile');
-  assert.match(pbody, /has not been confirmed by the bank yet/); assert.match(pbody, /held aside for it, not lost/);
-  assert.match(pbody, /was paid \(reference/); assert.match(pbody, /did not go through \(reference/);
-  assert.ok((pbody.match(/Balance: R\$\{balance\}/g) || []).length >= 3, 'every pay-out answer carries the live balance');
+  // The newest withdrawals of the last 7 days in one answer (BUGLOG #145), a PENDING one checked with OTT first.
+  assert.match(pbody, /listPayouts\(\{ accountId: account\.id, limit: 3 \}\)/);
+  assert.match(pbody, /filter\(\(x\) => x\.status === 'PENDING'\)\.slice\(0, 1\)\) \{\s*\n\s*const checked = await reconcilePayout\(\{ reference: r\.reference \}\)/, 'PENDING is checked with OTT, not guessed');
+  assert.ok(pbody.indexOf('reconcilePayout(') < pbody.indexOf('payoutBalances({'), 'the balance is read AFTER the reconcile');
+  assert.match(pbody, /missingMoneyReply\(\{ payouts: rows, availableCents: bal\?\.totalCents \?\? 0, heldCents: bal\?\.heldCents \?\? 0 \}\)/, 'one copy source, with what is set aside');
   // both call sites hand the customer's words to the handler
   assert.equal((p.match(/handleDepositStatus\(\{ from, account, rawText: text \}\)/g) || []).length, 2);
 });

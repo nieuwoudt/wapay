@@ -4,6 +4,75 @@
 
 ---
 
+## 2026-10-28 (134) — Lisa's failed PayShap withdrawal: money that already moved is answered from the record, one withdrawal at a time, and every failure says why
+
+The incident (founder's write-up, 28 October): a customer's R100 PayShap withdrawal waited for approval with R116
+set aside, was approved at 21:40 and failed at the bank in the same minute ("✅ … approved and handed to the bank
+rail", then "❌ … could not be completed by the bank rail", no reason given). A R228 withdrawal was offered to her
+at 21:20 with "Balance after R0", and her "Nothing is coming in to my bank account" at 22:13 got the PayShap withdraw
+opener. No money was lost. The bugs were documented first (BUGLOG #145 to #150, `docs/incidents/2026-10-28-payshap-withdrawal.md`),
+then fixed in the core per the incident's Build rules, not patched around.
+
+- **Money that already moved, answered from the record (BUGLOG #145).** `lib/missing-money.js`: `matchMissingMoney`
+  (complaints such as "nothing came in", "I didn't receive my money", "nothing in my Capitec yet", "my withdrawal
+  failed", and withdrawal status questions), `matchCancelWithdrawal` and `matchPersonAsk`. The processor checks them
+  before the Pay agent and before the withdraw matcher, so every customer gets the same deterministic answer and no
+  model states a transaction's status. `matchWithdrawAsk` no longer claims those sentences ("to my bank" was a
+  withdraw word). The answer (`handlePayoutStatus`, now shared by "did my withdrawal go through") lists the newest
+  three withdrawals of the last 7 days, each in plain words with where the money is now, then whether anything is
+  still on its way, the balance with what is set aside, and the one next step. A PENDING row is still reconciled
+  with OTT first. A deposit question, or no withdrawal and no bank named, goes to the deposit lookup as before.
+- **Every failure says why (BUGLOG #146, Build rule 5).** `lib/payout-reasons.js` is the rejection table as data:
+  OTT code or our outcome to a reason, the next step in words that work in the chat, who was at fault and whether
+  to waive the next fee. A 97 is refined by the bank's own words when OTT passes them on (name mismatch, account
+  not valid, bank unavailable, limit). `finalisePayout` and `railAndSettle` return the code and the message.
+  The webhook passes the balance the money came back to, so the customer reads: "❌ *Didn't go through.* Your R100
+  withdrawal by PayShap didn't reach your Capitec account •••918, because … The R100 and the R16 fee are back in
+  your WaPay balance, so you have R360 available now. … Reply *person* to talk to someone from WaPay." The founder
+  gets `opsPayoutFailed` (WhatsApp and e-mail, masks only, once per reference) with the code, the reason given
+  and the fee waiver. A code the table does not name is flagged UNMAPPED.
+- **One vocabulary (BUGLOG #148, Build rule 4).** `lib/payout-status-copy.js` builds every withdrawal status the
+  customer reads: ⏳ waiting for approval, ⏳ on its way, ✅ paid (only when the bank has confirmed), ❌ didn't go
+  through, ↩️ cancelled. The founder's approval of a PENDING is now "⏳ *Approved and on its way.*", never a ✅. The
+  in-progress line, the rejection and the web app's lines lost "bank rail". No time promise, no partner named, no
+  em dash. The bank's name (not a secret) rides on the masked recipient (`recipient.bank`) for "your Capitec account".
+- **One open withdrawal per account (BUGLOG #147, Build rule 3).** `findOpenPayout` (INIT, AWAITING_APPROVAL,
+  PENDING, REJECTING; NEEDS_OPERATOR waits for a person and never blocks the customer, and the status answer says
+  "a person at WaPay is checking this one"). `requestPayoutCore` refuses `OPEN_PAYOUT` after the replay and before any
+  row, cent, hold or rail call, so no refused request is reported to ops as a new one. `startWithdraw` names the
+  open one, with what is set aside, and offers to wait or, while it is waiting for approval, "cancel withdrawal"
+  (`rejectPayout` with `by: 'customer'`, outcome `CANCELLED_BY_CUSTOMER`, `tell: false`, answered by the chat in one
+  message). Backstop: migration `20261028_one_open_payout`, a partial unique index on `ProviderRequest("accountId")`
+  for those statuses; a P2002 on it is `OPEN_PAYOUT`. The code works with or without it. `moneySituation` now sees
+  AWAITING_APPROVAL rows, so the R0 gate says money is set aside while it waits for approval. `payoutBalances`
+  returns `heldCents`. The web app and the chat answer `OPEN_PAYOUT` with the same copy.
+- **"Talk to a person"** (`handlePersonAsk`): the ops numbers and the ops e-mail get the account, the masked number,
+  the balance and the newest withdrawal. The reply promises a person only when an alert went; otherwise it names
+  `WAPAY_SUPPORT_WHATSAPP` when set, or says honestly that the team could not be reached.
+- **The PIN (BUGLOG #149, interim).** The withdrawal PIN step says "WaPay never keeps your PIN. After you send it,
+  you can delete that message: press and hold it, then *Delete for me*." The move off chat is designed in the
+  incident doc and left unbuilt.
+- **The dev fixture's memory client** (`lib/app-dev-fixture.js`) reads JSON fields by path, as Prisma does, so the
+  processor replay can run the approval lookups.
+- **Tests (Build rule 7):** `tests/payout-incident-chat.test.mjs` replays the evening through the real processor
+  (with the old code it reproduces the 22:14 opener); `tests/payout-incident-2026-10-28.test.mjs` covers the
+  matchers, the reason table, the copy rules, one-open with the index race, approve then the webhook's 97, the
+  customer cancel, the money situation and the PIN line. Copy locks in the approval, chat, reconcile and wire suites
+  were updated to the new wording. 1457/1457 pass; `pnpm build` passes.
+- **A read-only review before shipping (2026-10-29)** found nine issues, all fixed here. "cancel withdrawal" also
+  fired on "please don't cancel …" and "how do I cancel …?", so it is now a request said as one. NEEDS_OPERATOR
+  could block a customer for good. The lookup could give a stale 98/99 reason instead of the final 97, so the
+  outcome's code now wins and is stamped on the row. Copy said "came back" when nothing had left, and bank words
+  were used for cash. A replay of a waiting request read as a failure (replays now return the row's real state).
+  An approval after a timeout said "on its way" (now "checking on it", BUGLOG #82). Open withdrawals older than
+  7 days were hidden. The matchers were too broad (incoming money, sends, purchases, hypothetical questions,
+  "agent"), and a stuck INIT row was skipped by the reconcile hook when the customer complained. The failure
+  alert had a 6 s cap (now 2.5 s). "person" e-mailed every time and said "Your money is safe" unconditionally.
+  Each fix has a guard in `tests/payout-incident-2026-10-28.test.mjs`.
+- **Before deploying:** run the pre-check query in the migration file (it must return no rows), then
+  `node --env-file=.env scripts/apply-migration.mjs 20261028_one_open_payout`. No Prisma client change is needed,
+  and the code deploys safely before or after it.
+
 ## 2026-10-27 (133) — CODE RED, Meta's second spam strike: WaPay never writes first to a number that never wrote to it, and Meta's verdict reaches the founder in minutes
 
 Founder, 27 October, after Meta's e-mail of 26 October ("identified as sending spam … may face restrictions or

@@ -91,15 +91,17 @@ test('bank transfer: account → bank name → confirm; ATM cash: number typed; 
   assert.equal((await handleWithdrawReply({ account: verified, state: 'PAYOUT_CONFIRM', data: ok.data, text: 'cancel' })).cancelled, true);
   assert.equal((await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: c.data, text: 'stop' })).state, null);
   const pending = await executeWithdraw({ account: verified, data: ok.data, pinProof: proofFor(verified, ok.data), deps: deps(100000, { ok: true, status: 'PENDING', reference: 'WPPEND', amountCents: 30000, feeCents: 1600, outcome: 'PENDING_FINALISATION' }) });
-  assert.match(pending.text, /In progress\./); assert.match(pending.text, /handed to the bank rail/); assert.match(pending.text, /WPPEND/); assert.ok(!/within minutes/.test(pending.text), 'no time promise (BUGLOG #82)');
+  // One vocabulary (BUGLOG #148): ⏳ on its way, never a ✅ before it is paid, no "bank rail".
+  assert.match(pending.text, /^⏳ \*On its way\.\* Your R300 withdrawal as cash at an Absa ATM is being sent/); assert.match(pending.text, /WPPEND/); assert.ok(!/within minutes|bank rail|✅/.test(pending.text), 'no time promise (BUGLOG #82), no jargon, no tick before it is paid');
   // A transport timeout is not a hand-over: nothing is claimed, the held money is named, no "Sent" (BUGLOG #82).
   for (const outcome of ['TRANSPORT_INDETERMINATE', 'UNKNOWN', 'HTTP_502', undefined]) {
     const unsure = await executeWithdraw({ account: verified, data: ok.data, pinProof: proofFor(verified, ok.data), deps: deps(100000, { ok: true, status: 'PENDING', reference: 'WPUNK', amountCents: 30000, feeCents: 1600, outcome }) });
-    assert.match(unsure.text, /could not get confirmation from the bank rail just now/); assert.match(unsure.text, /R300 plus the R16 fee is held, not spent/); assert.match(unsure.text, /WPUNK/);
+    assert.match(unsure.text, /could not get confirmation from your bank just now/); assert.match(unsure.text, /R300 plus the R16 fee is held, not spent/); assert.match(unsure.text, /WPUNK/);
     assert.ok(!/Sent|handed to the bank rail|within minutes/.test(unsure.text), `nothing claimed for ${outcome}`);
   }
   const failed = await executeWithdraw({ account: verified, data: ok.data, pinProof: proofFor(verified, ok.data), deps: deps(100000, { ok: false, status: 'FAILED', error: 'INVALID_MOBILE', reference: 'WPX' }) });
-  assert.match(failed.text, /did not go through/); assert.match(failed.text, /Nothing has left your balance/);
+  // The rail's reason (BUGLOG #146): a cash withdrawal's rejected cellphone is named, with the step that fits it.
+  assert.match(failed.text, /^❌ \*Didn't go through\.\* Your R300 withdrawal as cash at an Absa ATM didn't go through, because the cellphone number was not accepted\. The R300 and the R18 fee are back in your WaPay balance\. Check the cellphone number, then say \*withdraw\* to try again\./);
   const broke = await executeWithdraw({ account: verified, data: ok.data, pinProof: proofFor(verified, ok.data), deps: deps(100000, { ok: false, error: 'INSUFFICIENT_FUNDS', totalCents: 31600 }) });
   assert.match(broke.text, /no longer have R316/);
 });
@@ -334,7 +336,7 @@ test('the full name is asked once as on the account when KYC has none; the confi
   const bank = await executeWithdraw({ account: verified, data: { method: 'PAYSHAP', amountCents: 5000, intentId: 'wa-x-y', recipient: { account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', mobile: '0731234567', id_number: '9001015009087' } }, pinProof: proofFor(verified, { method: 'PAYSHAP', amountCents: 5000, intentId: 'wa-x-y', recipient: { account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', mobile: '0731234567', id_number: '9001015009087' } }), deps: { ...deps(), beneficiariesAvailable: () => false } });
   assert.match(bank.text, /straight into your bank account\. Your bank's own app or SMS will show the credit/);
   const pend = await executeWithdraw({ account: verified, data: { method: 'PAYSHAP', amountCents: 5000, intentId: 'wa-x-z', recipient: { account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', mobile: '0731234567', id_number: '9001015009087' } }, pinProof: proofFor(verified, { method: 'PAYSHAP', amountCents: 5000, intentId: 'wa-x-z', recipient: { account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', mobile: '0731234567', id_number: '9001015009087' } }), deps: { ...deps(100000, { ok: true, status: 'PENDING', reference: 'WPPEND', amountCents: 5000, feeCents: 800, outcome: 'PENDING_FINALISATION' }), beneficiariesAvailable: () => false } });
-  assert.match(pend.text, /In progress\./); assert.match(pend.text, /bank's own app or SMS as well/); assert.ok(!/within minutes/.test(pend.text));
+  assert.match(pend.text, /^⏳ \*On its way\.\* Your R50 withdrawal by PayShap is on its way to your FNB account •••678/); assert.match(pend.text, /bank's own app or SMS as well/); assert.ok(!/within minutes|bank rail/.test(pend.text));
   // The finalisers say the same thing later (webhook / sweep): paid carries the collection steps, failed does not.
   const later = payoutOutcomeMessage({ status: 'SETTLED', method: 'NEDCASH', amountCents: 2000, reference: 'WPX', recipient: { mobile: '•••175' } });
   assert.match(later, /has been paid \(reference WPX\)/); assert.match(later, /withdrawal code is sent by SMS to •••175/); assert.match(later, /Cardless services/);
