@@ -80,8 +80,37 @@ settlement in G matches the expected costs; SHB's written acceptance of Please P
 | 6 | Optional: R60 debit (fee) | | | | | | | | |
 
 Methods that must NOT appear on Adumo's page (EMAIL_TO_SHB_12 item 4b): American Express,
-Zapper, Mobicred, OTT. Seen on the page: _to fill_.
+Zapper, Mobicred, OTT. Seen on the page (2026-11-06, attempts PRAHSUHH-12 desktop and -13 phone): debit/credit card (Visa, Mastercard, Maestro), Apple Pay, Google Pay; none of the four, and no Ozow or Capitec Pay yet.
 
 ## 4. Findings
 
-_None yet._
+**2026-11-03 (the founder and the valuation thread).** The founder put the portal values into
+Vercel (probe: `enabled`, `configured`, `primaryCardRail PAYFAST`, `sandbox false`,
+`tokenOk true`) and made his own R5 link `PRAHSUHH` ("Yes test", valid to 10 Nov). Eleven
+checkout attempts, several from the valuation thread's probe: `-2`, `-3`, `-5`, `-6` FAILED at
+Adumo with "Security token cannot be validated" (the first paste of the JWT secret was wrong; the
+gateway accepted from about 14:35 UTC after the re-paste); `-7` to `-11` loaded with the amount
+and TIMED_OUT ("changes in the transaction state"), none reached card entry; `-1` and `-4` are
+unknown to Adumo. The webhook for `-11` (15:11 UTC) arrived and verified, so the secret, the
+per-transaction `notificationURL` and `/api/webhooks/adumo` work in production. Nothing was paid.
+The live application was card only that day; the founder's decision: stay on PayFast until Adumo
+enables the other methods.
+
+**2026-11-06 13:10 UTC (this thread, build `9da2068`).** The founder switched the hosted page to
+version 2 with card, Apple Pay and Google Pay. `PRAHSUHH-12` (desktop) and `-13` (phone, 375 px)
+opened through `/api/pay/checkout?code=PRAHSUHH&rail=adumo`: the token validated, "Ref
+PRAHSUHH-12", "ZAR 5.00", the green WaPay logo on a white header, company label "WaPay".
+Screenshots: `docs/testing/adumo-2026-11-06/`. No card details were entered; both attempts will
+time out unpaid.
+
+- **Methods:** card, Apple Pay, Google Pay only (above). On a phone the card form fills the first
+  screen and Apple Pay / Google Pay sit below it.
+- **Pay Now colour:** the portal's colour (`#FFFFFF`) is applied to the page card behind the header,
+  not to the card form's Pay Now button, which stays grey until the form is valid and then shows
+  Adumo's own default, coral `#FF666E` with white text (read from the page's stylesheet and its
+  `ngStyle` bindings; the binding that would carry the merchant colour is empty on this page).
+  Readable, so no white-on-white; not WaPay green, and the portal does not appear to control it.
+- **Contract (valuation thread, from the signed documents):** the agreement describes WaPay as an
+  airtime-voucher business (clauses 3.1 and 3.3), the Nedlink form answers e-commerce "No", the Amex
+  rate is blank and chargeback fees are unspecified. Pay links still need SHB's written OK before
+  customer traffic.
