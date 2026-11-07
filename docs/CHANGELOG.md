@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-11-07 (134) — One message per payment leg when two paths finish the same payment (Adumo return + webhook); no receipt to someone paying their own link
+
+Founder's live test, 7 November 10:31 SAST: his own R5 link PRAHSUHH, paid with Apple Pay on Adumo production, sent
+him three WhatsApp messages (the requester notice and the payer receipt twice) for one charge credited once.
+BUGLOG #145 has the cause: Adumo's browser return and its webhook both run the paid notifications, which read their
+"already told" flags before a slow send and wrote them after it.
+
+- **Exactly once under concurrency** (`lib/request-notify.js`): each leg (requester notice, payer receipt) is
+  claimed before any send with a unique `notify-claim:<leg>:<CODE>` row in `processed_messages`; the call that
+  loses sends nothing. A failed send gives the claim back so a retry or `/api/admin/notify-request` still delivers;
+  a delivered leg leaves `notify-done:<leg>:<CODE>` and merges its flag in SQL (`metadata || $patch::jsonb`) instead
+  of spreading the copy read at the start. A claim older than 5 minutes with no done row (a call that died
+  mid-send) is taken over. Covers the PayFast ITN and the repair route too, which call the same function.
+- **Paying your own link is one message:** when the payer's number is the requester's own, no payer receipt goes;
+  the requester notice is it. Payers paying someone else still get theirs.
+- **Unchanged:** the outbound guard (never write first to a number that never wrote, BUGLOG #144), the
+  service-window choice of rail, the template fallbacks, Vercel env (`WAPAY_PRIMARY_CARD_RAIL` stays PAYFAST until
+  the founder switches it after a re-test).
+- Tests: `tests/request-notify-once.test.mjs` (5, all fail on the previous code), the notify fakes in the
+  payer-registration, payer-preregister and direct-send tests get the claim table (`tests/helpers/notify-claims.mjs`),
+  the static flag test pins the SQL merge; 1,447 pass; `pnpm build` passes.
+
 ## 2026-10-27 (133) — CODE RED, Meta's second spam strike: WaPay never writes first to a number that never wrote to it, and Meta's verdict reaches the founder in minutes
 
 Founder, 27 October, after Meta's e-mail of 26 October ("identified as sending spam … may face restrictions or

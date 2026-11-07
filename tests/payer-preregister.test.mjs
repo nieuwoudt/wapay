@@ -24,6 +24,7 @@ import { deliverRequestPaidNotifications } from '../lib/request-notify.js';
 import { receiptV2TemplateFor, payerPreregisterFor, oneStepSignupFor, FLAGS, RECEIPT_V2_ENV } from '../lib/onboarding-flags.js';
 import { payerReceiptLine, payerPendingLine, receiptButtonPayload, receiptCodeFromPayload, RECEIPT_BUTTON_PAYLOAD, shortSastDate } from '../lib/one-step-signup.js';
 import { parseReferralCode } from '../lib/referrals.js';
+import { claimTable } from './helpers/notify-claims.mjs';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const processor = read('../pages/api/webhooks/message-processor-v2.js');
@@ -105,6 +106,9 @@ function notifyPrisma({ payerWrote = true } = {}) {
       findUnique: async () => ({ id: 'acc_requester', displayName: 'Thandi Nkosi' }),
       findFirst: async ({ where }) => (payerWrote && JSON.stringify(where).includes(PAYER_WA) ? { id: 'acc_payer', profile: {} } : null),
     },
+    // Each leg is claimed before it is sent; the flag is merged in SQL (BUGLOG #145).
+    processedMessage: claimTable().processedMessage,
+    $executeRaw: async () => 1,
   };
 }
 function sends() {

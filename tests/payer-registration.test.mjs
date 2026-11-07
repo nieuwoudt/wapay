@@ -32,6 +32,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { maskedRequesterLabel } from '../lib/payment-requests.js';
+import { claimTable, jsonbMerge } from './helpers/notify-claims.mjs';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const processorSource = read('../pages/api/webhooks/message-processor-v2.js');
@@ -165,9 +166,15 @@ test('notify: flags are set ONLY after a send succeeds — exactly-once with rep
   const flips = [...notifySource.matchAll(/if \(sent\?\.ok\) delivered = true/g)].length
               + [...notifySource.matchAll(/if \(tpl\?\.ok\) delivered = true/g)].length;
   assert.ok(flips >= 4, 'both legs flip delivered only on a successful send');
-  const persists = [...notifySource.matchAll(/if \(delivered\) \{/g)].length;
-  assert.ok(persists >= 2, 'flags persist only when delivered');
-  assert.match(notifySource, /\.\.\.intent\.metadata, \.\.\.patch/, 'flag persist merges metadata (BUGLOG #24)');
+  assert.match(notifySource, /async function finishNotifyLeg[\s\S]{0,200}if \(delivered\) \{[\s\S]{0,500}persistFlag\(/, 'flags persist only when delivered');
+  // BUGLOG #145: merged in SQL on the row as it is now, never a spread of the copy read at the start (BUGLOG #24).
+  assert.match(notifySource, /COALESCE\("metadata", '\{\}'::jsonb\) \|\| \$\{JSON\.stringify\(patch\)\}::jsonb WHERE "idemKey" = \$\{idemKey\}/);
+  assert.ok(!/\.\.\.intent\.metadata, \.\.\.patch/.test(notifySource), 'no stale spread of the metadata');
+  // Each leg is claimed before its first send; the loser sends nothing (tests/request-notify-once.test.mjs).
+  const reqClaim = notifySource.indexOf("claimNotifyLeg({ prisma, leg: 'requester'");
+  const payClaim = notifySource.indexOf("claimNotifyLeg({ prisma, leg: 'payer'");
+  assert.ok(reqClaim > 0 && reqClaim < notifySource.indexOf('await send.text({ to: meta.waId'), 'requester claim before its send');
+  assert.ok(payClaim > 0 && payClaim < notifySource.indexOf('await send.text({\n', payClaim), 'payer claim before its send');
 });
 
 test('notify: send outcomes read from the RESOLVED result — send fns never throw', () => {
@@ -214,6 +221,8 @@ test('notify (behavioral): repairs a lost send, then never double-sends', async 
     wallet: { findFirst: async () => ({ availableCents: 8500 }) },
     // The payer's number wrote to WaPay before (BUGLOG #144: only such a number gets a receipt).
     account: { findUnique: async () => ({ displayName: 'Nieuwoudt', msisdn: '27787051175' }), findFirst: async () => ({ id: 'payer1', profile: {} }) },
+    processedMessage: claimTable().processedMessage,
+    $executeRaw: jsonbMerge(() => intentRow),
   };
   const sends = [];
   const send = { text: async (a) => { sends.push(['text', a.to]); return { ok: true }; }, template: async (a) => { sends.push(['tpl', a.to]); return { ok: true }; } };
@@ -238,6 +247,8 @@ test('notify (behavioral): a payer who wrote to WaPay before, now outside the wi
     providerRequest: { findUnique: async () => ({ ...intentRow, metadata: { ...intentRow.metadata } }), update: async ({ data }) => { intentRow.metadata = data.metadata; return intentRow; } },
     wallet: { findFirst: async () => null },
     account: { findUnique: async () => ({ msisdn: '27787051175' }), findFirst: async () => ({ id: 'payer1', profile: {} }) },
+    processedMessage: claimTable().processedMessage,
+    $executeRaw: jsonbMerge(() => intentRow),
   };
   const sends = [];
   const send = {

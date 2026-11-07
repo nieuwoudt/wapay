@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { directSendEnabled } from '../packages/whatsapp/dist/send.js';
 import { deliverRequestPaidNotifications } from '../lib/request-notify.js';
+import { claimTable } from './helpers/notify-claims.mjs';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 
@@ -24,6 +25,9 @@ function mockPrisma(meta) {
     wallet: { findFirst: async () => null },
     // Every number here wrote to WaPay before (BUGLOG #144: rails outside a reply need that).
     account: { findUnique: async () => ({ displayName: 'Niev' }), findFirst: async () => ({ id: 'a1', profile: {} }) },
+    // Each leg is claimed before it is sent; the flag is merged in SQL (BUGLOG #145).
+    processedMessage: claimTable().processedMessage,
+    $executeRaw: async () => 1,
   };
 }
 
