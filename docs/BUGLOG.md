@@ -4,6 +4,36 @@
 
 ---
 
+## 147. An operator pay-out link said "all clear" and the rail refused it: OTT now asks PayShap for an ID number, and the operator pay-out read only its own static field list
+
+- **Symptom (2026-11-09):** the founder tapped an operator pay-out link (`/ops/payout`) for R2,863.70 by PayShap to a customer's saved TymeBank account. The dry run on the page showed no blockers. The tap failed with BAD_RECIPIENT and no money moved.
+- **Root cause:**
+  - OTT's live GetActiveProvidersLimits now marks `id_number` Required for PayShap (provider 66), and for CashSend (67) and Nedbank cardless (4). `/api/internal/payout-status` `mapped` shows it.
+  - `lib/ops-payout.js` decided "is an ID needed" from the static `PAYOUT_METHODS.PAYSHAP.fields` (`account_number, branch_code, mobile`), while the rail's `cleanRecipient` checks OTT's live list. The chat (`lib/payout-chat.js`) and the web portal (`lib/app-money.js`) already read the live list, so only the operator path was affected.
+  - The ID came only from the identity vault. This customer had none: their ID is Didit-verified, and they typed it for an earlier pay-out request, where it is sealed in the request's metadata. The recipient went out without `id_number`, and `cleanRecipient` threw `Missing id_number`.
+  - The dry run checked neither the live fields nor whether an ID was on file, so it could not see the failure coming.
+- **Fix (CHANGELOG 136):**
+  - **One answer for "which fields".** `requiredRecipientFields(method, liveFields)` in `lib/payouts.js` holds the rule (OTT's live list wins, the static list is the fallback). `cleanRecipient` and the operator pay-out both use it. The dry run and the live run read the live list through `resolveProviders`, and the live run passes that same list to `requestPayout`.
+  - **Where the ID comes from, in order:**
+    1. the identity vault;
+    2. the newest sealed recipient on one of the customer's own pay-out requests (`idFromLastPayoutRequest`), only when the customer's ID is verified, the request's name matches the verified name (case, accents and word order ignored), and the request's ID ends with the same three characters the verification kept (`usableRequestId`);
+    3. none: the dry run blocks with NO_IDENTITY.
+
+    An ID is never invented. A request keeps its sealed recipient only while it waits for approval: approving or rejecting it drops the seal, and then step 2 finds nothing.
+  - **Any other field OTT asks for that this pay-out cannot fill** (an email address, a date of birth) blocks the dry run as MISSING_FIELDS, with the fields named.
+  - **Plain words.** The dry run and the live run return `blockerDetails` (`{ code, text }`) and `message`, for example "The customer's ID number is not on file, and PayShap asks for one." A rail refusal comes back as `result.field` + `result.message` ("PayShap refused the details: the customer's ID number is missing or not valid. No money moved."). The link page lists the texts, says where the ID came from, and notes when OTT's list could not be read.
+  - Only the last three characters of an ID leave the library.
+  - **Not changed:** the static `PAYOUT_METHODS.PAYSHAP.fields`. Adding `id_number` there changes the chat's fallback when OTT's list is missing (six chat and payouts tests assume no ID). It is left for the founder to decide. CashSend's static list is equally behind OTT.
+- **Guard:** `tests/ops-payout.test.mjs`:
+  - the incident's own `cleanRecipient` refusal;
+  - a live list that needs an ID the vault lacks blocks the dry run in plain words and never reaches the rail;
+  - the fallback pays with the request's ID and returns only its last three;
+  - another name, an unverified ID or different last three characters is never used;
+  - `idFromLastPayoutRequest` with real vault encryption;
+  - MISSING_FIELDS, and the rail's refusal in plain words.
+
+  Five of the new tests fail on the code before this fix.
+
 ## 146. A card payment refunded in the PayFast or Adumo dashboard stayed in the customer's balance: nothing told the ledger
 
 - **Symptom (2026-11-08/09):** frozen account •••1332, frozen 23 Oct after the stolen-card burst, was paid three R3,000 links by card on 7 Nov. Each was credited R2,871.70 (PayFast payment ids ending 1585, 2407 and 3461). It also took a R50 card top-up on 8 Nov. The founder may refund all four in the PayFast dashboard. A dashboard refund sends the money back to the card, but the ledger keeps the LOAD_PAYFAST credits. The wallet would still show R8,683.40. The links would still read PAID in the link map, the metrics and the watchlist. And WaPay would owe the customer R8,665.10 that has already gone back to the cards, which would be paid out a second time if the freeze were ever lifted.

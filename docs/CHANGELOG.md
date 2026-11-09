@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-11-09 (136) — Operator pay-out links check OTT's live required fields and find the customer's ID on their own waiting pay-out request; a link that would fail says why in plain words
+
+The founder's R2,863.70 PayShap link failed at the rail with BAD_RECIPIENT after a dry run with no blockers
+(BUGLOG #147). OTT's live list now requires `id_number` for PayShap. The operator pay-out read only the static list, and
+this customer's ID was not in the vault.
+
+- `lib/payouts.js`: `requiredRecipientFields(method, liveFields)`, the one rule for the fields a method needs (live
+  list first, static fallback). `cleanRecipient` uses it, with the same behaviour as before.
+- `lib/ops-payout.js`:
+  - The dry run and the live run read OTT's list (`resolveProviders`, cached five minutes, a read). The live run
+    hands the same list to `requestPayout`.
+  - When an ID is needed it comes from the vault, else from the newest sealed recipient on the customer's own pay-out
+    request: only with a verified ID, the same name as the verification, and the same last three characters
+    (`idFromLastPayoutRequest`, `usableRequestId`). Otherwise the dry run blocks with NO_IDENTITY.
+  - Any other required field this pay-out cannot fill blocks as MISSING_FIELDS.
+  - New in the answer: `blockerDetails` and `message` (plain words); `identity.source` (VAULT or
+    LAST_PAYOUT_REQUEST, with the request reference); `requiredFields` (`{ fields, from: 'OTT' | 'STATIC' }`);
+    `result.field` and `result.message` after a rail refusal. Only the last three characters of an ID are returned.
+- `pages/ops/payout.js`: the checks listed in plain words; the ID row says where the ID came from and that the method
+  asks for one; a note when OTT's list could not be read; the result card shows the rail's refusal in words.
+  `/api/ops/payout-link` and `/api/internal/ops-payout` return the new fields unchanged.
+- docs/GOLDEN_THREAD.md 3.1 names the one place a waiting request's sealed recipient is opened for an operator pay-out.
+- Not changed: the static PayShap field list (left for the founder), the pay-out hold, approval mode. No live pay-out
+  was run.
+- Tests: 5 new in `tests/ops-payout.test.mjs` (10 in the file). 1,470 pass, and `pnpm build` passes, both on a temp-dir
+  copy of HEAD plus this change.
+
 ## 2026-11-09 (135) — A card refund made in the PayFast or Adumo dashboard is booked in the ledger: the credit is reversed, the link closes, never below zero
 
 The founder may refund frozen account •••1332's three R3,000 card-paid links of 7 Nov and its R50 top-up of 8 Nov in
