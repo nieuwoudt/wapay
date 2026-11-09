@@ -176,6 +176,7 @@ test('pin colours: green when the link is paid, blue while requested, grey once 
   assert.equal(pinStatusOf({ status: 'PENDING', expiresAt: new Date(now - 1) }, now), 'closed', 'pending past its expiry is expired, as getPaymentRequest reads it');
   assert.equal(pinStatusOf({ status: 'CANCELLED' }, now), 'closed');
   assert.equal(pinStatusOf({ status: 'EXPIRED' }, now), 'closed');
+  assert.equal(pinStatusOf({ status: 'REFUNDED' }, now), 'closed', 'a card payment refunded to the card is no longer paid (BUGLOG #146)');
   assert.equal(pinStatusOf(undefined, now), null, 'no link, no pin');
   assert.equal(pinStatusOf({ status: 'SOMETHING_NEW' }, now), null);
 });

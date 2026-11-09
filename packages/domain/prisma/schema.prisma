@@ -345,7 +345,7 @@ model PaymentRequest {
   accountId   String // the REQUESTER — who gets credited
   amountCents Int
   note        String?
-  status      String    @default("PENDING") // PENDING | PAID | CANCELLED | EXPIRED
+  status      String    @default("PENDING") // PENDING | PAID | CANCELLED | EXPIRED | REFUNDED (card refund booked, 20261109)
   payerRef    String? // how it was paid: WAPAY:<accountId> or PAYFAST:<pf id>
   paidAt      DateTime?
   createdAt   DateTime  @default(now())

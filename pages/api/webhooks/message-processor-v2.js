@@ -3330,6 +3330,7 @@ async function handleLinkCommand({ from, account, cmd, data }) {
     // The status is named only for the customer's own link; anyone else's code reads the same as a wrong one.
     const why = !mine ? `It may already be paid, cancelled, or not yours.`
       : row.status === 'PAID' ? `It is already paid.`
+        : row.status === 'REFUNDED' ? `It was paid by card and that payment was refunded to the card, so nobody can pay it.`
         : row.status === 'EXPIRED' ? `It already expired, so nobody can pay it.`
           : `It is already cancelled.`;
     return await sendWhatsAppText({
@@ -3350,7 +3351,7 @@ async function handleLinkCommand({ from, account, cmd, data }) {
       to: from,
       text: await localizeOutbound(row.status === 'PAID'
         ? `✅ That link is already paid, so there is nothing to remind them about.`
-        : `That link is no longer open (${row.status === 'EXPIRED' ? 'it expired' : 'it was cancelled'}), so it cannot be paid. To ask again, tell me the amount and what it is for.`, await userLang(account)),
+        : `That link is no longer open (${row.status === 'EXPIRED' ? 'it expired' : row.status === 'REFUNDED' ? 'its card payment was refunded to the card' : 'it was cancelled'}), so it cannot be paid. To ask again, tell me the amount and what it is for.`, await userLang(account)),
     });
   }
   logStructured('pay_link_reminder', { accountId: account.id, code });
@@ -4180,11 +4181,21 @@ async function handlePaymentReceiptAsk({ from, code }) {
     // cancels (the credit posts; only the PENDING->PAID mark loses). Never
     // tell a charged payer "no payment was taken": check the intent.
     let intentSucceeded = false;
+    let intentRefunded = request.status === 'REFUNDED';
     try {
       const intent = await prisma.providerRequest.findUnique({ where: { idemKey: `wapay-payreq-${code}` } });
       intentSucceeded = intent?.status === 'SUCCESS' || Boolean(intent?.providerRef);
+      intentRefunded = intentRefunded || Boolean(intent?.metadata?.refund);
     } catch {
       // Fall through to the generic message.
+    }
+    if (intentRefunded) {
+      // Paid by card, then refunded to that card and reversed in the ledger (lib/card-refund.js, BUGLOG #146):
+      // "the money reached them" would no longer be true.
+      return await sendWhatsAppText({
+        to: from,
+        text: `↩️ The card payment on that request was refunded to the card that paid it, so it did not stay with ${requesterLabel}.`,
+      });
     }
     if (intentSucceeded) {
       return await sendWhatsAppText({

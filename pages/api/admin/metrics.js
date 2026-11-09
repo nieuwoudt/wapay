@@ -178,7 +178,8 @@ export default async function handler(req, res) {
     for (let d = new Date(dayKey(start) + 'T00:00:00Z'); d.getTime() <= Date.now(); d = new Date(d.getTime() + 86400000)) {
       const k = dayKey(d); const end = new Date(d.getTime() + 86400000);
       const createdToday = all.filter((r) => dayKey(r.createdAt) === k);
-      const paidToday = all.filter((r) => r.paidAt && dayKey(r.paidAt) === k);
+      // status PAID too: a link refunded to the card keeps its paidAt but is no longer paid (BUGLOG #146).
+      const paidToday = all.filter((r) => r.status === 'PAID' && r.paidAt && dayKey(r.paidAt) === k);
       const createdSoFar = all.filter((r) => new Date(r.createdAt) < end);
       const openAtEnd = createdSoFar.filter((r) => !(r.paidAt && new Date(r.paidAt) < end) && !(r.status === 'EXPIRED' || r.status === 'CANCELLED') && new Date(r.createdAt).getTime() + 7 * 86400000 > end.getTime());
       series.push({

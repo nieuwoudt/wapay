@@ -2222,7 +2222,7 @@ function Watchlist({ tick }) {
         <>
           <h3 style={{ fontSize: 13.5, margin: '14px 0 6px' }}>Payer numbers</h3>
           <table><thead><tr><th>Payer</th><th className="n">Accounts paid</th><th className="n">Payments to frozen accounts</th><th className="n">Total</th></tr></thead>
-            <tbody>{d.payers.map((p) => <tr key={p.number}><td>{p.number}{p.isFrozenAccount ? <span className="pill r" style={{ marginLeft: 6 }}>a frozen account</span> : null}</td><td className="n">{p.paidAccounts}</td><td className="n">{p.paidFrozenAccounts}</td><td className="n">{R(p.totalCents)}</td></tr>)}</tbody>
+            <tbody>{d.payers.map((p) => <tr key={p.number}><td>{p.number}{p.isFrozenAccount ? <span className="pill r" style={{ marginLeft: 6 }}>a frozen account</span> : null}</td><td className="n">{p.paidAccounts}</td><td className="n">{p.paidFrozenAccounts}{p.refundedFrozenAccounts ? <div className="note" style={{ margin: 0 }}>+{p.refundedFrozenAccounts} refunded</div> : null}</td><td className="n">{R(p.totalCents)}</td></tr>)}</tbody>
           </table>
         </>
       ) : null}

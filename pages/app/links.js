@@ -16,13 +16,14 @@ import Shell from '../../components/app/Shell.js';
 import { Icon, Notice, Pill, Rs, Spinner, api, copyText, shortDate, useBusy } from '../../components/app/kit.js';
 
 const FILTERS = [['open', 'Open'], ['paid', 'Paid'], ['all', 'All']];
-const STATUS = { OPEN: ['Open', 'amber'], PAID: ['Paid', ''], EXPIRED: ['Expired', 'grey'], CANCELLED: ['Cancelled', 'grey'] };
+const STATUS = { OPEN: ['Open', 'amber'], PAID: ['Paid', ''], EXPIRED: ['Expired', 'grey'], CANCELLED: ['Cancelled', 'grey'], REFUNDED: ['Refunded', 'grey'] };
 
 function whenLine(l) {
   const made = `Made ${shortDate(l.createdAt)}`;
   if (l.status === 'PAID') return `Paid ${shortDate(l.paidAt)}${l.paidBy ? ` from ${l.paidBy === 'card' ? 'a card' : 'a WaPay balance'}` : ''} · ${made.toLowerCase()}`;
   if (l.status === 'OPEN') return `${made} · open until ${shortDate(l.expiresAt)}`;
   if (l.status === 'EXPIRED') return `${made} · expired ${shortDate(l.expiresAt)}`;
+  if (l.status === 'REFUNDED') return `${made} · refunded to the payer's card`;
   return `${made} · cancelled`;
 }
 

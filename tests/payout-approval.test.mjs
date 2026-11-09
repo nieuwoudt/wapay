@@ -207,7 +207,7 @@ test('numbers we watch: money moved with a frozen account, abroad checkouts, own
   const abroad = w.accounts.find((a) => a.accountId === X);
   assert.deepEqual(abroad.reasons.map((r) => r.code).sort(), ['ABROAD_CHECKOUT', 'OWN_CARD']);
   assert.ok(!w.accounts.some((a) => a.accountId === F), 'a frozen account is listed under frozen, not watched');
-  assert.deepEqual(w.payers, [{ number: '•••4567', paidAccounts: 1, paidFrozenAccounts: 1, totalCents: 30000, isFrozenAccount: false }]);
+  assert.deepEqual(w.payers, [{ number: '•••4567', paidAccounts: 1, paidFrozenAccounts: 1, refundedFrozenAccounts: 0, totalCents: 30000, isFrozenAccount: false }]);
   assert.equal(w.frozen[0].balanceCents, 28510); assert.equal(w.frozenHeldCents, 28510);
   assert.ok(!JSON.stringify(w).includes('27830000517'), 'masked numbers only');
 });

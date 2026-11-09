@@ -4,6 +4,75 @@
 
 ---
 
+## 146. A card payment refunded in the PayFast or Adumo dashboard stayed in the customer's balance: nothing told the ledger
+
+- **Symptom (2026-11-08/09):** frozen account •••1332, frozen 23 Oct after the stolen-card burst, was paid three R3,000 links by card on 7 Nov. Each was credited R2,871.70 (PayFast payment ids ending 1585, 2407 and 3461). It also took a R50 card top-up on 8 Nov. The founder may refund all four in the PayFast dashboard. A dashboard refund sends the money back to the card, but the ledger keeps the LOAD_PAYFAST credits. The wallet would still show R8,683.40. The links would still read PAID in the link map, the metrics and the watchlist. And WaPay would owe the customer R8,665.10 that has already gone back to the cards, which would be paid out a second time if the freeze were ever lifted.
+- **Root cause:**
+  - `buildReversal` has been in `lib/ledger-core.js` since the ledger was written, but no route or library called it. A balance changes only through customer flows and provider callbacks, so there was no operator path for "the processor refunded this".
+  - There was no REFUNDED state for a payment request. The column is a string, but the database's check `payment_requests_status_valid` (migration 20260821_payment_requests) allows only PENDING, PAID, CANCELLED and EXPIRED, so writing REFUNDED fails.
+  - Several readers treat a status they do not know as open: the customer's Links tab (`lib/app-portal.js` `linkStatus`) and the agent's record (`lib/context-pack.js` `normaliseRequestStatus`).
+  - Nothing recorded which charge credited a card load. `buildLoad` sets no externalRef, and `markDeposit` overwrites the intent's providerRef on every delivery, so after a second charge for the same intent the intent names the duplicate, not the credit.
+- **Fix (CHANGELOG 135):** the new `lib/card-refund.js` behind `GET|POST /api/internal/card-refund` (internal key), the migration `20261109_payment_request_refunded` (the status check with REFUNDED), and the crediting charge written on every new card load.
+  - **The crediting charge, from now on.** The PayFast ITN and `settleCardPayment` (Adumo) post the load with `externalRef` = the processor reference. Only the first post writes it; a redelivery or a second charge replays the entry and never changes it.
+  - **Finding the payment.** By reference, in this order:
+    1. the card load whose externalRef is that reference;
+    2. the paid link whose payerRef is `<RAIL>:<ref>`;
+    3. the intent that last carried it, as a finder only.
+
+    By idemKey, the entry directly. The books name the crediting charge when the entry has an externalRef (ENTRY) or the link's payerRef names a card charge (LINK). Otherwise the payment is UNVERIFIED: older top-ups, and links with no payerRef or a `REPAIR:replayed` one.
+  - **Refusals, nothing written:**
+    - NOT_A_CARD_LOAD (422): anything other than LOAD_PAYFAST or LOAD_ADUMO, including a link paid from a balance (P2P_SEND under the same idemKey), a voucher load or a reversal.
+    - ALREADY_REVERSED (409): the reversal already exists for this original idemKey.
+    - SHORT (409): the available balance cannot cover the debit. The answer gives the numbers.
+    - NOT_THE_CREDITED_PAYMENT (409): the books name another charge, or a balance payment, as the one that credited. The charge named here never reached a balance.
+    - CONFIRM_ONLY_CHARGE (409): an UNVERIFIED payment without `onlyCharge: true`, the operator's word that the dashboard shows one payment for that m_payment_id.
+    - NEEDS_MIGRATION (503): a link must be marked and the status check still predates REFUNDED. This is read from `pg_constraint` up front; failing that, the database's own refusal rolls everything back.
+    - AMBIGUOUS, REFERENCE_MISMATCH, and bad input.
+  - **What one POST does, in one transaction:**
+    - Posts the full mirror of the load through `postEntry` without `allowNegative`, idemKey `card-refund-<original idemKey>`. The wallet gives back its credit, the deposit fee revenue is reversed, and CLEARING:<rail> gives back the gross the payer paid.
+    - Marks the link REFUNDED (from PAID, or from PENDING when the PAID mark had failed).
+    - Adds `metadata.refund` to the card intent. Its status stays SUCCESS, because the processor did take the money.
+  - **After the commit:** one audit row (event CARD_REFUND, id derived from the reversal, so a repair cannot write two, and `onlyChargeConfirmed` when the operator vouched) and one masked `opsPersonAlert` (key `card-refund:<idemKey>`, once per key). The operator's reason and name keep no run of 7 or more digits whole. No customer message, no processor API, no freeze or approval.
+  - **A second call** refuses ALREADY_REVERSED and finishes anything a first call that died after the commit left undone: the mark, the audit row, and the alert, which goes only if it never went. It never moves money.
+  - **The readers:**
+    - The link map pins REFUNDED as closed.
+    - The customer's Links tab shows "Refunded", never Open.
+    - The customer's activity names the debit "Link payment refunded" or "Top-up refunded", not "Balance correction".
+    - The agent reads a refunded link, and a refunded card deposit, as REFUNDED.
+    - A payer asking for a receipt on a refunded link hears it was refunded to their card, never that the money reached the requester. Cancel and remind name the refund.
+    - The business portal's closed filter includes REFUNDED.
+    - The metrics daily chart counts paid as status PAID only.
+    - The watchlist leaves refunded payments out of money paid but keeps the payer listed (the evidence stays).
+    - The metrics totals already counted only `status = 'PAID'` and already netted `REVERSAL_<X>` against X.
+  - **No processor cost line is invented.** The card fee was never booked per payment (`FEES.load`: settled separately, in clearing), so whatever PayFast or Adumo keeps on a refund shows up when CLEARING:<rail> is reconciled to the settlement statement, as their fees do today.
+- **Found in review (2026-11-09, read-only reviewer, before commit):** the status check, the overwritten providerRef, the `REPAIR:replayed` payerRef, the readers above, an alert a repair could lose, and unmasked free text. All fixed in this commit.
+- **Guard:** `tests/card-refund.test.mjs` (18 tests) runs the •••1332 shapes through the real builders, the real `postEntry` and an in-memory database that rolls back. It covers:
+  - the exact mirror, the trial balance at zero, and the stored balance equal to the journal;
+  - the double call;
+  - the repair after a crash, with the alert sent once;
+  - SHORT, both at the dry run and when the balance is spent between the check and the debit;
+  - non-card entries;
+  - the duplicate charge on a link and on a top-up;
+  - the `REPAIR:replayed` link;
+  - NEEDS_MIGRATION, both up front and from the database's refusal;
+  - the masked free text;
+  - the R50 top-up, refused without `onlyCharge`, then all four refunds leaving only what the account held before 7 Nov (R18.30 in the fixture) with balanced books;
+  - an Adumo link;
+  - the ITN and settlement stamping;
+  - the new reader branches;
+  - the route's internal key, and its source: no customer messaging, processor, freeze or approval import, and no `allowNegative`.
+
+  `tests/link-visits.test.mjs` pins REFUNDED as a closed pin. `tests/payout-approval.test.mjs` carries the watchlist's new `refundedFrozenAccounts` field.
+- **Deploy order:** apply `20261109_payment_request_refunded` to production first (`node --env-file=.env scripts/apply-migration.mjs 20261109_payment_request_refunded`). Until then link refunds answer NEEDS_MIGRATION and top-up refunds work.
+- **Not changed (follow-ups):**
+  - A freeze still does not stop money coming in: new card links and top-ups to a frozen account still credit it.
+  - Partial refunds: only whole entries reverse.
+  - The pay-out triage (`lib/payout-triage.js`) still counts a refunded payment's payer relations as a fraud signal, by design.
+  - The agent's transactions tool counts a REFUNDED row with the failed ones; the row itself says refunded.
+  - The Adumo return, the Adumo webhook and the ITN's payer-number write rewrite intent metadata from an earlier copy, so a write overlapping the refund can drop `metadata.refund`. Calling the route again restores it.
+  - What PayFast keeps or charges on a refund is not in docs/COMMERCIALS.md. For Adumo it is open with SHB (EMAIL_TO_SHB_12 item 2).
+  - Seen in review, separate bug: `pending_gifts_status_valid` (20260821_pending_gifts) allows only ISSUED, DELIVERED and CANCELLED, but `refundExpiredHeldGifts` writes REFUNDED, outside its try. The first 30-day held gifts (sends from 18 Oct) expire around 17 Nov.
+
 ## 145. One Adumo payment sent the payer receipt twice: the browser return and the webhook both ran the notifications, and the "already told" flags were read before a slow send and written after it
 
 - **Symptom (founder, 2026-11-07 10:31 SAST):** he paid his own R5 test link PRAHSUHH with Apple Pay on Adumo production (merchantReference PRAHSUHH-17, SETTLED 500 cents, one charge). His WhatsApp got three messages: the requester notice ("your WaPay payment request PRAHSUHH has been paid"), then the payer receipt template ("Payment confirmed: you paid R5.00 to … Payment reference: <Adumo transactionIndex>"), then the same receipt again. Money was credited once: the ledger replays on the intent's idemKey with the same providerRef.

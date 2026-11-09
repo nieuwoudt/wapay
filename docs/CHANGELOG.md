@@ -4,6 +4,67 @@
 
 ---
 
+## 2026-11-09 (135) — A card refund made in the PayFast or Adumo dashboard is booked in the ledger: the credit is reversed, the link closes, never below zero
+
+The founder may refund frozen account •••1332's three R3,000 card-paid links of 7 Nov and its R50 top-up of 8 Nov in
+the PayFast dashboard. A dashboard refund alone left the credits in the balance and the links PAID (BUGLOG #146). He
+refunds in the dashboard first, then calls the new internal route. The route never calls a processor.
+
+    GET  /api/internal/card-refund?providerRef=<pf_payment_id>     dry run: the entry, the postings, the balance before and after, the link, referenceCheck
+    POST /api/internal/card-refund  {"providerRef":"<pf_payment_id>","reason":"stolen card, refunded in PayFast","by":"founder"}
+
+`idemKey` (the LOAD entry's) can stand in for `providerRef`. Add `"onlyCharge": true` only when the dry run says
+`referenceCheck: "UNVERIFIED"`. Header: `x-internal-api-key`.
+
+**Deploy order:** apply migration `20261109_payment_request_refunded` first (the payment_requests status check gains
+REFUNDED). Until then a link refund answers NEEDS_MIGRATION (503) and changes nothing; top-up refunds work.
+
+- **The books** (`lib/card-refund.js`): the full mirror of the LOAD_PAYFAST / LOAD_ADUMO entry (`buildReversal`,
+  idemKey `card-refund-<original idemKey>`, source `REVERSAL_LOAD_<RAIL>`), posted through `postEntry` with no
+  `allowNegative`:
+  - the wallet gives back its credit;
+  - the deposit fee revenue is reversed, because the payer gets the whole amount back;
+  - CLEARING:<rail> gives back the gross.
+
+  No processor cost line is invented: the card fee was never booked per payment, so it still shows when clearing is
+  reconciled to the statement.
+- **In the same transaction:**
+  - the paid link becomes REFUNDED (from PAID, or PENDING if its PAID mark had failed);
+  - the card intent keeps SUCCESS and gains `metadata.refund` (when, by, reason, reference, the reversal's idemKey).
+- **After the commit:** one audit row (event CARD_REFUND) and one masked ops alert to the ops numbers (`opsPersonAlert`,
+  `•••1332`, `…1585`, amounts, the link, the reason with digit runs masked). The customer is sent nothing.
+- **Which charge credited:**
+  - The PayFast ITN and `settleCardPayment` (Adumo) now post every card load with `externalRef` = the processor
+    reference, written once by the first post. Before this, a second charge for the same intent overwrote the intent's
+    providerRef and nothing named the credit.
+  - A reference is matched to the load that recorded it first, then to the paid link's payerRef, then to the intent.
+  - A payment the books cannot place (older top-ups; links with no payerRef or `REPAIR:replayed`) is booked only with
+    `onlyCharge: true`, and the audit row records that.
+- **Refused, nothing written:**
+  - NOT_A_CARD_LOAD (422);
+  - ALREADY_REVERSED (409; the second call only repairs a missing mark, audit row or alert);
+  - SHORT (409, with the shortfall);
+  - NOT_THE_CREDITED_PAYMENT (409);
+  - CONFIRM_ONLY_CHARGE (409);
+  - NEEDS_MIGRATION (503);
+  - AMBIGUOUS and REFERENCE_MISMATCH (409);
+  - not found (404) and bad input or no reason (400).
+- **Readers taught REFUNDED:**
+  - `lib/link-map.js`: pinned as closed.
+  - `lib/app-portal.js` + `pages/app/links.js`: shown as "Refunded", never Open; the activity says "Link payment refunded" or "Top-up refunded".
+  - `lib/context-pack.js`: the agent reads refunded links and deposits as refunded.
+  - The processor: a payer's receipt question on a refunded link says it was refunded, and cancel and remind name it.
+  - `lib/business.js`: the closed filter includes REFUNDED.
+  - `pages/api/admin/metrics.js`: the daily paid series counts status PAID only.
+  - `lib/watchlist.js` + Mission Control: money paid excludes refunds, the payer stays listed, and the "+N refunded" note shows.
+- docs/GOLDEN_THREAD.md: 2.10 now names its one exception, and the new 2.15 holds the rule. docs/CAPABILITIES.md §7
+  has the line. `schema.prisma` comments the new status.
+- A read-only review before commit found the status check, the overwritten providerRef and five smaller gaps; all are
+  fixed here (BUGLOG #146). It also found a separate bug, the same check problem on `pending_gifts` (REFUNDED from
+  `refundExpiredHeldGifts`), which is not fixed here.
+- Tests: `tests/card-refund.test.mjs` (18), the link-visits and payout-approval tests extended. 1,465 pass, and
+  `pnpm build` passes, both on a temp-dir copy of HEAD plus this change. Not run against production data.
+
 ## 2026-11-07 (134) — One message per payment leg when two paths finish the same payment (Adumo return + webhook); no receipt to someone paying their own link
 
 Founder's live test, 7 November 10:31 SAST: his own R5 link PRAHSUHH, paid with Apple Pay on Adumo production, sent
