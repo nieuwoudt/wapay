@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-11-10 (137) — A member who is sent money hears from WaPay every time: inside their window as a message, outside it through the approved utility template
+
+The founder sent R400 to a member, and the member got nothing. Since 23 Oct (CHANGELOG 122) a person who was paid
+heard from WaPay only if they had written in the last 24 hours. The sender's receipt said "WaPay does not message
+them". The founder's rule (10 Nov): the person who was paid is told automatically.
+
+- `lib/send-money.js` has `notifySendRecipient`, one rule for the chat and the web:
+  - **A member** (money in their balance) is told every time. Inside their window: a plain message. Outside it:
+    `notifyCustomer`, which runs the outbound guard and then sends the UTILITY template named by
+    `WAPAY_TEMPLATE_MONEY_RECEIVED` (spec `docs/templates/wapay_money_received.md`). Unset or `off`, nothing is
+    attempted outside the window.
+  - **Anyone else** (money held until they join): a plain message only inside a window they opened. A number with
+    no account hears nothing (BUGLOG #144).
+  - Someone who said stop hears nothing until they write again. The function never throws and never blocks the
+    send.
+- `pages/api/webhooks/message-processor-v2.js`: `notifyGiftRecipient` hands MONEY to `notifySendRecipient`. The
+  airtime, data and voucher gift notices are unchanged (inside the window only). A replayed send does not notify
+  again.
+- `lib/app-money.js` `sendExecute`: the web-app send now notifies too (before this it never told the recipient),
+  wired through `lib/app-deps.js`.
+- The sender's line follows the switch, worded the same whoever the number belongs to (`recipientNoticeLine`):
+  - off: "WaPay does not message them, so let them know you sent it."
+  - on: "If they use WaPay, WaPay tells them on WhatsApp. If not, let them know it is waiting for them."
+
+  The web confirmation shows the same line.
+- `lib/gifting.js` `buildRecipientNotification` also returns `who` and `what` for MONEY (the template's
+  parameters).
+- Tests: `tests/send-recipient-notice.test.mjs` (8); `tests/meta-compliance.test.mjs` now locks the new rule.
+  Full suite 1478/1478 and `next build` green on HEAD plus this change.
+- Founder steps: push; once `wapay_money_received` is APPROVED as UTILITY, set
+  `WAPAY_TEMPLATE_MONEY_RECEIVED=wapay_money_received` in Vercel and redeploy.
+
 ## 2026-11-09 (136) — Operator pay-out links check OTT's live required fields and find the customer's ID on their own waiting pay-out request; a link that would fail says why in plain words
 
 The founder's R2,863.70 PayShap link failed at the rail with BAD_RECIPIENT after a dry run with no blockers

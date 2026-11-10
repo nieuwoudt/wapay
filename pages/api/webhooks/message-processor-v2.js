@@ -91,7 +91,7 @@ import {
 import { orchestrate, runAgentTurn, buildAgentSystemPrompt, runWithPrivacy, addPrivacyNames } from '@wapay/ai';
 import { privacyNamesFor } from '../../../lib/privacy-names.js';
 import { bareSecretKind, bareSecretReply, nothingPendingLine, privacyBlockedLine, expiredStepText } from '../../../lib/money-truth.js';
-import { sendConfirmText, sendReceiptText } from '../../../lib/send-money.js';
+import { sendConfirmText, sendReceiptText, notifySendRecipient } from '../../../lib/send-money.js';
 import { buildToolDefinitions, executeTool } from '../../../lib/agent/tools/index.js';
 import { agentGuard, outputGate } from '../../../lib/agent/guards.js';
 import { recordAgentTurn, agentTurnsInLastHour } from '../../../lib/agent/turn-ledger.js';
@@ -962,6 +962,15 @@ async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCe
     // recipient becomes a beneficiary ("send to Philly again"). Best-effort,
     // like everything else in here.
     await rememberBeneficiary({ accountId: account?.id, msisdn: targetMsisdn });
+
+    // Money from a WaPay balance (2026-11-10, founder): a member is told every time, through the
+    // outbound guard and the approved UTILITY template when their window is closed; anyone else only
+    // inside a window they opened (lib/send-money.js notifySendRecipient).
+    if (product === 'MONEY') {
+      const r = await notifySendRecipient({ prisma, sender: account, recipientMsisdn: targetMsisdn, amountCents, delivered });
+      logStructured(r.sent ? 'send_recipient_notified' : 'send_recipient_not_notified', { accountId: account?.id, amountCents, delivered, rail: r.rail || null, reason: r.reason || null, recipientMasked: maskMsisdn(targetMsisdn) });
+      return;
+    }
 
     const note = buildRecipientNotification({
       senderName: account?.displayName,
@@ -7298,7 +7307,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           if (data?.send) {
             logStructured('send_execute_success', { from, accountId: account.id, previewId, delivered: executeData.delivered, amountCents: executeData.amountCents ?? amountCents, recipientMasked: maskMsisdn(recipientMsisdn) });
             await sendWhatsAppText({ to: from, text: await localizeOutbound(sendReceiptText({ amountCents: executeData.amountCents ?? amountCents, recipientMsisdn, newBalanceCents: executeData.newBalance || 0 }), await userLang(account)), kind: 'receipt' });
-            await notifyGiftRecipient({ account, recipientMsisdn, product: 'MONEY', amountCents: executeData.amountCents ?? amountCents, delivered: executeData.delivered });
+            if (!executeData.replayed) await notifyGiftRecipient({ account, recipientMsisdn, product: 'MONEY', amountCents: executeData.amountCents ?? amountCents, delivered: executeData.delivered });
             return await sendPostTransactionCta(from);
           }
 

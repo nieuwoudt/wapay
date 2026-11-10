@@ -154,3 +154,18 @@ Account overview, and WhatsApp Manager → Account quality; request a review whe
 ad (ad arrivals are people who did not know WaPay, and their blocks and reports are what Meta counts); send
 nothing to catch up. Subscribe the app's webhook to `phone_number_quality_update` so a quality change arrives
 as an event as well as by the ten-minute read.
+
+## 2026-11-10: a member who is sent money is told every time (CHANGELOG 137)
+
+The founder's rule: the person who was paid hears from WaPay automatically. For a **member** (the money is in their
+own balance) this is the receipt of a credit to their own account, which is a utility message. Inside their 24-hour
+window it goes as a plain message. Outside it, it goes only through `notifyCustomer`: the outbound guard first, then
+the approved UTILITY template `wapay_money_received` (`WAPAY_TEMPLATE_MONEY_RECEIVED`,
+`docs/templates/wapay_money_received.md`).
+
+Rules 1 and 3 hold unchanged:
+- A number that never wrote to WaPay gets nothing.
+- Someone who is not a member hears only inside a window they opened.
+- Someone who said stop hears nothing until they write again.
+
+Airtime, data and voucher gift notices stay inside the window only.

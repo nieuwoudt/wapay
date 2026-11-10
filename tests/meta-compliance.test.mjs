@@ -22,15 +22,19 @@ test('every MARKETING template on the account is blocked at the sender unless ex
   assert.deepEqual(r, { ok: false, error: 'MARKETING_TEMPLATE_BLOCKED' }, 'refused before any network call');
 });
 
-test('a money or gift recipient hears from WaPay only inside their own 24-hour window, never by template', () => {
+test('a gift recipient hears from WaPay only inside their own 24-hour window; a money recipient goes through notifySendRecipient', () => {
   const src = read('../pages/api/webhooks/message-processor-v2.js');
   const start = src.indexOf('async function notifyGiftRecipient(');
   const body = src.slice(start, src.indexOf('\n}\n', start));
-  assert.ok(!/sendWhatsAppTemplate\(/.test(body), 'no template in the recipient notice');
+  assert.ok(!/sendWhatsAppTemplate\(/.test(body), 'no template sent directly from the recipient notice');
   assert.match(body, /gift_notify_skipped_no_window/);
   assert.match(body, /24 \* 60 \* 60 \* 1000/);
-  const receipt = read('../lib/send-money.js');
-  assert.match(receipt, /WaPay does not message them, so let them know you sent it\./, 'the sender is told to tell them');
+  assert.match(body, /product === 'MONEY'[\s\S]*notifySendRecipient\(/, 'money from a balance takes the member rule (2026-11-10)');
+  const sendMoneySrc = read('../lib/send-money.js');
+  const fn = sendMoneySrc.slice(sendMoneySrc.indexOf('export async function notifySendRecipient('));
+  assert.ok(!/sendWhatsAppTemplate\(/.test(fn), 'outside the window only notifyCustomer (guard first, then the approved utility template)');
+  assert.match(fn, /notifyCustomer/);
+  assert.match(sendMoneySrc, /WaPay does not message them, so let them know you sent it\./, 'without the template the sender is told to tell them');
 });
 
 test('the webhook records what Meta bills each message as, and the cron runs the check daily', () => {
