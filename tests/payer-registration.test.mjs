@@ -102,9 +102,18 @@ test('checkout: payer number comes from the POST body only, never the query stri
 
 test('checkout: payer number is validated + normalised, and NEVER blocks payment', () => {
   assert.match(checkoutSource, /isValidSaMsisdn\(raw\) \? normaliseMsisdn\(raw\) : null/);
-  // The only failure paths are the pre-existing method/code/request guards.
+  // The only failure paths are the pre-existing method/code/request guards, plus (founder 2026-11-10,
+  // lib/own-link.js) the own-link pages: they apply only when the typed number IS the requester's own,
+  // never to a bad, missing or other number.
   const statuses = [...checkoutSource.matchAll(/res\.status\((\d{3})\)/g)].map((m) => m[1]);
-  assert.deepEqual(statuses.sort(), ['400', '404', '405', '410'].sort(), 'no new failure path for the payer field');
+  assert.deepEqual(statuses.sort(), ['200', '400', '403', '404', '405', '410'].sort(), 'no new failure path for the payer field');
+  const ownStart = checkoutSource.indexOf('if (isOwnNumber(payerMsisdn, requester)) {');
+  const ownEnd = checkoutSource.indexOf('if (!intent) {', ownStart);
+  assert.ok(ownStart > 0 && ownEnd > ownStart, 'the own-link branch is one block before the intent');
+  for (const s of ['res.status(403)', 'res.status(200)']) {
+    const at = checkoutSource.indexOf(s);
+    assert.ok(at > ownStart && at < ownEnd, `${s} only inside the own-link branch`);
+  }
   const badCodeIdx = checkoutSource.indexOf("res.status(400).send('bad code')");
   assert.ok(badCodeIdx > -1, 'the 400 is the bad-CODE guard, not a payer guard');
 });

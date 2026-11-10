@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-11-10 (138) — Paying your own link: the first time is allowed and the payer is told we can see it; after that, or from R1,000, a verified ID comes first
+
+The founder's rule (10 Nov), given while deciding the Adumo switch: own-link card payments (73% of Pay presses, and
+the stolen-card pattern of 20 Oct to 7 Nov) are not refused, they need an ID check.
+
+- `lib/own-link.js` (new) holds the rule (`ownLinkDecision`):
+  - **another payer number:** PASS;
+  - **requester ID verified:** PASS (pay-outs still wait for approval);
+  - **first own-link payment under the line:** WARN, one page saying "This is your own link … This time it goes
+    through. Paying your own link again needs a verified ID first", then Continue (re-posted with `ack=1`, the rule
+    decided again);
+  - **a paid own-link payment already on record:** BLOCK (REPEAT);
+  - **first own-link payment at or above `WAPAY_OWN_LINK_KYC_FIRST_CENTS`** (default 100000 = R1,000; `off`
+    disables): BLOCK (AMOUNT);
+  - **history unreadable:** BLOCK.
+
+  "Paid" means a SUCCESS `payrequest` intent on the account whose `metadata.payerMsisdn` is its own number, refunds
+  excluded. The block page points to app.wapay.co.za/app/profile → Verify and says nothing was charged.
+- `pages/api/pay/checkout.js`: decided before any intent or rail session, on both PayFast and Adumo, so a block
+  charges nothing. The log line `payrequest_own_link` records only `…1234` of the number.
+- `lib/request-notify.js`: when an unverified requester paid their own link, the requester's paid notice carries one
+  line saying the next one needs a verified ID (plain text or Direct Send only, not the template).
+- Tests: `tests/own-link.test.mjs` (11); the `tests/payer-registration.test.mjs` lock now allows 200/403 only
+  inside the own-link branch. Full suite 1489/1489 and `next build` green with 137.
+- Known limits, for the founder:
+  - The rule sees only the typed payer number. Typing another number (Mo's, on 2 of •••1332's 3 payments) or the
+    old GET `?code=` link gets past it.
+  - A VERIFIED account (•••1332 was) passes without limit, so pay-out approval stays the real control.
+  - WhatsApp has no standalone "verify" command; the check starts on the web portal or inside withdraw.
+
 ## 2026-11-10 (137) — A member who is sent money hears from WaPay every time: inside their window as a message, outside it through the approved utility template
 
 The founder sent R400 to a member, and the member got nothing. Since 23 Oct (CHANGELOG 122) a person who was paid
