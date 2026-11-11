@@ -45,7 +45,7 @@ function stubLedger() {
 const providers = [{ method: 'PAYSHAP', label: 'PayShap', providerCode: '66', providerName: 'PayShap Account', minCents: 5000, maxCents: 300000 }];
 const account = { id: 'acc-float', msisdn: '27731234567', profile: {} };
 const recipient = { firstname: 'Lerato', surname: 'M', mobile: '073 123 4567', account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', id_number: '9001015009087' };
-const call = (over = {}) => requestPayout({ prisma: stubPrisma(), ledger: stubLedger(), account, intentId: over.intentId || 'intent-0001', method: 'PAYSHAP', amountCents: 99200, recipient, providers, authorization: proofFor(account, { intentId: over.intentId || 'intent-0001', amountCents: 99200 }), ...over });
+const call = (over = {}) => requestPayout({ prisma: stubPrisma(), ledger: stubLedger(), account, intentId: over.intentId || 'intent-0001', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 99200, recipient, providers, authorization: proofFor(account, { intentId: over.intentId || 'intent-0001', amountCents: 99200 }), ...over });
 
 test('a float that cannot cover the pay-out refuses before any ledger move, records FLOAT_SHORT, and alerts once', async () => {
   env();

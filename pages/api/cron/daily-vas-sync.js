@@ -86,6 +86,16 @@ export default async function handler(req, res) {
       payoutSweep = { error: e?.message || String(e) };
     }
 
+    // Next-business-day pay-outs whose day has come (lib/payout-approval.js, 2026-11-11): the floor behind
+    // /api/cron/payout-release at 08:00 SAST, in case that run was missed. Never sends one early.
+    try {
+      const { releaseDuePayouts } = await import('../../../lib/payout-approval.js');
+      const released = await releaseDuePayouts({ take: 10 });
+      console.log(JSON.stringify({ type: 'cron_payout_release_floor', scheduled: released.scheduled, due: released.due, sent: released.sent, pending: released.pending, floatShort: released.floatShort, errors: released.errors, timestamp: new Date().toISOString() }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_payout_release_floor_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
     // Held sends nobody collected in 30 days go back to their senders, each told
     // once (BUGLOG #117; Hobby plan, so it rides this daily cron like the pay-out
     // sweep). Best-effort: never changes this route's answer or status.

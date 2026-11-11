@@ -74,8 +74,8 @@ test('1. the ID step takes a passport, asks the issuing country, confirms it mas
   assert.equal(s5.state, 'PAYOUT_CONFIRM');
   assert.match(s5.text, /Name on the account: Lisa Moyo/); assert.match(s5.text, /Passport \/ foreign ID: •••456 \(Zimbabwe\)/);
   assert.ok(!/FN123456/.test(s5.text)); assert.equal(s5.data.idPending ?? null, null);
-  const pin = await handleWithdrawReply({ account: lisa, state: s5.state, data: s5.data, text: 'yes' });
-  assert.equal(pin.state, 'PAYOUT_PIN');
+  const pin = await handleWithdrawReply({ account: lisa, state: s5.state, data: s5.data, text: '1' });
+  assert.equal(pin.state, 'PAYOUT_PIN'); assert.equal(pin.data.speed, 'NEXT_DAY', 'a bank account: the speed is picked at the confirmation (2026-11-11)');
   const done = await executeWithdraw({ account: lisa, data: pin.data, pinProof: proofFor(lisa, pin.data), deps: d });
   const r = d.last.recipient;
   assert.equal(r.id_number, 'FN123456'); assert.equal(r.id_type, 'PASSPORT'); assert.equal(r.country_of_issue, 'ZW'); assert.equal(r.nationality, 'ZW');
@@ -197,7 +197,7 @@ test('2. bank words open PayShap with the fee, the balance, the ceiling and the 
   const d = deps(8650);
   const open = await startWithdraw({ account: founder, ask: matchWithdrawAsk('lets do a withdrawal to my bank account'), deps: d });
   assert.equal(open.state, 'PAYOUT_AMOUNT'); assert.equal(open.data.method, 'PAYSHAP');
-  assert.equal(open.text, '🏦 PayShap to your bank account: R8 fee, the cheapest way into your bank. You have R86.50, so up to R78. No bank account? Cash at an Absa or Nedbank ATM costs from R18. How much?');
+  assert.equal(open.text, '🏦 PayShap to your bank account: R12 fee on the next business day, or R20 the same day, the cheapest way into your bank. You have R86.50, so up to R74. No bank account? Cash at an Absa or Nedbank ATM costs from R18. How much?');
   assert.ok(!/Withdraw from WaPay|Reply 1, 2/.test(open.text), 'never the generic menu');
   // The agent's proposal names RTC for bank words: the same opener, never a dropped method.
   const agent = await startWithdraw({ account: founder, ask: { amountCents: null, method: 'RTC' }, deps: d });
@@ -205,14 +205,14 @@ test('2. bank words open PayShap with the fee, the balance, the ceiling and the 
   const amt = await handleWithdrawReply({ account: founder, state: open.state, data: open.data, text: '50' });
   assert.equal(amt.state, 'PAYOUT_ACCOUNT'); assert.equal(amt.data.amountCents, 5000);
   const all = await handleWithdrawReply({ account: founder, state: open.state, data: open.data, text: 'all of it' });
-  assert.equal(all.state, 'PAYOUT_ACCOUNT'); assert.equal(all.data.amountCents, 7800, 'all = the most PayShap can take with its fee');
+  assert.equal(all.state, 'PAYOUT_ACCOUNT'); assert.equal(all.data.amountCents, 7400, 'all = the most PayShap can take with its next-business-day fee');
   const noBank = await handleWithdrawReply({ account: founder, state: open.state, data: open.data, text: "I don't have a bank account" });
   assert.equal(noBank.state, 'PAYOUT_METHOD'); assert.match(noBank.text, /cash needs no bank account/); assert.match(noBank.text, /Reply \*2\* for cash at an Absa ATM, or \*3\* for cash at a Nedbank ATM\./);
   const pick = await handleWithdrawReply({ account: founder, state: noBank.state, data: noBank.data, text: '3' });
   assert.match(pick.text, /withdraw by Cash at a Nedbank ATM/);
   // "All my money to my bank account": the ceiling is taken straight away.
   const allAsk = await startWithdraw({ account: founder, ask: matchWithdrawAsk('I want to put all my money to my bank account'), deps: d });
-  assert.equal(allAsk.state, 'PAYOUT_ACCOUNT'); assert.equal(allAsk.data.amountCents, 7800);
+  assert.equal(allAsk.state, 'PAYOUT_ACCOUNT'); assert.equal(allAsk.data.amountCents, 7400);
   // A large balance names the per-withdrawal maximum instead.
   const rich = await startWithdraw({ account: founder, ask: { method: 'PAYSHAP' }, deps: deps(500000) });
   assert.match(rich.text, /You have R5000, one withdrawal can be up to R3000\./);
@@ -221,7 +221,7 @@ test('2. bank words open PayShap with the fee, the balance, the ceiling and the 
   assert.equal(withAmt.state, 'PAYOUT_ACCOUNT');
   const menu = await startWithdraw({ account: founder, ask: {}, deps: d });
   const one = await handleWithdrawReply({ account: founder, state: menu.state, data: menu.data, text: '1' });
-  assert.match(one.text, /How much would you like to withdraw by PayShap\? Between R50 and R78/);
+  assert.match(one.text, /How much would you like to withdraw by PayShap\? Between R50 and R74/);
   assert.ok(!/—/.test(open.text + noBank.text), 'no em dashes in customer copy');
 });
 
@@ -337,7 +337,7 @@ test('3. "How much can I withdraw?" is answered from the balance (not the how-it
   assert.equal(matchHowItWorksAsk('How do I withdraw?'), 'withdraw', 'a how-to question still gets the walkthrough');
   const ans = await startWithdraw({ account: lisa, ask: matchWithdrawAsk('How much can I withdraw?'), deps: deps(35000) });
   assert.equal(ans.state, null);
-  assert.equal(ans.text, '💸 You have R350. The most you can withdraw right now: R342 by PayShap to your bank account (R8 fee), or R300 as cash at an Absa or Nedbank ATM (R18 fee, paid in R50 and R100 notes). Say *withdraw* and the amount, like "withdraw 342".');
+  assert.equal(ans.text, '💸 You have R350. The most you can withdraw right now: R338 by PayShap to your bank account (R12 fee), or R300 as cash at an Absa or Nedbank ATM (R18 fee, paid in R50 and R100 notes). Say *withdraw* and the amount, like "withdraw 338".');
   const poor = await startWithdraw({ account: lisa, ask: matchWithdrawAsk('How much can I withdraw?'), deps: { ...deps(0), moneySituation: async () => LISA_SITUATION, gateHistory: async () => ({ count: 0, personAsked: false }) } });
   assert.match(poor.text, /^💸 You have R0 to withdraw\./);
 });
@@ -463,7 +463,7 @@ test('7. the withdraw copy names only the cash ways on the merchant and the iden
   envOff();
   const live = { withdrawLive: true, providers: LIVE, text: 'can I withdraw?' };
   const brief = howItWorksBrief('withdraw', live);
-  assert.match(brief, /PayShap \(R8 fee\) or collect cash at an Absa or Nedbank ATM, or a Pick n Pay \/ Boxer till \(from R18\)/);
+  assert.match(brief, /PayShap \(R12 fee on the next business day, R20 the same day\) or collect cash at an Absa or Nedbank ATM, or a Pick n Pay \/ Boxer till \(from R18\)/);
   assert.ok(!/FNB eWallet/.test(brief + howItWorksAnswer('withdraw', live)), 'no FNB eWallet on the production merchant');
   assert.ok(!/identity check/.test(howItWorksAnswer('withdraw', live)), 'identity checks are off in the open pilot');
   delete process.env.WAPAY_PAYOUT_KYC;

@@ -55,17 +55,24 @@ test('model.js mirrors paymentRequestFeeCents on both rails, every rand R5..R300
   assert.deepEqual(MoneyMap.CARD_RAIL.ADUMO, cardRailFee('ADUMO'));
 });
 
+// A bank account has two speeds (2026-11-11): the next business day is one flat band, the same day the bands.
+const bandsFor = (cfg, speed) => (Number.isInteger(cfg.nextDayFeeCents) && speed !== 'SAME_DAY' ? [[null, cfg.nextDayFeeCents]] : cfg.bands.map(([max, fee]) => [Number.isFinite(max) ? max : null, fee]));
+const speedsOf = (cfg) => (Number.isInteger(cfg.nextDayFeeCents) ? ['NEXT_DAY', 'SAME_DAY'] : [null]);
+
 test('model.js mirrors the cash-out fee, rail cost and margin for every method and amount', () => {
   assert.equal(MoneyMap.VAT_BPS, VAT_BPS);
   for (const [method, cfg] of Object.entries(FEES.cashout)) {
-    const bands = cfg.bands.map(([max, fee]) => [Number.isFinite(max) ? max : null, fee]);
     const cost = { fixedCents: cfg.railCostExVatCents, bps: cfg.switchingBps || 0, exVat: true };
-    for (let a = 1000; a <= MAX_PAYOUT_CENTS; a += 100) {
-      assert.equal(MoneyMap.bandFeeCents(bands, a), cashoutFeeCents(method, a), `${method} fee ${a}`);
-      assert.equal(MoneyMap.cashoutRailCostCents(cost, a), cashoutRailCostCents(method, a), `${method} cost ${a}`);
-      assert.equal(MoneyMap.bandFeeCents(bands, a) - MoneyMap.cashoutRailCostCents(cost, a), cashoutMarginCents(method, a), `${method} margin ${a}`);
+    for (const speed of speedsOf(cfg)) {
+      const bands = bandsFor(cfg, speed);
+      for (let a = 1000; a <= MAX_PAYOUT_CENTS; a += 100) {
+        assert.equal(MoneyMap.bandFeeCents(bands, a), cashoutFeeCents(method, a, speed), `${method} ${speed} fee ${a}`);
+        assert.equal(MoneyMap.cashoutRailCostCents(cost, a), cashoutRailCostCents(method, a), `${method} cost ${a}`);
+        assert.equal(MoneyMap.bandFeeCents(bands, a) - MoneyMap.cashoutRailCostCents(cost, a), cashoutMarginCents(method, a, speed), `${method} ${speed} margin ${a}`);
+      }
     }
   }
+  assert.equal(cashoutFeeCents('PAYSHAP', 50000), 1200, 'the next business day is the default'); assert.equal(cashoutFeeCents('PAYSHAP', 50000, 'SAME_DAY'), 2000);
   assert.equal(MoneyMap.inclVatCents(996), inclVatCents(996));
   assert.equal(MoneyMap.bps(12345, 600), bps(12345, 600));
 });
@@ -75,7 +82,8 @@ test('rows.json carries the same parameters as FEES and the deposit module', () 
   for (const row of rowsDoc.rows.filter((r) => r.codeRef?.fn === 'cashout')) {
     const cfg = FEES.cashout[row.codeRef.method];
     assert.ok(cfg, `${row.id}: method ${row.codeRef.method} exists in FEES.cashout`);
-    assert.deepEqual(row.price.bands, cfg.bands.map(([max, fee]) => [Number.isFinite(max) ? max : null, fee]), `${row.id} bands`);
+    assert.deepEqual(row.price.bands, bandsFor(cfg, row.codeRef.speed), `${row.id} bands`);
+    if (Number.isInteger(cfg.nextDayFeeCents)) assert.ok(['NEXT_DAY', 'SAME_DAY'].includes(row.codeRef.speed), `${row.id}: a method with two speeds names its speed`);
     assert.equal(row.cost.fixedCents, cfg.railCostExVatCents, `${row.id} rail cost ex VAT`);
     assert.equal(row.cost.bps || 0, cfg.switchingBps || 0, `${row.id} switching bps`);
     assert.equal(row.cost.exVat, true, `${row.id} rail cost is quoted ex VAT`);
@@ -133,9 +141,9 @@ test('the dashboard grid equals the charging functions at the five reference amo
       if (fn === 'depositFeeCents') assert.equal(cell.price, depositFeeCents(a), `${row.id} @${a}`);
       if (fn === 'paymentRequestFeeCents') assert.equal(cell.price, paymentRequestFeeCents(a, row.codeRef.rail), `${row.id} @${a}`);
       if (fn === 'cashout') {
-        assert.equal(cell.price, cashoutFeeCents(row.codeRef.method, a), `${row.id} fee @${a}`);
+        assert.equal(cell.price, cashoutFeeCents(row.codeRef.method, a, row.codeRef.speed || null), `${row.id} fee @${a}`);
         assert.equal(cell.costIncl, cashoutRailCostCents(row.codeRef.method, a), `${row.id} cost @${a}`);
-        assert.equal(cell.margin, cashoutMarginCents(row.codeRef.method, a), `${row.id} margin @${a}`);
+        assert.equal(cell.margin, cashoutMarginCents(row.codeRef.method, a, row.codeRef.speed || null), `${row.id} margin @${a}`);
       }
       if (fn === 'loadDiscount') assert.equal(cell.credited, a - bps(a, FEES.load[row.codeRef.rail].discountBps), `${row.id} credited @${a}`);
       if (fn === 'commission') assert.equal(cell.booked, bps(a, FEES.commissionBps[row.codeRef.category]), `${row.id} booked @${a}`);

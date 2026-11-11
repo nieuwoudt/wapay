@@ -1,5 +1,6 @@
 // The express fee and the fraud triage (founder 2026-10-24). Money under two hours old can leave at double
-// the fee, never more than the customer confirmed; every pay-out request is scored 1 to 5 and reported to
+// the fee as cash (since 2026-11-11 a bank account takes the next business day instead, lib/payout-speed.js),
+// never more than the customer confirmed; every pay-out request is scored 1 to 5 and reported to
 // the founder; a level-5 request waits for a person until the founder clears the account.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -59,17 +60,18 @@ test('fresh money is what came in from outside: paid links, top-ups, sends, clai
 });
 
 test('the quote and the ledger carry the agreed fee', () => {
-  const q = quotePayout({ method: 'PAYSHAP', amountCents: 10000, feeMultiplier: 2 });
-  assert.equal(q.feeCents, 1600); assert.equal(q.normalFeeCents, 800); assert.equal(q.express, true); assert.equal(q.totalCents, 11600);
-  assert.equal(quotePayout({ method: 'PAYSHAP', amountCents: 10000 }).express, false);
-  const e = buildCashout({ accountId: 'acc1', amountCents: 10000, idemKey: 'k', method: 'PAYSHAP', feeCents: 1600 });
-  assert.equal(e.postings.find((p) => p.accountCode === 'WALLET:acc1:CASH').debitCents, 11600);
-  assert.equal(e.postings.find((p) => p.accountCode === 'REVENUE:FEE:CASHOUT').creditCents, 1600);
-  assert.equal(buildCashout({ accountId: 'acc1', amountCents: 10000, idemKey: 'k', method: 'PAYSHAP' }).postings.find((p) => p.accountCode === 'REVENUE:FEE:CASHOUT').creditCents, 800, 'older rows: the banded fee');
+  const q = quotePayout({ method: 'NEDCASH', amountCents: 10000, feeMultiplier: 2 });
+  assert.equal(q.feeCents, 3600); assert.equal(q.normalFeeCents, 1800); assert.equal(q.express, true); assert.equal(q.totalCents, 13600);
+  assert.equal(quotePayout({ method: 'NEDCASH', amountCents: 10000 }).express, false);
+  assert.equal(quotePayout({ method: 'PAYSHAP', amountCents: 10000, feeMultiplier: 2 }).feeCents, 1200, 'a bank account is never doubled (2026-11-11)');
+  const e = buildCashout({ accountId: 'acc1', amountCents: 10000, idemKey: 'k', method: 'NEDCASH', feeCents: 3600 });
+  assert.equal(e.postings.find((p) => p.accountCode === 'WALLET:acc1:CASH').debitCents, 13600);
+  assert.equal(e.postings.find((p) => p.accountCode === 'REVENUE:FEE:CASHOUT').creditCents, 3600);
+  assert.equal(buildCashout({ accountId: 'acc1', amountCents: 10000, idemKey: 'k', method: 'NEDCASH' }).postings.find((p) => p.accountCode === 'REVENUE:FEE:CASHOUT').creditCents, 1800, 'older rows: the banded fee');
 });
 
 // ---- requestPayout end to end, with stubs ----
-const providers = [{ method: 'PAYSHAP', label: 'PayShap', providerCode: '66', providerName: 'PayShap Account', minCents: 5000, maxCents: 300000 }];
+const providers = [{ method: 'PAYSHAP', label: 'PayShap', providerCode: '66', providerName: 'PayShap Account', minCents: 5000, maxCents: 300000 }, { method: 'NEDCASH', label: 'Nedbank cash', providerCode: '4', providerName: 'Nedbank Cardless', minCents: 2000, maxCents: 300000 }];
 const recipient = { firstname: 'Lerato', surname: 'M', mobile: '073 123 4567', account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', id_number: '9001015009087' };
 function stubPrisma({ account, total = 30000, paidLinks = [], intents = [], otherPayers = [], frozen = [], sameDest = [], history = [], existing = null } = {}) {
   const prs = existing ? [existing] : []; const audits = [];
@@ -106,40 +108,41 @@ function stubLedger() {
 }
 const settleRail = (seen = []) => ({ async performPayout(a) { seen.push(a); return { settlement: 'SETTLE', outcome: 'SETTLED', status: 100, paymentReference: 'OTT1' }; }, async getPaymentStatus() { return {}; } });
 const oldVerified = { id: 'acc-old-verified-000001', waId: '27731234567', createdAt: new Date(NOW - 60 * 24 * 60 * MIN), profile: { kyc: { status: 'VERIFIED', fullName: 'Lerato M' } } };
-const pay = ({ prisma, ledger = stubLedger(), client = settleRail(), account = oldVerified, amountCents = 10000, intentId = 'intent-x0001', receipts = [], expectedFeeCents = null, alerts = [] }) =>
-  requestPayout({ prisma, ledger, client, account, intentId, method: 'PAYSHAP', amountCents, recipient, providers, readFloat: async () => null, authorization: proofFor(account, { intentId, amountCents }), receipts, expectedFeeCents, alertRequest: async (a) => { alerts.push(a); } });
+// Express is a cash rule since 2026-11-11 (a bank account takes the next business day instead), so these run on Nedbank cash.
+const pay = ({ prisma, ledger = stubLedger(), client = settleRail(), account = oldVerified, amountCents = 10000, intentId = 'intent-x0001', receipts = [], expectedFeeCents = null, alerts = [], method = 'NEDCASH', speed = null }) =>
+  requestPayout({ prisma, ledger, client, account, intentId, method, speed, amountCents, recipient, providers, readFloat: async () => null, authorization: proofFor(account, { intentId, amountCents }), receipts, expectedFeeCents, alertRequest: async (a) => { alerts.push(a); } });
 
 test('requestPayout: money under two hours old doubles the fee in the hold, the books and the receipt; the founder hears about it', async () => {
   env();
   const prisma = stubPrisma({ account: oldVerified }); const ledger = stubLedger(); const alerts = [];
   const out = await pay({ prisma, ledger, receipts: [{ cents: 25000, at: NOW - 30 * MIN }], alerts });
-  assert.equal(out.ok, true, JSON.stringify(out)); assert.equal(out.status, 'SETTLED'); assert.equal(out.feeCents, 1600); assert.equal(out.express, true);
+  assert.equal(out.ok, true, JSON.stringify(out)); assert.equal(out.status, 'SETTLED'); assert.equal(out.feeCents, 3600); assert.equal(out.express, true);
   const meta = prisma._prs[0].metadata;
-  assert.equal(meta.feeCents, 1600); assert.equal(meta.express, true); assert.equal(meta.normalFeeCents, 800); assert.equal(meta.freshCents, 25000);
+  assert.equal(meta.feeCents, 3600); assert.equal(meta.express, true); assert.equal(meta.normalFeeCents, 1800); assert.equal(meta.freshCents, 25000);
   assert.match(meta.destKey, /^[0-9a-f]{32}$/, 'a keyed destination hash, never the number'); assert.ok(!JSON.stringify(meta).includes('62012345678'));
   assert.equal(meta.triage.level, 1, 'an old, ID-checked account');
-  assert.equal([...ledger.holds.values()][0].amountCents, 11600, 'the hold covers the doubled fee');
+  assert.equal([...ledger.holds.values()][0].amountCents, 13600, 'the hold covers the doubled fee');
   const entry = ledger.settled[0];
-  assert.equal(entry.postings.find((p) => /:CASH$/.test(p.accountCode)).debitCents, 11600);
-  assert.equal(entry.postings.find((p) => p.accountCode === 'REVENUE:FEE:CASHOUT').creditCents, 1600);
+  assert.equal(entry.postings.find((p) => /:CASH$/.test(p.accountCode)).debitCents, 13600);
+  assert.equal(entry.postings.find((p) => p.accountCode === 'REVENUE:FEE:CASHOUT').creditCents, 3600);
   assert.equal(alerts.length, 1);
-  assert.match(alerts[0].text, /^🟢 Pay-out request, fraud level 1\/5 \(very unlikely\)\nR100 by PayShap · fee R16 \(double, money under 2 h old\)\nAccount •••4567 Lerato M · ID checked/);
+  assert.match(alerts[0].text, /^🟢 Pay-out request, fraud level 1\/5 \(very unlikely\)\nR100 by Nedbank cash · fee R36 \(double, money under 2 h old\)\nAccount •••4567 Lerato M · ID checked/);
   assert.match(alerts[0].text, /Result: paid$/);
   assert.equal(prisma._audits[0].event, 'PAYOUT_REQUEST'); assert.equal(prisma._audits[0].metadata.outcome, 'SETTLED'); assert.equal(prisma._audits[0].metadata.level, 1); assert.equal(prisma._audits[0].metadata.express, true);
   const normal = await pay({ prisma: stubPrisma({ account: oldVerified }), intentId: 'intent-x0002', receipts: [] });
-  assert.equal(normal.feeCents, 800); assert.equal(normal.express, false);
+  assert.equal(normal.feeCents, 1800); assert.equal(normal.express, false);
 });
 
 test('requestPayout: a fee higher than the one confirmed is refused before anything moves; a lower one is charged', async () => {
   env();
   const prisma = stubPrisma({ account: oldVerified }); const ledger = stubLedger(); const seen = []; const alerts = [];
-  const out = await pay({ prisma, ledger, client: settleRail(seen), receipts: [{ cents: 25000, at: NOW - 30 * MIN }], expectedFeeCents: 800, alerts });
-  assert.equal(out.ok, false); assert.equal(out.error, 'FEE_CHANGED'); assert.equal(out.feeCents, 1600); assert.equal(out.expectedFeeCents, 800);
+  const out = await pay({ prisma, ledger, client: settleRail(seen), receipts: [{ cents: 25000, at: NOW - 30 * MIN }], expectedFeeCents: 1800, alerts });
+  assert.equal(out.ok, false); assert.equal(out.error, 'FEE_CHANGED'); assert.equal(out.feeCents, 3600); assert.equal(out.expectedFeeCents, 1800);
   assert.deepEqual(prisma._prs, []); assert.deepEqual(ledger.calls, []); assert.equal(seen.length, 0);
   assert.match(alerts[0].text, /Result: stopped, the fee went up after the confirmation/);
-  assert.match(feeChangedCopy(out), /^💸 The fee for this pay-out is now R16, not the R8 you confirmed, because money reached your balance less than 2 hours ago\. From \d\d:\d\d the fee is R8 again\. Nothing was sent and nothing has left your balance\. Say \*withdraw\* to start again\.$/);
-  const lower = await pay({ prisma: stubPrisma({ account: oldVerified }), intentId: 'intent-x0003', receipts: [], expectedFeeCents: 1600 });
-  assert.equal(lower.ok, true); assert.equal(lower.feeCents, 800, 'the window passed: the lower fee');
+  assert.match(feeChangedCopy(out), /^💸 The fee for this pay-out is now R36, not the R18 you confirmed, because money reached your balance less than 2 hours ago\. From \d\d:\d\d the fee is R18 again\. Nothing was sent and nothing has left your balance\. Say \*withdraw\* to start again\.$/);
+  const lower = await pay({ prisma: stubPrisma({ account: oldVerified }), intentId: 'intent-x0003', receipts: [], expectedFeeCents: 3600 });
+  assert.equal(lower.ok, true); assert.equal(lower.feeCents, 1800, 'the window passed: the lower fee');
 });
 
 // The 22 October burst, as rows: opened today, six card payments in an hour from different numbers, one of those
@@ -209,22 +212,23 @@ test('a replay and a paused pay-out are not reported again', async () => {
 });
 
 test('the chat: the confirmation names the doubled fee and when it ends; the PIN step sends the confirmed fee and words the new refusals', async () => {
-  const data = { method: 'PAYSHAP', amountCents: 10000, balanceCents: 30000, receipts: [{ cents: 25000, at: Date.now() - 30 * MIN }], limits: { PAYSHAP: { minCents: 5000, maxCents: 300000 } }, recipient: { savedLabel: 'FNB account •••678' }, intentId: 'wd-exp-0001' };
+  const data = { method: 'NEDCASH', amountCents: 10000, balanceCents: 30000, receipts: [{ cents: 25000, at: Date.now() - 30 * MIN }], limits: { NEDCASH: { minCents: 2000, maxCents: 300000 } }, recipient: { savedLabel: 'my cellphone •••4567' }, intentId: 'wd-exp-0001' };
   const c = confirmAsk(data);
-  assert.match(c.text, /Fee: R16 \(double the usual R8\)\nThe fee is doubled because some of this money reached your balance less than 2 hours ago\. From \d\d:\d\d the fee is R8\./);
-  assert.match(c.text, /Total leaving your balance: \*R116\*/);
-  assert.equal(c.data.feeCents, 1600); assert.equal(c.data.express, true);
-  assert.equal(confirmAsk({ ...data, receipts: [] }).data.feeCents, 800);
-  const lim = { PAYSHAP: { minCents: 5000, maxCents: 300000 } };
-  assert.equal(affordableMaxCents({ method: 'PAYSHAP', balanceCents: 30000, limits: lim }), 29200);
-  assert.equal(affordableMaxCents({ method: 'PAYSHAP', balanceCents: 30000, limits: lim, receipts: data.receipts }), 28400, 'all of it with the doubled fee');
+  assert.match(c.text, /Fee: R36 \(double the usual R18\)\nThe fee is doubled because some of this money reached your balance less than 2 hours ago\. From \d\d:\d\d the fee is R18\./);
+  assert.match(c.text, /Total leaving your balance: \*R136\*/);
+  assert.equal(c.data.feeCents, 3600); assert.equal(c.data.express, true);
+  assert.equal(confirmAsk({ ...data, receipts: [] }).data.feeCents, 1800);
+  const lim = { NEDCASH: { minCents: 2000, maxCents: 300000 } };
+  assert.equal(affordableMaxCents({ method: 'NEDCASH', balanceCents: 33000, limits: lim }), 30000);
+  assert.equal(affordableMaxCents({ method: 'NEDCASH', balanceCents: 33000, limits: lim, receipts: data.receipts }), 25000, 'all of it with the doubled fee, in R50 notes');
   const account = { id: 'acc-chat-0000000000001', waId: '27731234567', profile: { kyc: { status: 'VERIFIED', fullName: 'Lerato M' } } };
-  const wd = { ...c.data, recipient: { mobile: '0731234567', account_number: '62012345678', branch_code: '250655', branch_name: 'FNB', id_number: '9001015009087' } };
+  const wd = { ...c.data, recipient: { mobile: '0731234567', id_number: '9001015009087' } };
   const seen = [];
   const reqOut = async (out) => executeWithdraw({ account, data: wd, pinProof: proofFor(account, wd), deps: { requestPayout: async (a) => { seen.push(a); return out; }, pinResetCoolOff: () => null, loadIdentity: async () => null } });
-  const changed = await reqOut({ ok: false, error: 'FEE_CHANGED', feeCents: 1600, expectedFeeCents: 800, normalFeeCents: 800, normalFromAt: null });
-  assert.equal(seen[0].expectedFeeCents, 1600, 'the fee the customer confirmed travels with the pay-out');
-  assert.match(changed.text, /^💸 The fee for this pay-out is now R16, not the R8 you confirmed/);
+  const changed = await reqOut({ ok: false, error: 'FEE_CHANGED', feeCents: 3600, expectedFeeCents: 1800, normalFeeCents: 1800, normalFromAt: null });
+  assert.equal(seen[0].expectedFeeCents, 3600, 'the fee the customer confirmed travels with the pay-out');
+  assert.equal(seen[0].speed, null, 'cash has no speed');
+  assert.match(changed.text, /^💸 The fee for this pay-out is now R36, not the R18 you confirmed/);
   assert.equal((await reqOut({ ok: false, error: 'REVIEW', level: 5 })).text, PAYOUT_REVIEW_COPY);
 });
 
@@ -232,12 +236,15 @@ test('the web app: the check shows the doubled fee and why, and the request carr
   const deps = createFixtureDeps();
   const account = deps.prisma._tables.account.find((a) => a.msisdn === FIXTURE_CELL);
   deps.recentReceipts = async () => [{ cents: 100000000, at: Date.now() - 10 * MIN }];
+  // A bank account (2026-11-11): never doubled; fresh money closes the same day and the next business day stays.
   const check = await payoutCheck(deps, { account, method: 'PAYSHAP', amountCents: 5000, destinationId: 'cfixturedest0000000001' });
-  assert.equal(check.ok, true, JSON.stringify(check)); assert.equal(check.express, true); assert.equal(check.feeCents, 2 * check.normalFeeCents);
-  assert.match(check.feeNote, /reached your balance less than 2 hours ago/);
+  assert.equal(check.ok, true, JSON.stringify(check)); assert.equal(check.express, false); assert.equal(check.speed, 'NEXT_DAY'); assert.equal(check.feeCents, 1200);
+  assert.equal(check.speeds.SAME_DAY.available, false); assert.equal(check.speeds.SAME_DAY.feeCents, 2000); assert.match(check.speeds.NEXT_DAY.when, /^(Monday|Tuesday|Wednesday|Thursday|Friday) \d{1,2} \w+, from 08:00$/);
+  const closed = await payoutCheck(deps, { account, method: 'PAYSHAP', amountCents: 5000, destinationId: 'cfixturedest0000000001', speed: 'SAME_DAY' });
+  assert.equal(closed.ok, false); assert.equal(closed.error, 'NOT_CLEARED'); assert.match(closed.line, /^💸 Same day is not open for this pay-out any more/);
   deps.recentReceipts = async () => [];
-  const normal = await payoutCheck(deps, { account, method: 'PAYSHAP', amountCents: 5000, destinationId: 'cfixturedest0000000001' });
-  assert.equal(normal.express, false); assert.equal(normal.feeNote, null);
+  const normal = await payoutCheck(deps, { account, method: 'PAYSHAP', amountCents: 5000, destinationId: 'cfixturedest0000000001', speed: 'SAME_DAY' });
+  assert.equal(normal.ok, true); assert.equal(normal.express, false); assert.equal(normal.feeNote, null); assert.equal(normal.speed, 'SAME_DAY'); assert.equal(normal.feeCents, 2000); assert.equal(normal.releaseAt, null);
   assert.match(read('../pages/app/pay-out.js'), /proof: step1\.data\.proof, feeCents: check\.feeCents \}/);
   assert.match(read('../pages/api/app/payout.js'), /feeCents: intOf\(b\.feeCents\)/);
 });
@@ -245,9 +252,13 @@ test('the web app: the check shows the doubled fee and why, and the request carr
 test('an operator pay-out never carries the express fee; the business portal quotes it and sends the fee it showed', async () => {
   env();
   const prisma = stubPrisma({ account: oldVerified });
-  const out = await requestPayout({ prisma, ledger: stubLedger(), client: settleRail(), account: oldVerified, intentId: 'intent-op001', method: 'PAYSHAP', amountCents: 10000, recipient, providers, readFloat: async () => null, authorization: proofFor(oldVerified, { intentId: 'intent-op001', amountCents: 10000 }), receipts: [{ cents: 25000, at: NOW - 30 * MIN }], allowExpress: false, alertRequest: async () => {} });
-  assert.equal(out.ok, true); assert.equal(out.feeCents, 800, 'the founder chose the timing, not the customer');
-  assert.match(read('../lib/ops-payout.js'), /authorization, allowExpress: false, allowApproval: false \}\);/);
+  const out = await requestPayout({ prisma, ledger: stubLedger(), client: settleRail(), account: oldVerified, intentId: 'intent-op001', method: 'NEDCASH', amountCents: 10000, recipient, providers, readFloat: async () => null, authorization: proofFor(oldVerified, { intentId: 'intent-op001', amountCents: 10000 }), receipts: [{ cents: 25000, at: NOW - 30 * MIN }], allowExpress: false, alertRequest: async () => {} });
+  assert.equal(out.ok, true); assert.equal(out.feeCents, 1800, 'the founder chose the timing, not the customer');
+  // A bank account from an operator goes the same day, at the same-day fee, even with fresh money (2026-11-11).
+  const bank = await requestPayout({ prisma: stubPrisma({ account: oldVerified }), ledger: stubLedger(), client: settleRail(), account: oldVerified, intentId: 'intent-op002', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 10000, recipient, providers, readFloat: async () => null, authorization: proofFor(oldVerified, { intentId: 'intent-op002', amountCents: 10000 }), receipts: [{ cents: 25000, at: NOW - 30 * MIN }], allowExpress: false, allowApproval: false, alertRequest: async () => {} });
+  assert.equal(bank.ok, true, JSON.stringify(bank)); assert.equal(bank.status, 'SETTLED'); assert.equal(bank.feeCents, 2000);
+  assert.match(read('../lib/ops-payout.js'), /authorization, allowExpress: false, allowApproval: false, speed: OPS_SPEED \}\);/);
+  assert.match(read('../lib/ops-payout.js'), /const OPS_SPEED = 'SAME_DAY';/);
   const biz = read('../pages/api/business/payout.js');
   assert.match(biz, /expectedFeeCents: Number\.isInteger\(body\.feeCents\) \? body\.feeCents : null/);
   assert.match(biz, /feeNote: ex\?\.express \? expressFeeLine\(ex\) : null/);
@@ -277,18 +288,18 @@ test('a test number goes through the pause and every check, then stops before an
     assert.equal(await isPayoutHeldFor({ prisma: held, account: { waId: '27831112222' } }), true, 'everyone else stays paused');
     const ledger = stubLedger(); const seen = []; const alerts = [];
     const out = await pay({ prisma: held, ledger, client: settleRail(seen), receipts: [{ cents: 25000, at: NOW - 30 * MIN }], alerts });
-    assert.equal(out.ok, false); assert.equal(out.error, 'TEST_RUN'); assert.equal(out.feeCents, 1600); assert.equal(out.express, true); assert.equal(out.level, 1);
+    assert.equal(out.ok, false); assert.equal(out.error, 'TEST_RUN'); assert.equal(out.feeCents, 3600); assert.equal(out.express, true); assert.equal(out.level, 1);
     assert.deepEqual(held._prs, [], 'no pay-out row'); assert.deepEqual(ledger.calls, [], 'no hold, no ledger move'); assert.equal(seen.length, 0, 'no rail call');
     assert.match(alerts[0].text, /Result: test run for a test number, nothing sent/);
     assert.equal(held._audits[0].metadata.outcome, 'TEST_RUN');
-    assert.match(testRunCopy(out), /^🧪 Test pay-out: every check passed for R100 with a fee of R16 \(double the usual R8, money under 2 hours old\), and the fraud check scored it 1 of 5\. This number is a test number, so nothing was sent and your balance has not changed\.$/);
+    assert.match(testRunCopy(out), /^🧪 Test pay-out: every check passed for R100 with a fee of R36 \(double the usual R18, money under 2 hours old\), and the fraud check scored it 1 of 5\. This number is a test number, so nothing was sent and your balance has not changed\.$/);
     const frozenTester = stubPrisma({ account: { ...oldVerified, profile: { ...oldVerified.profile, payouts: { frozen: true } } } });
     assert.equal((await pay({ prisma: frozenTester, intentId: 'intent-t0002' })).error, 'FROZEN', 'a frozen test number stays frozen');
   } finally { delete process.env.WAPAY_PAYOUT_TEST_NUMBERS; }
 });
 
 test('the readouts: the bot quotes the rules, the flags show them, Mission Control lists the requests, the review route needs a reason', () => {
-  assert.equal(withdrawRulesLine({ WAPAY_PAYOUT_KYC: 'threshold' }), 'Money that reached your balance less than 2 hours ago costs double the fee to withdraw. You can withdraw up to R3000 in any 24 hours, and more than R1000 in 24 hours needs a once-off ID check.');
+  assert.equal(withdrawRulesLine({ WAPAY_PAYOUT_KYC: 'threshold' }), 'Money that reached your balance less than 2 hours ago goes to a bank account on the next business day only, and costs double the fee as cash. You can withdraw up to R3000 in any 24 hours, and more than R1000 in 24 hours needs a once-off ID check.');
   assert.match(read('../pages/api/internal/flags.js'), /payoutRules: \(\(\) =>/);
   assert.match(read('../pages/admin/index.js'), /<h2>Pay-out requests<\/h2><PayoutRequests tick=\{tick\} \/>/, 'on the Pay-outs tab since 2026-10-26');
   assert.match(read('../pages/api/admin/payout-requests.js'), /const auth = requireAdmin\(req\);\n\s+if \(!auth\.ok\) return res\.status\(401\)/);

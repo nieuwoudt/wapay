@@ -1141,6 +1141,8 @@ function Payouts() {
   const [st, setSt] = useState(null);
   const [err, setErr] = useState('');
   const [method, setMethod] = useState('PAYSHAP');
+  // A bank account has two speeds (lib/payout-speed.js, 2026-11-11): the next business day or the same day.
+  const [speed, setSpeed] = useState('NEXT_DAY');
   const [amount, setAmount] = useState('');
   const [rec, setRec] = useState({ firstname: '', surname: '', id_number: '', mobile: '', account_number: '', branch_code: '', branch_name: '' });
   const [stepUp, setStepUp] = useState('');
@@ -1154,9 +1156,9 @@ function Payouts() {
   useEffect(() => {
     if (!amountCents || !st?.enabled) { setQuote(null); return undefined; }
     let live = true;
-    const t = setTimeout(() => api('/api/business/payout', { action: 'quote', method, amountCents }).then((r) => { if (live) setQuote(r.ok ? r.quote : { error: r.error, minCents: r.minCents, maxCents: r.maxCents }); }), 250);
+    const t = setTimeout(() => api('/api/business/payout', { action: 'quote', method, amountCents, speed }).then((r) => { if (live) setQuote(r.ok ? r.quote : { error: r.error, minCents: r.minCents, maxCents: r.maxCents }); }), 250);
     return () => { live = false; clearTimeout(t); };
-  }, [amountCents, method, st?.enabled]);
+  }, [amountCents, method, speed, st?.enabled]);
   if (err) return <div className="card"><div className="err">{err}</div></div>;
   if (!st) return <div className="card"><div className="empty">Loading…</div></div>;
   const m = st.methods.find((x) => x.method === method) || st.methods[0];
@@ -1165,10 +1167,12 @@ function Payouts() {
     setErr('');
     if (!quote || quote.error) { setErr('Enter an amount within the limits first.'); return; }
     if (!stepUp) { setErr(st.hasPassword ? 'Enter your portal password to confirm.' : 'Enter a one-time code to confirm.'); return; }
-    if (!window.confirm(`Pay out ${R(amountCents)} by ${m.label} to ${rec.firstname} ${rec.surname}? Fee ${R(quote.feeCents)}${quote.express ? ' (double: money under 2 hours old)' : ''}, ${R(quote.totalCents)} leaves your balance.`)) return;
+    if (quote.speed === 'SAME_DAY' && quote.speeds?.SAME_DAY && !quote.speeds.SAME_DAY.available) { setErr('Same day is not available for this pay-out: some of the money reached your balance less than 2 hours ago. Choose the next business day.'); return; }
+    const when = quote.speed === 'NEXT_DAY' ? ' It goes on the next business day, from 08:00.' : quote.speed === 'SAME_DAY' ? ' It goes the same day.' : '';
+    if (!window.confirm(`Pay out ${R(amountCents)} by ${m.label} to ${rec.firstname} ${rec.surname}? Fee ${R(quote.feeCents)}${quote.express ? ' (double: money under 2 hours old)' : ''}, ${R(quote.totalCents)} leaves your balance.${when}`)) return;
     setBusy(true);
     try {
-      const r = await api('/api/business/payout', { action: 'request', intentId, method, amountCents, recipient: rec, feeCents: quote.feeCents, ...(st.hasPassword ? { currentPassword: stepUp } : { code: stepUp }) });
+      const r = await api('/api/business/payout', { action: 'request', intentId, method, amountCents, recipient: rec, feeCents: quote.feeCents, speed: quote.speed || null, ...(st.hasPassword ? { currentPassword: stepUp } : { code: stepUp }) });
       setResult(r);
       if (r.ok) { setAmount(''); setStepUp(''); setIntentId(newIntentId()); load(); }
       else if (r.error === 'STEP_UP_FAILED') setErr('That password or code did not work.');
@@ -1176,6 +1180,7 @@ function Payouts() {
       else if (r.error === 'INSUFFICIENT_FUNDS') setErr(`Not enough balance: ${R(r.totalCents || quote.totalCents)} is needed including the fee.`);
       else if (r.error === 'BAD_RECIPIENT') setErr(`Please fill in the recipient's ${String(r.field || 'details').replace('_', ' ')}.`);
       else if (r.error === 'FEE_CHANGED') setErr(`The fee is now ${R(r.feeCents)} because money reached your balance less than 2 hours ago. Nothing has left your balance. Check the new fee and confirm again.`);
+      else if (r.error === 'NOT_CLEARED') setErr('Same day is not available for this pay-out: some of the money reached your balance less than 2 hours ago. Nothing has left your balance. Choose the next business day.');
       else if (r.error === 'DAILY_CAP') setErr(`Pay-outs are limited to ${R(r.capCents)} in any 24 hours; up to ${R(r.remainingCents || 0)} more works now. Nothing has left your balance.`);
       else if (r.error === 'REVIEW') setErr('This pay-out needs a check by a person at WaPay before it can go. Nothing has left your balance.');
       else setErr(r.error === 'DISABLED' ? 'Pay-outs are not switched on yet.' : r.error === 'PAYOUT_HOLD' ? 'Pay-outs are paused while we run safety checks. Nothing has left your balance.' : r.error === 'NO_PROVIDER' ? 'That pay-out method is not available right now.' : `The pay-out did not go through (${r.error || 'error'}). Nothing has left your balance.`);
@@ -1192,7 +1197,7 @@ function Payouts() {
       {!st.enabled || !st.configured ? (
         <div className="card mt">
           <h2>Pay out your balance</h2>
-          <p className="note">Three ways, all from this page: <b>PayShap</b> to your bank account in minutes (R8 flat), a <b>bank transfer</b> to any account (R10 flat, usually within the hour), or <b>cash</b> at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet, with no bank account needed (from R18). A once-off identity check applies. The rail is integrated and tested and goes live once the pay-out provider's sandbox sign-off and the compliance review are done. Until then your balance keeps working for airtime, data, electricity and WaPay payments, and every rand stays yours.</p>
+          <p className="note">Three ways, all from this page: <b>PayShap</b> to your bank account (R12 on the next business day, or R20 the same day), a <b>bank transfer</b> to any account (the same R12 or R20), or <b>cash</b> at an Absa or Nedbank ATM, a Pick n Pay / Boxer till, or as an FNB eWallet, with no bank account needed (from R18). A once-off identity check applies. The rail is integrated and tested and goes live once the pay-out provider's sandbox sign-off and the compliance review are done. Until then your balance keeps working for airtime, data, electricity and WaPay payments, and every rand stays yours.</p>
         </div>
       ) : (
         <div className="card mt">
@@ -1206,6 +1211,15 @@ function Payouts() {
             </div>
             <div><label className="f">Amount</label><input inputMode="decimal" placeholder="R 500.00" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
           </div>
+          {quote?.speeds && (
+            <div className="mt">
+              <label className="f">When</label>
+              <select value={speed} onChange={(e) => setSpeed(e.target.value)}>
+                <option value="NEXT_DAY">Next business day, from 08:00 ({R(quote.speeds.NEXT_DAY.feeCents)} fee)</option>
+                <option value="SAME_DAY" disabled={!quote.speeds.SAME_DAY.available}>Same day ({R(quote.speeds.SAME_DAY.feeCents)} fee){quote.speeds.SAME_DAY.available ? '' : ' (not for money under 2 hours old)'}</option>
+              </select>
+            </div>
+          )}
           <div className="grid two mt">
             <div><label className="f">Recipient first name</label><input value={rec.firstname} onChange={(e) => setRec({ ...rec, firstname: e.target.value })} maxLength={40} /></div>
             <div><label className="f">Surname</label><input value={rec.surname} onChange={(e) => setRec({ ...rec, surname: e.target.value })} maxLength={40} /></div>
@@ -1227,7 +1241,7 @@ function Payouts() {
           <input type={st.hasPassword ? 'password' : 'text'} autoComplete={st.hasPassword ? 'current-password' : 'one-time-code'} value={stepUp} onChange={(e) => setStepUp(e.target.value)} />
           <button className="btn p" style={{ width: '100%', marginTop: 12, padding: 14, fontSize: 15 }} disabled={busy || !quote || quote.error || !st.kyc.verified && st.kyc.required} onClick={submit}>{busy ? 'Paying out…' : 'Pay out'}</button>
           {err && <div className="err">{err}</div>}
-          {result?.ok && <div className="ok">{result.status === 'AWAITING_APPROVAL' ? `Waiting for approval: a person at WaPay checks every pay-out before it goes. The amount and the fee are set aside; reference ${result.reference}.` : result.status === 'SETTLED' ? `Paid. Reference ${result.reference}.` : `Accepted by the bank rail, reference ${result.reference}. It shows as paid below as soon as the bank confirms.`}</div>}
+          {result?.ok && <div className="ok">{result.status === 'AWAITING_APPROVAL' ? `Waiting for approval: a person at WaPay checks every pay-out before it goes. The amount and the fee are set aside; reference ${result.reference}.` : result.status === 'SCHEDULED' ? `Set aside for the next business day: it goes from 08:00 that day. Reference ${result.reference}.` : result.status === 'SETTLED' ? `Paid. Reference ${result.reference}.` : `Accepted by the bank rail, reference ${result.reference}. It shows as paid below as soon as the bank confirms.`}</div>}
         </div>
       )}
       <div className="card mt">
@@ -1235,7 +1249,7 @@ function Payouts() {
         {!hist.length ? <div className="empty">No pay-outs yet.</div> : (
           <div style={{ overflowX: 'auto' }}><table>
             <thead><tr><th>Date</th><th>Reference</th><th>How</th><th>To</th><th className="n">Amount</th><th className="n">Fee</th><th>Status</th></tr></thead>
-            <tbody>{hist.map((h) => <tr key={h.reference}><td className="note" style={{ margin: 0, whiteSpace: 'nowrap' }}>{dt(h.createdAt)}</td><td><code>{h.reference}</code></td><td>{h.method}</td><td>{h.recipient?.name}{h.recipient?.account ? ` · ${h.recipient.account}` : h.recipient?.mobile ? ` · ${h.recipient.mobile}` : ''}</td><td className="n">{R(h.amountCents)}</td><td className="n">{R(h.feeCents)}</td><td><span className={`pill ${h.status === 'SUCCESS' ? 'g' : h.status === 'PENDING' ? 'y' : 'r'}`}>{h.status === 'SUCCESS' ? 'PAID' : h.status}</span></td></tr>)}</tbody>
+            <tbody>{hist.map((h) => <tr key={h.reference}><td className="note" style={{ margin: 0, whiteSpace: 'nowrap' }}>{dt(h.createdAt)}</td><td><code>{h.reference}</code></td><td>{h.method}</td><td>{h.recipient?.name}{h.recipient?.account ? ` · ${h.recipient.account}` : h.recipient?.mobile ? ` · ${h.recipient.mobile}` : ''}</td><td className="n">{R(h.amountCents)}</td><td className="n">{R(h.feeCents)}</td><td><span className={`pill ${h.status === 'SUCCESS' ? 'g' : ['PENDING', 'SCHEDULED', 'AWAITING_APPROVAL'].includes(h.status) ? 'y' : 'r'}`}>{h.status === 'SUCCESS' ? 'PAID' : h.status}</span></td></tr>)}</tbody>
           </table></div>
         )}
       </div>

@@ -4,6 +4,52 @@
 
 ---
 
+## 2026-11-11 (139) — A pay-out to a bank account has two speeds: R12 on the next business day or R20 the same day; money under 2 hours old goes on the next business day only
+
+The founder's decision (7 Nov, confirmed 11 Nov "12 yes"): "payout to your bank is R12 for all payouts, and if you want
+a same-day payout, it's R20 ... if it's cleared." Cash withdrawals keep R18 / R23 / R30.
+
+- **Fees** (`lib/ledger-core.js`): PayShap and RTC carry `nextDayFeeCents: 1200` (the default whenever a caller names no
+  speed) and bands of R20 (the same day). `cashoutFeeCents(method, amount, speed)`; cash ignores the speed.
+- **The rule** (`lib/payout-speed.js`, new):
+  - `nextBusinessDayAt`: 08:00 SAST on the first Monday to Friday after the request's day. Friday evening and the
+    weekend go to Monday. There is no public-holiday list in the code, so a weekday holiday counts.
+  - `sameDayCheck`: the same receipts and oldest-first ageing as the express fee (`freshNeed`, factored out of
+    `lib/payout-express.js`).
+- **`requestPayout`** (`lib/payouts.js`):
+  - SAME_DAY that needs money under 2 hours old is refused (`NOT_CLEARED`, with `clearedFromAt`) before any row, hold
+    or rail call.
+  - The express multiplier no longer applies to a bank account; cash keeps it.
+  - NEXT_DAY is set aside like an approval-mode request: SPEND to CASH, hold, destination encrypted, `releaseAt` on the
+    row. Status is AWAITING_APPROVAL in approval mode, SCHEDULED without it.
+  - A replay of a waiting or scheduled request now reports that status instead of FAILED.
+  - The R3,000 in 24 hours (`lib/payout-rules.js paidOutLast24h`) counts SCHEDULED too, so an approved
+    next-business-day pay-out cannot be stacked past the cap. AWAITING_APPROVAL still does not count (unchanged).
+- **Approval and release** (`lib/payout-approval.js`):
+  - Approved before its `releaseAt`, a request becomes SCHEDULED and the customer is told the day. Approved after it,
+    it goes at once.
+  - `releaseDuePayouts` sends due SCHEDULED rows, one at a time and claimed atomically. A freeze rejects; a short float
+    leaves the row SCHEDULED and alerts the ops numbers once a day. It runs from `GET /api/cron/payout-release`
+    (new, `vercel.json` `0 6 * * *` = 08:00 SAST) and as a floor inside `daily-vas-sync`.
+  - `rejectPayout` also stops a SCHEDULED pay-out. Mission Control and the signed approval link show the speed and the
+    day.
+- **Every channel names the speed:**
+  - **Chat:** the confirmation offers "1 Next business day (day, from 08:00): R12" and "2 Same day: R20". When the
+    money is fresh or the balance only covers R12, it offers the next business day alone and says why. The PIN step
+    carries the chosen fee. New copy: scheduled, not cleared, and the next-business-day line in the waiting-for-approval
+    and status replies.
+  - **Web app:** `payoutCheck` returns `speeds` and the page has a two-option choice.
+  - **Business portal:** a "When" select.
+  - **Operator pay-outs:** always SAME_DAY.
+- **Fee answers, the how-it-works brief and the audit brief** quote both prices. The rules line says fresh money goes
+  to a bank on the next business day only, and costs double as cash.
+- **Books** (`lib/payout-books.js`): AWAITING_APPROVAL, SCHEDULED and REJECTING count as open, holding states. This
+  also clears the "orphan hold" anomaly that •••0517's waiting R492 raised.
+- `WAPAY_TEMPLATE_MONEY_RECEIVED` added to the compliance check's template list.
+- **Money Map** v1.5: next-day and same-day rows for PayShap and RTC; `code-facts.json` re-synced.
+- **Tests:** `tests/payout-speed.test.mjs` (10, new). Rail tests that exercise the immediate rail now name SAME_DAY, the
+  express tests run on Nedbank cash, and copy tests carry R12 / R20. Full suite 1499/1499 and `next build` green.
+
 ## 2026-11-10 (138) — Paying your own link: the first time is allowed and the payer is told we can see it; after that, or from R1,000, a verified ID comes first
 
 The founder's rule (10 Nov), given while deciding the Adumo switch: own-link card payments (73% of Pay presses, and

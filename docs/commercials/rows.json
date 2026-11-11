@@ -1,7 +1,7 @@
 {
   "title": "WaPay Money Map",
-  "version": "1.4",
-  "date": "2026-10-23",
+  "version": "1.5",
+  "date": "2026-11-11",
   "referenceAmountsCents": [
     5000,
     20000,
@@ -571,7 +571,7 @@
     {
       "id": "out.payshap",
       "section": "out",
-      "name": "Withdraw by PayShap to own bank account",
+      "name": "Withdraw by PayShap to own bank account, next business day",
       "counterparty": "OTT Payout (PayShap Account, provider 127)",
       "productState": "PILOT",
       "productNote": "On in production for the five allowlisted numbers on OTT's sandbox. Sandbox PayShap is created then pends or fails at the provider (R50 pending since 2026-10-04 08:55).",
@@ -593,15 +593,16 @@
         "bands": [
           [
             null,
-            800
+            1200
           ]
         ],
         "status": "LIVE",
-        "source": "lib/ledger-core.js FEES.cashout.PAYSHAP: R8 flat (founder +R2 on 2026-09-11 over the R6 of 2026-08-10); quoted by lib/fee-facts.js and lib/how-it-works.js"
+        "source": "lib/ledger-core.js FEES.cashout.PAYSHAP.nextDayFeeCents: R12, the default speed (founder 2026-11-07, confirmed 2026-11-11: R12 next business day or R20 same day; money under 2 hours old only gets the next business day); sent from 08:00 SAST on the next South African business day (lib/payout-speed.js); quoted by lib/fee-facts.js and lib/how-it-works.js"
       },
       "codeRef": {
         "fn": "cashout",
-        "method": "PAYSHAP"
+        "method": "PAYSHAP",
+        "speed": "NEXT_DAY"
       },
       "competitors": [
         {
@@ -621,14 +622,53 @@
           "price": "R0 (verify)"
         }
       ],
-      "notes": "The margin rail: a constant R5.12 at every amount. Dearer than every bank's own PayShap (R0 to R2), so the story is reach, never price (benchmark 2026-09-11).",
-      "question": "Pay-out fees: keep the +R2 of 2026-09-11 (PayShap R8, bank transfer R10, cash R18/R23/R30) or return to R6/R8/R16 so CashSend sits under Absa's R16 and FNB's R11? docs/PAYOUT_COMMERCIALS.md section 7 (commit bea9856) sets out options A, B and C and recommends C: keep PayShap at R8, drop the +R2 on the cash methods only (R16 / R21 / R28), which leaves R2.12 at the R700 band top and matches Absa's own R16.",
+      "notes": "The margin rail: a constant R9.12 at every amount on the next business day, R17.12 the same day. Dearer than every bank's own PayShap (R0 to R2), so the story is reach, never price (benchmark 2026-09-11).",
+      "question": "None open on price: R12 next business day / R20 same day decided by the founder on 2026-11-07 and confirmed 2026-11-11. Open: watch whether customers pick the same day enough to matter.",
+      "owner": "Founder"
+    },
+    {
+      "id": "out.payshap_same_day",
+      "section": "out",
+      "name": "Withdraw by PayShap to own bank account, same day",
+      "counterparty": "OTT Payout (PayShap Account, provider 127)",
+      "productState": "PILOT",
+      "productNote": "On in production for the five allowlisted numbers on OTT's sandbox. Sandbox PayShap is created then pends or fails at the provider (R50 pending since 2026-10-04 08:55).",
+      "payer": "customer",
+      "limits": {
+        "minCents": 5000,
+        "maxCents": 300000
+      },
+      "cost": {
+        "fixedCents": 250,
+        "bps": 0,
+        "exVat": true,
+        "status": "SIGNED",
+        "source": "OTT Payout Agreement signed by WaPay 2026-08-25, co-signed by OTT 2026-09-10, Annexure A (the 2026 Addendum template restates the same rates): R2.50 per transaction ex VAT, no percentage on Bank EFT products (WaPay /OTT Onboarding /). Applied rate unverified until OTT's statement: R12.69 of sandbox float deductions on 2026-10-04 do not reconcile to the rates (docs/PAYOUT_COMMERCIALS.md section 2; OTT asked in emails 9 and 11)."
+      },
+      "price": {
+        "kind": "bands",
+        "method": "PAYSHAP",
+        "bands": [
+          [
+            null,
+            2000
+          ]
+        ],
+        "status": "LIVE",
+        "source": "lib/ledger-core.js FEES.cashout.PAYSHAP bands: R20 when the customer picks the same day (founder 2026-11-07, confirmed 2026-11-11); refused for money that reached the balance under 2 hours ago (lib/payout-speed.js sameDayCheck)"
+      },
+      "codeRef": {
+        "fn": "cashout",
+        "method": "PAYSHAP",
+        "speed": "SAME_DAY"
+      },
+      "question": "None open on price (founder decision 2026-11-07).",
       "owner": "Founder"
     },
     {
       "id": "out.rtc",
       "section": "out",
-      "name": "Withdraw by bank transfer (RTC)",
+      "name": "Withdraw by bank transfer (RTC), next business day",
       "counterparty": "OTT Payout (no RTC provider on the test merchant)",
       "productState": "PILOT",
       "productNote": "Built; no RTC provider is active on OTT's test merchant, so the chat does not offer it. Production availability asked in EMAIL_TO_KEAMO_9_COMMERCIALS (unsent as far as the repo knows).",
@@ -650,15 +690,16 @@
         "bands": [
           [
             null,
-            1000
+            1200
           ]
         ],
         "status": "LIVE",
-        "source": "lib/ledger-core.js FEES.cashout.RTC: R10 flat (+R2 decision 2026-09-11)"
+        "source": "lib/ledger-core.js FEES.cashout.RTC.nextDayFeeCents: R12, the same two speeds as PayShap (founder 2026-11-07: \"payout to your bank is R12 for all payouts\")"
       },
       "codeRef": {
         "fn": "cashout",
-        "method": "RTC"
+        "method": "RTC",
+        "speed": "NEXT_DAY"
       },
       "competitors": [
         {
@@ -666,6 +707,45 @@
           "price": "about R40 (WAPAY_B2B_PAYOUTS.md section 8.4)"
         }
       ],
+      "question": "Can OTT enable RTC for WaPay in production, and at what price? There is no RTC provider on the sandbox merchant.",
+      "owner": "OTT (Keamo)"
+    },
+    {
+      "id": "out.rtc_same_day",
+      "section": "out",
+      "name": "Withdraw by bank transfer (RTC), same day",
+      "counterparty": "OTT Payout (no RTC provider on the test merchant)",
+      "productState": "PILOT",
+      "productNote": "Built; no RTC provider is active on OTT's test merchant, so the chat does not offer it. Production availability asked in EMAIL_TO_KEAMO_9_COMMERCIALS (unsent as far as the repo knows).",
+      "payer": "customer",
+      "limits": {
+        "minCents": 2000,
+        "maxCents": 300000
+      },
+      "cost": {
+        "fixedCents": 450,
+        "bps": 0,
+        "exVat": true,
+        "status": "SIGNED",
+        "source": "OTT Payout Addendum 2026, Annexure A clause 3.3: R4.50 per transaction ex VAT"
+      },
+      "price": {
+        "kind": "bands",
+        "method": "RTC",
+        "bands": [
+          [
+            null,
+            2000
+          ]
+        ],
+        "status": "LIVE",
+        "source": "lib/ledger-core.js FEES.cashout.RTC bands: R20 the same day (founder 2026-11-07)"
+      },
+      "codeRef": {
+        "fn": "cashout",
+        "method": "RTC",
+        "speed": "SAME_DAY"
+      },
       "question": "Can OTT enable RTC for WaPay in production, and at what price? There is no RTC provider on the sandbox merchant.",
       "owner": "OTT (Keamo)"
     },
@@ -1672,15 +1752,16 @@
         "bands": [
           [
             null,
-            800
+            1200
           ]
         ],
         "status": "LIVE",
-        "source": "lib/payouts.js quotePayout uses cashoutFeeCents: PayShap R8 shown; RTC R10, cash R18/R23/R30"
+        "source": "lib/payouts.js quotePayout uses cashoutFeeCents: PayShap R12 on the next business day (R20 when the owner picks the same day); cash R18/R23/R30 (2026-11-11)"
       },
       "codeRef": {
         "fn": "cashout",
-        "method": "PAYSHAP"
+        "method": "PAYSHAP",
+        "speed": "NEXT_DAY"
       },
       "owner": "Founder"
     },

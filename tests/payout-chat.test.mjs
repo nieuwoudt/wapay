@@ -41,14 +41,14 @@ test('switch off → null (the coming-soon script stays); unverified → identit
   const pending = await startWithdraw({ account: { ...unverified, profile: { kyc: { status: 'PENDING' } } }, ask: {}, deps: deps() });
   assert.match(pending.text, /still being reviewed/);
   const poor = await startWithdraw({ account: verified, ask: {}, deps: { ...deps(1500), moneySituation: async () => null, gateHistory: async () => ({ count: 0, personAsked: false }) } });
-  assert.equal(poor.state, null); assert.match(poor.text, /You have R15 to withdraw\. A withdrawal needs at least R28 in your balance \(the R20 minimum plus the R8 PayShap fee\)/, 'the money first, then the minimum (2026-10-12)');
+  assert.equal(poor.state, null); assert.match(poor.text, /You have R15 to withdraw\. A withdrawal needs at least R32 in your balance \(the R20 minimum plus the R12 PayShap fee\)/, 'the money first, then the minimum (2026-10-12)');
 });
 
 test('happy path PayShap: menu → 1 → amount → account → bank → confirm → YES → PIN state; executes once with the KYC name and the intent id', async () => {
   env();
   const d = deps();
   const menu = await startWithdraw({ account: verified, ask: {}, deps: d });
-  assert.equal(menu.state, 'PAYOUT_METHOD'); assert.match(menu.text, /R1000 available/); assert.match(menu.text, /1️⃣ \*PayShap\*.*R8 fee/);
+  assert.equal(menu.state, 'PAYOUT_METHOD'); assert.match(menu.text, /R1000 available/); assert.match(menu.text, /1️⃣ \*PayShap\* to your bank account: R12 fee on the next business day, or R20 the same day\./);
   const amt = await handleWithdrawReply({ account: verified, state: 'PAYOUT_METHOD', data: menu.data, text: '1' });
   assert.equal(amt.state, 'PAYOUT_AMOUNT'); assert.equal(amt.data.method, 'PAYSHAP');
   const tooMuch = await handleWithdrawReply({ account: verified, state: 'PAYOUT_AMOUNT', data: amt.data, text: '999' });
@@ -60,15 +60,23 @@ test('happy path PayShap: menu → 1 → amount → account → bank → confirm
   const br = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ACCOUNT', data: acc.data, text: '62012345678' });
   assert.equal(br.state, 'PAYOUT_BRANCH');
   const conf = await handleWithdrawReply({ account: verified, state: 'PAYOUT_BRANCH', data: br.data, text: 'FNB' });
-  assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.equal(conf.data.recipient.account_number, '62012345678'); assert.equal(conf.data.recipient.branch_code, '250655'); assert.equal(conf.data.recipient.mobile, '0731234567', 'own number rides along for the SMS'); assert.equal(conf.data.feeCents, 800); assert.equal(conf.data.totalCents, 20800);
-  assert.match(conf.text, /Withdraw \*R200\* to account 62012345678 at FNB by PayShap/); assert.match(conf.text, /Total leaving your balance: \*R208\* \(R200 \+ R8 fee\)/); assert.match(conf.text, /Balance after: \*R792\*/);
-  const pin = await handleWithdrawReply({ account: verified, state: 'PAYOUT_CONFIRM', data: conf.data, text: 'yes' });
-  assert.equal(pin.state, 'PAYOUT_PIN'); assert.match(pin.text, /PIN/);
+  assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.equal(conf.data.recipient.account_number, '62012345678'); assert.equal(conf.data.recipient.branch_code, '250655'); assert.equal(conf.data.recipient.mobile, '0731234567', 'own number rides along for the SMS'); assert.equal(conf.data.speedChoice, true);
+  assert.match(conf.text, /Withdraw \*R200\* to account 62012345678 at FNB by PayShap/);
+  // The speed (founder 2026-11-07): the next business day for R12 or the same day for R20, picked before the PIN.
+  assert.match(conf.text, /When should it go\?\n1️⃣ \*Next business day\* \((Monday|Tuesday|Wednesday|Thursday|Friday) \d{1,2} \w+, from 08:00\): R12 fee, \*R212\* leaves your balance\n2️⃣ \*Same day\*: R20 fee, \*R220\* leaves your balance\n\nReply \*1\* or \*2\* to continue to your PIN, or \*NO\* to cancel\./);
+  const again = await handleWithdrawReply({ account: verified, state: 'PAYOUT_CONFIRM', data: conf.data, text: 'yes' });
+  assert.equal(again.state, 'PAYOUT_CONFIRM', 'YES does not pick a speed'); assert.match(again.text, /^Reply \*1\* for the next business day \(R12 fee\) or \*2\* for the same day \(R20 fee\)/);
+  const nextDay = await handleWithdrawReply({ account: verified, state: 'PAYOUT_CONFIRM', data: conf.data, text: '1' });
+  assert.equal(nextDay.state, 'PAYOUT_PIN'); assert.equal(nextDay.data.speed, 'NEXT_DAY'); assert.equal(nextDay.data.feeCents, 1200); assert.equal(nextDay.data.totalCents, 21200);
+  assert.match(nextDay.text, /^🔐 \*Enter your WaPay PIN\* to withdraw R200 \(R12 fee, next business day\)\.$/);
+  const pin = await handleWithdrawReply({ account: verified, state: 'PAYOUT_CONFIRM', data: conf.data, text: 'same day' });
+  assert.equal(pin.state, 'PAYOUT_PIN'); assert.equal(pin.data.speed, 'SAME_DAY'); assert.equal(pin.data.feeCents, 2000); assert.match(pin.text, /R20 fee, same day/);
   const done = await executeWithdraw({ account: verified, data: pin.data, pinProof: proofFor(verified, pin.data), deps: d });
   assert.equal(done.done, true); assert.match(done.text, /Done\./); assert.match(done.text, /WPTEST/);
   assert.equal(d.last.intentId, menu.data.intentId, 'the intent minted at the start is the idempotency key');
   assert.equal(d.last.recipient.firstname, 'Lerato'); assert.equal(d.last.recipient.surname, 'Mokoena', 'the KYC name goes to the bank, never a typed one');
   assert.equal(d.last.recipient.mobile, '0731234567'); assert.equal(d.last.method, 'PAYSHAP'); assert.equal(d.last.amountCents, 20000);
+  assert.equal(d.last.speed, 'SAME_DAY'); assert.equal(d.last.expectedFeeCents, 2000, 'the speed and the fee the customer picked travel with the pay-out');
 });
 
 test('bank transfer: account → bank name → confirm; ATM cash: number typed; cancel anywhere; PENDING and failures worded honestly', async () => {
@@ -81,7 +89,7 @@ test('bank transfer: account → bank name → confirm; ATM cash: number typed; 
   const unknown = await handleWithdrawReply({ account: verified, state: 'PAYOUT_BRANCH', data: s.data, text: 'Bank of Narnia' });
   assert.equal(unknown.state, 'PAYOUT_BRANCH');
   s = await handleWithdrawReply({ account: verified, state: 'PAYOUT_BRANCH', data: s.data, text: 'Standard Bank' });
-  assert.equal(s.state, 'PAYOUT_CONFIRM'); assert.equal(s.data.recipient.branch_code, '051001'); assert.match(s.text, /account 62012345678 at Standard Bank/); assert.equal(s.data.feeCents, 1000);
+  assert.equal(s.state, 'PAYOUT_CONFIRM'); assert.equal(s.data.recipient.branch_code, '051001'); assert.match(s.text, /account 62012345678 at Standard Bank/); assert.equal(s.data.feeCents, 1200);
   const c = await startWithdraw({ account: verified, ask: { amountCents: 30000, method: 'CASHSEND' }, deps: d });
   assert.equal(c.state, 'PAYOUT_MOBILE');
   const bad = await handleWithdrawReply({ account: verified, state: 'PAYOUT_MOBILE', data: c.data, text: '12' });
@@ -155,7 +163,7 @@ test('live providers drive the menu, the limits and the ID step (OTT test mercha
   const bad = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ID', data: idAsk.data, text: '123' });
   assert.equal(bad.state, 'PAYOUT_ID');
   const conf = await handleWithdrawReply({ account: verified, state: 'PAYOUT_ID', data: idAsk.data, text: '9001015009087' });
-  assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.equal(conf.data.recipient.id_number, '9001015009087'); assert.equal(conf.data.feeCents, 800);
+  assert.equal(conf.state, 'PAYOUT_CONFIRM'); assert.equal(conf.data.recipient.id_number, '9001015009087'); assert.equal(conf.data.feeCents, 1200);
   assert.match(conf.text, /Withdraw \*R50\* to account 62012345678 at FNB by PayShap/);
   const none = await startWithdraw({ account: verified, ask: {}, deps: { ...deps(), resolveProviders: async () => [] } });
   assert.equal(none.state, null); assert.match(none.text, /not available for a little while/, 'no live provider: an honest pause, never a dead flow');
@@ -442,9 +450,9 @@ test('round 3: the save question reads sentences and nicknames; other-flow asks 
 
 test('round 3: "add money" inside any withdraw step passes through; "you have it stored" answers from the saved list; the menu names the shortfall', async () => {
   envOff();
-  const d = { ...deps(6000), resolveProviders: async () => LIVE4 };
+  const d = { ...deps(6500), resolveProviders: async () => LIVE4 };
   const menu = await startWithdraw({ account: founder, ask: { amountCents: 5000, method: null }, deps: d });
-  assert.match(menu.text, /💡 With R60 you cannot use cash at an Absa ATM, cash at a Nedbank ATM or an FNB eWallet \(R68 with the fee\) yet\. Say \*add money\* to top up, or reply \*1\* for PayShap\./);
+  assert.match(menu.text, /💡 With R65 you cannot use cash at an Absa ATM, cash at a Nedbank ATM or an FNB eWallet \(R68 with the fee\) yet\. Say \*add money\* to top up, or reply \*1\* for PayShap\./);
   for (const t of ['Add money', 'I want to load money to WaPay', 'buy airtime', 'my balance']) {
     assert.deepEqual(await handleWithdrawReply({ account: founder, state: 'PAYOUT_METHOD', data: menu.data, text: t }), { state: null, passthrough: true }, t);
   }

@@ -76,12 +76,12 @@ test('requestPayout, the one door to the rail: no proof, a stale proof or anothe
   process.env.WAPAY_PAYOUT_KYC = 'off';
   for (const authorization of [null, 'nonsense', proofFor(account, { intentId: 'wa-lisa-1', amountCents: 50000 }), issuePinProof({ accountId: account.id, intentId: 'wa-lisa-1', amountCents: 34200, now: Date.now() - PIN_PROOF_TTL_MS - 1000 })]) {
     const r = rail();
-    const out = await requestPayout({ prisma: r.prisma, ledger: r.ledger, client: r.client, account, intentId: 'wa-lisa-1', method: 'PAYSHAP', amountCents: 34200, recipient, providers, authorization });
+    const out = await requestPayout({ prisma: r.prisma, ledger: r.ledger, client: r.client, account, intentId: 'wa-lisa-1', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 34200, recipient, providers, authorization });
     assert.equal(out.error, 'NOT_AUTHORISED');
     assert.deepEqual(r.calls, [], 'nothing written, moved, held or sent');
   }
   const r = rail();
-  const ok = await requestPayout({ prisma: r.prisma, ledger: r.ledger, client: r.client, account, intentId: 'wa-lisa-1', method: 'PAYSHAP', amountCents: 34200, recipient, providers, authorization: proofFor(account, { intentId: 'wa-lisa-1', amountCents: 34200 }) });
+  const ok = await requestPayout({ prisma: r.prisma, ledger: r.ledger, client: r.client, account, intentId: 'wa-lisa-1', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 34200, recipient, providers, authorization: proofFor(account, { intentId: 'wa-lisa-1', amountCents: 34200 }) });
   assert.notEqual(ok.error, 'NOT_AUTHORISED');
   assert.ok(r.calls.includes('rail'), 'with the proof the rail is reached');
   delete process.env.WAPAY_PAYOUT_KYC;

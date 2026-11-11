@@ -21,6 +21,7 @@ import {
   payoutBalances, listPayouts, requestPayout, PAYOUT_METHODS, MIN_PAYOUT_CENTS, MAX_PAYOUT_CENTS,
 } from '../../../lib/payouts.js';
 import { expressFor, recentReceipts, expressFeeLine } from '../../../lib/payout-express.js';
+import { speedFor, sameDayCheck, nextBusinessDayAt } from '../../../lib/payout-speed.js';
 
 export const config = { maxDuration: 30 };
 
@@ -60,9 +61,18 @@ export default async function handler(req, res) {
   try {
     if (body.action === 'quote') {
       // The express fee (lib/payout-express.js, 2026-10-24) is quoted here, so the owner sees it before confirming.
+      // A bank account has two speeds instead (lib/payout-speed.js, 2026-11-11): body.speed 'SAME_DAY' or the
+      // next business day; same day only when the pay-out needs no money under 2 hours old.
       const method = String(body.method || ''); const amountCents = Number(body.amountCents);
-      const base = quotePayout({ method, amountCents });
+      const speed = speedFor(method, body.speed);
+      const base = quotePayout({ method, amountCents, speed });
       const [bal, receipts] = await Promise.all([payoutBalances({ accountId: account.id }).catch(() => null), recentReceipts({ prisma, accountId: account.id }).catch(() => [])]);
+      if (speed) {
+        const sameDay = quotePayout({ method, amountCents, speed: 'SAME_DAY' });
+        const check = bal ? sameDayCheck({ balanceCents: bal.totalCents, receipts, amountCents, feeCents: sameDay.feeCents }) : { cleared: true, clearedFromAt: null };
+        const nextDay = quotePayout({ method, amountCents, speed: 'NEXT_DAY' });
+        return res.status(200).json({ ok: true, quote: { ...base, feeNote: null, releaseAt: speed === 'NEXT_DAY' ? new Date(nextBusinessDayAt()).toISOString() : null, speeds: { NEXT_DAY: { feeCents: nextDay.feeCents, totalCents: nextDay.totalCents, releaseAt: new Date(nextBusinessDayAt()).toISOString() }, SAME_DAY: { feeCents: sameDay.feeCents, totalCents: sameDay.totalCents, available: check.cleared, clearedFromAt: check.clearedFromAt } } } });
+      }
       const ex = bal ? expressFor({ balanceCents: bal.totalCents, receipts, amountCents, normalFeeCents: base.feeCents }) : null;
       const quote = ex?.express ? quotePayout({ method, amountCents, feeMultiplier: ex.multiplier }) : base;
       return res.status(200).json({ ok: true, quote: { ...quote, feeNote: ex?.express ? expressFeeLine(ex) : null } });
@@ -83,8 +93,10 @@ export default async function handler(req, res) {
         authorization: step.proof || null,
         // The fee the owner saw in the quote: a higher one is refused, never charged (2026-10-24).
         expectedFeeCents: Number.isInteger(body.feeCents) ? body.feeCents : null,
+        // A bank account's speed (2026-11-11): the next business day unless 'SAME_DAY' is named.
+        speed: body.speed || null,
       });
-      const status = out.ok ? 200 : out.error === 'KYC_REQUIRED' ? 403 : out.error === 'INSUFFICIENT_FUNDS' ? 402 : ['DISABLED', 'NOT_CONFIGURED', 'NO_PROVIDER', 'PAYOUT_HOLD'].includes(out.error) ? 503 : ['FEE_CHANGED', 'DAILY_CAP'].includes(out.error) ? 409 : out.error === 'REVIEW' ? 423 : 400;
+      const status = out.ok ? 200 : out.error === 'KYC_REQUIRED' ? 403 : out.error === 'INSUFFICIENT_FUNDS' ? 402 : ['DISABLED', 'NOT_CONFIGURED', 'NO_PROVIDER', 'PAYOUT_HOLD'].includes(out.error) ? 503 : ['FEE_CHANGED', 'DAILY_CAP', 'NOT_CLEARED'].includes(out.error) ? 409 : out.error === 'REVIEW' ? 423 : 400;
       console.log(JSON.stringify({ type: 'business_payout', businessId: business.id, via: step.via, ok: out.ok, status: out.status || out.error, reference: out.reference || null }));
       return res.status(status).json(out);
     }

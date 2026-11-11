@@ -117,6 +117,7 @@ import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEn
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
 import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders, getLatestPayout, reconcilePayout, reconcileInitPayout, payoutOutcomeMessage, PAYOUT_METHODS } from '../../../lib/payouts.js';
+import { releaseWhen } from '../../../lib/payout-speed.js';
 import { forgetPayoutDetails } from '../../../lib/payout-beneficiaries.js';
 import { OttPayoutClient } from '../../../lib/ott-payout.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
@@ -4836,7 +4837,12 @@ async function handlePayoutStatus({ from, account, payout, altLine = '' }) {
   if (status === 'AWAITING_APPROVAL' || status === 'REJECTING') {
     // Approval mode (lib/payout-approval.js, 2026-10-26): it has not gone to the bank; a person checks it first.
     const setAside = randsShort(Number(payout.amountCents || 0) + Number(payout.feeCents || 0));
-    text = `⏳ Your withdrawal of ${amount} by ${label} (reference ${payout.reference}) is waiting for approval: a person at WaPay checks every pay-out before it goes. ${setAside} is set aside for it and nothing has left WaPay.\n\n💰 Balance: R${balance}`;
+    // A next-business-day pay-out (lib/payout-speed.js, 2026-11-11) says when it goes once approved.
+    const day = payout.speed === 'NEXT_DAY' && payout.releaseAt ? ` Once approved, it goes on the next business day, ${releaseWhen(payout.releaseAt)}.` : '';
+    text = `⏳ Your withdrawal of ${amount} by ${label} (reference ${payout.reference}) is waiting for approval: a person at WaPay checks every pay-out before it goes. ${setAside} is set aside for it and nothing has left WaPay.${day}\n\n💰 Balance: R${balance}`;
+  } else if (status === 'SCHEDULED') {
+    const setAside = randsShort(Number(payout.amountCents || 0) + Number(payout.feeCents || 0));
+    text = `🗓️ Your withdrawal of ${amount} by ${label} (reference ${payout.reference}) is approved and goes to your bank on the next business day, ${releaseWhen(payout.releaseAt)}. ${setAside} is set aside for it and nothing has left WaPay yet.\n\n💰 Balance: R${balance}`;
   } else if (status === 'SUCCESS') {
     text = `✅ Your withdrawal of ${amount} by ${label} was paid (reference ${payout.reference}).\n\n💰 Balance: R${balance}`;
   } else if (status === 'FAILED') {

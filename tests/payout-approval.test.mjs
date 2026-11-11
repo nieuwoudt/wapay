@@ -70,24 +70,24 @@ function ledger() {
 }
 const rail = (seen = [], settlement = 'SETTLE') => ({ async performPayout(a) { seen.push(a); return { settlement, outcome: settlement === 'SETTLE' ? 'SETTLED' : 'PENDING_FINALISATION', status: settlement === 'SETTLE' ? 100 : 99, paymentReference: 'OTT1' }; }, async getPaymentStatus() { return {}; } });
 const ask = ({ prisma, led = ledger(), client = rail(), intentId = 'intent-ap0001', amountCents = 20000, alerts = [], extra = {} }) =>
-  requestPayout({ prisma, ledger: led, client, account, intentId, method: 'PAYSHAP', amountCents, recipient, providers, readFloat: async () => null, authorization: proofFor(account, { intentId, amountCents }), receipts: [], alertRequest: async (a) => { alerts.push(a); }, ...extra });
+  requestPayout({ prisma, ledger: led, client, account, intentId, method: 'PAYSHAP', speed: 'SAME_DAY', amountCents, recipient, providers, readFloat: async () => null, authorization: proofFor(account, { intentId, amountCents }), receipts: [], alertRequest: async (a) => { alerts.push(a); }, ...extra });
 
 test('approval mode: the request is checked, set aside and kept encrypted; nothing reaches the rail; the founder gets a link', async () => {
   env();
   const prisma = db(); const led = ledger(); const seen = []; const alerts = [];
   assert.equal(await isPayoutHeldFor({ prisma, account }), false, 'customers may ask while approval mode is on, even with the pause row');
   const out = await ask({ prisma, led, client: rail(seen), alerts });
-  assert.deepEqual({ ok: out.ok, status: out.status, feeCents: out.feeCents }, { ok: true, status: 'AWAITING_APPROVAL', feeCents: 800 });
+  assert.deepEqual({ ok: out.ok, status: out.status, feeCents: out.feeCents }, { ok: true, status: 'AWAITING_APPROVAL', feeCents: 2000 });
   assert.equal(seen.length, 0, 'no rail call');
   const row = prisma._prs[0];
   assert.equal(row.status, 'AWAITING_APPROVAL');
   assert.ok(row.metadata.approval.enc.startsWith('pii1:') || row.metadata.approval.enc.split(':').length === 4, 'the details are encrypted');
   assert.ok(!JSON.stringify(row).includes('62012345678') && !JSON.stringify(row).includes('9001015009087'), 'no account or ID number in the clear');
-  assert.equal([...led.holds.values()][0].amountCents, 20800, 'the amount and the fee are set aside');
+  assert.equal([...led.holds.values()][0].amountCents, 22000, 'the amount and the fee are set aside');
   assert.deepEqual(led.calls, ['ensureWallet', 'post:BALANCE_UPGRADE', 'reserveHold']);
   assert.match(alerts[0].text, /Result: WAITING FOR YOUR APPROVAL, money set aside, nothing sent\nApprove or reject: https:\/\/[^\s]+\/ops\/approve\?token=/);
   assert.equal(prisma._audits[0].metadata.outcome, 'AWAITING_APPROVAL');
-  assert.match(awaitingApprovalCopy(out), /^⏳ \*Waiting for approval\.\* A person at WaPay checks every pay-out before it goes\. Your R200 and the R8 fee are set aside for it and nothing has left WaPay \(reference WP[0-9A-F]{14}\)\. Ask me \*status\* any time to see where it is\.$/);
+  assert.match(awaitingApprovalCopy(out), /^⏳ \*Waiting for approval\.\* A person at WaPay checks every pay-out before it goes\. Your R200 and the R20 fee are set aside for it and nothing has left WaPay \(reference WP[0-9A-F]{14}\)\. Ask me \*status\* any time to see where it is\.$/);
   assert.ok(!/\b(soon|shortly|within|minutes?|hours?|today|tomorrow)\b/i.test(awaitingApprovalCopy(out)), 'no time promise');
   const list = await listAwaitingApproval({ prisma });
   assert.equal(list.length, 1); assert.equal(list[0].to.account, '•••678'); assert.equal(list[0].level, 1);
@@ -103,7 +103,7 @@ test('approve: claimed once, decrypted, sent through the same rail step, the cus
   assert.equal(seen[0].recipient.account_number, '62012345678', 'the rail gets the real details');
   assert.equal(prisma._prs[0].status, 'SUCCESS'); assert.equal(prisma._prs[0].metadata.approval.approvedBy, 'founder');
   assert.ok(!prisma._prs[0].metadata.approval.enc, 'the encrypted details are dropped once used');
-  assert.equal(led.settled[0].postings.find((p) => p.accountCode === 'REVENUE:FEE:CASHOUT').creditCents, 800);
+  assert.equal(led.settled[0].postings.find((p) => p.accountCode === 'REVENUE:FEE:CASHOUT').creditCents, 2000);
   assert.match(told[0].text, /^✅ Your withdrawal of R200 by PayShap has been paid/);
   assert.equal(told[0].templateEnv, 'WAPAY_TEMPLATE_PAYOUT_OUTCOME');
   assert.deepEqual(await approvePayout({ prisma, ledger: led, client: rail(seen), reference: out.reference }), { ok: false, error: 'NOT_WAITING' });
@@ -130,7 +130,7 @@ test('reject: the hold released, the money back to SPEND, the customer told; ide
   assert.deepEqual({ ok: r.ok, status: r.status }, { ok: true, status: 'REJECTED' });
   assert.equal(prisma._prs[0].status, 'FAILED'); assert.equal(prisma._prs[0].metadata.approval.rejectedBy, 'founder'); assert.ok(!prisma._prs[0].metadata.approval.enc);
   assert.ok(led.calls.includes('releaseHold')); assert.ok(led.calls.includes('post:BALANCE_DOWNGRADE'));
-  assert.match(told[0].text, /^❌ Your pay-out request of R200 by PayShap was not approved \(reference WP[0-9A-F]{14}\)\. The R200 and the R8 fee are back in your WaPay balance\./);
+  assert.match(told[0].text, /^❌ Your pay-out request of R200 by PayShap was not approved \(reference WP[0-9A-F]{14}\)\. The R200 and the R20 fee are back in your WaPay balance\./);
   assert.deepEqual(await rejectPayout({ prisma, ledger: led, reference: out.reference }), { ok: false, error: 'NOT_WAITING' });
   assert.ok(!/—/.test(rejectedCopy({ amountCents: 100, feeCents: 8, method: 'PAYSHAP', reference: 'WP1' })) && !/—/.test(approvedCopy({ status: 'PENDING', amountCents: 100, method: 'PAYSHAP', reference: 'WP1' })));
 });
@@ -223,6 +223,6 @@ test('the dashboard and the pages: a Pay-outs tab with approvals, requests and t
   const proc = read('../pages/api/webhooks/message-processor-v2.js');
   assert.match(proc, /if \(status === 'AWAITING_APPROVAL' \|\| status === 'REJECTING'\) \{/);
   assert.match(read('../lib/app-portal.js'), /'waiting for approval, set aside from your balance'/);
-  assert.match(read('../lib/app-portal.js'), /'AWAITING_APPROVAL', 'REJECTING'\] \}/);
+  assert.match(read('../lib/app-portal.js'), /'AWAITING_APPROVAL', 'SCHEDULED', 'REJECTING'\] \}/);
   assert.match(read('../lib/ops-payout.js'), /allowExpress: false, allowApproval: false/);
 });

@@ -2067,7 +2067,7 @@ function AuditPanel({ tick = 0 }) {
 
 /* ---------------- Pay-out requests with the fraud triage (founder 2026-10-24) ---------------- */
 const LEVEL_PILL = { 1: 'g', 2: 'g', 3: 'y', 4: 'r', 5: 'r' };
-const PAYOUT_OUTCOME = { SETTLED: 'paid', PENDING: 'with the bank', AWAITING_APPROVAL: 'waiting for your approval', REVIEW: 'held for your check', TEST_RUN: 'test run, nothing sent', FROZEN: 'refused: frozen', PAYOUT_HOLD: 'refused: paused', DAILY_CAP: 'refused: daily cap', KYC_REQUIRED: 'refused: ID check', FEE_CHANGED: 'stopped: fee changed', INSUFFICIENT_FUNDS: 'refused: balance', FLOAT_SHORT: 'refused: float empty', NOT_AUTHORISED: 'refused: no PIN' };
+const PAYOUT_OUTCOME = { SETTLED: 'paid', PENDING: 'with the bank', AWAITING_APPROVAL: 'waiting for your approval', SCHEDULED: 'set aside for the next business day', NOT_CLEARED: 'not sent: same day needs money older than 2 h', REVIEW: 'held for your check', TEST_RUN: 'test run, nothing sent', FROZEN: 'refused: frozen', PAYOUT_HOLD: 'refused: paused', DAILY_CAP: 'refused: daily cap', KYC_REQUIRED: 'refused: ID check', FEE_CHANGED: 'stopped: fee changed', INSUFFICIENT_FUNDS: 'refused: balance', FLOAT_SHORT: 'refused: float empty', NOT_AUTHORISED: 'refused: no PIN' };
 function PayoutRequests({ tick }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
@@ -2138,7 +2138,7 @@ function Approvals({ tick, onChange }) {
     try {
       const r = await fetch('/api/admin/payout-approvals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reference: p.reference, decision }) });
       const j = await r.json().catch(() => ({}));
-      setMsg(j.ok ? (j.status === 'REJECTED' ? `Rejected ${p.reference}: the money is back in their balance.` : `${p.reference}: ${j.status === 'SETTLED' ? 'paid' : 'sent to the bank rail'}.`)
+      setMsg(j.ok ? (j.status === 'REJECTED' ? `Rejected ${p.reference}: the money is back in their balance.` : j.status === 'SCHEDULED' ? `${p.reference}: approved, it goes on the next business day from 08:00 (${p.releaseAt ? new Date(p.releaseAt).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'next business day'}).` : `${p.reference}: ${j.status === 'SETTLED' ? 'paid' : 'sent to the bank rail'}.`)
         : j.error === 'FLOAT_SHORT' ? `The pay-out float has ${R(j.floatCents)} and ${p.reference} needs ${R(j.needCents)}. Top up OTT, then approve again; it is still waiting.`
         : j.error === 'FROZEN' ? `${p.phone} is frozen, so ${p.reference} was rejected and the money went back.` : `${p.reference} did not go through (${j.error || r.status}).`);
       load(); if (onChange) onChange();
@@ -2164,12 +2164,12 @@ function Approvals({ tick, onChange }) {
                 <tr key={p.reference}>
                   <td>{REL(p.requestedAt)}</td>
                   <td>{p.phone}{p.name ? ` ${p.name}` : ''}<div className="note" style={{ margin: 0 }}>{p.accountAgeDays} days · {p.idChecked ? 'ID checked' : 'no ID check'}{p.frozen ? ' · FROZEN' : ''}</div></td>
-                  <td className="n"><b>{R(p.amountCents)}</b><div className="note" style={{ margin: 0 }}>{p.methodLabel} · fee {R(p.feeCents)}{p.express ? ' (double)' : ''}</div></td>
+                  <td className="n"><b>{R(p.amountCents)}</b><div className="note" style={{ margin: 0 }}>{p.methodLabel} · fee {R(p.feeCents)}{p.express ? ' (double)' : ''}{p.speed === 'SAME_DAY' ? ' · same day' : p.speed === 'NEXT_DAY' ? ` · next business day${p.releaseAt ? ` (${new Date(p.releaseAt).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', weekday: 'short', day: 'numeric', month: 'short' })}, 08:00)` : ''}` : ''}</div></td>
                   <td>{[p.to?.name, p.to?.account || p.to?.mobile].filter(Boolean).join(' · ') || '–'}</td>
                   <td>{p.level ? <span className={`pill ${LEVEL_PILL[p.level] || 'y'}`}>{LEVEL_TEXT[p.level]}</span> : '–'}</td>
                   <td>{p.reasons?.length ? p.reasons.map((c) => c.toLowerCase().replace(/_/g, ' ')).join('; ') : 'nothing unusual'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    <button className="linkish" disabled={!!busy} onClick={() => decide(p, 'approve')}>Approve and pay</button>{' · '}
+                    {p.status === 'SCHEDULED' ? <span className="pill g" style={{ marginRight: 6 }}>Approved, goes on its business day</span> : <><button className="linkish" disabled={!!busy} onClick={() => decide(p, 'approve')}>{p.speed === 'NEXT_DAY' ? 'Approve' : 'Approve and pay'}</button>{' · '}</>}
                     <button className="linkish" disabled={!!busy} style={{ color: 'var(--crit)' }} onClick={() => decide(p, 'reject')}>Reject</button>
                   </td>
                 </tr>

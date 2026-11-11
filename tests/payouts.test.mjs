@@ -61,8 +61,12 @@ function client(script) { const calls = []; return { calls, async performPayout(
 test('quote + reference + recipient cleaning', () => {
   env();
   const q = quotePayout({ method: 'PAYSHAP', amountCents: 50000 });
-  assert.equal(q.feeCents, 800, 'PayShap flat R8 (ledger-core bands, +R2 margin 2026-09-11)');
-  assert.equal(q.totalCents, 50800);
+  assert.equal(q.feeCents, 1200, 'PayShap R12 on the next business day unless same day is named (founder 2026-11-07)');
+  assert.equal(q.totalCents, 51200);
+  assert.equal(q.speed, 'NEXT_DAY');
+  const same = quotePayout({ method: 'PAYSHAP', amountCents: 50000, speed: 'SAME_DAY' });
+  assert.equal(same.feeCents, 2000, 'PayShap R20 the same day'); assert.equal(same.totalCents, 52000); assert.equal(same.speed, 'SAME_DAY');
+  assert.equal(quotePayout({ method: 'CASHSEND', amountCents: 50000, speed: 'SAME_DAY' }).speed, null, 'cash has no speeds');
   assert.throws(() => quotePayout({ method: 'PAYSHAP', amountCents: MIN_PAYOUT_CENTS - 1 }), /between/);
   assert.throws(() => quotePayout({ method: 'PAYSHAP', amountCents: MAX_PAYOUT_CENTS + 1 }), /between/);
   assert.throws(() => quotePayout({ method: 'BITCOIN', amountCents: 5000 }), /Unknown/);
@@ -77,15 +81,15 @@ test('quote + reference + recipient cleaning', () => {
 test('gates: disabled, KYC, bad intent — nothing touches the ledger', async () => {
   env(false);
   const ledger = stubLedger();
-  assert.equal((await requestPayout({ prisma: stubPrisma(), ledger, account: kycd, intentId: 'intent-0001', method: 'PAYSHAP', amountCents: 50000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-0001', amountCents: 50000 }) })).error, 'DISABLED');
+  assert.equal((await requestPayout({ prisma: stubPrisma(), ledger, account: kycd, intentId: 'intent-0001', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 50000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-0001', amountCents: 50000 }) })).error, 'DISABLED');
   env();
-  assert.equal((await requestPayout({ prisma: stubPrisma(), ledger, account: { id: 'acc-2', profile: {} }, intentId: 'intent-0001', method: 'PAYSHAP', amountCents: 50000, recipient, providers, authorization: proofFor({ id: 'acc-2', profile: {} }, { intentId: 'intent-0001', amountCents: 50000 }) })).error, 'KYC_REQUIRED');
-  assert.equal((await requestPayout({ prisma: stubPrisma(), ledger, account: kycd, intentId: 'x', method: 'PAYSHAP', amountCents: 50000, recipient, providers, authorization: proofFor(kycd, { intentId: 'x', amountCents: 50000 }) })).error, 'BAD_INTENT');
-  assert.equal((await requestPayout({ prisma: stubPrisma(), ledger, account: kycd, intentId: 'intent-0001', method: 'PAYSHAP', amountCents: 100, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-0001', amountCents: 100 }) })).error, 'BAD_AMOUNT');
+  assert.equal((await requestPayout({ prisma: stubPrisma(), ledger, account: { id: 'acc-2', profile: {} }, intentId: 'intent-0001', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 50000, recipient, providers, authorization: proofFor({ id: 'acc-2', profile: {} }, { intentId: 'intent-0001', amountCents: 50000 }) })).error, 'KYC_REQUIRED');
+  assert.equal((await requestPayout({ prisma: stubPrisma(), ledger, account: kycd, intentId: 'x', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 50000, recipient, providers, authorization: proofFor(kycd, { intentId: 'x', amountCents: 50000 }) })).error, 'BAD_INTENT');
+  assert.equal((await requestPayout({ prisma: stubPrisma(), ledger, account: kycd, intentId: 'intent-0001', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 100, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-0001', amountCents: 100 }) })).error, 'BAD_AMOUNT');
   assert.deepEqual(ledger.calls, [], 'no ledger call for any refused request');
   process.env.WAPAY_PAYOUT_KYC = 'off';
   assert.equal(accountKycVerified({ profile: {} }), false);
-  const r = await requestPayout({ prisma: stubPrisma(), ledger: stubLedger(), client: client({ status: '100', settlement: 'SETTLE', outcome: 'SUCCESS', paymentReference: 'OTT1' }), account: { id: 'acc-2', profile: {} }, intentId: 'intent-0002', method: 'PAYSHAP', amountCents: 50000, recipient, providers, authorization: proofFor({ id: 'acc-2', profile: {} }, { intentId: 'intent-0002', amountCents: 50000 }) });
+  const r = await requestPayout({ prisma: stubPrisma(), ledger: stubLedger(), client: client({ status: '100', settlement: 'SETTLE', outcome: 'SUCCESS', paymentReference: 'OTT1' }), account: { id: 'acc-2', profile: {} }, intentId: 'intent-0002', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 50000, recipient, providers, authorization: proofFor({ id: 'acc-2', profile: {} }, { intentId: 'intent-0002', amountCents: 50000 }) });
   assert.equal(r.status, 'SETTLED', 'sandbox switch skips KYC');
   delete process.env.WAPAY_PAYOUT_KYC;
 });
@@ -93,15 +97,15 @@ test('gates: disabled, KYC, bad intent — nothing touches the ledger', async ()
 test('status 100: upgrade → hold → pay → settle (cashout) + rail cost; recorded SUCCESS; replay is a no-op', async () => {
   env();
   const prisma = stubPrisma(); const ledger = stubLedger(); const c = client({ status: '100', settlement: 'SETTLE', outcome: 'SUCCESS', paymentReference: 'OTT-REF-1' });
-  const r = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId: 'intent-1000', method: 'PAYSHAP', amountCents: 50000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-1000', amountCents: 50000 }) });
-  assert.equal(r.ok, true); assert.equal(r.status, 'SETTLED'); assert.equal(r.feeCents, 800); assert.equal(r.providerRef, 'OTT-REF-1');
+  const r = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId: 'intent-1000', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 50000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-1000', amountCents: 50000 }) });
+  assert.equal(r.ok, true); assert.equal(r.status, 'SETTLED'); assert.equal(r.feeCents, 2000); assert.equal(r.providerRef, 'OTT-REF-1');
   assert.deepEqual(ledger.calls, ['ensureWallet', 'post:BALANCE_UPGRADE', 'reserveHold', 'settleHold:CASHOUT_PAYSHAP', 'post:CASHOUT_COST_PAYSHAP']);
   assert.equal(c.calls[0].amountCents, 50000); assert.equal(c.calls[0].providerCode, '7'); assert.match(c.calls[0].yourUniqueReference, /^WP/);
   assert.equal(c.calls[0].recipient.mobile, '27731234567');
   assert.equal(prisma._prs[0].status, 'SUCCESS'); assert.equal(prisma._prs[0].providerRef, 'OTT-REF-1');
   assert.equal(prisma._prs[0].metadata.recipient.account, '•••678', 'recipient stored masked');
-  assert.equal(ledger.spend, 100000 - 50800, 'amount + fee left SPEND'); assert.equal(ledger.cash, 0, 'and CASH after settle');
-  const again = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId: 'intent-1000', method: 'PAYSHAP', amountCents: 50000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-1000', amountCents: 50000 }) });
+  assert.equal(ledger.spend, 100000 - 52000, 'amount + fee left SPEND'); assert.equal(ledger.cash, 0, 'and CASH after settle');
+  const again = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId: 'intent-1000', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 50000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-1000', amountCents: 50000 }) });
   assert.equal(again.replayed, true); assert.equal(again.status, 'SETTLED'); assert.equal(c.calls.length, 1, 'the double submit never reaches OTT');
 });
 
@@ -109,7 +113,7 @@ test('status 99/98 or a transport timeout: hold KEPT, recorded PENDING; the webh
   env();
   for (const script of [{ status: '99', settlement: 'PENDING', outcome: 'PENDING_FINALISATION', paymentReference: 'P1' }, { status: null, settlement: 'PENDING', outcome: 'TRANSPORT_INDETERMINATE', reconcileRequired: true, paymentReference: null }]) {
     const prisma = stubPrisma(); const ledger = stubLedger();
-    const r = await requestPayout({ prisma, ledger, client: client(script), account: kycd, intentId: 'intent-2000', method: 'PAYSHAP', amountCents: 20000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-2000', amountCents: 20000 }) });
+    const r = await requestPayout({ prisma, ledger, client: client(script), account: kycd, intentId: 'intent-2000', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 20000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-2000', amountCents: 20000 }) });
     assert.equal(r.status, 'PENDING');
     assert.deepEqual(ledger.calls, ['ensureWallet', 'post:BALANCE_UPGRADE', 'reserveHold'], 'never released, never settled');
     assert.equal(ledger.holds.get('payout-acc-1-intent-2000-hold').status, 'ACTIVE');
@@ -122,7 +126,7 @@ test('status 99/98 or a transport timeout: hold KEPT, recorded PENDING; the webh
   }
   // webhook: failed at the provider → release + money back to SPEND
   const prisma = stubPrisma(); const ledger = stubLedger();
-  const r = await requestPayout({ prisma, ledger, client: client({ status: '98', settlement: 'PENDING', outcome: 'PENDING' }), account: kycd, intentId: 'intent-2001', method: 'PAYSHAP', amountCents: 20000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-2001', amountCents: 20000 }) });
+  const r = await requestPayout({ prisma, ledger, client: client({ status: '98', settlement: 'PENDING', outcome: 'PENDING' }), account: kycd, intentId: 'intent-2001', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 20000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-2001', amountCents: 20000 }) });
   assert.equal((await finalisePayout({ prisma, ledger, reference: r.reference, status: '98' })).noop, true, 'still pending: nothing changes');
   const failed = await finalisePayout({ prisma, ledger, reference: r.reference, status: '97', message: 'Failed at provider' });
   assert.equal(failed.status, 'FAILED'); assert.equal(prisma._prs[0].status, 'FAILED');
@@ -144,8 +148,8 @@ test('provider rejects (status 0 / 4 / 97 at request time): released, money back
 test('insufficient balance: refused before any hold; no provider for the method: refused before any ledger call', async () => {
   env();
   const prisma = stubPrisma(); const ledger = stubLedger({ spendCents: 1000 });
-  const r = await requestPayout({ prisma, ledger, client: client({}), account: kycd, intentId: 'intent-4000', method: 'PAYSHAP', amountCents: 50000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-4000', amountCents: 50000 }) });
-  assert.equal(r.error, 'INSUFFICIENT_FUNDS'); assert.equal(r.totalCents, 50800);
+  const r = await requestPayout({ prisma, ledger, client: client({}), account: kycd, intentId: 'intent-4000', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 50000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-4000', amountCents: 50000 }) });
+  assert.equal(r.error, 'INSUFFICIENT_FUNDS'); assert.equal(r.totalCents, 52000);
   assert.deepEqual(ledger.calls, ['ensureWallet', 'post:BALANCE_UPGRADE']); assert.equal(prisma._prs[0].status, 'FAILED');
   const l2 = stubLedger();
   const r2 = await requestPayout({ prisma: stubPrisma(), ledger: l2, client: client({}), account: kycd, intentId: 'intent-4001', method: 'RTC', amountCents: 50000, recipient, providers, authorization: proofFor(kycd, { intentId: 'intent-4001', amountCents: 50000 }) });
@@ -197,9 +201,9 @@ test('OTT limits shape (2026-09-15): providers map by name, required fields come
   const ok = cleanRecipient('PAYSHAP', { firstname: 'L', surname: 'M', mobile: '0731234567', account_number: '62012345678', branch_code: '250655', id_number: '9001015009087' }, list[0].requiredFields);
   assert.equal(ok.id_number, '9001015009087'); assert.equal(ok.mobile, '27731234567');
   const l = stubLedger();
-  const r = await requestPayout({ prisma: stubPrisma(), ledger: l, client: c, account: kycd, intentId: 'intent-5000', method: 'PAYSHAP', amountCents: 3000, recipient: { ...recipient, id_number: '9001015009087' }, providers: list, authorization: proofFor(kycd, { intentId: 'intent-5000', amountCents: 3000 }) });
+  const r = await requestPayout({ prisma: stubPrisma(), ledger: l, client: c, account: kycd, intentId: 'intent-5000', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 3000, recipient: { ...recipient, id_number: '9001015009087' }, providers: list, authorization: proofFor(kycd, { intentId: 'intent-5000', amountCents: 3000 }) });
   assert.equal(r.error, 'BAD_AMOUNT'); assert.equal(r.minCents, 5000); assert.deepEqual(l.calls, [], 'below the provider minimum: refused before any ledger call');
-  const r2 = await requestPayout({ prisma: stubPrisma(), ledger: stubLedger(), client: c, account: kycd, intentId: 'intent-5001', method: 'PAYSHAP', amountCents: 5000, recipient, providers: list, authorization: proofFor(kycd, { intentId: 'intent-5001', amountCents: 5000 }) });
+  const r2 = await requestPayout({ prisma: stubPrisma(), ledger: stubLedger(), client: c, account: kycd, intentId: 'intent-5001', method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 5000, recipient, providers: list, authorization: proofFor(kycd, { intentId: 'intent-5001', amountCents: 5000 }) });
   assert.equal(r2.error, 'BAD_RECIPIENT'); assert.equal(r2.field, 'id_number', 'the live required fields are enforced');
   _resetProviderCache();
 });

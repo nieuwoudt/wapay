@@ -68,11 +68,13 @@ test('the 0.3% switching fee is CashSend/VAS only — never PayShap or RTC', () 
 test('EVERY rail is margin-positive at EVERY amount R50..R3000', () => {
   for (const rail of RAILS) {
     for (let cents = MIN_CENTS; cents <= MAX_CENTS; cents += 100) {
-      const margin = cashoutMarginCents(rail, cents);
-      assert.ok(
-        margin > 0,
-        `${rail} loses ${margin}c at ${cents}c — a fee band is underwater`
-      );
+      for (const speed of [null, 'SAME_DAY']) {
+        const margin = cashoutMarginCents(rail, cents, speed);
+        assert.ok(
+          margin > 0,
+          `${rail} ${speed || 'default'} loses ${margin}c at ${cents}c — a fee band is underwater`
+        );
+      }
     }
   }
 });
@@ -92,7 +94,9 @@ test('PayShap is the margin rail: constant margin at any ticket size', () => {
   const small = cashoutMarginCents('PAYSHAP', MIN_CENTS);
   const large = cashoutMarginCents('PAYSHAP', MAX_CENTS);
   assert.equal(small, large, 'flat cost + flat fee = flat margin');
-  assert.equal(small, 512, 'R8.00 charged - R2.88 cost incl VAT (+R2 margin 2026-09-11)');
+  assert.equal(small, 912, 'R12.00 charged on the next business day - R2.88 cost incl VAT (founder 2026-11-07)');
+  assert.equal(cashoutMarginCents('PAYSHAP', MIN_CENTS, 'SAME_DAY'), 1712, 'R20.00 charged the same day - R2.88 cost incl VAT');
+  assert.equal(cashoutMarginCents('PAYSHAP', MAX_CENTS, 'SAME_DAY'), 1712, 'the same day is flat too');
   // It must also beat CashSend at the top end — that is why we steer to it.
   assert.ok(
     cashoutRailCostCents('PAYSHAP', MAX_CENTS) < cashoutRailCostCents('CASHSEND', MAX_CENTS)
