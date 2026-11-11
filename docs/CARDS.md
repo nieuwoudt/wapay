@@ -371,6 +371,36 @@ documents per card).
    - "get a card", "add money to my card", "my card", freeze;
    - the float card.
 
+### 0.10 Live portal: funding the first virtual card (2026-11-07 to 2026-11-11)
+
+WaPay is onboarded on PayCentral's live portal (company "Wapay Pty Ltd"). The founder is
+testing by hand before any code: first a DigiCentral virtual card, with a few CashCentral
+physical cards ordered alongside to learn delivery, assignment and PIN.
+
+**How funding works (quote QU-27681, 11 Nov 2026):**
+- **Each product has its own account and its own bank account.**
+  - The virtual-card account is "Wapay Pty Ltd (VC 8729334261)".
+  - It is paid into a Standard Bank account named "Prepay Central DigiCentral VC". Take the
+    numbers from the quote, never from memory.
+  - The portal's generic "Pay offline via EFT" details (invoice INV-65126) failed FNB's
+    account-number check on 2026-11-07. The founder asked PayCentral to confirm them and to
+    cancel that invoice.
+- **The payment reference must be the product account's 10-digit number.** A wrong or
+  incomplete reference may carry a R1,500 admin fee.
+- **The load fee is charged when the account is funded, not per card load.** R1,000 "Issue
+  Volume" (VAT exempt) carries R50 + R7.50 VAT service fees, R1,057.50 in total: 5.75% all in.
+- **Quotes expire the same day.**
+
+**For the build:**
+- **Float per product.** Each product account is a separate float: one `CLEARING:PAYCENTRAL`
+  position per product account, each reconciled against its own statement.
+- **Fees are booked at funding.** The 5% plus VAT is a cost of topping up the float. A per-load
+  customer fee therefore has to cover a cost WaPay paid in advance. Model it in
+  `docs/COMMERCIALS.md` once the white-label price is known.
+- **Funding is manual.** Topping up the float is an ops task: quote, EFT with the exact
+  reference, then allocation. Mission Control's float card needs a low-balance alarm per
+  product account.
+
 ---
 
 ## Paymentology direct (2026-10-15; the route at 30,000 cards)
