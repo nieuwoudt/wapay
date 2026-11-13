@@ -307,6 +307,15 @@ security measure").
   proxy agent on that client).
 - **Testing:** calls work only from the whitelisted IPs, so staging tests run on Vercel
   deployments, not on laptops.
+- **2026-11-13: PayCentral asked for the IP and a test email** (`EMAIL_TO_PAYCENTRAL_5_STATIC_IP.txt`).
+  Decision: start with Vercel Static IPs for staging (enabled in minutes, no code).
+  - The repo's standing note for Blu (`docs/BLU_PRODUCTION_CUTOVER.md`, memory
+    `vercel-static-egress-ip`) records the same choice: Vercel's pair is shared; a Fly.io
+    Johannesburg egress is the dedicated option.
+  - Blu and PayCentral should share one egress route, so each partner whitelists one set of
+    addresses.
+  - Revisit dedicated egress before production.
+  - API credentials go into Vercel env (Preview first), never into chat or the repo.
 
 **The API (REST/JSON).**
 - **Base URL:** `https://staging-api.paycentral.co.za`; production URL to come.

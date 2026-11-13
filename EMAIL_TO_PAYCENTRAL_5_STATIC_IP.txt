@@ -1,0 +1,25 @@
+PAYCENTRAL: STATIC IP AND TEST EMAIL FOR STAGING
+Written 2026-11-13, in reply to PayCentral's "Please share a static IP address and email that will
+be used for testing." Before sending: enable Vercel Static IPs (WaPay project, region Stockholm,
+arn1, the region in vercel.json) and paste the two addresses Vercel shows; choose the test email
+(a role mailbox such as api@wapay.co.za is better than a personal one, because the API login is
+tied to it). Fill in the name. No em dashes (founder style).
+
+-----------------------------------------------------------------------------
+
+Subject: Re: Staging access: static IP and test email
+
+Hi <name>,
+
+Thank you. Our platform runs on Vercel, and our calls to your API will come from these two static IP addresses (our Vercel region):
+- <IP address 1>
+- <IP address 2>
+
+Please whitelist both for the staging environment.
+
+The email address for our test user is <test email>. Please send the staging credentials there, with the password sent separately from the username (for example by SMS to 078 705 1175).
+
+Once the addresses are whitelisted, we will start testing virtual card creation and loads on staging.
+
+Kind regards,
+Niev
