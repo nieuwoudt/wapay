@@ -15,6 +15,8 @@ import Head from 'next/head';
 import dynamic from 'next/dynamic';
 // The Links tab (2026-10-25): Leaflet touches the window, so the tab renders in the browser only.
 const LinkMapTab = dynamic(() => import('../../components/admin/LinkMapTab.js'), { ssr: false });
+// The Programme tab (2026-11-13): every workstream, thread and open item, read from the published snapshot.
+import ProgrammeTab from '../../components/admin/ProgrammeTab.js';
 import { fmtR, fmtN, simulate, preset, budgetFn, BUDGET_DEFAULT } from '../../lib/scale-model.js';
 import { Bars, WeeklyFlows, TakeRate, StackBars, DailyBars, DailyLines, PathChart, ValuationPath } from '../../lib/admin-charts.js';
 
@@ -2432,7 +2434,7 @@ function Inbox() {
   );
 }
 
-const TABS = [['dashboard', 'Dashboard'], ['growth', 'Valuation Metrics'], ['inbox', 'Inbox'], ['customer', 'Customers'], ['payouts', 'Pay-outs'], ['links', 'Link map'], ['health', 'Health'], ['floats', 'Supplier Floats']];
+const TABS = [['dashboard', 'Dashboard'], ['growth', 'Valuation Metrics'], ['inbox', 'Inbox'], ['customer', 'Customers'], ['payouts', 'Pay-outs'], ['links', 'Link map'], ['health', 'Health'], ['floats', 'Supplier Floats'], ['programme', 'Programme']];
 
 export default function Admin() {
   const [authed, setAuthed] = useState(null);
@@ -2489,7 +2491,7 @@ export default function Admin() {
       {authed === null && <div className="card"><div className="empty">…</div></div>}
       {authed === false && <Login configured={configured} passwordLogin={passwordLogin} onDone={probe} />}
       {authed === true && (
-        tab === 'dashboard' ? <Dashboard /> : tab === 'growth' ? <Growth /> : tab === 'inbox' ? <Inbox /> : tab === 'health' ? <Health /> : tab === 'floats' ? <FloatsTab /> : tab === 'links' ? <LinkMapTab /> : tab === 'payouts' ? <PayoutsTab /> : <Customer initialQuery={initialCustomer} />
+        tab === 'dashboard' ? <Dashboard /> : tab === 'growth' ? <Growth /> : tab === 'inbox' ? <Inbox /> : tab === 'health' ? <Health /> : tab === 'floats' ? <FloatsTab /> : tab === 'links' ? <LinkMapTab /> : tab === 'payouts' ? <PayoutsTab /> : tab === 'programme' ? <ProgrammeTab /> : <Customer initialQuery={initialCustomer} />
       )}
     </div>
   );
