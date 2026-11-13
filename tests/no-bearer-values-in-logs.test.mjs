@@ -28,6 +28,23 @@ test('the Blu status check logs the path with the PIN masked, never the address 
   }
 });
 
+test('a supplier error body is logged with any echo of the PIN masked', async () => {
+  const src = read('packages/providers/blu/src/client.ts');
+  assert.ok(!/responseBody:\s*(errorBody|errorData)\s*,/.test(src), 'no raw supplier body in a log call');
+  assert.equal((src.match(/responseBody: bodyForLog\((errorBody|errorData), pin\)/g) || []).length, 2, 'the status failure and the redeem failure');
+  // Behaviour, when the package is built (pnpm build:packages): the mask replaces every echo, in text and in JSON.
+  const blu = await import('@wapay/providers-blu');
+  if (typeof blu.bodyForLog !== 'function') return;
+  const pin = '4' + '7'.repeat(11);
+  const masked = blu.bodyForLog({ message: `Voucher ${pin} is not valid`, token: pin }, pin);
+  assert.equal(typeof masked, 'string');
+  assert.ok(!masked.includes(pin), 'the PIN is gone');
+  assert.ok(masked.includes('not valid'), 'the meaning is kept');
+  assert.ok(!blu.bodyForLog(`echo ${pin} twice ${pin}`, pin).includes(pin));
+  assert.equal(blu.bodyForLog({ message: 'Service unavailable' }, pin), '{"message":"Service unavailable"}', 'a body without the PIN is unchanged');
+  assert.equal(blu.bodyForLog('x'.repeat(5000), pin).length, 2000, 'and cut');
+});
+
 test('the electricity sale logs that a token exists, not the token', () => {
   const src = read('pages/api/vas/electricity/execute.js');
   const calls = [];

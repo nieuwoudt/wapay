@@ -28,6 +28,22 @@ export type BluVoucherStatus = {
  * - BLU_BASIC_USER: Basic auth username (optional)
  * - BLU_BASIC_PASS: Basic auth password (optional)
  */
+/**
+ * A supplier's error body as the log may see it: any echo of the voucher PIN is
+ * replaced by its mask, and the text is cut. For logging only; the code that
+ * decides what the error means reads the real body (review 2026-11-13).
+ */
+export function bodyForLog(body: unknown, pin: string): string {
+  let text: string;
+  try {
+    text = typeof body === 'string' ? body : JSON.stringify(body) ?? '';
+  } catch {
+    return '[unserialisable]';
+  }
+  const safe = pin && pin.length >= 6 ? text.split(pin).join(maskVoucherPin(pin)) : text;
+  return safe.slice(0, 2000);
+}
+
 export class BluClient {
   private base = requireEnv('BLU_BASE_URL');
   private user = process.env.BLU_BASIC_USER || '';
@@ -121,7 +137,7 @@ export class BluClient {
         method: 'GET',
         pin: maskVoucherPin(pin),
         statusCode: res.statusCode,
-        responseBody: errorBody,
+        responseBody: bodyForLog(errorBody, pin),
       });
 
       // The operator probe reads statusCode and reason off these errors
@@ -256,7 +272,7 @@ export class BluClient {
             method: 'POST',
             requestBody: { requestId: idemKey, token: masked, amount: amountCents },
             statusCode: res.statusCode,
-            responseBody: errorData,
+            responseBody: bodyForLog(errorData, pin),
             extractedMessage: message,
           });
           
