@@ -16,6 +16,8 @@ WaPay is a **live WhatsApp wallet for South Africa** (Next.js on Vercel, Postgre
   - `docs/CHANGELOG.md` — one dated section per meaningful commit
   - `docs/BUGLOG.md` — every bug: symptom → root cause → fix → guard
   - `docs/CAPABILITIES.md` — the single honest answer to "what works?"
+  - `docs/SYSTEM_ARCHITECTURE.md` — the whole system on one page: hosts, routes and their guards, crons, tables, suppliers, switches, subsystems. A change that adds one of those updates its row in the same commit
+  - **The programme board** — every open item across all workstreams and sessions. Master: `…/Desktop/WaPay /WAPAY_PROGRAMME_BOARD.json` (PRIVATE, outside this repo: the repo is public and the board carries security findings and fraud specifics; never commit it or copy its content into `docs/`). Rules: `docs/programme/README.md`. Read it at session start; before a session ends, update the items it owns, then `node scripts/programme-board.mjs check` and `publish`
   - Strategy/agreements/research live as `WAPAY_*.md` next to the tracker
 
 ## The golden thread (read first, keep always)
@@ -61,6 +63,7 @@ Multiple Claude threads may work this repo simultaneously. To avoid collisions:
 3. **Ship in small commits** with the tracker/CHANGELOG updated in the same push, so a parallel thread reading the tracker sees the truth.
 4. **Running out of context:** write a HANDOVER entry in the tracker before the thread dies: deployed HEAD, what's mid-flight, exact next steps, open user actions, and any credentials/answers received but not yet applied. The next thread starts from the tracker + memory index + `docs/CAPABILITIES.md`.
 5. **Memory:** durable strategic facts (agreements, regulatory positions, contacts, locked decisions) go in the auto-memory files, not just the chat.
+6. **The repository is public.** An unfixed security finding, a fraud pattern, a customer's name or number, or a supplier credential never goes into a commit, a commit message, a test or a doc. Fixed bugs are described by the guarantee the code now gives, not by a recipe. The private places are the programme board and the workspace folder above this repo.
 
 ## Working with Claude (Fable 5.1)
 

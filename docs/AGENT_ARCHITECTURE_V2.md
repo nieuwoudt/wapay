@@ -1,6 +1,6 @@
 # The Pay agent: architecture v2 (the moat)
 
-**Version 1.8 · 2026-09-18 · build f91e317** (the version table is section 15; the visual map is docs/architecture/pay-agent-architecture.html, published at https://claude.ai/artifact/LzMx7uSJLfbyJeRftpPuMB)
+**Version 1.12 · 2026-11-13 · re-baselined at build 6df86a2** (the version table is section 15; the visual map is docs/architecture/pay-agent-architecture.html, published at https://claude.ai/artifact/LzMx7uSJLfbyJeRftpPuMB; everything around the chat brain, hosts, routes, crons, tables, suppliers, switches and 34 subsystems, is `docs/SYSTEM_ARCHITECTURE.md`)
 
 ## How this document is used
 
@@ -585,6 +585,7 @@ below is updated on every ship.
 | 1.9 | 2026-10-04 | `5249fd3` | Re-baseline after eleven quiet days: the pilot week restarted on 4 October (14 clean turns, day 1 of 7); the first customer withdrawal completed (Nedbank cardless R20, OTT 126382) and the product table's withdrawal row moves from F to C; the pay-out wire format (BUGLOG #80, #82) and the Adumo reporting/reconcile work (23 and 29 September) recorded as rail work outside this architecture; three side threads opened (Blu VAS, payouts + commercials, Money Map) with the main session as the architecture owner; the beneficiary record design (encrypted tables outside the profile, labels and masks into the pack) approved for section 13 when it lands. Map Version 13. |
 | 1.10 | 2026-10-04 | `a2c3912` | Map Version 14, the same afternoon: C6 carries saved pay-out details (labels and masks) in the record; C19’s pay-outs half lands as the Pay-out reconciliation card (seven checks across provider row, hold and journal, probed green against production data); C3/C12 gain the clarify-step slot rescue on the payouts thread’s parser (BUGLOG #83). The payouts thread’s remembered beneficiaries, compound answers and commercial model landed in 24d07f8 with the migration applied; the Money Map (3355df3, b9e1366) is the fee source of truth the registry will read from. |
 | 1.11 | 2026-10-06 | `bafa652` | Map Version 15 after founder review 5: composition policy rewritten in both brains (ways questions list every live way incl. cash; yes/no answered first, never started; two-or-more items are bullets, enforced by `normaliseLists`; best value with the balance in view; one history shape via `movementBullet`; start-command endings); the dispatcher answers a question in words for REDEEM_VOUCHER and DEPOSIT_START; the Mission Control reconciliation card carries parked electricity sales (7a0c232); the shortfall pattern recorded as the standing shape (Blu thread, RESUME_* states on the voucher precedent). Pilot week day 3 of 7, no money gate fired. |
+| 1.12 | 2026-11-13 | `6df86a2` | Map Version 16, a re-baseline after 139 commits with no update to this record. Phase 3 has not started: the agent still answers only the pilot list, no hook was deleted, the layer in front of the model grew from 29 to about 44 intercepts and the processor from 8,304 to 9,826 lines. Five component states changed (see "State on 2026-11-13" at the end of section 13). Thirty-four subsystems were built around the brain in those commits (pay-out rules, approval mode, fraud triage, the freeze, the own-link rule, the ledger send, two portals, the Link map, Meta compliance, the audit loop, the card refund route and more); none was a component here, so they are recorded in the new `docs/SYSTEM_ARCHITECTURE.md`. The same day: the programme board (CHANGELOG 140) and a security sweep (CHANGELOG 141). |
 
 - 2026-10-16, the model boundary and the golden thread (changelog 88, BUGLOG
   #111 to #114). **C4 grows a structural half:** besides the code guards, a
@@ -604,3 +605,48 @@ below is updated on every ship.
   demands a PIN proof (`@wapay/auth/pin-proof`) bound to account, intent and
   amount. The rules, their enforcing code and their tests are kept in
   `docs/GOLDEN_THREAD.md`.
+
+- **State on 2026-11-13 (re-baseline at `6df86a2`, read from the code by a
+  read-only review; nothing below is taken from the changelog).**
+  - **Phase 3 has not started.** The only way to the agent is still
+    `agentV3For` reading `WAPAY_AGENT_V3_MSISDNS`; no per-language promotion
+    exists; none of the 14 hooks on the deletion list is deleted; the
+    two-tier engine answers everyone off the list. No record of the pilot
+    week exists after day 3 of 7 on 6 October.
+  - **Five states differ from map Version 15.** Retire dead code: shipped to
+    partial (new dormant code: `apps/api`, `apps/ops`, `@wapay/nlp`,
+    `@wapay/ledger`, unused Prisma models). Rewrite the text locks: shipped to
+    partial (43 of 154 test files still read the processor as text).
+    Vercel plan decision: next to partial (two daily crons, still no
+    ten-minute sweep). Promote per language: shadow to next. notifyCustomer:
+    still partial, now behind the outbound guard with three template rails.
+  - **Same badge, corrected detail.** C4 has four guard kinds (COMING_SOON,
+    VOUCHER_PIN_RESEND, PAY_REQUEST_CODE, VOUCHER_PIN) followed by the
+    bare-secret check, not "3 of 10". C7 has 15 capability descriptors, not
+    11. C18's corpus is 166 cases (132 golden in eleven languages, 34 agent),
+    not 156, and is still run by hand. C3 has no 20 s deadline. C8 still
+    loads no focus knowledge (`focusKnowledge: null`). C19 is nine tabs on 31
+    admin routes with the Programme tab.
+  - **What the plan did not foresee.** The product grew sideways, not
+    through the agent: 34 subsystems in 139 commits, almost all of them rules
+    and operator tooling for money out after the October fraud. Each is live;
+    several have no document beyond the changelog (approval mode and its
+    links, the own-link rule, pay-out speeds and the release cron, the
+    watchlist, delivery health, the test-database guard). They are listed
+    with their code, tables, switches and tests in
+    `docs/SYSTEM_ARCHITECTURE.md` section 7.
+  - **The three structural risks, each with its smallest next step.** (1)
+    The processor is one 9,826-line file that grew a third while the plan was
+    to halve it: lift the thirteen intercepts above the shadow gate into one
+    exported ordered table, in place, with no behaviour change (the C4
+    design). (2) One 60-second nightly function runs fourteen jobs, three of
+    them money: schedule the existing `/api/cron/payout-reconcile` and take
+    the money steps out of the nightly run. (3) `processed_messages` holds
+    dedupe, pulses, the pay-out switches, claims and rate limits with no
+    retention: move the two pay-out switches to a settings table. The full
+    list of ten is `docs/SYSTEM_ARCHITECTURE.md` section 11.
+  - **A rule this record must gain.** The operator pay-out mints its own PIN
+    proof (`lib/ops-payout.js`) and admin routes approve, reject and freeze;
+    `docs/GOLDEN_THREAD.md` 2.2 and 2.10 do not say so and the structure test
+    misses the proof because it is imported under an alias. To correct in the
+    golden thread, with the test.

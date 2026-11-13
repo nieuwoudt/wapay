@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-11-13 (142) — The architecture record re-baselined after 139 commits: the whole system on one page, map Version 16, two golden-thread rules corrected
+
+No code. A read-only review compared every document of record with the tree at `6df86a2`.
+
+- **`docs/SYSTEM_ARCHITECTURE.md` (new):** hosts, every route with its guard, the crons and their steps, tables by
+  domain, suppliers, 61 switches, the chat brain component by component, and the 34 subsystems built around it since
+  6 October, each with its code, tables, switches, tests and where it is described. Ten structural risks, each with
+  its smallest next step.
+- **`docs/AGENT_ARCHITECTURE_V2.md` v1.12:** "State on 2026-11-13" at the end of section 13. Phase 3 has not started;
+  five component states differ from map Version 15; six details corrected under the same badge.
+- **Map Version 16** (`docs/architecture/rows.json`, the template, republished at the same address): where we are,
+  the caption, and the product table restated from the documents of record and the day's production readings. The
+  five wrong badges are corrected in words; the drawings are not redrawn yet.
+- **`docs/GOLDEN_THREAD.md`:** 2.2 names the operator pay-out as the one other proof issuer (the structure test must
+  be widened to see it); 2.10 is rewritten, because "admin routes are read-only" stopped being true on 26 October;
+  O10 says the ID check is by threshold, not off.
+- **`docs/CAPABILITIES.md`:** the header, the web portal row (live, not a branch), the one-step row (on main), the
+  test count, and a row for the programme board.
+- **`CLAUDE.md`:** the system page and the programme board join the state documents; rule 6, the repository is
+  public.
+- **Still behind** (on the programme board): `WAPAY_STATUS.md` sections 2 to 10, `PAYOUT_RULES.md`, `KYC.md`,
+  `LAUNCH_SCOPE.md`, `ADUMO.md`, `BLU_PRODUCTION_CUTOVER.md`, `audits/PROCESS_CHECKS.md`.
+
 ## 2026-11-13 (141) — Security sweep: a card credit is bound to the link its signed reference names; a PIN attempt is spent before it is checked; four leftover routes closed; held sends can be refunded
 
 A read-only sweep of the whole repository by three reviewers (public surface and sign-in, money integrity, secrets and
