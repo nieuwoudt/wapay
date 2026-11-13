@@ -316,6 +316,8 @@ security measure").
     addresses.
   - Revisit dedicated egress before production.
   - API credentials go into Vercel env (Preview first), never into chat or the repo.
+  - **Enabled 2026-11-13: 155.121.235.0 and 155.121.235.2** (Vercel Static IPs, arn1), sent
+    to PayCentral for staging with niev@wapay.co.za as the test user.
 
 **The API (REST/JSON).**
 - **Base URL:** `https://staging-api.paycentral.co.za`; production URL to come.
