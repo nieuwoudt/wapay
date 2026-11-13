@@ -25,7 +25,8 @@ export default async function handler(req, res) {
   const intent = await prisma.providerRequest.findUnique({ where: { idemKey: `wapay-payreq-${code}` } });
   if (!intent) return res.status(404).json({ ok: false, error: 'UNKNOWN' });
   const grossCents = Number.isInteger(intent.metadata?.grossCents) ? intent.metadata.grossCents : Number(intent.metadata?.amountCents || 0) + Number(intent.metadata?.feeCents || 0);
-  const v = verifyAdumoResponse({ fields: { ...body, _RESPONSE_TOKEN: token }, expected: { mref, amountCents: grossCents } });
+  // expected.code: the signed reference must name the link this intent belongs to (review 2026-11-13).
+  const v = verifyAdumoResponse({ fields: { ...body, _RESPONSE_TOKEN: token }, expected: { mref, code, amountCents: grossCents } });
   if (!v.ok) {
     console.error(JSON.stringify({ type: 'adumo_webhook_rejected', reason: v.error, detail: v.detail, requestCode: code }));
     return res.status(401).json({ ok: false, error: v.error });

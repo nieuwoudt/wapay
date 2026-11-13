@@ -14,8 +14,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname;
+// fileURLToPath, not .pathname: the workspace path has spaces, which .pathname leaves percent-encoded.
+const root = fileURLToPath(new URL('..', import.meta.url));
 function walk(dir) {
   const out = [];
   for (const name of readdirSync(dir)) {

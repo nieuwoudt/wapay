@@ -4,6 +4,35 @@
 
 ---
 
+## 151. Four leftover routes answered anyone: an echo stub, a balance read by account id, and two Meta set-up routes
+
+- **Symptom (security sweep, 2026-11-13):** `pages/api/webhook-test.js` echoed a query value; `/api/wallet/balance` returned a balance and a name for any account id; `/api/admin/list-wabas` and `/api/admin/init-templates` ran Meta Graph calls on the production token. None had a caller in the product.
+- **Root cause:** set-up helpers from 2025 that predate `requireInternalAuth` and were never revisited when the VAS routes were gated.
+- **Fix:** the stub is deleted; the other three check the internal key first; `init-templates` no longer returns the error text; every `/api` answer carries `nosniff`; the WhatsApp verification echo is `text/plain`.
+- **Guard:** `tests/public-surface-gates.test.mjs`: every file under `pages/api/admin` and `pages/api/internal` must check a credential before it touches the database or the network (the admin login excepted), and the four leftovers stay closed.
+
+## 150. Money sent to someone who never joined could never go back: the database refused the status that closes the send
+
+- **Symptom (found in review 9 Nov, fixed 13 Nov, before it could bite):** the daily sweep refunds a held send after 30 days by closing its row as `REFUNDED`. The first held sends (18 Oct) reach 30 days on 17 Nov.
+- **Root cause:** `pending_gifts_status_valid` (migration `20260821_pending_gifts`) allows `ISSUED`, `DELIVERED` and `CANCELLED` only. The close was written outside the sweep's `try`, so the first expired row would have thrown and no sender would have been refunded on any night. No money could be lost or doubled: the row stays `ISSUED`, nothing posts, the recipient can still claim.
+- **Fix:** migration `20261113_pending_gifts_refunded` (idempotent) adds `REFUNDED`; `refundExpiredHeldGifts` stops and logs `held_gift_refund_close_refused` when the database refuses.
+- **Guard:** `tests/send-money.test.mjs`: every status `lib/pending-gifts.js` writes is one the check allows; a database that refuses moves nothing and never throws; once it accepts, each send is refunded once. The unit test missed this before because its in-memory table had no check.
+- **Founder:** apply the migration to production before 17 Nov.
+
+## 149. The PIN lock counted a burst of simultaneous wrong PINs as one attempt
+
+- **Symptom (security sweep, 2026-11-13; not seen in production):** the five-try lock is the only thing between a cell number and a wallet's PIN on the web portal. It held for one request at a time and not for many at once.
+- **Root cause:** `verifyPIN` checked the PIN and then wrote "the count I read, plus one". Requests that arrive together all read the same count.
+- **Fix:** `claimPinAttempt` (packages/auth) spends the attempt before the check, as a compare-and-set on the count read, and writes the lock with the attempt that reaches it. A request that loses the claim re-reads twice (so an honest double submit still works) and otherwise checks nothing.
+- **Guard:** `tests/pin-lockout-atomic.test.mjs`: 200 simultaneous wrong PINs get at most five checked before the 15-minute lock and ten in all before the hard lock; `verifyPIN` claims before it checks; no count is computed from a stale read.
+
+## 148. A card credit trusted an unsigned field to say which link it was for
+
+- **Symptom (security sweep, 2026-11-13):** the Adumo browser return decided which pay link to credit from the address and an unsigned form field, and compared the signed reference only with that same unsigned field.
+- **Root cause:** `expected.mref` in `verifyAdumoResponse` came from the request, so the check proved the caller knew the token's reference, not that the token was issued for this link; when the intent held no Adumo reference the check was skipped.
+- **Fix:** the verifier takes `expected.code` and refuses unless the SIGNED reference names that link; a token with no reference names no link. The return route and the webhook both pass it.
+- **Guard:** `tests/adumo.test.mjs`: one approved payment credits one link, however the return is replayed (padded reference, missing reference, reference in the address, another link's own reference). The test fails against the previous verifier.
+
 ## 147. An operator pay-out link said "all clear" and the rail refused it: OTT now asks PayShap for an ID number, and the operator pay-out read only its own static field list
 
 - **Symptom (2026-11-09):** the founder tapped an operator pay-out link (`/ops/payout`) for R2,863.70 by PayShap to a customer's saved TymeBank account. The dry run on the page showed no blockers. The tap failed with BAD_RECIPIENT and no money moved.

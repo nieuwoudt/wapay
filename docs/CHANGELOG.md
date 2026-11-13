@@ -4,6 +4,58 @@
 
 ---
 
+## 2026-11-13 (141) — Security sweep: a card credit is bound to the link its signed reference names; a PIN attempt is spent before it is checked; four leftover routes closed; held sends can be refunded
+
+A read-only sweep of the whole repository by three reviewers (public surface and sign-in, money integrity, secrets and
+the model boundary), every finding re-read in the code by the main session before anything changed. The findings and
+what is still open live on the programme board (private), not in this repository. What changed:
+
+- **Card credit (`lib/adumo.js`, `pages/api/pay/adumo-return.js`, `pages/api/webhooks/adumo.js`; BUGLOG #148):**
+  `verifyAdumoResponse` takes `expected.code` and refuses a token whose SIGNED reference does not name that link, or
+  that carries no reference. Both routes pass the link code. The unsigned reference and the `?code=` in the address
+  only find the intent. The return route is now `createAdumoReturnHandler(deps)` so a test can run it end to end.
+- **PIN attempts (`packages/auth/src/pin.ts`; BUGLOG #149):** `claimPinAttempt` spends the attempt before the PIN is
+  checked, as a compare-and-set on the count the request read, with the lock written in the same statement as the
+  attempt that reaches it. `verifyPIN` claims, then checks; a request that cannot claim checks nothing. Thresholds
+  are unchanged (15 minutes from the 5th wrong try, a hard lock from the 10th). The query is typed against the
+  Prisma client, so a wrong field fails the build.
+- **Leftover routes (BUGLOG #151):** `pages/api/webhook-test.js` deleted; `/api/wallet/balance`,
+  `/api/admin/list-wabas` and `/api/admin/init-templates` need the internal key; `X-Content-Type-Options: nosniff` on
+  every `/api` answer; the WhatsApp verification echo is sent as `text/plain`.
+- **Held sends (`lib/pending-gifts.js`, migration `20261113_pending_gifts_refunded`; BUGLOG #150):** the status check
+  on `pending_gifts` gains `REFUNDED`; the sweep stops and logs when the database refuses the close instead of
+  throwing. **The migration must be applied to production before 17 Nov** (`node --env-file=.env
+  scripts/apply-migration.mjs 20261113_pending_gifts_refunded`).
+- **Tests:** `tests/pin-lockout-atomic.test.mjs` (a burst of 200 simultaneous wrong PINs: at most five checked before
+  the lock, ten in all), `tests/public-surface-gates.test.mjs` (every admin and internal route checks a credential
+  before it touches the database or the network), `tests/adumo.test.mjs` (one payment, one link),
+  `tests/send-money.test.mjs` (the migration, and a database that refuses). `tests/vas-routes-internal.test.mjs` no
+  longer fails when the checkout path has a space in it.
+- **Not changed:** what the sweep left open is tracked on the programme board for the pay-outs session and the founder.
+
+Suite 1,520 pass, 0 fail; `next build` passes.
+
+## 2026-11-13 (140) — The programme board: every workstream, session and open item in one place, in Mission Control and on a private page
+
+The founder's ask: "consolidate them for me into a nice dashboard view ... from a management point of view and a
+development buildout view ... make sure it gets updated and linked to threads."
+
+- **Where the content lives.** The repository is public and the board is not (security findings, fraud specifics,
+  what waits on whom). The master is `WAPAY_PROGRAMME_BOARD.json` in the private workspace folder, outside the
+  repository. A published snapshot is ONE finished row in `agent_jobs` (kind `programme-board`, key `current`, status
+  `DONE`), which the job drain never claims. No migration, no money path.
+- **`lib/programme-board.js`:** the shape, `validateBoard` (ids, owners, dates, references, and a refusal of any run
+  of nine or more digits and of anything shaped like a credential), `saveBoard`, `loadBoard`.
+- **Routes:** `GET /api/admin/programme` (admin session) for the tab; `GET` and `POST /api/internal/programme`
+  (internal key): the read returns counts only, the write validates before it stores.
+- **Mission Control:** a ninth tab, Programme (`components/admin/ProgrammeTab.js`), with five views: Management
+  (needs you, workstreams, waiting on others, watch, shipped), Build (items per workstream), Threads (each session,
+  where it stopped, a link), Security (the sweep) and System (architecture components, subsystems, documents). Links
+  from the board are followed only to Claude addresses.
+- **`scripts/programme-board.mjs`:** `check`, `page`, `publish`, `status`. The key reaches curl on standard input.
+- **`docs/programme/`:** the rules (`README.md`) and the page template. A scheduled daily run refreshes the board.
+- **Tests:** `tests/programme-board.test.mjs`; `tests/inbox.test.mjs` now expects nine tabs.
+
 ## 2026-11-11 (139) — A pay-out to a bank account has two speeds: R12 on the next business day or R20 the same day; money under 2 hours old goes on the next business day only
 
 The founder's decision (7 Nov, confirmed 11 Nov "12 yes"): "payout to your bank is R12 for all payouts, and if you want

@@ -74,6 +74,67 @@ test('response decision: only a signed token with matching claims and a success 
   assert.equal(verifyAdumoResponse({ fields: mk({ cuid: cfg.merchantId, auid: cfg.applicationId, mref: 'PRFMXNPV-1', amount: '38.00', status: 'SETTLED' }), expected: { mref: 'PRFMXNPV-1', amountCents: 3800 }, config: cfg }).approved, true, 'string amount + status-only claims (webhook shape) still decide');
 });
 
+test('one approved payment credits one link: the signed reference must name the link being credited (review 2026-11-13)', async () => {
+  const claims = (mref, amount = 3000) => ({ cuid: cfg.merchantId, auid: cfg.applicationId, mref, amount, result: 0, transactionIndex: 'T-REAL-1' });
+  const tok = (c) => signJwtHs256(c, cfg.jwtSecret);
+  // The verifier: `expected.code` binds the token to a link, whatever reference the caller supplies.
+  const paidA = tok(claims('PRAAAAAA-1'));
+  assert.equal(verifyAdumoResponse({ fields: { _RESPONSE_TOKEN: paidA }, expected: { mref: 'PRAAAAAA-1', code: 'PRAAAAAA', amountCents: 300000 }, config: cfg }).approved, true, 'its own link');
+  assert.equal(verifyAdumoResponse({ fields: { _RESPONSE_TOKEN: paidA }, expected: { mref: 'PRAAAAAA-1 ', code: 'PRBBBBBB', amountCents: 300000 }, config: cfg }).detail, 'mref_code', 'the caller knowing the reference is not enough');
+  assert.equal(verifyAdumoResponse({ fields: { _RESPONSE_TOKEN: paidA }, expected: { mref: null, code: 'PRBBBBBB', amountCents: 300000 }, config: cfg }).detail, 'mref_code', 'no expected reference no longer skips the check');
+  assert.equal(verifyAdumoResponse({ fields: { _RESPONSE_TOKEN: tok({ ...claims('PRAAAAAA-1'), mref: undefined }) }, expected: { code: 'PRAAAAAA', amountCents: 300000 }, config: cfg }).detail, 'mref_code', 'a token with no reference names no link');
+  assert.equal(verifyAdumoResponse({ fields: { _RESPONSE_TOKEN: tok(claims('praaaaaa-17')) }, expected: { code: 'PRAAAAAA', amountCents: 300000 }, config: cfg }).approved, true, 'case and the attempt number do not matter');
+  assert.equal(verifyAdumoResponse({ fields: { _RESPONSE_TOKEN: paidA }, expected: { mref: 'PRAAAAAA-1', amountCents: 300000 }, config: cfg }).approved, true, 'callers that pass no code behave as before');
+
+  // The browser return, end to end against stand-ins: two links of the same amount, one real payment.
+  const { createAdumoReturnHandler } = await import('../pages/api/pay/adumo-return.js');
+  const intents = {
+    'wapay-payreq-PRAAAAAA': { id: 'i-a', idemKey: 'wapay-payreq-PRAAAAAA', route: 'payrequest', metadata: { grossCents: 300000, amountCents: 287170, feeCents: 12830, accountId: 'acc-a', requestCode: 'PRAAAAAA', adumoRef: 'PRAAAAAA-1' } },
+    'wapay-payreq-PRBBBBBB': { id: 'i-b', idemKey: 'wapay-payreq-PRBBBBBB', route: 'payrequest', metadata: { grossCents: 300000, amountCents: 287170, feeCents: 12830, accountId: 'acc-b', requestCode: 'PRBBBBBB', adumoRef: 'PRBBBBBB-1' } },
+    // An intent opened on the PayFast rail carries no Adumo reference at all.
+    'wapay-payreq-PRCCCCCC': { id: 'i-c', idemKey: 'wapay-payreq-PRCCCCCC', route: 'payrequest', metadata: { grossCents: 300000, amountCents: 287170, feeCents: 12830, accountId: 'acc-c', requestCode: 'PRCCCCCC' } },
+  };
+  const settled = []; const debug = [];
+  const handler = createAdumoReturnHandler({
+    prisma: { providerRequest: { findUnique: async ({ where }) => intents[where.idemKey] || null, update: async () => ({}) } },
+    settle: async ({ intent, providerRef }) => { settled.push({ code: intent.metadata.requestCode, providerRef }); return { ok: true, replayed: false }; },
+    recordDebug: async (d) => { debug.push(d.reason); },
+    adumo: cfg,
+  });
+  const call = async ({ query = {}, body = {} }) => {
+    const res = { code: 0, to: null, status(c) { this.code = c; return this; }, send() { return this; }, redirect(c, to) { this.code = c; this.to = to; return this; } };
+    const err = console.error; const log = console.log; console.error = () => {}; console.log = () => {};
+    try { await handler({ method: 'POST', query, body, headers: {}, socket: {} }, res); } finally { console.error = err; console.log = log; }
+    return res;
+  };
+  // The genuine return for link A credits link A.
+  let r = await call({ query: { code: 'PRAAAAAA' }, body: { _RESPONSE_TOKEN: paidA, _MERCHANTREFERENCE: 'PRAAAAAA-1', _TRANSACTIONINDEX: 'T-REAL-1' } });
+  assert.equal(r.to, '/pay/PRAAAAAA?r=1'); assert.deepEqual(settled, [{ code: 'PRAAAAAA', providerRef: 'T-REAL-1' }]);
+  // Replay 1: the same token against link B, with the reference padded so the address picks the link.
+  r = await call({ query: { code: 'PRBBBBBB' }, body: { _RESPONSE_TOKEN: paidA, _MERCHANTREFERENCE: 'PRAAAAAA-1 ' } });
+  // The padded reference is trimmed, so it names link A: the route settles link A again (the ledger
+  // dedupes that on the intent's key) and never looks at link B.
+  assert.ok(!settled.some((x) => x.code === 'PRBBBBBB'), 'link B is not credited');
+  assert.equal(r.to, '/pay/PRAAAAAA?r=1', 'the return lands on the link the token was issued for');
+  // Replay 2: no reference at all, against a link whose intent has no Adumo reference.
+  r = await call({ query: { code: 'PRCCCCCC' }, body: { _RESPONSE_TOKEN: paidA } });
+  assert.equal(r.to, '/pay/PRCCCCCC?e=unverified'); assert.ok(!settled.some((x) => x.code === 'PRCCCCCC'), 'link C is not credited');
+  // Replay 3: the reference in the address, the link in the address, the token for another link.
+  r = await call({ query: { code: 'PRBBBBBB', mref: 'PRAAAAAA-1\t' }, body: { _RESPONSE_TOKEN: paidA } });
+  assert.ok(!settled.some((x) => x.code === 'PRBBBBBB'), 'link B is not credited by an address reference either');
+  // Replay 4: against link B with link B's own reference: the signed reference does not match.
+  r = await call({ query: { code: 'PRBBBBBB' }, body: { _RESPONSE_TOKEN: paidA, _MERCHANTREFERENCE: 'PRBBBBBB-1' } });
+  assert.equal(r.to, '/pay/PRBBBBBB?e=unverified'); assert.ok(!settled.some((x) => x.code === 'PRBBBBBB'));
+  assert.ok(debug.includes('ADUMO_CLAIM_MISMATCH'), 'each refusal is recorded for forensics');
+  assert.deepEqual([...new Set(settled.map((x) => x.code))], ['PRAAAAAA'], 'one payment, one link, however often it is replayed');
+
+  // Both routes hand the verifier the link code, and the webhook can only reach a link its reference names.
+  const ret = read('../pages/api/pay/adumo-return.js');
+  assert.match(ret, /expected: \{ mref: expectedMref, code, amountCents: grossCents \}/);
+  const hook = read('../pages/api/webhooks/adumo.js');
+  assert.match(hook, /expected: \{ mref, code, amountCents: grossCents \}/);
+});
+
 test('fees per rail: one price on every rail (founder 2026-10-23), free under R50, still env-tunable', () => {
   delete process.env.WAPAY_ADUMO_FEE_BPS; delete process.env.WAPAY_ADUMO_FEE_FIXED_CENTS;
   assert.deepEqual(cardRailFee('PAYFAST'), { bps: 420, fixedCents: 230 });
@@ -123,7 +184,8 @@ test('routes: checkout books the chosen rail and its fee; the return + webhook s
   assert.match(checkout, /provider: rail,/); assert.match(checkout, /adumoMerchantReference\(code, attempt\)/); assert.match(checkout, /autoSubmitHtml\(form\)/);
   assert.ok(checkout.indexOf("if (rail === 'ADUMO') {") < checkout.indexOf('buildCheckoutUrl({'), 'Adumo branch before the PayFast redirect');
   const ret = read('../pages/api/pay/adumo-return.js');
-  assert.ok(ret.indexOf('verifyAdumoResponse(') < ret.indexOf('settleCardPayment('), 'verify before money');
+  assert.ok(ret.indexOf('verifyAdumoResponse(') > -1 && ret.indexOf('verifyAdumoResponse(') < ret.indexOf('await settle('), 'verify before money');
+  assert.match(ret, /settle = settleCardPayment/, 'the default settlement is the shared card settlement');
   assert.match(ret, /if \(!v\.approved\)/); assert.match(ret, /\?e=unverified/);
   const hook = read('../pages/api/webhooks/adumo.js');
   assert.ok(hook.indexOf('verifyAdumoResponse(') < hook.indexOf('settleCardPayment('));

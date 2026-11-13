@@ -151,7 +151,7 @@ test('static: checkout passes the webhook claim and the flow; return + webhook r
   assert.match(checkout, /flow: adumoFlow\(req\.method === 'POST' \? req\.body\?\.flow : req\.query\?\.flow\)/);
   const ret = read('../pages/api/pay/adumo-return.js');
   assert.ok(ret.indexOf('adumoOutcomeRecord(v, { via: \'return\' })') > ret.indexOf('verifyAdumoResponse(') && ret.indexOf('adumoOutcomeRecord(v') < ret.indexOf('if (!v.approved)'), 'recorded after verification, before the decision');
-  assert.ok(ret.indexOf('adumoOutcomeRecord(v') < ret.indexOf('settleCardPayment('));
+  assert.ok(ret.indexOf('await settle(') > -1 && ret.indexOf('adumoOutcomeRecord(v') < ret.indexOf('await settle('), 'recorded before the settlement (settle is the shared card settlement, injected for tests)');
   const hook = read('../pages/api/webhooks/adumo.js');
   assert.match(hook, /adumoOutcomeRecord\(v, \{ via: 'webhook' \}\)/);
   const probe = read('../pages/api/internal/adumo-status.js');

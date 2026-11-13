@@ -33,6 +33,9 @@ const nextConfig = {
     return [
       { source: '/app', headers: app },
       { source: '/app/:path*', headers: app },
+      // No API answer is ever guessed to be a page (review 2026-11-13): a route that echoes text
+      // without a content type cannot run as HTML on the admin or portal hosts.
+      { source: '/api/:path*', headers: [{ key: 'X-Content-Type-Options', value: 'nosniff' }] },
     ];
   },
 

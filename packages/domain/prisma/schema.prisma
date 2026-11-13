@@ -436,7 +436,7 @@ model PendingGift {
   rail            String
   voucherPin      String? // bearer secret — never log the full PIN; null for a held send (rail WAPAY, BUGLOG #117)
   voucherSerial   String?
-  status          String    @default("ISSUED") // ISSUED | DELIVERED | CANCELLED
+  status          String    @default("ISSUED") // ISSUED | DELIVERED | CANCELLED | REFUNDED (20261113)
   idemKey         String    @unique
   createdAt       DateTime  @default(now())
   deliveredAt     DateTime?
