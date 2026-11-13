@@ -38,7 +38,7 @@ const board = (over = {}) => ({
     { id: 'payouts', name: 'Pay-outs', state: 'red', summary: 'Approval mode; the supplier gateway refuses us.', live: ['PayShap'], next: 'Supplier answer', threads: ['t-main'] },
     { id: 'security', name: 'Security', state: 'amber', summary: 'Swept on the 13th.' },
   ],
-  threads: [{ id: 't-main', title: 'Main architecture session', state: 'active', lastActive: '2026-11-13', role: 'Coordinates', leftOff: 'Building the board', link: 'claude://claude.ai/epitaxy/local_abc' }],
+  threads: [{ id: 't-main', title: 'Main architecture session', state: 'active', lastActive: '2026-11-13', role: 'Coordinates', leftOff: 'Building the board', link: 'claude://claude.ai/epitaxy/local_1e7af5bf-19af-4bfa-9aef-6560381870ed' }],
   items: [
     { id: 'PAY-001', ws: 'payouts', title: 'Approve nothing until the supplier answers', status: 'BLOCKED', owner: 'founder', kind: 'action', priority: 'P0', due: '2026-11-14', blockedOn: 'the supplier', detail: 'Account •••1332 is waiting.', evidence: 'reading of 13 Nov', asOf: '2026-11-13', thread: 't-main' },
     { id: 'PAY-002', ws: 'payouts', title: 'Ask the supplier what changed', status: 'OPEN', owner: 'supplier:OTT', kind: 'supplier', priority: 'P0' },
@@ -128,6 +128,9 @@ test('the board is refused when its shape is wrong, and the reason names the ite
   bad(items({ id: 'has space' }), /bad id/);
   bad({ items: [board().items[0], board().items[0]] }, /PAY-001: duplicate id/);
   bad({ threads: [{ ...board().threads[0], link: 'https://example.com/x' }] }, /link must be a claude/);
+  bad({ threads: [{ ...board().threads[0], link: 'claude://claude.ai/epitaxy/local_' + '2'.repeat(11) }] }, /link must be a claude/);
+  bad({ threads: [{ ...board().threads[0], link: 'https://claude.ai/x?n=' + '2'.repeat(11) }] }, /link must be a claude/);
+  bad({ boardUrl: 'https://claude.ai/artifact/a b' }, /boardUrl/);
   bad({ threads: [{ ...board().threads[0], link: 'javascript:alert(1)' }] }, /link must be a claude/);
   bad({ boardUrl: 'https://evil.example/claude.ai/' }, /boardUrl/);
   bad({ architecture: { mapUrl: 'javascript:alert(1)' } }, /mapUrl must be/);
@@ -145,6 +148,8 @@ test('a number or a secret anywhere in the board refuses it; a masked tail passe
   const inDetail = (text) => validateBoard(board({ items: [{ ...board().items[0], detail: text }] }));
   const digits = (n) => '2'.repeat(n);
   assert.equal(inDetail('Account •••1332 retried twice, R3,000 each, on 2026-11-07.').ok, true, 'masked tail, amounts and dates are fine');
+  assert.equal(validateBoard(board()).ok, true, 'a session address may hold a long run of digits: addresses have their own exact shape and are the only field the digit rule skips');
+  assert.equal(validateBoard(board({ threads: [{ ...board().threads[0], leftOff: `call ${digits(11)}` }] })).ok, false, 'every other thread field is still read');
   assert.equal(inDetail(`reference ${digits(8)}`).ok, true, 'eight digits is not a number we protect');
   for (const [text, what] of [
     [`call ${digits(11)}`, /nine or more digits/],
