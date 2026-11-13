@@ -63,6 +63,11 @@ test('the leftovers the sweep found stay closed', () => {
 
 test('no API answer is sniffed into a page, and the verification echo is plain text', () => {
   const cfg = read('next.config.js');
+  // The consoles where a tap approves money cannot be framed by another site.
+  for (const source of ['/', '/admin', '/admin/:path*', '/business', '/business/:path*', '/ops/:path*', '/app', '/app/:path*']) {
+    assert.ok(cfg.includes(`{ source: '${source}', headers: app }`), `${source} carries the frame, sniff and referrer headers`);
+  }
+  assert.match(cfg, /\{ key: 'X-Frame-Options', value: 'DENY' \}/); assert.match(cfg, /frame-ancestors 'none'/);
   assert.match(cfg, /\{ source: '\/api\/:path\*', headers: \[\{ key: 'X-Content-Type-Options', value: 'nosniff' \}\] \}/);
   const hook = read('pages/api/webhooks/whatsapp.js');
   const echo = hook.indexOf('return res.status(200).send(challenge);');
