@@ -65,10 +65,13 @@ export class BluClient {
   async checkStatus(pin: string): Promise<BluVoucherStatus> {
     // Blu Swagger: GET /voucher/variable/vouchers?token={PIN}
     const url = `${this.base}/voucher/variable/vouchers?token=${encodeURIComponent(pin)}`;
+    // What the logs see: the path, never the PIN. The address above carries the whole PIN as a
+    // query value, and a voucher PIN is a bearer secret until it is redeemed (review 2026-11-13).
+    const logUrl = `${this.base}/voucher/variable/vouchers?token=${maskVoucherPin(pin)}`;
 
     try {
       console.log('[Blu] Status check request', {
-        url,
+        url: logUrl,
         method: 'GET',
         pin: maskVoucherPin(pin),
       });
@@ -114,7 +117,7 @@ export class BluClient {
       }
 
       console.error('[Blu] Status check failed', {
-        url,
+        url: logUrl,
         method: 'GET',
         pin: maskVoucherPin(pin),
         statusCode: res.statusCode,

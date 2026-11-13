@@ -96,7 +96,7 @@ curl -s -X POST "https://graph.facebook.com/v19.0/870272072828461/verify_code" \
 curl -s -X POST "https://graph.facebook.com/v19.0/870272072828461/register" \
   -H "Authorization: Bearer <TOKEN>" \
   -H "Content-Type: application/json" \
-  -d '{"messaging_product":"whatsapp","pin":"654321"}'
+  -d '{"messaging_product":"whatsapp","pin":"<TWO_STEP_PIN>"}'
 # Response: {"success":true}
 ```
 
@@ -118,7 +118,7 @@ curl -s -X POST "https://graph.facebook.com/v19.0/870272072828461/messages" \
 ## Prevention
 
 1. **NEVER use temporary developer tokens in production** — always create a System User with a permanent (never-expiring) token
-2. **Document the 2FA PIN** — the registration PIN (654321) should be stored securely
+2. **Document the 2FA PIN** — the registration PIN is stored in the password manager, never in this repository (it was written here until 2026-11-13 and has to be changed in Meta)
 3. **Monitor token expiry** — add a health check that validates the token periodically
 4. **Set up alerts** — if Message Delivery Insights drops to 0, something is wrong
 
@@ -130,7 +130,7 @@ curl -s -X POST "https://graph.facebook.com/v19.0/870272072828461/messages" \
 | Phone Number ID | 870272072828461 |
 | WABA ID | 647978251504290 |
 | System User | WaPay API (ID: 61588380805990) |
-| 2FA PIN | 654321 |
+| 2FA PIN | in the password manager, not here |
 | Token Type | Permanent (never expires) |
 | Required Permissions | `whatsapp_business_management` + `whatsapp_business_messaging` |
 | Payment Method | Visa ····4909 (linked to WABA) |
