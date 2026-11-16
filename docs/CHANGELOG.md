@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-11-16 (144) — PayCentral client: one whitelisted address handled in code, card data kept out, a probe
+
+PayCentral whitelists one IP (155.121.235.0), but Vercel's Static IPs are a pair that Vercel cannot
+pin. The changes:
+- `lib/paycentral.js` is the client for the staging API v2.1.5: login with a cached token, virtual
+  and physical card allocation, loads with a reference derived from the idemKey, the audit-log
+  check, balance, statement, card info, freeze and unfreeze.
+- **Door retry.** A call refused before it reached PayCentral (connection refused or timed out
+  while connecting, TLS cut before the request, a proxy refusal, a 403 without PayCentral's JSON)
+  is retried on a fresh connection, up to 6 times within 15 seconds.
+- **Never guess on money.** A money call that may have reached PayCentral is never retried and
+  raises `TRANSPORT_INDETERMINATE` with its reference.
+- **One fixed address.** `PAYCENTRAL_EGRESS_PROXY` routes every call through one address for
+  production.
+- **Card data.** The card number and security code from `virtualAllocate` never leave the client
+  (golden thread 3.5), and every body is redacted before logging.
+- **Probe.** `GET /api/internal/paycentral-probe` (internal key, read-only) measures the door
+  refusals and gives a verdict.
+- **Docs.** env.template, `docs/CARDS.md` §0.11, CAPABILITIES.
+
+Tests: `tests/paycentral.test.mjs`, 17 tests. Not wired to customers.
+
+---
+
 ## 2026-10-23 (143) — Cards: PayCentral's staging API read, products chosen (DigiCentral + CashCentral+), static IP plan, reply to Odette (docs only)
 
 PayCentral sent the staging API specification v2.1.5, its onboarding document and the

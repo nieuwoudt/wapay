@@ -421,6 +421,63 @@ physical cards ordered alongside to learn delivery, assignment and PIN.
   reference, then allocation. Mission Control's float card needs a low-balance alarm per
   product account.
 
+
+### 0.11 The PayCentral client, and one whitelisted address handled in code (2026-11-16)
+
+**What exists.**
+- `lib/paycentral.js`: the wire to PayCentral's API.
+- `pages/api/internal/paycentral-probe.js`: a read-only probe.
+- `tests/paycentral.test.mjs`: 17 tests.
+
+No customer can reach any of it yet. The WhatsApp flows and the ledger flow ("add money to my
+card": reserve, load, settle or release) are the next build.
+
+**One whitelisted address.**
+- **The constraint:** PayCentral whitelists one IP, 155.121.235.0. Vercel's Static IPs are a
+  pair (155.121.235.0 and 155.121.235.2), and Vercel cannot pin traffic to one of them.
+- **Staging: door retry.** A call refused before PayCentral's application saw it is retried on
+  a fresh connection, which may leave from the other address, up to 6 times within 15 seconds.
+  - "Refused at the door" means:
+    - the connection was refused or timed out while connecting;
+    - the TLS handshake was cut before any request was written;
+    - a proxy refused the tunnel;
+    - a 403 came back without PayCentral's JSON.
+  - Such a call never reached PayCentral, so retrying is safe for every call, loads included.
+- **Never guess on money.** A money call that may have reached PayCentral is never retried: a
+  reset or timeout after connecting, or a 5xx. It raises `TRANSPORT_INDETERMINATE` with the
+  load's reference, and the flow must call `checkReference()` (PayCentral's audit log) before
+  releasing any hold. That is the BUGLOG #15 rule. Reads (balance, statement, info) do retry.
+- **Production: one fixed address.** Set `PAYCENTRAL_EGRESS_PROXY` to an HTTP proxy with one
+  outbound address of our own. Every PayCentral call goes through it, so no retry is needed.
+  That address goes to PayCentral with the production whitelisting request. The Johannesburg
+  egress planned for Blu (`docs/BLU_PRODUCTION_CUTOVER.md`) can be the same proxy.
+- **The probe.** `GET /api/internal/paycentral-probe` (header `x-internal-api-key`) logs in a
+  few times, each on a fresh connection, then once normally.
+  - It counts how many attempts the door refused and gives a verdict.
+  - If the normal login fails or refusals are frequent, switch to the proxy.
+  - It touches no card and no money, and reports secrets only as booleans or masks.
+
+**Card data (golden thread 3.5).** `virtualAllocate` returns `seqNo` (use it as the card
+identifier), the last four digits and the expiry. PayCentral's full card number and security
+code are dropped in the client. Every PayCentral body is redacted before any log.
+
+**Other rules in the client.**
+- **Amounts:** integer cents in, rands out. Whole rands only until PayCentral confirms cents
+  (`PAYCENTRAL_WHOLE_RANDS`).
+- **References:** a load's `reference_no` is 12 digits derived from the load's idemKey, never
+  starting with 0. The same load always carries the same reference.
+- **Tokens:** cached until a minute before expiry. A 401 logs in again once; it was a rejected
+  call, so repeating it is safe.
+- **Not implemented:** `/card/transfertoprofile` (money back from a card). It has no reference,
+  so a timed-out call could not be checked and a retry could deduct twice. Ask PayCentral for
+  a reference first.
+
+**To switch on staging** (once PayCentral sends the credentials):
+1. Vercel → WaPay → Settings → Environment Variables, Preview: `PAYCENTRAL_API_EMAIL`,
+   `PAYCENTRAL_API_PASSWORD`, and `PAYCENTRAL_BASE_URL=https://staging-api.paycentral.co.za`.
+2. Redeploy the preview.
+3. Call the probe on the preview URL and read the verdict.
+
 ---
 
 ## Paymentology direct (2026-10-15; the route at 30,000 cards)
