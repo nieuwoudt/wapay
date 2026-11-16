@@ -318,6 +318,11 @@ security measure").
   - API credentials go into Vercel env (Preview first), never into chat or the repo.
   - **Enabled 2026-11-13: 155.121.235.0 and 155.121.235.2** (Vercel Static IPs, arn1), sent
     to PayCentral for staging with niev@wapay.co.za as the test user.
+  - **2026-11-16: PayCentral whitelists one IP only and funds one staging product.**
+    - We asked for an exception for the pair, because Vercel's guidance is to allowlist both.
+    - We chose DigiCentral (`EMAIL_TO_PAYCENTRAL_6_ONE_IP.txt`).
+    - If they refuse, route only the PayCentral client through a single dedicated egress
+      (Fly.io Johannesburg or a static-IP proxy service), shared later with Blu.
 
 **The API (REST/JSON).**
 - **Base URL:** `https://staging-api.paycentral.co.za`; production URL to come.
