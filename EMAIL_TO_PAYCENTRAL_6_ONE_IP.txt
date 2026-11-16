@@ -5,14 +5,19 @@ Vercel Static IPs give a pair per region and Vercel's guidance is to allowlist b
 an exception rather than pick one. Fallback if refused: route PayCentral calls through a single
 dedicated egress (Fly.io Johannesburg, the option in docs/BLU_PRODUCTION_CUTOVER.md, or a paid
 static-IP proxy). Product: DigiCentral. Fill in the name. No em dashes (founder style).
+REVISED 2026-11-16 (founder): do not ask PayCentral to change its process. Give one address
+(155.121.235.0) and adjust on our side; describe the platform as hosted on AWS (true: Vercel
+functions run on AWS, Stockholm). Vercel has no setting to pin one address of the pair, so the
+PayCentral client retries a call refused at the whitelist (safe: a refused call never reached
+PayCentral) for staging, and production goes through one dedicated egress address we control.
 
 -----------------------------------------------------------------------------
 
 Hi <name>,
 
-Thank you.
+Thank you, no problem.
 
-1. IP addresses: our platform runs on Vercel, which gives our project a fixed pair of addresses (155.121.235.0 and 155.121.235.2) and sends our calls out through either one. Vercel's guidance is to whitelist both; with only one, some of our calls would be refused at random. Could you please make an exception and whitelist both? If that is not possible, let us know and we will set up a single dedicated address instead.
+1. IP address: please whitelist 155.121.235.0. Our platform is hosted on AWS.
 
 2. Product: we will test DigiCentral (virtual cards). Please fund that one.
 

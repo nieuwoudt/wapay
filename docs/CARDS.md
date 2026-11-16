@@ -319,10 +319,14 @@ security measure").
   - **Enabled 2026-11-13: 155.121.235.0 and 155.121.235.2** (Vercel Static IPs, arn1), sent
     to PayCentral for staging with niev@wapay.co.za as the test user.
   - **2026-11-16: PayCentral whitelists one IP only and funds one staging product.**
-    - We asked for an exception for the pair, because Vercel's guidance is to allowlist both.
-    - We chose DigiCentral (`EMAIL_TO_PAYCENTRAL_6_ONE_IP.txt`).
-    - If they refuse, route only the PayCentral client through a single dedicated egress
-      (Fly.io Johannesburg or a static-IP proxy service), shared later with Blu.
+    - Founder: do not ask them to change their process. We gave **155.121.235.0** only and
+      chose DigiCentral (`EMAIL_TO_PAYCENTRAL_6_ONE_IP.txt`).
+    - Vercel cannot pin one address of its pair, so the build must:
+      - **(a) Staging:** make the PayCentral client retry a call refused at the whitelist. This
+        is safe: a refused call never reached PayCentral.
+      - **(b) Production:** route the PayCentral client through one dedicated egress address we
+        control (Fly.io Johannesburg, shared later with Blu). Its address goes to PayCentral
+        with the production whitelisting request.
 
 **The API (REST/JSON).**
 - **Base URL:** `https://staging-api.paycentral.co.za`; production URL to come.
