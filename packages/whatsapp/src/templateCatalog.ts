@@ -6,7 +6,11 @@
 
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Under `node --test` never the .env database (founder 2026-10-24; same guard as lib/prisma.js): this
+// module loads with the package index, which many tests import.
+const prisma = process.env.NODE_TEST_CONTEXT
+  ? new PrismaClient({ datasources: { db: { url: String(process.env.TEST_DATABASE_URL || '').trim() || 'postgresql://wapay_tests@127.0.0.1:1/no_database' } } })
+  : new PrismaClient();
 
 type Catalog = Map<string, Set<string>>; // name -> approved languages
 

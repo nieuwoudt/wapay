@@ -12,6 +12,9 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Head from 'next/head';
+import dynamic from 'next/dynamic';
+// The Links tab (2026-10-25): Leaflet touches the window, so the tab renders in the browser only.
+const LinkMapTab = dynamic(() => import('../../components/admin/LinkMapTab.js'), { ssr: false });
 import { fmtR, fmtN, simulate, preset, budgetFn, BUDGET_DEFAULT } from '../../lib/scale-model.js';
 import { Bars, WeeklyFlows, TakeRate, StackBars, DailyBars, DailyLines, PathChart, ValuationPath } from '../../lib/admin-charts.js';
 
@@ -1989,6 +1992,13 @@ function QualityCard({ tick = 0 }) {
           </div>
           <div className="vs">{q && q.delivery && q.delivery.verdict !== 'UNKNOWN' ? (q.delivery.verdict === 'OK' ? `delivery ok · 24 h: ${q.delivery.last24h.ok} delivered, ${q.delivery.last24h.failed} failed` : `${q.delivery.verdict}${q.delivery.code ? ` · Meta code ${q.delivery.code}` : ''}${q.delivery.last24h?.firstFailAt ? ` · since ${dt(q.delivery.last24h.firstFailAt)}` : ''}`) : 'from Meta\'s delivery statuses on the webhook'}</div>
         </div>
+        <div className="card" style={{ borderColor: q && q.compliance && q.compliance.verdict === 'RED' ? 'var(--crit)' : undefined }}>
+          <div className="k">Meta compliance, last 24 h</div>
+          <div className="v" style={{ color: q && q.compliance ? (q.compliance.verdict === 'GREEN' ? 'var(--good)' : q.compliance.verdict === 'AMBER' ? 'var(--warn, #e3b341)' : q.compliance.verdict === 'RED' ? 'var(--crit)' : 'var(--ink3)') : undefined }}>
+            {!q ? '…' : q.compliance ? q.compliance.verdict : 'unknown'}
+          </div>
+          <div className="vs">{q && q.compliance ? (q.compliance.reasons && q.compliance.reasons.length ? q.compliance.reasons.slice(0, 3).map((r) => r.text).join(' ') : 'every rule held: no marketing, no reminders, stop honoured, one reply per message') : 'checked daily; alerts ops when anything drifts'}</div>
+        </div>
         <div className="card"><div className="k">Support contact on the profile</div><div className="v" style={{ color: q && q.profile ? (q.profile.hasSupportContact ? 'var(--good)' : 'var(--crit)') : undefined }}>{q && q.profile ? (q.profile.hasSupportContact ? 'yes' : 'missing') : '…'}</div><div className="vs">{q && q.profile ? [q.profile.email, ...(q.profile.websites || [])].filter(Boolean).join(' · ') || 'the Messaging Policy asks for an e-mail or website' : ''}</div></div>
       </div>
     </div>
@@ -2052,6 +2062,188 @@ function AuditPanel({ tick = 0 }) {
         </>
       )}
     </div>
+  );
+}
+
+/* ---------------- Pay-out requests with the fraud triage (founder 2026-10-24) ---------------- */
+const LEVEL_PILL = { 1: 'g', 2: 'g', 3: 'y', 4: 'r', 5: 'r' };
+const PAYOUT_OUTCOME = { SETTLED: 'paid', PENDING: 'with the bank', AWAITING_APPROVAL: 'waiting for your approval', SCHEDULED: 'set aside for the next business day', NOT_CLEARED: 'not sent: same day needs money older than 2 h', REVIEW: 'held for your check', TEST_RUN: 'test run, nothing sent', FROZEN: 'refused: frozen', PAYOUT_HOLD: 'refused: paused', DAILY_CAP: 'refused: daily cap', KYC_REQUIRED: 'refused: ID check', FEE_CHANGED: 'stopped: fee changed', INSUFFICIENT_FUNDS: 'refused: balance', FLOAT_SHORT: 'refused: float empty', NOT_AUTHORISED: 'refused: no PIN' };
+function PayoutRequests({ tick }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState('');
+  const [again, setAgain] = useState(0);
+  useEffect(() => {
+    fetch('/api/admin/payout-requests?days=7').then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then(setD).catch((e) => setErr(e.message || 'failed'));
+  }, [tick, again]);
+  const act = async (q, decision) => {
+    const what = decision === 'clear' ? `Clear ${q.phone || 'this account'} past the review for 72 hours? The cap, the ID check and the pause still apply.` : `Freeze pay-outs and sends for ${q.phone || 'this account'}? Receiving money stays open.`;
+    if (!window.confirm(what)) return;
+    setBusy(`${q.accountId}:${decision}`);
+    try {
+      const r = await fetch('/api/admin/payout-requests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: q.accountId, decision }) });
+      if (!r.ok) setErr(`That did not work (${r.status}).`);
+      setAgain((n) => n + 1);
+    } finally { setBusy(''); }
+  };
+  if (err) return <p className="err">Pay-out requests could not be read ({err}).</p>;
+  if (!d) return <p className="empty">Loading pay-out requests…</p>;
+  return (
+    <>
+      {d.hold?.held ? <p className="pill r" style={{ fontSize: 12.5, padding: '6px 12px', marginBottom: 10 }}>⏸ Pay-outs are paused for everyone since {new Date(d.hold.since).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}. Nothing leaves until you reopen them.</p> : null}
+      <p className="note" style={{ marginTop: 0 }}>Last 7 days by fraud level: {[5, 4, 3, 2, 1].map((l) => `${l}: ${d.byLevel?.[l] ?? 0}`).join(' · ')}. Level 4 and 5 wait for your check (Clear lets one account through for 72 hours); you get every request on WhatsApp and e-mail.</p>
+      {!d.requests?.length ? <p className="empty">No pay-out requests in the last 7 days.</p> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ minWidth: 760 }}>
+            <thead><tr><th>When</th><th>Account</th><th className="n">Amount</th><th>Level</th><th>Why</th><th>Result</th><th></th></tr></thead>
+            <tbody>
+              {d.requests.map((q, i) => (
+                <tr key={`${q.accountId}-${i}`}>
+                  <td>{new Date(q.at).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                  <td>{q.phone || '•••'}{q.name ? ` ${q.name}` : ''}{q.frozen ? <span className="pill r" style={{ marginLeft: 6 }}>frozen</span> : null}</td>
+                  <td className="n">{q.amountCents != null ? R(q.amountCents) : '–'}{q.method ? ` ${q.method}` : ''}{q.express ? ' · double fee' : ''}</td>
+                  <td>{q.level ? <span className={`pill ${LEVEL_PILL[q.level] || 'y'}`}>{q.level}/5 {q.label}</span> : '–'}</td>
+                  <td>{q.reasons?.length ? q.reasons.join('; ') : 'nothing unusual'}</td>
+                  <td>{PAYOUT_OUTCOME[q.outcome] || q.outcome || '–'}{q.cleared ? ' (cleared)' : ''}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{(q.level >= 4 || q.outcome === 'REVIEW') && !q.frozen ? (
+                    <>
+                      <button className="linkish" disabled={!!busy} onClick={() => act(q, 'clear')}>Clear 72 h</button>{' · '}
+                      <button className="linkish" disabled={!!busy} style={{ color: 'var(--crit)' }} onClick={() => act(q, 'freeze')}>Freeze</button>
+                    </>
+                  ) : null}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ---------------- Pay-outs: approvals, requests, numbers we watch (founder 2026-10-26) ---------------- */
+const REL = (d) => (d ? new Date(d).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '–');
+const LEVEL_TEXT = { 1: '1/5 very unlikely', 2: '2/5 unlikely', 3: '3/5 possible', 4: '4/5 likely', 5: '5/5 very likely' };
+function Approvals({ tick, onChange }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState('');
+  const load = () => fetch('/api/admin/payout-approvals').then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then(setD).catch((e) => setErr(e.message || 'failed'));
+  useEffect(() => { load(); }, [tick]);
+  const decide = async (p, decision) => {
+    const q = decision === 'approve' ? `Pay ${R(p.amountCents)} to ${p.to?.name || p.phone} by ${p.methodLabel} now?` : `Reject ${p.phone}'s ${R(p.amountCents)} pay-out? The money goes back to their balance.`;
+    if (!window.confirm(q)) return;
+    setBusy(`${p.reference}:${decision}`); setMsg('');
+    try {
+      const r = await fetch('/api/admin/payout-approvals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reference: p.reference, decision }) });
+      const j = await r.json().catch(() => ({}));
+      setMsg(j.ok ? (j.status === 'REJECTED' ? `Rejected ${p.reference}: the money is back in their balance.` : j.status === 'SCHEDULED' ? `${p.reference}: approved, it goes on the next business day from 08:00 (${p.releaseAt ? new Date(p.releaseAt).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'next business day'}).` : `${p.reference}: ${j.status === 'SETTLED' ? 'paid' : 'sent to the bank rail'}.`)
+        : j.error === 'FLOAT_SHORT' ? `The pay-out float has ${R(j.floatCents)} and ${p.reference} needs ${R(j.needCents)}. Top up OTT, then approve again; it is still waiting.`
+        : j.error === 'FROZEN' ? `${p.phone} is frozen, so ${p.reference} was rejected and the money went back.` : `${p.reference} did not go through (${j.error || r.status}).`);
+      load(); if (onChange) onChange();
+    } finally { setBusy(''); }
+  };
+  if (err) return <p className="err">Approvals could not be read ({err}).</p>;
+  if (!d) return <p className="empty">Loading…</p>;
+  const m = d.mode || {};
+  return (
+    <>
+      <p className={`pill ${m.mode === 'open' ? 'g' : 'r'}`} style={{ fontSize: 12.5, padding: '6px 12px', marginBottom: 10 }}>
+        {m.mode === 'approval' ? `Every pay-out waits for your approval (since ${REL(m.approvalSince)}). Nothing reaches the bank until you approve it.`
+          : m.mode === 'paused' ? `⏸ Pay-outs are paused for everyone (since ${REL(m.heldSince)}). Customers are told to try later.`
+          : 'Pay-outs are open: they go automatically unless the fraud level holds them.'}
+      </p>
+      {msg ? <p className="note">{msg}</p> : null}
+      {!d.waiting?.length ? <p className="empty">Nothing waiting for you.</p> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ minWidth: 900 }}>
+            <thead><tr><th>Asked</th><th>Customer</th><th className="n">Amount</th><th>To</th><th>Fraud level</th><th>Why</th><th></th></tr></thead>
+            <tbody>
+              {d.waiting.map((p) => (
+                <tr key={p.reference}>
+                  <td>{REL(p.requestedAt)}</td>
+                  <td>{p.phone}{p.name ? ` ${p.name}` : ''}<div className="note" style={{ margin: 0 }}>{p.accountAgeDays} days · {p.idChecked ? 'ID checked' : 'no ID check'}{p.frozen ? ' · FROZEN' : ''}</div></td>
+                  <td className="n"><b>{R(p.amountCents)}</b><div className="note" style={{ margin: 0 }}>{p.methodLabel} · fee {R(p.feeCents)}{p.express ? ' (double)' : ''}{p.speed === 'SAME_DAY' ? ' · same day' : p.speed === 'NEXT_DAY' ? ` · next business day${p.releaseAt ? ` (${new Date(p.releaseAt).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', weekday: 'short', day: 'numeric', month: 'short' })}, 08:00)` : ''}` : ''}</div></td>
+                  <td>{[p.to?.name, p.to?.account || p.to?.mobile].filter(Boolean).join(' · ') || '–'}</td>
+                  <td>{p.level ? <span className={`pill ${LEVEL_PILL[p.level] || 'y'}`}>{LEVEL_TEXT[p.level]}</span> : '–'}</td>
+                  <td>{p.reasons?.length ? p.reasons.map((c) => c.toLowerCase().replace(/_/g, ' ')).join('; ') : 'nothing unusual'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {p.status === 'SCHEDULED' ? <span className="pill g" style={{ marginRight: 6 }}>Approved, goes on its business day</span> : <><button className="linkish" disabled={!!busy} onClick={() => decide(p, 'approve')}>{p.speed === 'NEXT_DAY' ? 'Approve' : 'Approve and pay'}</button>{' · '}</>}
+                    <button className="linkish" disabled={!!busy} style={{ color: 'var(--crit)' }} onClick={() => decide(p, 'reject')}>Reject</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+function Watchlist({ tick }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState('');
+  const [again, setAgain] = useState(0);
+  useEffect(() => { fetch('/api/admin/watchlist?days=30').then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then(setD).catch((e) => setErr(e.message || 'failed')); }, [tick, again]);
+  const freeze = async (a) => {
+    if (!window.confirm(`Freeze pay-outs and sends for ${a.phone}? Receiving money stays open.`)) return;
+    setBusy(a.accountId);
+    try { await fetch('/api/admin/payout-requests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountId: a.accountId, decision: 'freeze' }) }); setAgain((n) => n + 1); } finally { setBusy(''); }
+  };
+  if (err) return <p className="err">The watchlist could not be read ({err}).</p>;
+  if (!d) return <p className="empty">Loading…</p>;
+  return (
+    <>
+      <p className="note" style={{ marginTop: 0 }}>Not frozen, but tied to the fraud in the last {d.days} days. Freeze stops their pay-outs and sends; receiving stays open.</p>
+      {!d.accounts.length ? <p className="empty">No accounts to watch.</p> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ minWidth: 820 }}>
+            <thead><tr><th>Number</th><th>Opened</th><th className="n">Holds</th><th>Why we watch it</th><th></th></tr></thead>
+            <tbody>
+              {d.accounts.map((a) => (
+                <tr key={a.accountId}>
+                  <td>{a.phone}{a.name ? ` ${a.name}` : ''}{a.idChecked ? <span className="pill g" style={{ marginLeft: 6 }}>ID checked</span> : null}</td>
+                  <td>{REL(a.openedAt)}</td>
+                  <td className="n">{R(a.balanceCents)}</td>
+                  <td>{a.reasons.map((r) => r.text).join('; ')}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <a className="linkish" href={`/admin?tab=customer&customer=${encodeURIComponent(a.accountId)}`}>Customer card</a>{' · '}
+                    <button className="linkish" disabled={!!busy} style={{ color: 'var(--crit)' }} onClick={() => freeze(a)}>Freeze</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {d.payers?.length ? (
+        <>
+          <h3 style={{ fontSize: 13.5, margin: '14px 0 6px' }}>Payer numbers</h3>
+          <table><thead><tr><th>Payer</th><th className="n">Accounts paid</th><th className="n">Payments to frozen accounts</th><th className="n">Total</th></tr></thead>
+            <tbody>{d.payers.map((p) => <tr key={p.number}><td>{p.number}{p.isFrozenAccount ? <span className="pill r" style={{ marginLeft: 6 }}>a frozen account</span> : null}</td><td className="n">{p.paidAccounts}</td><td className="n">{p.paidFrozenAccounts}{p.refundedFrozenAccounts ? <div className="note" style={{ margin: 0 }}>+{p.refundedFrozenAccounts} refunded</div> : null}</td><td className="n">{R(p.totalCents)}</td></tr>)}</tbody>
+          </table>
+        </>
+      ) : null}
+      <h3 style={{ fontSize: 13.5, margin: '14px 0 6px' }}>Frozen accounts · {d.frozen.length} · holding {R(d.frozenHeldCents)}</h3>
+      <table><thead><tr><th>Number</th><th>Frozen</th><th className="n">Holds</th><th>Reason</th></tr></thead>
+        <tbody>{d.frozen.map((f) => <tr key={f.accountId}><td>{f.phone}{f.name ? ` ${f.name}` : ''}</td><td>{REL(f.frozenAt)}</td><td className="n">{R(f.balanceCents)}</td><td>{f.reason || '–'}</td></tr>)}</tbody>
+      </table>
+    </>
+  );
+}
+function PayoutsTab() {
+  const [tick, setTick] = useState(0);
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+        <button className="linkish" onClick={() => setTick((t) => t + 1)}>↻ Refresh</button>
+      </div>
+      <div className="card"><h2>Waiting for your approval</h2><Approvals tick={tick} onChange={() => setTick((t) => t + 1)} /></div>
+      <div className="card" style={{ marginTop: 14 }}><h2>Pay-out requests</h2><PayoutRequests tick={tick} /></div>
+      <div className="card" style={{ marginTop: 14 }}><h2>Numbers we should be watching</h2><Watchlist tick={tick} /></div>
+    </>
   );
 }
 
@@ -2240,7 +2432,7 @@ function Inbox() {
   );
 }
 
-const TABS = [['dashboard', 'Dashboard'], ['growth', 'Valuation Metrics'], ['inbox', 'Inbox'], ['customer', 'Customers'], ['health', 'Health'], ['floats', 'Supplier Floats']];
+const TABS = [['dashboard', 'Dashboard'], ['growth', 'Valuation Metrics'], ['inbox', 'Inbox'], ['customer', 'Customers'], ['payouts', 'Pay-outs'], ['links', 'Link map'], ['health', 'Health'], ['floats', 'Supplier Floats']];
 
 export default function Admin() {
   const [authed, setAuthed] = useState(null);
@@ -2297,7 +2489,7 @@ export default function Admin() {
       {authed === null && <div className="card"><div className="empty">…</div></div>}
       {authed === false && <Login configured={configured} passwordLogin={passwordLogin} onDone={probe} />}
       {authed === true && (
-        tab === 'dashboard' ? <Dashboard /> : tab === 'growth' ? <Growth /> : tab === 'inbox' ? <Inbox /> : tab === 'health' ? <Health /> : tab === 'floats' ? <FloatsTab /> : <Customer initialQuery={initialCustomer} />
+        tab === 'dashboard' ? <Dashboard /> : tab === 'growth' ? <Growth /> : tab === 'inbox' ? <Inbox /> : tab === 'health' ? <Health /> : tab === 'floats' ? <FloatsTab /> : tab === 'links' ? <LinkMapTab /> : tab === 'payouts' ? <PayoutsTab /> : <Customer initialQuery={initialCustomer} />
       )}
     </div>
   );

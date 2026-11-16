@@ -29,6 +29,10 @@
     {
       "path": "/api/cron/daily-vas-sync",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/payout-release",
+      "schedule": "0 6 * * *"
     }
   ],
   "regions": [

@@ -86,6 +86,16 @@ export default async function handler(req, res) {
       payoutSweep = { error: e?.message || String(e) };
     }
 
+    // Next-business-day pay-outs whose day has come (lib/payout-approval.js, 2026-11-11): the floor behind
+    // /api/cron/payout-release at 08:00 SAST, in case that run was missed. Never sends one early.
+    try {
+      const { releaseDuePayouts } = await import('../../../lib/payout-approval.js');
+      const released = await releaseDuePayouts({ take: 10 });
+      console.log(JSON.stringify({ type: 'cron_payout_release_floor', scheduled: released.scheduled, due: released.due, sent: released.sent, pending: released.pending, floatShort: released.floatShort, errors: released.errors, timestamp: new Date().toISOString() }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_payout_release_floor_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
     // Held sends nobody collected in 30 days go back to their senders, each told
     // once (BUGLOG #117; Hobby plan, so it rides this daily cron like the pay-out
     // sweep). Best-effort: never changes this route's answer or status.
@@ -105,6 +115,15 @@ export default async function handler(req, res) {
       console.log(JSON.stringify({ type: 'cron_turns_purged', ...turnsPurged, timestamp: new Date().toISOString() }));
     } catch (e) {
       console.error(JSON.stringify({ type: 'cron_turns_purge_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
+    // Link visits retention (lib/link-visits.js, 2026-10-25): areas of link opens are kept 90 days.
+    try {
+      const { pruneLinkVisits } = await import('../../../lib/link-visits.js');
+      const pruned = await pruneLinkVisits({ prisma });
+      console.log(JSON.stringify({ type: 'cron_link_visits_pruned', ...pruned, timestamp: new Date().toISOString() }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_link_visits_prune_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
     }
 
     // Balance integrity (docs/AGENT_ARCHITECTURE_V2.md C17): stored vs derived
@@ -147,7 +166,7 @@ export default async function handler(req, res) {
     try {
       const { drainJobs } = await import('../../../lib/jobs.js');
       const { reconcileFuelPurchases } = await import('../../../lib/fuel-settlement.js');
-      const { reconcileElectricityPurchases } = await import('../../../lib/electricity-settlement.js');
+      const { reconcileElectricityPurchases, markElectricityTokenUndelivered } = await import('../../../lib/electricity-settlement.js');
       const { notifyCustomer } = await import('../../../lib/notify.js');
       jobs = await drainJobs({
         prisma,
@@ -180,12 +199,15 @@ export default async function handler(req, res) {
             if (account.waId) {
               for (const d of recon.delivered) {
                 const formattedToken = String(d.token || '').replace(/(.{4})/g, '$1 ').trim();
-                await notifyCustomer({
+                const sent = await notifyCustomer({
                   to: account.waId,
                   accountId: account.id,
                   text: `✅ Electricity purchase successful!\n\n📟 Meter: ${d.meterNumber}\n💰 Amount: R${(Number(d.amountCents || 0) / 100).toFixed(2)}\n⚡ Token: *${formattedToken}*\n🔋 Units: ${d.units || 'N/A'} kWh\n🧾 Reference: ${d.providerRef}\n\n💳 New balance: R${(Number(d.newBalanceCents || 0) / 100).toFixed(2)}`,
                   kind: 'receipt',
                 });
+                // Window closed and no template: the token stays on the row and
+                // the customer's next message delivers it (never re-sent here).
+                if (!sent?.ok) await markElectricityTokenUndelivered({ previewId: d.previewId });
               }
               if (recon.failed > 0) {
                 await notifyCustomer({
@@ -214,6 +236,31 @@ export default async function handler(req, res) {
       await Promise.race([deliveryStallCheck({ prisma }), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 5000))]);
     } catch (e) {
       console.error(JSON.stringify({ type: 'cron_whatsapp_quality_failed', error: e?.message || String(e), timestamp: new Date().toISOString() }));
+    }
+
+    try {
+      // The daily WhatsApp compliance check (lib/meta-compliance.js, founder 2026-10-23) runs in
+      // its own invocation, like the audit below: fire it with the key and stop waiting after 4 s.
+      let complianceHandoff = null;
+      try {
+        const ckey = process.env.WAPAY_INTERNAL_API_KEY || '';
+        if (ckey) {
+          const { apiUrl: complianceUrl } = await import('../../../lib/api-url.js');
+          const cc = new AbortController();
+          const ct = setTimeout(() => cc.abort(), 4000);
+          try {
+            const r = await fetch(complianceUrl('/api/internal/compliance-check?alert=1', req), { method: 'GET', headers: { 'x-internal-api-key': ckey }, signal: cc.signal });
+            complianceHandoff = { ok: r.ok, handoff: true, status: r.status };
+          } catch (e) {
+            complianceHandoff = e?.name === 'AbortError' ? { ok: true, handoff: true, status: 'RUNNING' } : { ok: false, error: e?.message || String(e) };
+          } finally { clearTimeout(ct); }
+        }
+      } catch (e) {
+        console.error(JSON.stringify({ type: 'cron_compliance_handoff_failed', error: e?.message || String(e) }));
+      }
+      console.log(JSON.stringify({ type: 'cron_compliance_handoff', ...(complianceHandoff || { ok: false, skipped: 'NO_KEY' }) }));
+    } catch (e) {
+      console.error(JSON.stringify({ type: 'cron_compliance_handoff_failed', error: e?.message || String(e) }));
     }
 
     // The daily conversation audit (docs/audits/DAILY_AUDIT.md, 2026-10-19):

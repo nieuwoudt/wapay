@@ -166,7 +166,7 @@ test('brief: the truth block follows the switches, both worlds, and never a date
   assert.doesNotMatch(hold, /buying airtime/);
   assert.match(hold, /Withdrawal methods on production \(the rail list could not be read; these are the production methods of record\): PayShap, Cash at an Absa ATM \(CashSend\) and Cash at a Nedbank ATM\./);
   assert.match(hold, /do NOT exist on production[^\n]*FNB eWallet/);
-  assert.match(hold, /R8 by PayShap/); assert.doesNotMatch(hold, /by bank transfer/, 'no fee for a method the list does not carry');
+  assert.match(hold, /R12 by PayShap to the customer's own bank account on the next business day, R20 the same day/); assert.doesNotMatch(hold, /by bank transfer/, 'no fee for a method the list does not carry');
   assert.match(hold, /Minimum R50 \(the rail floor\)/); assert.match(hold, /\(R50 to R3000;/, 'the live line and the fee line agree');
   assert.match(hold, /business accounts by invitation only/);
   const open = withEnv({ ...NEUTRAL, WAPAY_LAUNCH_HOLD: 'off', VAS_LIVE_AIRTIME: 'true', VAS_LIVE_BLU_LOAD: 'true', WAPAY_PAYOUT_ENABLED: 'true' }, () => truthBlock());
@@ -179,7 +179,7 @@ test('brief: the truth block follows the switches, both worlds, and never a date
   for (const t of [hold, open, off]) { assert.doesNotMatch(t, NO_DATE); assert.doesNotMatch(t, BANNED); }
   // The live list from the rail is used when it is there, with its own floor.
   const live = withEnv({ ...NEUTRAL, WAPAY_PAYOUT_ENABLED: 'true' }, () => truthBlock({ providers: [{ method: 'PAYSHAP', label: 'PayShap', minCents: 5000 }, { method: 'RTC', label: 'Bank transfer (RTC)', minCents: 5000 }] }));
-  assert.match(live, /read from the rail at run time\): PayShap and Bank transfer \(RTC\)\./); assert.match(live, /R10 by bank transfer/); assert.match(live, /do NOT exist[^\n]*Cash at a Nedbank ATM/);
+  assert.match(live, /read from the rail at run time\): PayShap and Bank transfer \(RTC\)\./); assert.match(live, /R12 by bank transfer on the next business day, R20 the same day/); assert.match(live, /do NOT exist[^\n]*Cash at a Nedbank ATM/);
   assert.equal(minWithdrawCents(null), 5000); assert.equal(minWithdrawCents([{ method: 'PAYSHAP', minCents: 2000 }]), 2000);
   assert.deepEqual(FALLBACK_PROVIDERS.map((p) => p.method), ['PAYSHAP', 'CASHSEND', 'NEDCASH']);
 });

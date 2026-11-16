@@ -4,7 +4,7 @@
 
 ---
 
-## 2026-10-23 (125) — Cards: PayCentral's staging API read, products chosen (DigiCentral + CashCentral+), static IP plan, reply to Odette (docs only)
+## 2026-10-23 (143) — Cards: PayCentral's staging API read, products chosen (DigiCentral + CashCentral+), static IP plan, reply to Odette (docs only)
 
 PayCentral sent the staging API specification v2.1.5, its onboarding document and the
 white-label deck, plus the static-IP whitelisting fees: staging R950 excl VAT for 3 months,
@@ -26,7 +26,7 @@ repo). Products as decided the same day: DigiCentral and CashCentral first, Cash
 
 ---
 
-## 2026-10-20 (124) — Cards: PayCentral's NDA reviewed and filled, the product deck read; the cards branch brought up to main (docs only)
+## 2026-10-20 (142) — Cards: PayCentral's NDA reviewed and filled, the product deck read; the cards branch brought up to main (docs only)
 
 PayCentral sent its standard NDA and product deck and told the founder WaPay can start issuing
 virtual and physical cards. `docs/CARDS.md` §0.8 records:
@@ -40,11 +40,11 @@ virtual and physical cards. `docs/CARDS.md` §0.8 records:
 - four new open questions, and a no-code pilot through the portal with company money.
 
 CAPABILITIES' PayCentral row updated. The branch merged `main` (the credentials scrub and
-pay-out rules). This branch's entries are renumbered after main's (first 88 and 89, then 109 to 111, now 122 to 124), the same way the scrub's were.
+pay-out rules). This branch's entries are renumbered after main's (first 88 and 89, then 109 to 111, now 140 to 142), the same way the scrub's were.
 
 ---
 
-## 2026-10-16 (123) — Cards: the route is PayCentral (Paymentology direct needs 30,000 cards); plan rewritten for a pre-funded card (docs only)
+## 2026-10-16 (141) — Cards: the route is PayCentral (Paymentology direct needs 30,000 cards); plan rewritten for a pre-funded card (docs only)
 
 On the founder's call Paymentology set a 30,000-card minimum for direct work and referred
 WaPay to PayCentral. PayCentral is a South African programme manager on Paymentology's
@@ -66,7 +66,7 @@ is search-sourced and labelled.
 
 ---
 
-## 2026-10-15 (122) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
+## 2026-10-15 (140) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
 
 The founder asked whether WaPay can issue customers virtual cards through Paymentology,
 how it maps onto the product, and what to send Paymentology's sales form.
@@ -92,6 +92,593 @@ pages were read through search extracts and every fact carries its source. CAPAB
 Paymentology as discovery. No code changed.
 
 ---
+## 2026-11-11 (139) — A pay-out to a bank account has two speeds: R12 on the next business day or R20 the same day; money under 2 hours old goes on the next business day only
+
+The founder's decision (7 Nov, confirmed 11 Nov "12 yes"): "payout to your bank is R12 for all payouts, and if you want
+a same-day payout, it's R20 ... if it's cleared." Cash withdrawals keep R18 / R23 / R30.
+
+- **Fees** (`lib/ledger-core.js`): PayShap and RTC carry `nextDayFeeCents: 1200` (the default whenever a caller names no
+  speed) and bands of R20 (the same day). `cashoutFeeCents(method, amount, speed)`; cash ignores the speed.
+- **The rule** (`lib/payout-speed.js`, new):
+  - `nextBusinessDayAt`: 08:00 SAST on the first Monday to Friday after the request's day. Friday evening and the
+    weekend go to Monday. There is no public-holiday list in the code, so a weekday holiday counts.
+  - `sameDayCheck`: the same receipts and oldest-first ageing as the express fee (`freshNeed`, factored out of
+    `lib/payout-express.js`).
+- **`requestPayout`** (`lib/payouts.js`):
+  - SAME_DAY that needs money under 2 hours old is refused (`NOT_CLEARED`, with `clearedFromAt`) before any row, hold
+    or rail call.
+  - The express multiplier no longer applies to a bank account; cash keeps it.
+  - NEXT_DAY is set aside like an approval-mode request: SPEND to CASH, hold, destination encrypted, `releaseAt` on the
+    row. Status is AWAITING_APPROVAL in approval mode, SCHEDULED without it.
+  - A replay of a waiting or scheduled request now reports that status instead of FAILED.
+  - The R3,000 in 24 hours (`lib/payout-rules.js paidOutLast24h`) counts SCHEDULED too, so an approved
+    next-business-day pay-out cannot be stacked past the cap. AWAITING_APPROVAL still does not count (unchanged).
+- **Approval and release** (`lib/payout-approval.js`):
+  - Approved before its `releaseAt`, a request becomes SCHEDULED and the customer is told the day. Approved after it,
+    it goes at once.
+  - `releaseDuePayouts` sends due SCHEDULED rows, one at a time and claimed atomically. A freeze rejects; a short float
+    leaves the row SCHEDULED and alerts the ops numbers once a day. It runs from `GET /api/cron/payout-release`
+    (new, `vercel.json` `0 6 * * *` = 08:00 SAST) and as a floor inside `daily-vas-sync`.
+  - `rejectPayout` also stops a SCHEDULED pay-out. Mission Control and the signed approval link show the speed and the
+    day.
+- **Every channel names the speed:**
+  - **Chat:** the confirmation offers "1 Next business day (day, from 08:00): R12" and "2 Same day: R20". When the
+    money is fresh or the balance only covers R12, it offers the next business day alone and says why. The PIN step
+    carries the chosen fee. New copy: scheduled, not cleared, and the next-business-day line in the waiting-for-approval
+    and status replies.
+  - **Web app:** `payoutCheck` returns `speeds` and the page has a two-option choice.
+  - **Business portal:** a "When" select.
+  - **Operator pay-outs:** always SAME_DAY.
+- **Fee answers, the how-it-works brief and the audit brief** quote both prices. The rules line says fresh money goes
+  to a bank on the next business day only, and costs double as cash.
+- **Books** (`lib/payout-books.js`): AWAITING_APPROVAL, SCHEDULED and REJECTING count as open, holding states. This
+  also clears the "orphan hold" anomaly that •••0517's waiting R492 raised.
+- `WAPAY_TEMPLATE_MONEY_RECEIVED` added to the compliance check's template list.
+- **Money Map** v1.5: next-day and same-day rows for PayShap and RTC; `code-facts.json` re-synced.
+- **Tests:** `tests/payout-speed.test.mjs` (10, new). Rail tests that exercise the immediate rail now name SAME_DAY, the
+  express tests run on Nedbank cash, and copy tests carry R12 / R20. Full suite 1499/1499 and `next build` green.
+
+## 2026-11-10 (138) — Paying your own link: the first time is allowed and the payer is told we can see it; after that, or from R1,000, a verified ID comes first
+
+The founder's rule (10 Nov), given while deciding the Adumo switch: own-link card payments (73% of Pay presses, and
+the stolen-card pattern of 20 Oct to 7 Nov) are not refused, they need an ID check.
+
+- `lib/own-link.js` (new) holds the rule (`ownLinkDecision`):
+  - **another payer number:** PASS;
+  - **requester ID verified:** PASS (pay-outs still wait for approval);
+  - **first own-link payment under the line:** WARN, one page saying "This is your own link … This time it goes
+    through. Paying your own link again needs a verified ID first", then Continue (re-posted with `ack=1`, the rule
+    decided again);
+  - **a paid own-link payment already on record:** BLOCK (REPEAT);
+  - **first own-link payment at or above `WAPAY_OWN_LINK_KYC_FIRST_CENTS`** (default 100000 = R1,000; `off`
+    disables): BLOCK (AMOUNT);
+  - **history unreadable:** BLOCK.
+
+  "Paid" means a SUCCESS `payrequest` intent on the account whose `metadata.payerMsisdn` is its own number, refunds
+  excluded. The block page points to app.wapay.co.za/app/profile → Verify and says nothing was charged.
+- `pages/api/pay/checkout.js`: decided before any intent or rail session, on both PayFast and Adumo, so a block
+  charges nothing. The log line `payrequest_own_link` records only `…1234` of the number.
+- `lib/request-notify.js`: when an unverified requester paid their own link, the requester's paid notice carries one
+  line saying the next one needs a verified ID (plain text or Direct Send only, not the template).
+- Tests: `tests/own-link.test.mjs` (11); the `tests/payer-registration.test.mjs` lock now allows 200/403 only
+  inside the own-link branch. Full suite 1489/1489 and `next build` green with 137.
+- Known limits, for the founder:
+  - The rule sees only the typed payer number. Typing another number (Mo's, on 2 of •••1332's 3 payments) or the
+    old GET `?code=` link gets past it.
+  - A VERIFIED account (•••1332 was) passes without limit, so pay-out approval stays the real control.
+  - WhatsApp has no standalone "verify" command; the check starts on the web portal or inside withdraw.
+
+## 2026-11-10 (137) — A member who is sent money hears from WaPay every time: inside their window as a message, outside it through the approved utility template
+
+The founder sent R400 to a member, and the member got nothing. Since 23 Oct (CHANGELOG 122) a person who was paid
+heard from WaPay only if they had written in the last 24 hours. The sender's receipt said "WaPay does not message
+them". The founder's rule (10 Nov): the person who was paid is told automatically.
+
+- `lib/send-money.js` has `notifySendRecipient`, one rule for the chat and the web:
+  - **A member** (money in their balance) is told every time. Inside their window: a plain message. Outside it:
+    `notifyCustomer`, which runs the outbound guard and then sends the UTILITY template named by
+    `WAPAY_TEMPLATE_MONEY_RECEIVED` (spec `docs/templates/wapay_money_received.md`). Unset or `off`, nothing is
+    attempted outside the window.
+  - **Anyone else** (money held until they join): a plain message only inside a window they opened. A number with
+    no account hears nothing (BUGLOG #144).
+  - Someone who said stop hears nothing until they write again. The function never throws and never blocks the
+    send.
+- `pages/api/webhooks/message-processor-v2.js`: `notifyGiftRecipient` hands MONEY to `notifySendRecipient`. The
+  airtime, data and voucher gift notices are unchanged (inside the window only). A replayed send does not notify
+  again.
+- `lib/app-money.js` `sendExecute`: the web-app send now notifies too (before this it never told the recipient),
+  wired through `lib/app-deps.js`.
+- The sender's line follows the switch, worded the same whoever the number belongs to (`recipientNoticeLine`):
+  - off: "WaPay does not message them, so let them know you sent it."
+  - on: "If they use WaPay, WaPay tells them on WhatsApp. If not, let them know it is waiting for them."
+
+  The web confirmation shows the same line.
+- `lib/gifting.js` `buildRecipientNotification` also returns `who` and `what` for MONEY (the template's
+  parameters).
+- Tests: `tests/send-recipient-notice.test.mjs` (8); `tests/meta-compliance.test.mjs` now locks the new rule.
+  Full suite 1478/1478 and `next build` green on HEAD plus this change.
+- Founder steps: push; once `wapay_money_received` is APPROVED as UTILITY, set
+  `WAPAY_TEMPLATE_MONEY_RECEIVED=wapay_money_received` in Vercel and redeploy.
+
+## 2026-11-09 (136) — Operator pay-out links check OTT's live required fields and find the customer's ID on their own waiting pay-out request; a link that would fail says why in plain words
+
+The founder's R2,863.70 PayShap link failed at the rail with BAD_RECIPIENT after a dry run with no blockers
+(BUGLOG #147). OTT's live list now requires `id_number` for PayShap. The operator pay-out read only the static list, and
+this customer's ID was not in the vault.
+
+- `lib/payouts.js`: `requiredRecipientFields(method, liveFields)`, the one rule for the fields a method needs (live
+  list first, static fallback). `cleanRecipient` uses it, with the same behaviour as before.
+- `lib/ops-payout.js`:
+  - The dry run and the live run read OTT's list (`resolveProviders`, cached five minutes, a read). The live run
+    hands the same list to `requestPayout`.
+  - When an ID is needed it comes from the vault, else from the newest sealed recipient on the customer's own pay-out
+    request: only with a verified ID, the same name as the verification, and the same last three characters
+    (`idFromLastPayoutRequest`, `usableRequestId`). Otherwise the dry run blocks with NO_IDENTITY.
+  - Any other required field this pay-out cannot fill blocks as MISSING_FIELDS.
+  - New in the answer: `blockerDetails` and `message` (plain words); `identity.source` (VAULT or
+    LAST_PAYOUT_REQUEST, with the request reference); `requiredFields` (`{ fields, from: 'OTT' | 'STATIC' }`);
+    `result.field` and `result.message` after a rail refusal. Only the last three characters of an ID are returned.
+- `pages/ops/payout.js`: the checks listed in plain words; the ID row says where the ID came from and that the method
+  asks for one; a note when OTT's list could not be read; the result card shows the rail's refusal in words.
+  `/api/ops/payout-link` and `/api/internal/ops-payout` return the new fields unchanged.
+- docs/GOLDEN_THREAD.md 3.1 names the one place a waiting request's sealed recipient is opened for an operator pay-out.
+- Not changed: the static PayShap field list (left for the founder), the pay-out hold, approval mode. No live pay-out
+  was run.
+- Tests: 5 new in `tests/ops-payout.test.mjs` (10 in the file). 1,470 pass, and `pnpm build` passes, both on a temp-dir
+  copy of HEAD plus this change.
+
+## 2026-11-09 (135) — A card refund made in the PayFast or Adumo dashboard is booked in the ledger: the credit is reversed, the link closes, never below zero
+
+The founder may refund frozen account •••1332's three R3,000 card-paid links of 7 Nov and its R50 top-up of 8 Nov in
+the PayFast dashboard. A dashboard refund alone left the credits in the balance and the links PAID (BUGLOG #146). He
+refunds in the dashboard first, then calls the new internal route. The route never calls a processor.
+
+    GET  /api/internal/card-refund?providerRef=<pf_payment_id>     dry run: the entry, the postings, the balance before and after, the link, referenceCheck
+    POST /api/internal/card-refund  {"providerRef":"<pf_payment_id>","reason":"stolen card, refunded in PayFast","by":"founder"}
+
+`idemKey` (the LOAD entry's) can stand in for `providerRef`. Add `"onlyCharge": true` only when the dry run says
+`referenceCheck: "UNVERIFIED"`. Header: `x-internal-api-key`.
+
+**Deploy order:** apply migration `20261109_payment_request_refunded` first (the payment_requests status check gains
+REFUNDED). Until then a link refund answers NEEDS_MIGRATION (503) and changes nothing; top-up refunds work.
+
+- **The books** (`lib/card-refund.js`): the full mirror of the LOAD_PAYFAST / LOAD_ADUMO entry (`buildReversal`,
+  idemKey `card-refund-<original idemKey>`, source `REVERSAL_LOAD_<RAIL>`), posted through `postEntry` with no
+  `allowNegative`:
+  - the wallet gives back its credit;
+  - the deposit fee revenue is reversed, because the payer gets the whole amount back;
+  - CLEARING:<rail> gives back the gross.
+
+  No processor cost line is invented: the card fee was never booked per payment, so it still shows when clearing is
+  reconciled to the statement.
+- **In the same transaction:**
+  - the paid link becomes REFUNDED (from PAID, or PENDING if its PAID mark had failed);
+  - the card intent keeps SUCCESS and gains `metadata.refund` (when, by, reason, reference, the reversal's idemKey).
+- **After the commit:** one audit row (event CARD_REFUND) and one masked ops alert to the ops numbers (`opsPersonAlert`,
+  `•••1332`, `…1585`, amounts, the link, the reason with digit runs masked). The customer is sent nothing.
+- **Which charge credited:**
+  - The PayFast ITN and `settleCardPayment` (Adumo) now post every card load with `externalRef` = the processor
+    reference, written once by the first post. Before this, a second charge for the same intent overwrote the intent's
+    providerRef and nothing named the credit.
+  - A reference is matched to the load that recorded it first, then to the paid link's payerRef, then to the intent.
+  - A payment the books cannot place (older top-ups; links with no payerRef or `REPAIR:replayed`) is booked only with
+    `onlyCharge: true`, and the audit row records that.
+- **Refused, nothing written:**
+  - NOT_A_CARD_LOAD (422);
+  - ALREADY_REVERSED (409; the second call only repairs a missing mark, audit row or alert);
+  - SHORT (409, with the shortfall);
+  - NOT_THE_CREDITED_PAYMENT (409);
+  - CONFIRM_ONLY_CHARGE (409);
+  - NEEDS_MIGRATION (503);
+  - AMBIGUOUS and REFERENCE_MISMATCH (409);
+  - not found (404) and bad input or no reason (400).
+- **Readers taught REFUNDED:**
+  - `lib/link-map.js`: pinned as closed.
+  - `lib/app-portal.js` + `pages/app/links.js`: shown as "Refunded", never Open; the activity says "Link payment refunded" or "Top-up refunded".
+  - `lib/context-pack.js`: the agent reads refunded links and deposits as refunded.
+  - The processor: a payer's receipt question on a refunded link says it was refunded, and cancel and remind name it.
+  - `lib/business.js`: the closed filter includes REFUNDED.
+  - `pages/api/admin/metrics.js`: the daily paid series counts status PAID only.
+  - `lib/watchlist.js` + Mission Control: money paid excludes refunds, the payer stays listed, and the "+N refunded" note shows.
+- docs/GOLDEN_THREAD.md: 2.10 now names its one exception, and the new 2.15 holds the rule. docs/CAPABILITIES.md §7
+  has the line. `schema.prisma` comments the new status.
+- A read-only review before commit found the status check, the overwritten providerRef and five smaller gaps; all are
+  fixed here (BUGLOG #146). It also found a separate bug, the same check problem on `pending_gifts` (REFUNDED from
+  `refundExpiredHeldGifts`), which is not fixed here.
+- Tests: `tests/card-refund.test.mjs` (18), the link-visits and payout-approval tests extended. 1,465 pass, and
+  `pnpm build` passes, both on a temp-dir copy of HEAD plus this change. Not run against production data.
+
+## 2026-11-07 (134) — One message per payment leg when two paths finish the same payment (Adumo return + webhook); no receipt to someone paying their own link
+
+Founder's live test, 7 November 10:31 SAST: his own R5 link PRAHSUHH, paid with Apple Pay on Adumo production, sent
+him three WhatsApp messages (the requester notice and the payer receipt twice) for one charge credited once.
+BUGLOG #145 has the cause: Adumo's browser return and its webhook both run the paid notifications, which read their
+"already told" flags before a slow send and wrote them after it.
+
+- **Exactly once under concurrency** (`lib/request-notify.js`): each leg (requester notice, payer receipt) is
+  claimed before any send with a unique `notify-claim:<leg>:<CODE>` row in `processed_messages`; the call that
+  loses sends nothing. A failed send gives the claim back so a retry or `/api/admin/notify-request` still delivers;
+  a delivered leg leaves `notify-done:<leg>:<CODE>` and merges its flag in SQL (`metadata || $patch::jsonb`) instead
+  of spreading the copy read at the start. A claim older than 5 minutes with no done row (a call that died
+  mid-send) is taken over. Covers the PayFast ITN and the repair route too, which call the same function.
+- **Paying your own link is one message:** when the payer's number is the requester's own, no payer receipt goes;
+  the requester notice is it. Payers paying someone else still get theirs.
+- **Unchanged:** the outbound guard (never write first to a number that never wrote, BUGLOG #144), the
+  service-window choice of rail, the template fallbacks, Vercel env (`WAPAY_PRIMARY_CARD_RAIL` stays PAYFAST until
+  the founder switches it after a re-test).
+- Tests: `tests/request-notify-once.test.mjs` (5, all fail on the previous code), the notify fakes in the
+  payer-registration, payer-preregister and direct-send tests get the claim table (`tests/helpers/notify-claims.mjs`),
+  the static flag test pins the SQL merge; 1,447 pass; `pnpm build` passes.
+
+## 2026-10-27 (133) — CODE RED, Meta's second spam strike: WaPay never writes first to a number that never wrote to it, and Meta's verdict reaches the founder in minutes
+
+Founder, 27 October, after Meta's e-mail of 26 October ("identified as sending spam … may face restrictions or
+be disabled"): "Identify the issue, log it, and make sure that it's implemented and not slipping past. I thought
+we have audit checks running daily." BUGLOG #144 has the numbers. In short: since 23 October 3,996 of WaPay's
+4,053 messages to account holders were replies within five minutes; one UTILITY receipt template went to a payer
+number typed during the 22 October stolen-card wave that had never written to WaPay; 86% of what Meta billed was
+click-to-WhatsApp ad arrivals; Meta flagged the number on 23 October 20:03 and 26 October 20:04 UTC, and the daily
+check reported both six hours later inside a RED it had shown every day since 20 October.
+
+- **The rule in code** (`lib/outbound-guard.js`): `businessInitiatedAllowed` refuses any business-initiated send
+  (template, Direct Send, a notice outside a reply) to a number that never wrote to WaPay: no account, a
+  pre-registered payer record without a message of theirs, or an unreadable answer. Each refusal is a
+  `bi-refused:<purpose>` row. Wired into the payer receipt (after the pre-registration record, before any rail),
+  the requester notice's template rails, `notifyCustomer` outside the window, the ops reply after the window
+  (`force` does not override it) and the business nudge (off in production). The payer's receipt comes when they
+  tap "Get my receipt" on the pay page, which opens their own chat with WaPay; the fine print now says WaPay
+  never messages a number that has not written to it.
+- **Told at once** (`lib/meta-alerts.js`): every Meta account event (`account_update`, `account_alerts`,
+  reviews, quality) is alerted from the webhook as it lands, by e-mail and WhatsApp, "🛑 ACTION NOW" for
+  enforcement, with the strikes of the last 7 days and the billing mix; the number's quality, limit tier and
+  status are read every ten minutes from the webhook and any change is alerted; every status Meta bills as
+  utility, marketing or authentication is checked against the database, and one to a number that never wrote
+  is counted (`stranger-<category>`) and alerted. Each alert stores whether the e-mail and the WhatsApp line went
+  (`alert-out:` rows).
+- **The daily check** (`lib/meta-compliance.js`): enforcement events count for 7 days with their dates, each
+  strike with its own code (`META_STRIKE_<minute>`) so a second strike is news; `SENT_TO_STRANGER` is RED;
+  refusals are reported; `AD_TRAFFIC_WHILE_RED` (AMBER) names the ad share while the rating is not GREEN; the
+  summary leads with what is new and the e-mail subject names it; the e-mail outcome is stored.
+- **Diagnosis:** `/api/internal/meta-status?node=<id>` reads what a Meta id named in an e-mail is (type, name,
+  WhatsApp accounts, numbers) with the messaging and the ads token.
+- **Not changed (the founder's decisions):** the ad, Meta settings, Vercel envs, frozen accounts.
+- Tests: `tests/spam-strike-guard.test.mjs` (10); never-wrote cases added to the notify, ops-reply,
+  payer-registration and payer-preregister tests; 1,440 pass; `pnpm build` passes.
+
+## 2026-10-27 (132) — The Blu voucher client says what Blu answered
+
+Blu thread. Phuti asked for evidence of the 12-digit QA PIN redemptions; the production
+status probe found Blu's voucher endpoint refusing us since 6 October (AUTH / RETRYABLE)
+while the VAS API key still works, and the voucher client's errors carried no status or
+reason. `packages/providers/blu/src/client.ts` `checkStatus` now attaches Blu's HTTP status
+and a masked reason to AUTH and RETRYABLE, and names a transport failure when there is no
+HTTP answer. No behaviour change in the chat.
+
+## 2026-10-27 (131) — Finfy Pay US mode: a separate +1 number for "get paid for work" (built, not switched on)
+
+Founder, 23 to 27 October: take the WhatsApp "please pay me" link to the US on Finfy Pay's Stripe rails, for
+freelancers and small businesses, starting with the pay-me link before anything bank-like. Brand Finfy Pay
+until a US trademark attorney clears "WaPay" (WhatsApp Inc. won TTAB opposition 91229413 against "WPAY WAPAY
+WHAT APP PAY").
+
+- **Routing:** a webhook change addressed to `FINFY_US_PHONE_NUMBER_ID` goes to `lib/us-finfy` and never to the
+  SA brain (one guarded `if` in `pages/api/webhooks/whatsapp.js`; unset env = nothing changes). A separate
+  endpoint, `/api/webhooks/whatsapp-us`, serves the number if it gets its own Meta app.
+- **Conversation** (`lib/us-finfy/turn.js`): sign-up by name, work and e-mail code (Finfy files the application
+  for approval); "$50 for logo design to Jane" is quoted at Finfy's price (4.9% + $1.49, the same table both
+  repos test), confirmed as payment for work, then created; balance, links and cash out answered from Finfy;
+  first cash out sends Stripe's verification link. Deterministic, no model; person-to-person refused; "start
+  over", "help" and "stop" work from any step.
+- **Notices** (`/api/finfy/events`): Finfy's signed payment.captured / payment.disputed events, deduped; free-form
+  inside the 24-hour window, the utility template outside it when configured, otherwise held for the next reply.
+- **Golden thread:** 1.8 (no model), 2.15 (no WaPay money; cash out only to the business's own verified bank),
+  4.5 (states only what Finfy's ledger says), §6 (`FINFY_CHAT_API_SECRET` has no default).
+- **To switch on:** `docs/FINFY_US_MODE.md` (Twilio, Meta, template, migration `20261027_finfy_us_chats`, env).
+- Tests: `tests/finfy-us.test.mjs` (21).
+
+## 2026-10-26 (130) — The Link map shows its pins: WaPay pins coloured by the link, the whole world, flags abroad
+
+Founder, 26 October, with a screenshot of an empty map: "I'm not seeing the links, or the areas where these links
+are getting paid, popping up on this interactive map. Maybe have a little WaPay icon showing where these links are.
+If I hover over them, show 'requested'. Do a colour difference: paid green, requested blue." And on the abroad box:
+"include the flags for these countries ... and show the colour status of the link."
+
+- **Why the map was empty** (BUGLOG #143): Mission Control's page-wide `svg{display:block;width:100%}` made
+  Leaflet's SVG marker layer 0px wide (100% of a 0×0 pane), so every circle was drawn and none was visible. The
+  local preview of CHANGELOG 128 did not carry the admin page's CSS, so it looked fine there.
+- **Pins** (`components/admin/LinkMapTab.js`, built by an agent in a worktree and reviewed): HTML markers
+  (`L.divIcon`, no SVG layer) carrying the white WaPay W-mark (`public/brand/wapay-mark-64-white.png`), coloured
+  by the LINK: green paid, blue requested, grey closed (cancelled, or pending past its expiry). A link appears
+  where it was made or its requester's area, where it was shared from, opened and paid from; pins at one place
+  and status group with a count, nearby places cluster at low zoom and split on click. The hover card says Paid
+  or Requested with up to five links (code, amount, what happened there), all escaped. The tab also resets any
+  SVG inside the map as a second guard.
+- **The world:** a "South Africa | Whole world" switch; the legend filters by status.
+- **Abroad:** each country with its flag, name, opens and pay presses, and its links by status in the pin
+  colours; a click flies the map there.
+- `linkMapView` now returns `pins` and `statuses` (the old `points` is gone), looks up the status of older links
+  still being opened, labels a pay press on an unpaid link "pressed pay", and shows a pending link past its
+  expiry as expired in Recent links.
+
+Tests: `tests/link-visits.test.mjs` (colours, grouping, flags, the older-link lookup, the SVG guard). Full suite
+1427/1427; build green; checked in light, dark and phone width under the admin page's real CSS.
+
+## 2026-10-26 (129) — Every pay-out approved by hand; the freeze holes closed; numbers we should be watching
+
+Founder, 26 October: "check the legitimacy of the payment that's being received today and notify me of any
+payout requests. I think we should manually approve the payout requests instead of just running with them,
+to make sure it doesn't seem like fraud and it's not from the same numbers that we expected as fraud in the
+past. Also flag those numbers for me in the dashboard under the appropriate section: numbers we should be
+watching."
+
+- **The morning's check** (read-only, recorded in BUGLOG #142): four payments since Saturday, none clean. Two
+  frozen accounts paid R285 each from their balances into a new account by paying its links; that account
+  tried to withdraw two minutes later, met the pause, and paid R570 back into one of them. A R300 card payment
+  at 05:07 SAST went to an account opened on 22 October; its link had been opened from Kenya, El Salvador,
+  Denmark and Singapore and pay pressed from El Salvador, Pretoria and Newcastle; the account tried to withdraw
+  two hours later. During the pause 33 withdrawals from 23 accounts met the pause line.
+- **The freeze holes, closed** (BUGLOG #142): a frozen account can no longer pay someone's link from its
+  balance (checked at the confirmation and again before the debit), nor buy airtime, data, electricity, fuel or
+  vouchers (`refuseSpendIfFrozen` before any hold in the five VAS execute routes).
+- **Approval mode** (`lib/payout-hold.js` `payout-mode:approval`, `lib/payout-approval.js`): every customer
+  pay-out runs every check, the customer's PIN and the fraud triage, has its money set aside (CASH, held) and
+  waits as `AWAITING_APPROVAL`, with where it goes kept encrypted (`lib/pii-vault.js`). The founder approves
+  (the freeze is read again; the float must cover it, otherwise it keeps waiting; the request is claimed
+  atomically; it is sent through the same rail step as an immediate pay-out, `railAndSettle`) or rejects (the
+  hold released, the money back to SPEND). The customer hears "⏳ Waiting for approval…" with no time promise,
+  "status" answers it, the web app and the business portal say it, and the outcome goes out through
+  `notifyCustomer` (inside the 24-hour window; outside it only once `WAPAY_TEMPLATE_PAYOUT_OUTCOME` is set).
+  Approval mode outranks the pause; operator pay-outs and test numbers never wait. The founder's alert carries
+  a signed link (three days, one pay-out) to `/ops/approve`. Switch: `POST /api/internal/payout-hold
+  { approval: true|false, by, reason }`; the flags show the mode.
+- **Mission Control → Pay-outs** (new tab): the mode, the pay-outs waiting for approval with Approve and pay /
+  Reject, the pay-out request log with fraud levels (moved from Supplier Floats), and **Numbers we should be
+  watching** (`lib/watchlist.js`, `GET /api/admin/watchlist`): accounts not frozen but tied to the fraud
+  (money moved with a frozen account, pay pressed or links opened from abroad, own-card links, a frozen
+  account's pay-out destination, a triage of 4 or 5, three or more withdrawal attempts during the pause) with
+  Freeze and Customer card; payer numbers that paid frozen accounts or three or more accounts; the frozen
+  accounts with what they hold. The founder's own and test numbers are never listed. The customer card opens
+  by account id too.
+
+Tests: `tests/payout-approval.test.mjs` (10). Full suite 1423/1423; build green.
+
+## 2026-10-25 (128) — Where links travel: a Link map in Mission Control; test numbers for pay-outs
+
+Founder, 25 October: "where all these links are being created, which parts of the country, and also where
+they're sending it to, and if that person opens the links, where that person is", with a description of the
+founder's other project (tagged links, a backend that catches the click, IP geolocation, an admin map); and
+"how can I test this".
+
+- **What is recorded** (`lib/link-visits.js`, table `link_visits`, migration `20261025_link_visits`, applied
+  to production before the deploy): the pay page records every OPEN, or a PREVIEW when a phone fetches the page
+  to draw WhatsApp's link preview (that phone is where the link was pasted, so it shows where it was sent
+  from); checkout records CHECKOUT (where the payment came from); link creation on the web app and the business
+  portal records CREATED; the web app's home records SEEN once a day (the requester's own area). Crawlers,
+  including Meta's, are not recorded. One row per device per link per kind per day.
+- **Where the area comes from:** Vercel's edge headers (`x-vercel-ip-country`, `-country-region`, `-city`,
+  `-latitude`, `-longitude`), so no outside lookup service, no extra call and no extra cost. It is IP-based:
+  town or city on Wi-Fi and fibre, often the network's hub city on South African mobile data, the VPN's city
+  behind a VPN, never GPS. WhatsApp shares no location and hides forwards: a link made in WhatsApp carries no
+  area of its own, and "where it was sent to" is where it was opened.
+- **The doors** (the other project's tags): `paymentRequestUrl(code, source)` adds `?s=r` to reminders,
+  `?s=t` to the tap-to-send copy, `?s=w` to web app shares and `?s=b` to business links; the plain link is
+  the chat's one message. The pay page reads the tag into the visit.
+- **Privacy** (POPIA: location is personal information): the IP is never stored; `visitorKey` is a keyed
+  hash of IP, browser and day, so a device cannot be followed across days; rows are deleted after 90 days by
+  the daily cron (`pruneLinkVisits`); the pay page tells payers in its fine print. Nothing goes to a model.
+- **Mission Control, Link map tab** (`components/admin/LinkMapTab.js`, `GET /api/admin/link-map`): links
+  made, opened, shared and paid; an OpenStreetMap map (Leaflet 1.9.4, bundled, never loaded from a CDN into
+  the admin console) with opened, paid-from, shared-from and requester areas; provinces; top towns; opens from
+  outside South Africa called out; doors; devices and apps; recent links with made in, shared from, opened in
+  and paid from; one link's journey by code; CSV export (areas and devices only).
+- **Fraud:** the triage adds FOREIGN_PAYER (+2) when a card payer pressed pay from outside South Africa.
+- **Test numbers for pay-outs** (`WAPAY_PAYOUT_TEST_NUMBERS`, any spelling): a test number goes through the
+  pause and the whole withdrawal (fees with the express fee, the ID check, the cap, the confirmation, the PIN,
+  the fraud triage and the founder's alert), and requestPayout stops before any row, hold, ledger move or rail
+  call with TEST_RUN ("🧪 Test pay-out: every check passed … nothing was sent"). A frozen test number stays
+  frozen. The flags show how many test numbers are set. The test guide is
+  `docs/testing/founder-test-2026-10-25.md`.
+
+Tests: `tests/link-visits.test.mjs` (9), the test-number case in `tests/payout-express-triage.test.mjs`, the
+tagged addresses in the link tests. Full suite 1413/1413; build green; the Links tab rendered locally with
+made-up data (map, markers, tables) before shipping.
+
+## 2026-10-24 (127) — Payment links: every link says what it is for, one message to forward, "my links" with reminders, a tap-to-send link instead of WaPay writing to the payer
+
+Founder, 24 October: "the customer has to put in a description of the payment request they send and create for
+the payee"; "when we generate a link, we only generate one message that the customer can forward, not two"; "track
+their payment links online on the web version like we do for our business accounts and in the WhatsApp menus, i.e.
+send reminders"; and whether WaPay can message the payer on the requester's behalf.
+
+**Every link says what it is for.** `lib/link-description.js` cleans the description for the payer (WhatsApp
+markdown, newlines, control and invisible characters go) and refuses it, in one plain sentence, when it carries a
+link, a domain or an e-mail address, a run of 7 or more digits (a phone or account number), wording that reads as
+WaPay or an authority (WaPay, SARS, support, admin, official, helpdesk, also spaced or with lookalike letters;
+"child support" is allowed) or more than 60 characters (refused, never cut). It is required wherever a personal link
+is made. The chat reads it from the ask ("please pay me R150 for braids", "request R200 from 082 123 4567 for
+plumbing") or asks one question in the new state `REQUEST_MONEY_NOTE`, where "cancel", a question, "my links" or
+another request always get out. The Pay agent's `start_pay_link` has a `description` argument (the slot set gains
+`description`); the flow checks it like any other and prefers the customer's own words. The ad first-link prompt
+asks "How much, and what is it for?", so "250 braids" makes the link in one answer (the words left over are the
+description now; a name only where it is marked with "from" or "owes me"). The web app's "What it is for" is
+required, checked before the PIN step, and `createLink` refuses with `DESCRIPTION` (400) before its claim. The fee
+choice names it ("Get paid R150 for braids"); a change of amount and the option-2 replacement keep it. The pay page
+shows "For: braids" and puts it in the link preview. Business links already carry a note, line items and a
+reference, so the business portal is unchanged.
+
+**One message after a link is made** (`lib/pay-links.js`), written to make sense forwarded as is: "🙏 *Thandi
+•••567 is asking you to pay R150*", "For: braids", "Pay here: <link>" as plain text, "No fee for you: pay by card,
+Instant EFT and more, or from a WaPay balance." It replaces the call-to-action card plus the forwardable text (and
+the third message on the member path). What the requester receives by card stays at the fee choice, before the
+link exists. It goes through say() with the link as its reference, so the chat remembers it (BUGLOG #120). "That
+link is already live" stays one message; the option-2 replacement and "change my amount" no longer send a cancel
+line of their own: the new link ends "This link replaces the earlier R100 link, which no longer works." and a
+question asked in that same turn starts "Your R100 link is cancelled and no longer works."
+
+**Tracking.** WhatsApp: "my links" lists the open links (amount, what for, how long ago, code) in one message;
+"remind 2" answers with one reminder to forward (the card marked as a reminder, with the date the link closes);
+"cancel 2", "cancel PRXXXXXX" and "cancel request PRXXXXXX" cancel through `cancelPaymentRequest`. They run before
+the Pay agent, so its pilot numbers get them too (BUGLOG #92, and "cancel request <code>" had never reached them);
+a number means the list the customer was shown (kept 30 minutes with the conversation). The help and home lines
+name "my links". Web: `/app/links`, a new Links tab, also on Pay and home: every link with its status, what it is
+for, the amount, when it was made, when it closes or when and how it was paid; an open link has Copy link, Share,
+Send reminder (the phone's share sheet, or `https://wa.me/?text=` so WhatsApp asks who to send it to) and Cancel.
+`GET /api/app/links` returns `shareText`, `reminderText` and `remindUrl` with each open link.
+
+**WaPay does not write to the payer for the requester.** Meta restricted the number for "sending spam" on 20 October
+and the rating is still RED; and anyone could make WaPay send "please pay R500" to any number. When the requester
+names a number ("request R200 from 082 123 4567 for plumbing"), the one message carries a tap-to-send link,
+`https://wa.me/27821234567?text=<the card>`, that opens the requester's own chat with that person, the request
+ready to send; one saved person matched by name works the same. The number is not stored on the request. The
+member-to-member note (a member the requester has sent money to before) stays, but only inside that member's
+24-hour window (`serviceWindowOpen`, now exported from `lib/request-notify.js`; BUGLOG #138): outside it nothing is
+sent. The requester's message is the same in every case, so it never tells whether a number is a member. Found on
+the way: "request from 082 123 4567 R200" read the phone's 082 as the amount (an R82 link), and "request R200 for
+plumbing" was not read as a request at all because the slot parser sees the "mb" in "plumbing" as a data bundle;
+the ask is now read by `parseLinkAsk`, and the request matcher judges product words only outside the description.
+
+Golden thread: no new model call (the one-message text is translated by the existing localizer, once); the agent's
+tool argument is the customer's own words, tokenised by the boundary like the rest of their message; descriptions
+reach a model only inside the customer's own record, as notes of web and business links already did. Nothing here
+moves money. The daily audit counts the new card and prompt as known-correct templates.
+
+Tests: `tests/pay-links.test.mjs` (21) and `tests/pay-links-chat.test.mjs` (11: the real processor in a child
+process with the WhatsApp transport captured, the database in memory and the Pay agent's turn scripted, asserting
+each turn's messages); the app portal suite (+1 and the description refusals). Locks of the old two-message copy,
+the CTA card, the old first-link prompt and the old ad created copy were updated to the new behaviour. 1387/1387,
+build green. `pnpm qa:chat` scenarios 1, 2, 7 and 9 updated to the new copy (not run here: it drives the
+production database).
+
+## 2026-10-24 (126) — Fraud review from level 4, after replaying the 22 October cash-outs; Clear and Freeze in Mission Control
+
+The triage of CHANGELOG 125 was replayed against production, read-only, at the moment of each frozen
+account's first pay-out (frozen signals taken out, since no account was frozen then). Of the 21 that paid
+out: level 5 for 4, level 4 for 12, level 3 for 4, level 2 for 1. Review at level 5 would have held 4 of
+21; at level 4 it holds 16 of 21. `WAPAY_PAYOUT_REVIEW_LEVEL` now defaults to 4. The price: a new
+customer paid once by a friend who withdraws within two hours also scores 4 and waits for a check, so the
+Mission Control card gained two buttons per level-4 or level-5 row: **Clear 72 h** (past the review for
+three days; the cap, the ID check and the pause still apply) and **Freeze** (the same freeze as
+`/api/internal/payout-freeze`). `POST /api/admin/payout-requests` takes `{ accountId, decision }`, JSON
+only, behind the admin session (SameSite=Strict). Every time window in the triage and in
+`recentReceipts` is now bounded at the moment scored, so a score for a past moment never counts later
+rows. Today, with the time-based signals faded, the same 28 accounts score 2 to 5; the live triage reads
+them at the moment of each request.
+
+## 2026-10-24 (125) — Pay-out rules for the reopening: R3,000 a day, the ID check over R1,000, double fee on money under two hours old, fraud triage 1 to 5 on every request; tests can no longer reach production
+
+Founder, 24 October: "maximum withdrawals can happen per day is 3k, every customer doing a withdrawal over
+1000 needs to do a KYC, and if you want to do a withdrawal within 2hrs of receipt you need to pay 2x the
+current fee"; "keep me updated whenever someone requests a payout ... levels of triage 1-5 of how likely it's
+fraud"; and, for the tests, "create a database for the test". Pay-outs stay paused (CHANGELOG 124); all of
+this applies the moment the founder reopens them.
+
+- **Limits** (`lib/payout-rules.js`): every account may pay out at most `WAPAY_PAYOUT_DAILY_CAP_CENTS`
+  (R3,000) in any 24 hours, ID-checked or not; the new-account cap applies only when it is lower. With
+  `WAPAY_PAYOUT_KYC=threshold`, a pay-out over `WAPAY_PAYOUT_KYC_SINGLE_CENTS` (R1,000), or more than
+  `WAPAY_PAYOUT_KYC_DAILY_CENTS` (R1,000) in 24 hours, needs the ID check, so three R1,000 pay-outs cannot
+  dodge it. Without the check a customer can take up to R1,000 a day; with it, up to R3,000. The wording
+  changed with it ("Pay-outs over R1,000 need a once-off identity check").
+- **Express fee** (`lib/payout-express.js`): money that reached the balance from outside less than
+  `WAPAY_PAYOUT_EXPRESS_WINDOW_MINUTES` (120) ago can leave at `WAPAY_PAYOUT_EXPRESS_FEE_MULTIPLIER` (2)
+  times the method's fee, PayShap R16 instead of R8, but only when the older balance cannot cover the
+  pay-out and its normal fee. Fresh money is a paid link or top-up (`LOAD_*`), a Blu voucher load, a send
+  from a member, a claimed gift, a manual credit, a referral reward; never the SPEND to CASH upgrade, a
+  refund or a reversal. The chat reads it once when a withdrawal starts and every quote, affordable amount
+  and the confirmation use it ("Fee: R16 (double the usual R8)" and the time the normal fee is back); the
+  web app and the business portal quote it before the PIN or the password. `requestPayout` decides it again
+  from the ledger and refuses with `FEE_CHANGED`, before any row, hold or rail call, when the fee is higher
+  than the one the customer confirmed (`expectedFeeCents`); a lower fee is simply charged. The hold, the
+  settlement (`buildCashout` now takes the agreed `feeCents`) and the row carry the doubled fee. Operator
+  pay-outs never carry it (`allowExpress: false`): the founder chose the timing. The bot's fee answer says
+  it, with the limits (`withdrawRulesLine`).
+- **Fraud triage** (`lib/payout-triage.js`): every request with a valid PIN is scored from rows WaPay
+  already keeps: account age, ID check, money under two hours old, links paid with the account's own
+  number, card payments in 24 hours, a payer who also paid other accounts this week, money moved with a
+  frozen account, a payer who is a frozen account, a destination shared with other accounts or with a
+  frozen one (a keyed hash, `destKey`, now written on every pay-out row; never the number), a cash code to
+  another person's phone, a first pay-out that takes nearly everything, many attempts. Score to level 1 to
+  5; a frozen account's destination is always 5. At `WAPAY_PAYOUT_REVIEW_LEVEL` (5; "off" disables) the
+  request waits for a person: `REVIEW`, nothing written, held or sent, and the customer is told a person
+  checks it first, with no time promise. Calibrated on the 22 October rows: burst accounts and
+  self-funders score 7 or more; a new customer paid once by a friend scores 2 to 5.
+- **Reporting**: `requestPayout` is now a thin wrapper around `requestPayoutCore` that writes an audit row
+  (event `PAYOUT_REQUEST`: level, reasons, amount, fee, express, result) and sends one alert to the ops
+  numbers with its e-mail twin (`opsPayoutRequest`) for every request except replays and while pay-outs
+  are switched off or paused: "🔴 Pay-out request, fraud level 5/5 (very likely)", the amount, method and
+  fee, the masked account, the reasons and the result. Mission Control's Supplier Floats tab opens with a
+  "Pay-out requests" card (levels, reasons, results, the pause banner; `/api/admin/payout-requests`).
+  `GET /api/internal/payout-review` lists them or triages one account; `POST { accountId, decision:
+  'clear' | 'unclear', hours, by, reason }` lets an account past the review for a while (default 72 h).
+  Freezing stays on `/api/internal/payout-freeze`. `/api/internal/flags` shows `payoutRules`.
+- **Tests and production** (BUGLOG #141): Prisma loads the fast copy's `.env`, which holds the production
+  database, so tests using a default client read production. Every place that builds a client
+  (`lib/prisma.js`, `packages/domain/src/db.ts`, the two in `packages/whatsapp`) now points at
+  `TEST_DATABASE_URL` or a closed local port whenever `node --test` runs it (`NODE_TEST_CONTEXT`); the
+  seven VAS routes that built their own client use the shared one; `pnpm test` loads `.env.test` when
+  present. No test needs a database: the suite passes with none. `tests/test-db-guard.test.mjs` proves
+  both shared clients refuse at the closed port and that no client is built without the guard.
+
+Tests: `tests/payout-express-triage.test.mjs` (12), `tests/test-db-guard.test.mjs` (3), the rules tests
+rewritten for the new limits. Full suite 1368/1368; build green.
+
+## 2026-10-24 (124) — Global pay-out hold: nothing leaves WaPay until the founder reopens pay-outs
+
+Founder, 24 October, after the stolen-card cash-out (BUGLOG #140): "don't do any more payouts until I say we
+can". `lib/payout-hold.js` is one switch for every pay-out route. A row `payout-hold:global` in
+`processed_messages` means held; no job purges that table by age, so the hold stays until it is lifted on
+purpose. `requestPayout` refuses with `PAYOUT_HOLD` right after the per-account freeze (a frozen account keeps
+its own words) and before the pay-out rules, the idempotency replay, any ledger move and any rail call. The
+chat's withdraw flow does not start, and a flow in progress ends at its next reply (saving details after a
+pay-out the rail already accepted carries on). The web app shows the pause on the pay-out screen and refuses
+the check and the request with 423. The operator pay-out lists `PAYOUT_HOLD` as its first blocker. The
+business portal answers 503 with its own line. The customer copy makes no time promise. The read is cached for
+five seconds per database client and fails closed: if the switch cannot be read, pay-outs are held.
+
+`GET /api/internal/payout-hold` reads it. `POST { held, by, reason }` switches it, and every switch writes a
+log row (`payout-hold:log:<iso>|on|<by>|<reason>`), so who reopened pay-outs, and why, stays in the database
+rather than in function logs that expire. `/api/internal/flags` shows `payoutHold`. Getting paid, sends between
+members, and the reconcile sweep (which only asks OTT for a status and never submits again) are untouched.
+Switched on in production at 23:07 UTC on 23 October (01:07 SAST on 24 October), before the deploy, so the new
+code found it on.
+
+Tests: Prisma loads the fast copy's `.env` by itself, so a test that uses the default client reads the
+production database. Five withdraw-flow test files now pin the hold off with `_pinPayoutHoldForTests(false)`, a
+test-only seam that no environment variable reaches and that a source scan proves application code never
+calls. The switch route's test only ever sends bodies that are refused or that switch the hold on, so no
+regression can lift the real hold. `tests/payout-hold.test.mjs` (9 tests). Full suite 1354/1354 with the
+production hold on; build green.
+
+## 2026-10-23 (123) — Adumo ready for the live R5 tests: the pay page follows the primary rail, one price on every rail, the production run sheet
+
+SHB/Adumo approved WaPay on 23 October (merchant WAPAY, no 4741443, MCC 4814). Going live is env changes plus a
+Redeploy, but enabling Adumo for the tests (`WAPAY_ADUMO_ENABLED=true`, `WAPAY_PRIMARY_CARD_RAIL=PAYFAST`) would
+have put the Adumo button in front of every payer, because the pay page asked only whether Adumo was enabled
+(BUGLOG #139). It now offers Adumo only when Adumo is the primary rail; tests reach it through
+`/api/pay/checkout?code=<CODE>&rail=adumo`. Founder ruling: the requester pays the same fee on every rail, so
+`cardRailFee('ADUMO')` defaults to the PayFast fee (R2.30 + 4.20%, free under R50) instead of R1 + 2.5%;
+`WAPAY_ADUMO_FEE_*` still override. Money Map 1.4: Adumo rows at the new price, foreign card and Capitec Pay
+rows added, Ozow and Capitec Pay costs from the signed application, every Adumo cost still PROPOSED until SHB
+puts the MSC in writing. `scripts/adumo-live-check.mjs` (read-only) reconciles a test link across the request,
+the intent, the `LOAD_ADUMO` entry and Adumo's `getState`; `docs/testing/adumo-production-2026-10-23.md` is the
+run sheet; `docs/ADUMO.md` sections 1, 3, 5 and 8 (portal settings, identifiers, open SHB items). White
+W-mark for the hosted page's green header: `marketing/brand/wapay-mark-256-white.png`. Verified on a local
+build against a pending link: PayFast primary shows the PayFast button only, Adumo primary shows both.
+
+## 2026-10-23 (122) — Guardrails so Meta has nothing to restrict: no marketing template can leave, nobody hears from WaPay first, a daily compliance check
+
+Founder 2026-10-23: "make sure the guardrails are in place so that Meta never, ever blocks us again".
+The audit of every send path found two live marketing paths: the onboarding welcome `onboarding_step_1`
+(MARKETING) to every new person who writes without an ad, and the recipient notice of a money, airtime or
+voucher send, which sent the MARKETING template `wapay_voucher_received` to people who had never written
+to WaPay. Fixes: `sendWhatsAppTemplate` refuses every MARKETING template on the account
+(`MARKETING_TEMPLATES`, `WAPAY_ALLOW_MARKETING_TEMPLATES` to lift); the recipient notice is one plain text
+inside the recipient's own 24-hour window or nothing, and the sender's receipt asks them to let the person
+know. The webhook records Meta's pricing category per message (`price-<category>`). `lib/meta-compliance.js`
++ `GET /api/internal/compliance-check` measure every rule daily from Meta's view and our own behaviour,
+e-mail a summary, alert ops on WhatsApp for a new reason, and feed a Health-tab card; the 02:00 cron hands it
+off to its own invocation. docs/WHATSAPP_POLICY_COMPLIANCE.md has the rules and thresholds.
+tests/meta-compliance.test.mjs. Also submitted the UTILITY template `wapay_payment_receipt_v2` (in review).
+
 ## 2026-10-22 (121) — One-step sign-up, the PIN on demand, the payer's reply, and the sign-up funnel (switches, default off)
 
 The founder's brief of 22 October (`docs/briefs/ONE_STEP_ONBOARDING_BRIEF.md`): of 739 ad arrivals since

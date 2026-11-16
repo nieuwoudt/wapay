@@ -505,7 +505,7 @@ test('every proposal tool maps to its action and normalises slots the way the di
     for (const k of SLOT_KEYS) assert.ok(k in out.proposal.slots, `${name}: slot ${k}`);
   }
   const airtime = await executeTool({ name: 'start_buy_airtime', args: { amountCents: 5000, msisdn: '083 123 4567', self: null }, ctx });
-  assert.deepEqual(airtime.proposal.slots, { amountCents: 5000, msisdn: '0831234567', recipientName: null, self: null, meterNumber: null, productQuery: null, category: 'AIRTIME', method: null });
+  assert.deepEqual(airtime.proposal.slots, { amountCents: 5000, msisdn: '0831234567', recipientName: null, self: null, meterNumber: null, productQuery: null, category: 'AIRTIME', method: null, description: null });
   const send = await executeTool({ name: 'start_send', args: { amountCents: 999999, msisdn: '12', recipientName: '  Philly  ', self: false }, ctx });
   assert.equal(send.proposal.slots.amountCents, null, 'over the dispatcher ceiling');
   assert.equal(send.proposal.slots.msisdn, null, 'too short');

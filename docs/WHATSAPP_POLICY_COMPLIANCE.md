@@ -76,3 +76,96 @@ A restriction shows first in Meta's delivery statuses, not in our logs: the API 
 ## 2026-10-21 addendum: the 30-day restriction and what changed
 
 Meta restricted the number for "Sending spam" from 20 October 21:30 UTC for 30 days (no replies to customers). Review requested 21 October. Two onboarding templates Meta files under MARKETING (`consent_terms_`, `welcome_new_user_account_activation`) are now off by default (`WAPAY_ONBOARDING_MARKETING_TEMPLATES`), replaced by one plain line each inside the customer's own window. Where the enforcement shows: Business Support Home → the WhatsApp account's Account overview (the Health Status API and the portfolio issues page do not show it).
+
+## 2026-10-23: guardrails in code and the daily check
+
+**In code (cannot be bypassed by any feature):**
+- **No marketing template can be sent.** `MARKETING_TEMPLATES` in `packages/whatsapp/src/send.ts` lists every
+  template Meta files as MARKETING on WaPay's account (ten as of 23 October); `sendWhatsAppTemplate` refuses them
+  before any network call (`MARKETING_TEMPLATE_BLOCKED`). `WAPAY_ALLOW_MARKETING_TEMPLATES=on` lifts it; never
+  while the quality rating is not GREEN. The onboarding welcome (`onboarding_step_1`) now falls back to one plain
+  text inside the customer's window.
+- **Nobody hears from WaPay unless they wrote first.** The money/airtime/voucher recipient notice used to send the
+  MARKETING template `wapay_voucher_received` to people who had never written to WaPay. It now sends one plain text
+  only when the recipient wrote in the last 24 hours; otherwise nothing, and the sender's receipt says "WaPay does
+  not message them, so let them know you sent it."
+- New templates can only be created as UTILITY or AUTHENTICATION (`/api/internal/template-create`).
+
+**Every day (`lib/meta-compliance.js`, `GET /api/internal/compliance-check`, run by the 02:00 UTC cron):**
+- Meta's view: quality rating, messaging limit tier (and whether it fell), number health, every template's category
+  and status; RED if a template the code sends is filed as MARKETING, AMBER for a new MARKETING template not yet on
+  the block list or a paused template.
+- What Meta billed: the webhook records each message's pricing category (`price-<category>` pulse rows); any
+  MARKETING message is RED.
+- Meta's refusals: 131031 restricted, 131042 billing, 131049 marketing limit (RED); 131047 outside the window (AMBER
+  from five minutes a day); account events (RED).
+- Our behaviour over the last 24 hours, ops numbers and QA numbers excluded: reminders (must be 0), messages after a
+  stop (must be 0), complaint words (AMBER from three), customer messages that got three or more replies (AMBER above
+  8%; 4.8% on 23 October).
+- One summary e-mail a day; a WhatsApp alert to ops when the verdict is not GREEN and a reason is new since yesterday.
+  The Health tab shows the verdict live ("Meta compliance, last 24 h").
+
+**What no code can promise:** Meta decides on people's reports and can change its rules. These guardrails keep
+WaPay's own behaviour inside every rule and raise the alarm the first day anything drifts; the delivery stall
+check (every ten minutes) catches a restriction within minutes.
+
+## 2026-10-24: payment requests never come from WaPay (CHANGELOG 127)
+
+The founder asked whether WaPay could message the payer itself ("request payment from this number ... the payer
+gets a message from WaPay: please pay this person X for Y"). It does not: that is WaPay starting a conversation
+with someone who never asked to hear from it (rule 1 above), on a number restricted for "sending spam" four days
+earlier, and it would let anyone make WaPay send "please pay R500" to any number. Instead:
+
+- After a link is made the requester gets **one** message, the card to forward (rule 2).
+- When they name the payer's number, that same message carries a tap-to-send link
+  (`https://wa.me/<number>?text=<the card>`): it opens the requester's own chat with that person, the request
+  ready to send, so the payer hears from someone they know. WaPay sends that number nothing, and the number is
+  not stored on the request.
+- The one exception that stays: a WaPay member the requester has already sent money to gets WaPay's
+  informational note, and only while that member's own 24-hour window is open (they wrote to WaPay in the last
+  24 hours). Outside it nothing is sent (Meta would refuse it with 131047, BUGLOG #138). The requester's message
+  is the same either way, so it never tells whether a number is on WaPay.
+- Reminders ("remind 2" in the chat, "Send reminder" on the web) are a message the customer sends themselves.
+
+## 2026-10-27: the second strike, and the rule moved into the rails (BUGLOG #144, CHANGELOG 133)
+
+Meta flagged the number for spam again: `ACCOUNT_VIOLATION` / `SPAM` at 20:03 UTC on 23 October and 20:04 UTC on
+26 October (e-mail of 26 October). Since 23 October WaPay's messages were replies to the person's own message,
+with one exception: a UTILITY receipt template to a payer number typed during the 22 October stolen-card wave,
+a number that had never written to WaPay. 86% of what Meta billed went to click-to-WhatsApp ad arrivals.
+
+**Rule 1 is now enforced where the message leaves.** `lib/outbound-guard.js` refuses every business-initiated
+send (template, Direct Send, a notice outside a reply) to a number that never wrote to WaPay. A number typed on
+a form (the pay page, a business customer row, an ops list) is not consent: anyone can type anyone's number.
+A pre-registered payer record does not count until the person writes. A payer gets their receipt by tapping
+"Get my receipt", which opens their own chat. A new sending path must call `businessInitiatedAllowed`;
+`tests/spam-strike-guard.test.mjs` fails the build for any file that can send a template or Direct Send and is
+not on its reviewed list.
+
+**Meta's verdict reaches the founder in minutes.** An `account_update` or other account event is e-mailed and
+sent on WhatsApp as it arrives ("🛑 ACTION NOW" for enforcement); quality, limit tier and status are read every
+ten minutes and any change is alerted; a message Meta bills as utility, marketing or authentication to a number
+that never wrote is counted RED (`stranger-<category>`) and alerted. Whether each alert went is stored
+(`alert-out:` rows). The WhatsApp line reaches the founder only inside his own 24-hour window until
+`WAPAY_TEMPLATE_OPS_ALERT` names an approved utility template; the e-mail always goes.
+
+**What the founder does when a strike lands:** open Business Support Home → the WhatsApp account WaPay →
+Account overview, and WhatsApp Manager → Account quality; request a review where it is offered; decide on the
+ad (ad arrivals are people who did not know WaPay, and their blocks and reports are what Meta counts); send
+nothing to catch up. Subscribe the app's webhook to `phone_number_quality_update` so a quality change arrives
+as an event as well as by the ten-minute read.
+
+## 2026-11-10: a member who is sent money is told every time (CHANGELOG 137)
+
+The founder's rule: the person who was paid hears from WaPay automatically. For a **member** (the money is in their
+own balance) this is the receipt of a credit to their own account, which is a utility message. Inside their 24-hour
+window it goes as a plain message. Outside it, it goes only through `notifyCustomer`: the outbound guard first, then
+the approved UTILITY template `wapay_money_received` (`WAPAY_TEMPLATE_MONEY_RECEIVED`,
+`docs/templates/wapay_money_received.md`).
+
+Rules 1 and 3 hold unchanged:
+- A number that never wrote to WaPay gets nothing.
+- Someone who is not a member hears only inside a window they opened.
+- Someone who said stop hears nothing until they write again.
+
+Airtime, data and voucher gift notices stay inside the window only.

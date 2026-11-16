@@ -180,13 +180,17 @@ test('directed requests: the requester label is stripped of markdown/control cha
 });
 
 test('directed requests: the requester response is NEUTRAL (no membership oracle)', () => {
-  const idx = processorSource.indexOf('const delivered = await deliverDirectedRequest(');
-  const around = processorSource.slice(idx, idx + 700);
-  // Both branches still hand back the shareable link; a non-member simply
-  // gets the standard created-message — indistinguishable enough that you
-  // cannot probe arbitrary numbers for WaPay membership.
-  assert.match(around, /Here's the link too/);
-  assert.match(around, /Payment request created/);
+  // 2026-10-24: the requester gets the SAME one message whether or not the number is a WaPay member and
+  // whether or not WaPay's note went: it is composed and sent before the member is even looked at, from
+  // nothing but the link and the number they typed. The runtime proof is tests/pay-links.test.mjs.
+  const lib = read('../lib/pay-links.js');
+  const fn = lib.slice(lib.indexOf('export async function sendCreatedLink('), lib.indexOf('\n}\n', lib.indexOf('export async function sendCreatedLink(')));
+  const send = fn.indexOf('await deps.send(');
+  const member = fn.indexOf('if (member?.waId)');
+  assert.ok(send > -1 && member > send, 'the requester message goes before the member is considered');
+  assert.ok(!/\bmember\b/.test(fn.slice(fn.indexOf('const card'), send)), 'nothing about the member reaches the requester text');
+  assert.ok(!processorSource.includes("I've let ${target.label} know on WaPay"), 'the membership-revealing line is gone');
+  assert.match(processorSource, /const member = await resolveDirectedRequestTarget\(\{ account, payer: payerTarget \}\);/);
 });
 
 test('directed requests: "from my phone/work" never resolves as a name', () => {

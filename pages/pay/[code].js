@@ -25,6 +25,7 @@ import Head from 'next/head';
 import { useRef, useState } from 'react';
 
 import { getPaymentRequest, maskedRequesterLabel, requesterNumberTail } from '../../lib/payment-requests.js';
+import { recordLinkVisit, sourceTag } from '../../lib/link-visits.js';
 import { paymentRequestFeeCents } from '../../lib/deposits.js';
 import prisma from '../../lib/prisma.js';
 
@@ -37,16 +38,23 @@ function rands(cents) {
   return `R${(cents / 100).toFixed(2).replace(/\.00$/, '')}`;
 }
 
-export async function getServerSideProps({ params, query }) {
+export async function getServerSideProps({ params, query, req }) {
   const code = String(params.code || '').toUpperCase();
-  const { adumoEnabled } = await import('../../lib/adumo.js');
-  const adumo = adumoEnabled();
+  const { adumoEnabled, primaryCardRail } = await import('../../lib/adumo.js');
+  // Adumo is offered to payers only once it is the primary rail. While it is
+  // enabled for the live R5 tests (WAPAY_PRIMARY_CARD_RAIL=PAYFAST) the page
+  // stays PayFast-only, and a test reaches Adumo through
+  // /api/pay/checkout?code=…&rail=adumo (docs/ADUMO.md section 5).
+  const adumo = adumoEnabled() && primaryCardRail() === 'ADUMO';
   // Back from a declined / cancelled hosted-page attempt: a short reason, no PII.
   const declined = typeof query?.e === 'string' ? String(query.e).replace(/[^A-Za-z_ ]/g, '').slice(0, 24) : null;
   if (!/^[A-Z]{6,12}$/.test(code)) return { notFound: true };
 
   const request = await getPaymentRequest({ code });
   if (!request) return { notFound: true };
+  // Where links are opened (lib/link-visits.js, founder 2026-10-25): the area from the IP, the device and the
+  // door (?s=); once per device per link per day; best effort and capped, never in the way of the page.
+  await recordLinkVisit({ req, kind: 'OPEN', code, accountId: request.accountId, source: sourceTag(query?.s) });
 
   let requesterLabel = 'A WaPay user';
   // Pay-link identity (2026-10-20): the name is the requester's own WhatsApp
@@ -220,7 +228,7 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
         <meta property="og:title" content={ogTitle} />
         <meta
           property="og:description"
-          content="Tap to pay on WaPay. Free from a WaPay balance, or pay securely by card."
+          content={`${status === 'PENDING' && note ? `For ${String(note).replace(/[\s.!]+$/, '')}. ` : ''}Tap to pay on WaPay. Free from a WaPay balance, or pay securely by card.`}
         />
         <meta property="og:site_name" content="Please Pay Me™ with WaPay" />
         <meta property="og:type" content="website" />
@@ -266,7 +274,8 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
                 {reference ? <div style={{ color: '#666', fontSize: 12.5, marginTop: items.length ? 6 : 0 }}>Ref: {reference}</div> : null}
               </div>
             ) : null}
-            {note ? <div style={styles.note}>“{note}”</div> : null}
+            {/* What the link is for (founder 2026-10-24: every personal link carries one; the payer reads it here). */}
+            {note ? <div style={styles.note}>For: {note}</div> : null}
             {requesterTail ? (
               <div style={{ ...styles.fine, color: '#1f3b2a', background: '#eef6f0', borderRadius: 10, padding: '8px 12px', marginTop: 10 }}>
                 Check the number. This request comes from the WaPay account on a number ending {requesterTail}.
@@ -338,7 +347,8 @@ export default function PayRequestPage({ code, status, amountCents, feeCents, no
             </div>
             <div style={styles.fine}>
               No fees for you: you pay exactly {rands(amountCents)}. Payments are processed securely by PayFast{adumo ? ' or Adumo (Nedbank)' : ''}; no WaPay account is needed.
-              Your number is used to send your receipt on WhatsApp and to offer you your own free WaPay, which you're welcome to ignore.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
+              Your number stays with this payment as its receipt. If you already chat with WaPay, the receipt comes to that chat; if not, tap Get my receipt after paying. WaPay never messages a number that has not written to it.{isBusiness ? ` ${requesterLabel} receives your number for its records.` : ''}
+              {' '}To protect payers and stop fraud, WaPay notes the rough area this page is opened from (from your internet connection, never your exact location) and keeps it for 90 days.
             </div>
             <div style={styles.fine}>
               Have a WaPay account? <a href="https://app.wapay.co.za" style={{ color: '#359853', fontWeight: 600 }}>Log in at app.wapay.co.za</a> to see your balance, get paid and pay out.

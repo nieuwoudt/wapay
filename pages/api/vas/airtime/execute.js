@@ -14,6 +14,7 @@
  */
 
 import prisma from '../../../../lib/prisma.js';
+import { refuseSpendIfFrozen } from '../../../../lib/payout-freeze.js';
 import { BluVasClient } from '@wapay/providers-blu';
 import { verifyPIN } from '@wapay/auth';
 import { BALANCE, RAIL, buildSpend } from '../../../../lib/ledger-core.js';
@@ -241,6 +242,8 @@ export default async function handler(req, res) {
     const { amountCents, totalCents, msisdn, vendorId } = metadata;
 
     // Spend flows always draw the no-KYC SPEND balance.
+    // A frozen account's money stays where it is (lib/payout-freeze.js, 2026-10-26).
+    if (await refuseSpendIfFrozen({ prisma, accountId, res })) return undefined;
     await ensureWallet({ accountId, balanceType: BALANCE.SPEND });
 
     // =========================================================================

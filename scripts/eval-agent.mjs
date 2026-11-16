@@ -278,7 +278,7 @@ function rangeStart(range, now) {
   return -Infinity;
 }
 
-const SLOT_KEYS = ['amountCents', 'msisdn', 'recipientName', 'self', 'meterNumber', 'productQuery', 'category', 'method'];
+const SLOT_KEYS = ['amountCents', 'msisdn', 'recipientName', 'self', 'meterNumber', 'productQuery', 'category', 'method', 'description'];
 function slotsFrom(args = {}) {
   const slots = {};
   for (const k of SLOT_KEYS) slots[k] = args[k] === undefined ? null : args[k];

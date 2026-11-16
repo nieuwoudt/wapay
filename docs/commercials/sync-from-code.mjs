@@ -49,7 +49,8 @@ export function snapshotFromCode() {
     load: Object.fromEntries(Object.entries(fees.load).map(([k, v]) => [k, { discountBps: v.discountBps, creditPolicy: v.creditPolicy }])),
     send: { ...fees.send },
     voucherGift: { ...fees.voucherGift },
-    cashout: Object.fromEntries(Object.entries(fees.cashout).map(([k, v]) => [k, { railCostExVatCents: v.railCostExVatCents, switchingBps: v.switchingBps || 0, bands: bandsOf(v) }])),
+    // A bank account's two speeds (2026-11-11): nextDayFeeCents is the default, the bands are the same day.
+    cashout: Object.fromEntries(Object.entries(fees.cashout).map(([k, v]) => [k, { railCostExVatCents: v.railCostExVatCents, switchingBps: v.switchingBps || 0, bands: bandsOf(v), ...(Number.isInteger(v.nextDayFeeCents) ? { nextDayFeeCents: v.nextDayFeeCents } : {}) }])),
     commissionBps: { ...fees.commissionBps },
     payout: { minCents: payouts.MIN_PAYOUT_CENTS, maxCents: payouts.MAX_PAYOUT_CENTS, methods: Object.keys(payouts.PAYOUT_METHODS) },
     atReference: {},
@@ -59,7 +60,7 @@ export function snapshotFromCode() {
     snapshot.atReference[key] = {
       depositFeeCents: a >= deposits.MIN_DEPOSIT_CENTS && a <= deposits.MAX_DEPOSIT_CENTS ? deposits.depositFeeCents(a) : null,
       paymentRequestFeeCents: { PAYFAST: deposits.paymentRequestFeeCents(a, 'PAYFAST'), ADUMO: deposits.paymentRequestFeeCents(a, 'ADUMO') },
-      cashout: Object.fromEntries(Object.keys(fees.cashout).map((m) => [m, { feeCents: ledger.cashoutFeeCents(m, a), railCostCents: ledger.cashoutRailCostCents(m, a), marginCents: ledger.cashoutMarginCents(m, a) }])),
+      cashout: Object.fromEntries(Object.keys(fees.cashout).map((m) => [m, { feeCents: ledger.cashoutFeeCents(m, a), railCostCents: ledger.cashoutRailCostCents(m, a), marginCents: ledger.cashoutMarginCents(m, a), ...(Number.isInteger(fees.cashout[m].nextDayFeeCents) ? { sameDayFeeCents: ledger.cashoutFeeCents(m, a, 'SAME_DAY'), sameDayMarginCents: ledger.cashoutMarginCents(m, a, 'SAME_DAY') } : {}) }])),
       commissionCents: Object.fromEntries(Object.entries(fees.commissionBps).map(([c, b]) => [c, ledger.bps(a, b)])),
       loadCreditedCents: Object.fromEntries(Object.entries(fees.load).map(([r, cfg]) => [r, cfg.creditPolicy === 'FACE' ? a : a - ledger.bps(a, cfg.discountBps)])),
     };

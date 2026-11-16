@@ -290,12 +290,46 @@ export function authTemplateComponents(code: string): NonNullable<SendTemplateAr
   ];
 }
 
+/**
+ * Marketing templates never go out (2026-10-23, after Meta's 30-day "Sending spam" restriction of
+ * 20 October 2026). Meta files these templates on WaPay's account under MARKETING. WaPay only answers
+ * people who wrote to it, and only sends UTILITY or AUTHENTICATION templates about a person's own
+ * transaction. Every template send passes here, so no code path, old or new, can send one of these.
+ * WAPAY_ALLOW_MARKETING_TEMPLATES=on lifts the block; never while the quality rating is not GREEN
+ * (docs/WHATSAPP_POLICY_COMPLIANCE.md). The daily compliance check (lib/meta-compliance.js) alerts
+ * when Meta files any other template we send as MARKETING, so this list is kept true.
+ */
+export const MARKETING_TEMPLATES: ReadonlySet<string> = new Set([
+  'bluvoucher_redeem_prompt',
+  'bluvoucher_redeem_success',
+  'consent_terms_',
+  'deposit_options',
+  'help_me_menu',
+  'onboarding_step_1',
+  'wapay_request_paid',
+  'wapay_voucher_received',
+  'welcome_new_user',
+  'welcome_new_user_account_activation',
+]);
+
+export function marketingTemplatesAllowed(env: Record<string, string | undefined> = process.env): boolean {
+  return /^(on|true|1|yes)$/i.test(String(env.WAPAY_ALLOW_MARKETING_TEMPLATES || '').trim());
+}
+
+export function marketingTemplateBlocked(templateName: string, env: Record<string, string | undefined> = process.env): boolean {
+  return MARKETING_TEMPLATES.has(String(templateName || '')) && !marketingTemplatesAllowed(env);
+}
+
 export async function sendWhatsAppTemplate(args: SendTemplateArgs): Promise<{
   ok: boolean;
   data?: any;
   error?: string;
 }> {
   const { to, templateName, language, components } = args;
+  if (marketingTemplateBlocked(templateName)) {
+    console.warn(JSON.stringify({ type: 'wa_marketing_template_blocked', templateName }));
+    return { ok: false, error: 'MARKETING_TEMPLATE_BLOCKED' };
+  }
   
   try {
     const accessToken = process.env.META_WHATSAPP_TOKEN || process.env.WHATSAPP_ACCESS_TOKEN;

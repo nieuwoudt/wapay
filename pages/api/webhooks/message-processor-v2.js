@@ -7,7 +7,13 @@
 
 import { getOrCreateUser, getUserBalance, updateConversationState, getConversationState, setActiveCategory, getActiveCategory, clearActiveCategory, wasMessageProcessed, markMessageProcessed, wasErrorSent, markErrorSent } from './user-manager.js';
 import { growthOnTurn, growthOnOnboarded, syncCapiForAccount } from '../../../lib/growth-attribution.js';
-import { classifyAdEntry, adEntryReply, firstNameFrom, firstLinkPrompt, parseFirstLinkAsk, firstLinkRetry, firstLinkCreatedCopy, matchesStop, STOP_REPLY, feeExample, isFaqKind, PAYOUT_BUTTON_KINDS, AD_STATES, buttonsAsText } from '../../../lib/ad-flow.js';
+import { classifyAdEntry, adEntryReply, firstNameFrom, firstLinkPrompt, parseFirstLinkAsk, firstLinkRetry, matchesStop, STOP_REPLY, feeExample, isFaqKind, PAYOUT_BUTTON_KINDS, AD_STATES, buttonsAsText } from '../../../lib/ad-flow.js';
+// Payment links (founder 2026-10-24): every link says what it is for, one forwardable message after it is made,
+// "my links" / "remind 2" / "cancel 2", and a tap-to-send link instead of WaPay writing to the payer.
+import { parseLinkAsk, descriptionQuestion, sendCreatedLink, matchLinkCommand, openLinksOf, myLinksText, reminderCardFor, displayDescription, looksLikeOtherRequest } from '../../../lib/pay-links.js';
+import { sanitizeLinkDescription, sameDescription } from '../../../lib/link-description.js';
+import { serviceWindowOpen } from '../../../lib/request-notify.js';
+import { configuredAppHost, DEFAULT_APP_HOST } from '../../../lib/app-host.js';
 import { markReminderOptOut } from '../../../lib/ad-reminders.js';
 import { mergeProfileSubkeyAtomic } from '../../../lib/profile-merge.js';
 import { sendWhatsAppTemplate, sendWhatsAppCtaUrl, sendWhatsAppReplyButtons, outboundSendCount } from '@wapay/whatsapp';
@@ -85,7 +91,7 @@ import {
 import { orchestrate, runAgentTurn, buildAgentSystemPrompt, runWithPrivacy, addPrivacyNames } from '@wapay/ai';
 import { privacyNamesFor } from '../../../lib/privacy-names.js';
 import { bareSecretKind, bareSecretReply, nothingPendingLine, privacyBlockedLine, expiredStepText } from '../../../lib/money-truth.js';
-import { sendConfirmText, sendReceiptText } from '../../../lib/send-money.js';
+import { sendConfirmText, sendReceiptText, notifySendRecipient } from '../../../lib/send-money.js';
 import { buildToolDefinitions, executeTool } from '../../../lib/agent/tools/index.js';
 import { agentGuard, outputGate } from '../../../lib/agent/guards.js';
 import { recordAgentTurn, agentTurnsInLastHour } from '../../../lib/agent/turn-ledger.js';
@@ -102,7 +108,7 @@ import {
 import { matchFeeAsk, feeAnswer, feeAskAmountCents, feeFacts } from '../../../lib/fee-facts.js';
 import { matchHowItWorksAsk, howItWorksAnswer, howItWorksBrief, wantsSteps, detectMethod, looksLikeQuestion, TOPICS as HOWTO_TOPICS } from '../../../lib/how-it-works.js';
 import { reconcileFuelPurchases } from '../../../lib/fuel-settlement.js';
-import { reconcileElectricityPurchases } from '../../../lib/electricity-settlement.js';
+import { reconcileElectricityPurchases, undeliveredElectricityTokens, markElectricityTokenDelivered, markElectricityTokenUndelivered } from '../../../lib/electricity-settlement.js';
 import { OttRedemptionClient } from '../../../lib/ott-redemption.js';
 import { isValidSaMsisdn, normaliseMsisdn, bluCanVendTo } from '../../../lib/msisdn.js';
 import { agentV3For } from '../../../lib/shadow-list.js';
@@ -111,6 +117,7 @@ import { getCategoryDisplayName, getLiveCategories, isCategoryLive, isCategoryEn
 import { apiUrl, internalJsonHeaders } from '../../../lib/api-url.js';
 import { parseSlots } from '../../../lib/slot-parser.js';
 import { payoutEnabled, payoutAllowedFor, payoutConfigured, resolveProviders, getLatestPayout, reconcilePayout, reconcileInitPayout, payoutOutcomeMessage, PAYOUT_METHODS } from '../../../lib/payouts.js';
+import { releaseWhen } from '../../../lib/payout-speed.js';
 import { forgetPayoutDetails } from '../../../lib/payout-beneficiaries.js';
 import { OttPayoutClient } from '../../../lib/ott-payout.js';
 import { sendTextOnce } from '../../../lib/error-guard.js';
@@ -957,6 +964,15 @@ async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCe
     // like everything else in here.
     await rememberBeneficiary({ accountId: account?.id, msisdn: targetMsisdn });
 
+    // Money from a WaPay balance (2026-11-10, founder): a member is told every time, through the
+    // outbound guard and the approved UTILITY template when their window is closed; anyone else only
+    // inside a window they opened (lib/send-money.js notifySendRecipient).
+    if (product === 'MONEY') {
+      const r = await notifySendRecipient({ prisma, sender: account, recipientMsisdn: targetMsisdn, amountCents, delivered });
+      logStructured(r.sent ? 'send_recipient_notified' : 'send_recipient_not_notified', { accountId: account?.id, amountCents, delivered, rail: r.rail || null, reason: r.reason || null, recipientMasked: maskMsisdn(targetMsisdn) });
+      return;
+    }
+
     const note = buildRecipientNotification({
       senderName: account?.displayName,
       senderMsisdn: account?.msisdn,
@@ -966,29 +982,29 @@ async function notifyGiftRecipient({ account, recipientMsisdn, product, amountCe
     });
     const to = waIdFromMsisdn(targetMsisdn);
 
-    // sendWhatsAppTemplate never throws; failure is signalled via ok:false.
-    const templateRes = await sendWhatsAppTemplate({
-      to,
-      templateName: note.templateName,
-      language: note.languageCode,
-      components: [
-        { type: 'body', parameters: note.bodyParams.map((text) => ({ type: 'text', text })) },
-      ],
-    });
-
-    if (!templateRes?.ok) {
-      const textRes = await sendWhatsAppText({ to, text: note.fallbackText });
-      if (!textRes?.ok) {
-        logStructured('gift_notify_failed', {
-          accountId: account?.id,
-          product,
-          amountCents,
-          recipientMasked: maskMsisdn(targetMsisdn),
-          templateError: templateRes?.error || 'TEMPLATE_SEND_FAILED',
-          textError: textRes?.error || 'TEXT_SEND_FAILED',
-        });
-        return;
-      }
+    // WaPay never starts a conversation (2026-10-23, after Meta's "Sending spam" restriction):
+    // the recipient hears from WaPay only when they wrote to us in the last 24 hours, and then as
+    // one plain message. Someone who never wrote is told by the sender (the sender's receipt says
+    // so). The old path sent them a MARKETING template (wapay_voucher_received) out of nowhere.
+    const recipientAccount = await prisma.account.findFirst({ where: { waId: to }, select: { id: true } }).catch(() => null);
+    const lastInbound = recipientAccount
+      ? await prisma.conversationTurn.findFirst({ where: { accountId: recipientAccount.id, role: 'user' }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }).catch(() => null)
+      : null;
+    const windowOpen = !!(lastInbound && Date.now() - new Date(lastInbound.createdAt).getTime() < 24 * 60 * 60 * 1000);
+    if (!windowOpen) {
+      logStructured('gift_notify_skipped_no_window', { accountId: account?.id, product, amountCents, recipientMasked: maskMsisdn(targetMsisdn) });
+      return;
+    }
+    const textRes = await sendWhatsAppText({ to, text: note.fallbackText });
+    if (!textRes?.ok) {
+      logStructured('gift_notify_failed', {
+        accountId: account?.id,
+        product,
+        amountCents,
+        recipientMasked: maskMsisdn(targetMsisdn),
+        textError: textRes?.error || 'TEXT_SEND_FAILED',
+      });
+      return;
     }
 
     logStructured('gift_sent', {
@@ -1638,14 +1654,49 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   // parked and a job is queued so the nightly cron keeps trying.
   try {
     const stuckElectricity = await prisma.providerRequest.findFirst({
-      where: { accountId: account.id, route: 'electricity-preview', status: { in: ['RECONCILE', 'EXECUTING'] } },
+      where: {
+        accountId: account.id,
+        route: 'electricity-preview',
+        OR: [
+          { status: { in: ['RECONCILE', 'EXECUTING'] } },
+          // settled by the cron, receipt refused outside the window: deliver now, in-window
+          { status: 'SUCCESS', metadata: { path: ['tokenUndelivered'], equals: true } },
+        ],
+      },
       select: { id: true },
     });
     if (stuckElectricity) {
+      // One extra message per turn (WhatsApp policy, 2026-10-27): a receipt
+      // may accompany the normal reply, a third message may not. A second
+      // token waits for the next message; a refund in the same turn rides
+      // inside the receipt.
+      let extraMessages = 0;
+      const refundLine = `💚 An earlier electricity purchase could not be completed, so nothing was charged for it. Your money is back in your balance.`;
+      for (const u of await undeliveredElectricityTokens({ account, limit: 1 })) {
+        const formattedToken = String(u.token || '').replace(/(.{4})/g, '$1 ').trim();
+        await sendReceipt({
+          to: from,
+          productLabel: 'Electricity',
+          targetLabel: '📟 Meter',
+          targetValue: u.meterNumber,
+          network: 'Electricity',
+          amountCents: u.amountCents,
+          reference: u.providerRef,
+          newBalanceCents: Math.round(parseFloat((await getUserBalance(from)).balance) * 100) || 0,
+          dateTime: u.dateTime || new Date(),
+          extraLines: [`⚡ Token: *${formattedToken}*`, `🔋 Units: ${u.units || 'N/A'} kWh`],
+        });
+        await markElectricityTokenDelivered({ previewId: u.previewId });
+        extraMessages += 1;
+      }
       // One short-bounded attempt per row, at most every two minutes: this
       // runs inside the webhook turn, so it must never blow Meta's window.
       const recon = await reconcileElectricityPurchases({ account, opportunistic: true });
       for (const d of recon.delivered) {
+        if (extraMessages) {
+          await markElectricityTokenUndelivered({ previewId: d.previewId });
+          continue;
+        }
         const formattedToken = String(d.token || '').replace(/(.{4})/g, '$1 ').trim();
         await sendReceipt({
           to: from,
@@ -1657,17 +1708,16 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
           reference: d.providerRef,
           newBalanceCents: d.newBalanceCents || 0,
           dateTime: d.dateTime || new Date(),
-          extraLines: [`⚡ Token: *${formattedToken}*`, `🔋 Units: ${d.units || 'N/A'} kWh`],
+          extraLines: [`⚡ Token: *${formattedToken}*`, `🔋 Units: ${d.units || 'N/A'} kWh`, ...(recon.failed > 0 ? [refundLine] : [])],
         });
+        extraMessages += 1;
       }
-      if (recon.failed > 0) {
+      if (recon.failed > 0 && !extraMessages) {
         await sendWhatsAppText({
           to: from,
-          text: await localizeOutbound(
-            `💚 Quick update: an electricity purchase from earlier could not be completed, so nothing was charged. Your money is back in your balance.`,
-            await userLang(account)
-          ),
+          text: await localizeOutbound(refundLine, await userLang(account)),
         });
+        extraMessages += 1;
       }
       if (recon.pending > 0) {
         const { enqueueJob } = await import('../../../lib/jobs.js');
@@ -2049,6 +2099,13 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   // own link, only when they ask for it, once per ask. Never a reminder, never a nudge.
   if (matchInviteAsk(text)) return await handleInviteAsk({ from, account });
 
+  // MY LINKS (founder 2026-10-24): "my links", "remind 2", "cancel 2", "cancel request PRXXXXXX". Before the agent,
+  // so the Pay agent's pilot numbers get the same deterministic answers (BUGLOG #92); one message each.
+  {
+    const linkCmd = matchLinkCommand(text);
+    if (linkCmd) return await handleLinkCommand({ from, account, cmd: linkCmd, data });
+  }
+
   // B (WAPAY_PIN_ON_DEMAND): "PIN", "set my PIN" or "forgot PIN" from an account that has none (the web
   // portal sends people here to say *PIN*): the PIN is chosen now. No code and no ID check, because
   // there is no PIN to replace; an account that has one goes on to the reset below as before.
@@ -2256,22 +2313,8 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
     }
   }
 
-  // Deterministic short-circuit: "cancel request PRXXXXXX".
-  {
-    const cancelMatch = text.match(/\bcancel\w*\s+(?:my\s+)?request\s+(PR[A-Z]{6})\b/i);
-    if (cancelMatch) {
-      const cancelled = await cancelPaymentRequest({
-        code: cancelMatch[1].toUpperCase(),
-        accountId: account.id,
-      });
-      return await sendWhatsAppText({
-        to: from,
-        text: await localizeOutbound(cancelled
-          ? `👍 Payment request ${cancelMatch[1].toUpperCase()} cancelled. The link no longer works.`
-          : `🤔 I couldn't cancel that request. It may already be paid, cancelled, or not yours.`, await userLang(account)),
-      });
-    }
-  }
+  // "cancel request PRXXXXXX" is answered by the link commands above the agent (handleLinkCommand, 2026-10-24),
+  // through the same cancelPaymentRequest, for every number including the agent's pilot list.
 
   // Deterministic short-circuit: "change my amount to R1000" — swap the
   // newest pending request in one step (cancel + recreate).
@@ -2289,17 +2332,20 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
   }
 
   // Deterministic short-circuit: "please pay me" — create a payment request.
+  // The amount, what it is for and who pays come from parseLinkAsk: a payer's number is never read as the
+  // amount ("request from 082 123 4567 R200" used to make an R82 link), and "for 2 boxes" is not R2.
   if (matchRequestMoneyAsk(text, slots)) {
+    const ask = parseLinkAsk(text);
     logSlotFill({
       intent: 'REQUEST_MONEY',
       text,
       slots,
-      routeDecision: slots.amountCents ? 'REQUEST_MONEY_CREATE' : 'REQUEST_MONEY_AMOUNT',
-      missing: slots.amountCents ? [] : ['amountCents'],
+      routeDecision: ask.amountCents ? (ask.description ? 'REQUEST_MONEY_CREATE' : 'REQUEST_MONEY_NOTE') : 'REQUEST_MONEY_AMOUNT',
+      missing: [...(ask.amountCents ? [] : ['amountCents']), ...(ask.description ? [] : ['description'])],
       from,
       accountId: account.id,
     });
-    return await handleCreatePaymentRequest({ from, account, amountCents: slots.amountCents, rawText: text });
+    return await handleCreatePaymentRequest({ from, account, amountCents: ask.amountCents, rawText: text });
   }
 
   // Deterministic short-circuit: "buy an OTT voucher" (no recipient) is a
@@ -3119,14 +3165,14 @@ async function handleChangeRequestAmount({ from, account, amountCents, rawText =
       });
     }
   }
-  if (latest) {
-    await cancelPaymentRequest({ code: latest.id, accountId: account.id });
-    await sendWhatsAppText({
-      to: from,
-      text: await localizeOutbound(`🔁 Cancelled your ${randsShort(latest.amountCents)} request (${latest.id}). That link no longer works. Here's the new one:`, await userLang(account)),
-    });
-  }
-  return await handleCreatePaymentRequest({ from, account, amountCents, rawText });
+  // One message per turn (founder 2026-10-24): the cancel is not announced on its own any more. The next
+  // message of this turn says the old link no longer works (the fee choice or the description question), and
+  // the new link itself says it replaces the old one, which also tells a payer who already had it.
+  let replacedCents = null;
+  if (latest && (await cancelPaymentRequest({ code: latest.id, accountId: account.id }))) replacedCents = latest.amountCents;
+  // The new link is for the same thing unless the customer says otherwise ("make it R200 for braids and nails").
+  const note = parseLinkAsk(rawText).description || latest?.note || null;
+  return await handleCreatePaymentRequest({ from, account, amountCents, rawText, note, replacedCents, replacedNow: replacedCents != null });
 }
 
 /**
@@ -3252,6 +3298,80 @@ async function handleInviteAsk({ from, account }) {
   logStructured('referral_invite_ask', { accountId: account.id });
   const msg = await localizeOutbound(inviteMessage({ code }), await userLang(account));
   return await sendWhatsAppText({ to: from, text: msg, kind: 'flow' });
+}
+
+/**
+ * The link commands (founder 2026-10-24: "track their payment links ... in the WhatsApp menus, i.e. send
+ * reminders"). One message each:
+ *   "my links"   the open links as a numbered list (amount, what for, how long ago, code);
+ *   "remind 2"   a reminder the customer forwards: WaPay itself never writes to the payer;
+ *   "cancel 2"   closes the link through cancelPaymentRequest, the path "cancel request PRXXXXXX" always used.
+ * A number points at the list the customer was shown (kept with the conversation for 30 minutes, so a link
+ * made or paid in between does not shift it), else at the current list. Personal links only.
+ */
+async function handleLinkCommand({ from, account, cmd, data }) {
+  const now = Date.now();
+  if (cmd.kind === 'LIST') {
+    const open = await openLinksOf({ prisma, accountId: account.id, now });
+    await updateConversationState(from, null, { linksListed: { codes: open.map((l) => l.id), at: new Date(now).toISOString() } });
+    logStructured('pay_links_listed', { accountId: account.id, open: open.length });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(myLinksText({ links: open, now, webUrl: linksWebUrl() }), await userLang(account)) });
+  }
+  let code = cmd.code || null;
+  if (!code) {
+    const listed = data?.linksListed;
+    const fresh = !!listed && Array.isArray(listed.codes) && now - (Date.parse(listed.at || '') || 0) < 30 * 60 * 1000;
+    const codes = fresh ? listed.codes : (await openLinksOf({ prisma, accountId: account.id, now })).map((l) => l.id);
+    code = codes[cmd.n - 1] || null;
+    if (!code) {
+      return await sendWhatsAppText({
+        to: from,
+        text: await localizeOutbound(codes.length
+          ? `🤔 There is no link ${cmd.n} in your list. Say *my links* to see your open links with their numbers.`
+          : `🔗 You have no open payment links right now. To make one, tell me the amount and what it is for, like "R150 for braids".`, await userLang(account)),
+      });
+    }
+  }
+  const row = await getPaymentRequest({ code }).catch(() => null);
+  const mine = !!row && row.accountId === account.id;
+  if (cmd.kind === 'CANCEL') {
+    const cancelled = await cancelPaymentRequest({ code, accountId: account.id });
+    logStructured('pay_link_cancel', { accountId: account.id, code, cancelled });
+    // The status is named only for the customer's own link; anyone else's code reads the same as a wrong one.
+    const why = !mine ? `It may already be paid, cancelled, or not yours.`
+      : row.status === 'PAID' ? `It is already paid.`
+        : row.status === 'REFUNDED' ? `It was paid by card and that payment was refunded to the card, so nobody can pay it.`
+        : row.status === 'EXPIRED' ? `It already expired, so nobody can pay it.`
+          : `It is already cancelled.`;
+    return await sendWhatsAppText({
+      to: from,
+      text: await localizeOutbound(cancelled
+        ? `👍 Cancelled: ${mine ? `${randsShort(row.amountCents)}${row.note ? ` for ${displayDescription(row.note, 40)}` : ''} ` : ''}(${code}). That link no longer works.`
+        : `🤔 I couldn't cancel that link. ${why}`, await userLang(account)),
+    });
+  }
+  if (!mine) {
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(`🤔 I can't find that link among yours. Say *my links* to see your open links.`, await userLang(account)) });
+  }
+  if (row.businessId) {
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(`🧾 That is a business link. Send it again from your WaPay for Business portal.`, await userLang(account)) });
+  }
+  if (row.status !== 'PENDING') {
+    return await sendWhatsAppText({
+      to: from,
+      text: await localizeOutbound(row.status === 'PAID'
+        ? `✅ That link is already paid, so there is nothing to remind them about.`
+        : `That link is no longer open (${row.status === 'EXPIRED' ? 'it expired' : row.status === 'REFUNDED' ? 'its card payment was refunded to the card' : 'it was cancelled'}), so it cannot be paid. To ask again, tell me the amount and what it is for.`, await userLang(account)),
+    });
+  }
+  logStructured('pay_link_reminder', { accountId: account.id, code });
+  // The reminder IS the message: the customer forwards it (WaPay never starts a conversation with the payer).
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(reminderCardFor({ account, request: row }), await userLang(account)), refs: { request: code } });
+}
+
+/** Where the customer sees every link they made: the personal web app (app.wapay.co.za by default). */
+function linksWebUrl() {
+  return `${configuredAppHost() || DEFAULT_APP_HOST}/app/links`;
 }
 
 /**
@@ -3634,7 +3754,14 @@ function matchRequestMoneyAsk(text = '', slots = null) {
   }
   // A named product wins: "request R100 airtime" / "pay me R50 airtime"
   // is a purchase/gift ask, never a payment request (found in QA 2026-08-21).
-  if (slots?.productHint && slots.productHint !== 'SEND_MONEY') return false;
+  // A product word only inside what the link is for is the description
+  // (2026-10-24): "request R200 for plumbing" ("mb" read as a data bundle),
+  // "please pay me R50 for airtime" (they bought it, now they get paid).
+  if (slots?.productHint && slots.productHint !== 'SEND_MONEY') {
+    const forAt = s.search(/\bfor\b/i);
+    const headHint = forAt > 0 ? parseSlots(s.slice(0, forAt)).productHint : slots.productHint;
+    if (headHint && headHint !== 'SEND_MONEY') return false;
+  }
   return (
     /\b(please\s+)?pay\s?-?\s?me\b/i.test(s) ||
     /\bget\s+paid\b/i.test(s) ||
@@ -3651,25 +3778,47 @@ function matchRequestMoneyAsk(text = '', slots = null) {
 }
 
 /**
- * Create a payment request and hand back a forwardable message + link.
- * The link page offers BOTH legs: pay from a WaPay balance (free, deep
- * links back into chat) or card/EFT via PayFast (payer covers the fee).
+ * Create a payment request and send ONE message the requester can forward
+ * (founder 2026-10-24: "we only generate one message that the customer can
+ * forward"). Every link says what it is for: asked once when the customer did
+ * not say it (state REQUEST_MONEY_NOTE) and refused plainly when it could
+ * mislead the payer (lib/link-description.js). The link page offers BOTH legs:
+ * pay from a WaPay balance (free, deep links back into chat) or card/EFT,
+ * where the payer pays exactly the amount and the card fee comes off what the
+ * requester receives (shown at the fee choice, before the link exists).
+ *
+ *   note           a description the customer already gave in this flow (checked again here)
+ *   noteHint       the Pay agent's or the ad parser's reading, used when the message has none
+ *   payer          { msisdn } | { name } | null: who pays; undefined = read from rawText
+ *   replacedCents  the amount of a link this flow cancelled; the new link says it replaces it
+ *   replacedNow    the cancel happened in this turn, so this turn's message says so
  */
-async function handleCreatePaymentRequest({ from, account, amountCents, rawText = '', confirmed = false, adPayerName = null }) {
+async function handleCreatePaymentRequest({ from, account, amountCents, rawText = '', confirmed = false, adPayerName = null, note = null, noteHint = null, payer = undefined, replacedCents = null, replacedNow = false }) {
+  const ask = parseLinkAsk(rawText);
+  const payerTarget = payer === undefined ? ask.payer : payer;
+  // The answer the customer already gave wins, then this message, then the agent's or the ad parser's reading.
+  const describedAs = note || ask.description || noteHint || null;
+  const flowData = { payer: payerTarget || null, adPayerName, replacedCents: replacedCents || null };
+  const replacedLead = replacedNow && replacedCents ? `🔁 Your ${randsShort(replacedCents)} link is cancelled and no longer works.\n\n` : '';
+
   if (!Number.isInteger(amountCents) || amountCents < MIN_REQUEST_CENTS || amountCents > MAX_REQUEST_CENTS) {
-    await updateConversationState(from, 'REQUEST_MONEY_AMOUNT');
+    await updateConversationState(from, 'REQUEST_MONEY_AMOUNT', { ...flowData, note: describedAs });
     // Say WHY (conversation audit 2026-10-19, BUGLOG #121: a customer typed an amount above the
     // maximum twice, got the bare question twice, and left). Over the top: name the ceiling and
-    // offer the way through; under it: name the floor; nothing parsed: the plain ask.
+    // offer the way through; under it: name the floor; nothing parsed: the plain ask, which asks
+    // what it is for in the same breath (one answer, "R150 for braids", makes the link).
     const reason = Number.isInteger(amountCents) && amountCents > MAX_REQUEST_CENTS
       ? `${randsShort(amountCents)} is more than one payment link can carry. A link can be for R5 up to ${randsShort(MAX_REQUEST_CENTS)}. Ask for ${randsShort(MAX_REQUEST_CENTS)} now and make another link for the rest, or tell me a smaller amount.`
       : Number.isInteger(amountCents) && amountCents > 0 && amountCents < MIN_REQUEST_CENTS
         ? `A payment link starts at R5. ${randsShort(amountCents)} is below that, so tell me an amount from R5 up to ${randsShort(MAX_REQUEST_CENTS)}.`
         : null;
+    const knownFor = describedAs ? sanitizeLinkDescription(describedAs) : null;
     const askMsg = await localizeOutbound(
-      reason
+      replacedLead + (reason
         ? `🙏 ${reason}\n\nReply with the amount, for example "R150", or "cancel" to stop.`
-        : `🙏 *Get paid with WaPay*\n\nHow much would you like to request? (R5 to R3000)\n\nFor example "R150", or reply "cancel" to stop.`,
+        : knownFor?.ok
+          ? `🙏 *Get paid for ${knownFor.text}*\n\nHow much would you like to request? (R5 to R3000)\n\nFor example "R150", or reply "cancel" to stop.`
+          : `🙏 *Get paid with WaPay*\n\nHow much would you like to request, and what is it for? (R5 to R3000)\n\nFor example "R150 for braids", or reply "cancel" to stop.`),
       await userLang(account)
     );
     return await sendWhatsAppText({ to: from, text: askMsg });
@@ -3680,28 +3829,44 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
     return await sendWhatsAppText({ to: from, text: await localizeOutbound(EXAMPLE_ECHO_REPLY, await userLang(account)), kind: 'ad' });
   }
   // A link made minutes ago (audit 2026-10-19, BUGLOG #124): the same amount again is that link, not a second one;
-  // its grossed-up amount is "option 2" of that link, so the first is replaced rather than compounded.
+  // its grossed-up amount is "option 2" of that link, so the first is replaced rather than compounded. A different
+  // description is a different link ("R150 for braids", then "R150 for nails", 2026-10-24).
   if (!confirmed) {
     const recent = await latestPendingLink({ accountId: account.id }).catch(() => null);
     const recentAgeMs = recent ? Date.now() - new Date(recent.createdAt).getTime() : Infinity;
-    if (recent && recentAgeMs < 15 * 60 * 1000) {
+    const sameAsRecent = !!recent && (!describedAs || sameDescription(describedAs, recent.note || ''));
+    if (recent && recentAgeMs < 15 * 60 * 1000 && sameAsRecent) {
       if (recent.amountCents === amountCents) {
         await updateConversationState(from, null);
-        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`That link is already live for ${randsShort(amountCents)}: ${paymentRequestUrl(recent.id)}\n\nForward it to the person who owes you. They do not need to open it for you, and you do not need to open it yourself. For a different amount, tell me the amount.`, await userLang(account)) });
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`${replacedLead}That link is already live for ${randsShort(amountCents)}${recent.note ? ` (${displayDescription(recent.note, 40)})` : ''}: ${paymentRequestUrl(recent.id)}\n\nForward it to the person who owes you. They do not need to open it for you, and you do not need to open it yourself. For a different amount, tell me the amount.`, await userLang(account)) });
       }
       if (amountCents <= MAX_REQUEST_CENTS && grossedUpRequestCents(recent.amountCents) === amountCents) {
-        await cancelPendingLink({ code: recent.id, accountId: account.id }).catch(() => null);
-        await sendWhatsAppText({ to: from, text: await localizeOutbound(`I cancelled your ${randsShort(recent.amountCents)} link and made the ${randsShort(amountCents)} one instead, so there is only one link.`, await userLang(account)) });
-        return await handleCreatePaymentRequest({ from, account, amountCents, rawText, confirmed: true, adPayerName });
+        const cancelled = await cancelPendingLink({ code: recent.id, accountId: account.id }).catch(() => false);
+        // One message (2026-10-24): no separate "I cancelled" line; the new link says it replaces this one.
+        return await handleCreatePaymentRequest({ from, account, amountCents, rawText, confirmed: true, adPayerName, note: describedAs || recent.note || null, payer: payerTarget, replacedCents: cancelled ? recent.amountCents : null, replacedNow: cancelled });
       }
     }
   }
+
+  // EVERY LINK SAYS WHAT IT IS FOR (founder 2026-10-24): the payer reads it on the forwarded message, the
+  // reminder and the pay page. Asked once when it is missing, refused plainly when it could mislead the payer
+  // (a link, a phone or account number, wording that reads as WaPay or an authority); the flow waits in
+  // REQUEST_MONEY_NOTE, where "cancel" and any other request always get out.
+  const described = describedAs ? sanitizeLinkDescription(describedAs) : null;
+  if (!described?.ok) {
+    await updateConversationState(from, 'REQUEST_MONEY_NOTE', { ...flowData, amountCents, confirmed });
+    const question = descriptionQuestion({ amountCents, refused: described ? described.reason : null, replacedCents: replacedNow ? replacedCents : null });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(question, await userLang(account)), kind: isAdAcquired(account) ? 'ad' : 'flow' });
+  }
+  const linkNote = described.text;
 
   // CONFIRM BEFORE CREATE (founder 2026-08-27): when a card fee exists, the
   // requester chooses the link amount FIRST and exactly one link is ever
   // minted (the old flow created immediately and offered "make it R390",
   // which cancelled + recreated = two links). Free-band requests (< R50)
   // have no fee and nothing to choose, so they still create in one step.
+  // This is also where the requester reads what they receive by card: the
+  // link message itself is for the payer (2026-10-24).
   const quoteFeeCents = paymentRequestFeeCents(amountCents);
   if (!confirmed && quoteFeeCents > 0) {
     // At the ceiling the card fee cannot be added on top (audit 2026-10-19, BUGLOG #123): no option 2, said plainly.
@@ -3712,9 +3877,13 @@ async function handleCreatePaymentRequest({ from, account, amountCents, rawText 
       askCents,
       rawText,
       adPayerName,
+      note: linkNote,
+      payer: payerTarget || null,
+      replacedCents: replacedCents || null,
     });
     const chooseMsg = await localizeOutbound(
-      `🙏 *Get paid ${randsShort(amountCents)}*
+      replacedLead +
+      `🙏 *Get paid ${randsShort(amountCents)} for ${linkNote}*
 
 ` +
         `Quick choice before I make your link:
@@ -3738,7 +3907,7 @@ Reply *1* to make it, tell me a smaller amount, or "cancel".`),
 
   let request;
   try {
-    request = await createPaymentRequest({ accountId: account.id, amountCents });
+    request = await createPaymentRequest({ accountId: account.id, amountCents, note: linkNote });
   } catch (error) {
     // Creation caps get an honest, actionable answer — never the generic
     // "try again in a moment" (retrying a cap is futile and reads as broken).
@@ -3769,104 +3938,72 @@ Reply *1* to make it, tell me a smaller amount, or "cancel".`),
   }
 
   await updateConversationState(from, null);
-  const url = paymentRequestUrl(request.id);
   const who = account.displayName || maskMsisdn(account.msisdn) || 'A WaPay user';
 
   logStructured('payrequest_created', { from, accountId: account.id, code: request.id, amountCents });
 
-  // Ad arrival (docs/AD_CHAT_FLOW.md section 8): one short, forwardable message
-  // with the link in it, and QualifiedLead told to Meta now rather than next turn.
+  // ONE MESSAGE after the link is made (founder 2026-10-24), written to make sense forwarded as is: who asks,
+  // the amount, what it is for, the link as plain text (WhatsApp strips buttons from a forwarded message, and the
+  // forwarded message is the payer's only road to the page) and how to pay. It goes through say(), which
+  // remembers it with the link as its reference, so the chat knows it sent the link (BUGLOG #120). When the
+  // requester named the payer's number, the same message carries a tap-to-send link that opens their OWN
+  // chat with that person, the request ready to send: WaPay itself never writes to a payer to ask for money.
+  const tapMsisdn = await tapToSendTarget({ account, payer: payerTarget });
+  // WaPay-to-WaPay (founder ask 2026-08-25): a member the requester has sent money to before also gets WaPay's
+  // informational note, only inside the member's 24-hour window (outside it Meta drops a plain text, BUGLOG #138).
+  // Neutral response either way (no membership-enumeration signal): the requester's message is the same whether
+  // the number is a member or not, and whether the note went or not.
+  const member = await resolveDirectedRequestTarget({ account, payer: payerTarget });
+  const lang = await userLang(account);
+  const created = await sendCreatedLink({
+    send: sendWhatsAppText,
+    localize: (t) => localizeOutbound(t, lang),
+    windowOpen: (waId) => serviceWindowOpen(prisma, { waId }),
+    deliverToMember: (waId) => deliverDirectedRequest({ payerWaId: waId, request, requesterLabel: who }),
+    log: logStructured,
+  }, { to: from, account, request, tapMsisdn, member, replacedCents, kind: isAdAcquired(account) ? 'ad' : 'flow' });
+
+  // Ad arrival (docs/AD_CHAT_FLOW.md section 8): the same one message, and QualifiedLead told to Meta now rather than next turn.
   if (isAdAcquired(account)) {
-    await sendWhatsAppText({ to: from, text: firstLinkCreatedCopy({ amountCents, url, payerName: adPayerName }), kind: 'ad' });
     await Promise.race([
       syncCapiForAccount({ accountId: account.id }).catch(() => null),
       new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
     ]);
     return { ok: true, adLink: request.id };
   }
-
-  // COMPOSE-TIME QUOTE (founder feedback 2026-08-27). The requester typed the
-  // amount, so it is their anchor — landing under it later reads as a loss.
-  // Tell them what they NET before the link goes out, and offer the ask that
-  // nets exactly what they wanted. They choose the displayed price; the PAYER
-  // always pays exactly what is displayed (never a card surcharge — that is
-  // prohibited in SA: PayFast T&Cs cl. 5.3, SARB/PASA, Visa/Mastercard).
-  const cardFeeCents = paymentRequestFeeCents(amountCents);
-  let introBody;
-  if (cardFeeCents === 0) {
-    introBody =
-      `Forward the next message to whoever owes you. I'll tell you the moment it's paid.\n\n` +
-      `You'll receive the full *${randsShort(amountCents)}* however they pay. No fees on this one. 🎉`;
-  } else {
-    introBody =
-      `Forward the next message to whoever owes you. I'll tell you the moment it's paid.\n\n` +
-      `You'll get the full *${randsShort(amountCents)}* if they pay from their WaPay (free), ` +
-      `or ${randsShort(amountCents - cardFeeCents)} if they pay by card.`;
-  }
-
-  // The requester's own copy shows a BUTTON, not a raw URL (founder ask
-  // 2026-08-24). Interactive falls back to plain text — a request must
-  // never fail on presentation.
-  const interactive = await sendWhatsAppCtaUrl({
-    to: from,
-    headerText: 'Payment request created',
-    bodyText: `🙏 *${randsShort(amountCents)} requested*\n\n${introBody}`,
-    footerText: `Code ${request.id}`,
-    buttonText: 'View my payment page',
-    url,
-  });
-  if (interactive?.ok) {
-    // A button message bypasses say(): remember it, or the chat forgets it sent the link (BUGLOG #120).
-    await rememberSent({ to: from, text: `🙏 *${randsShort(amountCents)} requested*\n\n${introBody}\n\n[button: View my payment page] ${url}`, waMessageId: interactive?.data?.messages?.[0]?.id || null, refs: { request: request.id } });
-  }
-  if (!interactive?.ok) {
-    await sendWhatsAppText({ to: from, text: await localizeOutbound(`🙏 *Payment request created!*\n\n${introBody}`, await userLang(account)) });
-  }
-
-  // WaPay-to-WaPay: "please pay me R50 from Philly / 083..." delivers the
-  // request STRAIGHT into the payer's chat as an authorize flow (founder
-  // ask 2026-08-25) — no web page needed between two WaPay users.
-  const target = await resolveDirectedRequestTarget({ account, rawText });
-  if (target?.waId) {
-    const delivered = await deliverDirectedRequest({
-      payerWaId: target.waId,
-      request,
-      requesterLabel: who,
-    });
-    // Neutral response either way (no membership-enumeration signal): the
-    // requester always gets the shareable link too.
-    const note = await localizeOutbound(delivered
-      ? `📨 I've let ${target.label} know on WaPay. They can pay you from their balance. ` +
-        `I'll tell you the moment it's paid.\n\nHere's the link too, to share however you like:\n${url}`
-      : `🙏 *Payment request created!*\n\n${introBody}`, await userLang(account));
-    await sendWhatsAppText({ to: from, text: note });
-    return { ok: true };
-  }
-
-  // The FORWARDABLE message must keep the visible link: WhatsApp strips
-  // interactive buttons when a message is forwarded, and the forwarded
-  // message is the payer's ONLY road to the page. The short domain
-  // (pleasepayme.co.za/PRXXXXXX) keeps it clean and tappable as plain text.
-  const forwardable = await localizeOutbound(
-    `🙏 *Pay ${who} now* · ${randsShort(amountCents)} on WaPay\n\n` +
-    `Tap the link to pay. Free from a WaPay balance, or pay by card:\n${url}`,
-    await userLang(account)
-  );
-  return await sendWhatsAppText({ to: from, text: forwardable });
+  return created.sent;
 }
 
 /**
- * "... from 083 555 1234" / "... from Philly" at the tail of a get-paid ask.
- * A name resolves through the requester's saved beneficiaries; exactly one
- * match counts. Returns { waId, label } when the target is an ONBOARDED
- * WaPay account, else null (the link flow covers everyone else).
+ * The number the one message's tap-to-send link opens a chat with: the number
+ * the requester typed, or the one saved person their name matches. Not their
+ * own number. This is the requester's own contact and their own WhatsApp sends
+ * the message, so no relationship gate applies; WaPay sends nothing.
  */
-async function resolveDirectedRequestTarget({ account, rawText }) {
-  const m = String(rawText || '').match(
-    /\bfrom\s+(?:my\s+)?(\+?27\d{9}|0\d{9}|0[\d\s-]{8,12}\d|[A-Za-z][A-Za-z'’-]{1,20})\s*$/i
-  );
-  if (!m) return null;
-  const raw = m[1].trim();
+async function tapToSendTarget({ account, payer }) {
+  if (!payer) return null;
+  let msisdn = null;
+  if (payer.msisdn) {
+    msisdn = normaliseMsisdn(payer.msisdn);
+  } else if (payer.name && !/^(me|my|phone|work|home|bank|card|wallet|app|whatsapp)$/i.test(payer.name)) {
+    const matches = await findBeneficiariesByName({ accountId: account.id, query: payer.name }).catch(() => []);
+    if (matches.length === 1) msisdn = normaliseMsisdn(matches[0].msisdn);
+  }
+  if (!msisdn || !isValidSaMsisdn(msisdn)) return null;
+  if (account.msisdn && normaliseMsisdn(account.msisdn) === msisdn) return null;
+  return msisdn;
+}
+
+/**
+ * Who pays, as parseLinkAsk read it from the ask ("... from 083 555 1234 for
+ * plumbing", "... from Philly"): a number, or a name that resolves through the
+ * requester's saved beneficiaries (exactly one match counts). Returns
+ * { waId, label } when the target is an ONBOARDED WaPay account the requester
+ * has sent money to before, else null (the one message covers everyone else).
+ */
+async function resolveDirectedRequestTarget({ account, payer }) {
+  if (!payer || (!payer.msisdn && !payer.name)) return null;
+  const raw = String(payer.msisdn || payer.name).trim();
 
   // RELATIONSHIP GATE (abuse review 2026-08-25, hardened after re-review): a
   // directed in-chat request can ONLY reach someone the requester has
@@ -3918,7 +4055,7 @@ function safeRequesterLabel(name) {
     .slice(0, 24);
   // A name that reads as WaPay/authority is impersonation even without
   // markdown ("WaPay Support", "Admin") — fall back to the neutral label.
-  if (!cleaned || /\b(wapay|wa-pay|support|admin|system|official|helpdesk|service)\b/i.test(cleaned)) {
+  if (!cleaned || /\b(wapay|wa-pay|support|admin|system|official|helpdesk|service|sars)\b/i.test(cleaned)) {
     return 'A WaPay user';
   }
   return cleaned;
@@ -3935,8 +4072,10 @@ function safeRequesterLabel(name) {
 async function deliverDirectedRequest({ payerWaId, request, requesterLabel }) {
   try {
     const label = safeRequesterLabel(requesterLabel);
+    // What it is for was checked when the link was made (lib/link-description.js); shown plain.
+    const forLine = request.note ? `\nFor: ${displayDescription(request.note, 60)}` : '';
     const text =
-      `🙏 *${label}* is asking you to pay *${randsShort(request.amountCents)}* on WaPay.\n\n` +
+      `🙏 *${label}* is asking you to pay *${randsShort(request.amountCents)}* on WaPay.${forLine}\n\n` +
       `If you'd like to pay, reply:\n*pay request ${request.id}*\n\n` +
       `Paid from your WaPay balance, no fees. Ignore this message if it wasn't expected.`;
     // Deliberately NOT added to the payer's conversation history: this is an
@@ -3967,6 +4106,15 @@ async function handlePayRequestStart({ from, account, code, rawText = '' }) {
       to: from,
       text: await localizeOutbound(`🙂 That's your own payment request. Forward the link to the person who owes you.`, await userLang(account)),
     });
+  }
+  // A frozen account's money stays where it is (2026-10-26): paying someone's link from a balance is a send, and
+  // two frozen accounts moved R570 out this way on 25 October before this check existed.
+  {
+    const { readPayoutFreeze, FROZEN_SEND_COPY } = await import('../../../lib/payout-freeze.js');
+    if (await readPayoutFreeze({ prisma, accountId: account.id, fallbackProfile: account.profile || null })) {
+      logStructured('payrequest_pay_refused_frozen', { accountId: account.id, code: request.id });
+      return await sendWhatsAppText({ to: from, text: await localizeOutbound(FROZEN_SEND_COPY, await userLang(account)) });
+    }
   }
   if (request.status !== 'PENDING') {
     const why = request.status === 'PAID' ? 'has already been paid' : 'is no longer active';
@@ -4043,11 +4191,21 @@ async function handlePaymentReceiptAsk({ from, code }) {
     // cancels (the credit posts; only the PENDING->PAID mark loses). Never
     // tell a charged payer "no payment was taken": check the intent.
     let intentSucceeded = false;
+    let intentRefunded = request.status === 'REFUNDED';
     try {
       const intent = await prisma.providerRequest.findUnique({ where: { idemKey: `wapay-payreq-${code}` } });
       intentSucceeded = intent?.status === 'SUCCESS' || Boolean(intent?.providerRef);
+      intentRefunded = intentRefunded || Boolean(intent?.metadata?.refund);
     } catch {
       // Fall through to the generic message.
+    }
+    if (intentRefunded) {
+      // Paid by card, then refunded to that card and reversed in the ledger (lib/card-refund.js, BUGLOG #146):
+      // "the money reached them" would no longer be true.
+      return await sendWhatsAppText({
+        to: from,
+        text: `↩️ The card payment on that request was refunded to the card that paid it, so it did not stay with ${requesterLabel}.`,
+      });
     }
     if (intentSucceeded) {
       return await sendWhatsAppText({
@@ -4676,7 +4834,16 @@ async function handlePayoutStatus({ from, account, payout, altLine = '' }) {
   const { balance } = await getUserBalance(from);
 
   let text;
-  if (status === 'SUCCESS') {
+  if (status === 'AWAITING_APPROVAL' || status === 'REJECTING') {
+    // Approval mode (lib/payout-approval.js, 2026-10-26): it has not gone to the bank; a person checks it first.
+    const setAside = randsShort(Number(payout.amountCents || 0) + Number(payout.feeCents || 0));
+    // A next-business-day pay-out (lib/payout-speed.js, 2026-11-11) says when it goes once approved.
+    const day = payout.speed === 'NEXT_DAY' && payout.releaseAt ? ` Once approved, it goes on the next business day, ${releaseWhen(payout.releaseAt)}.` : '';
+    text = `⏳ Your withdrawal of ${amount} by ${label} (reference ${payout.reference}) is waiting for approval: a person at WaPay checks every pay-out before it goes. ${setAside} is set aside for it and nothing has left WaPay.${day}\n\n💰 Balance: R${balance}`;
+  } else if (status === 'SCHEDULED') {
+    const setAside = randsShort(Number(payout.amountCents || 0) + Number(payout.feeCents || 0));
+    text = `🗓️ Your withdrawal of ${amount} by ${label} (reference ${payout.reference}) is approved and goes to your bank on the next business day, ${releaseWhen(payout.releaseAt)}. ${setAside} is set aside for it and nothing has left WaPay yet.\n\n💰 Balance: R${balance}`;
+  } else if (status === 'SUCCESS') {
     text = `✅ Your withdrawal of ${amount} by ${label} was paid (reference ${payout.reference}).\n\n💰 Balance: R${balance}`;
   } else if (status === 'FAILED') {
     text =
@@ -4890,8 +5057,20 @@ async function handleConversationState({ from, text, state, data, account }) {
         await updateConversationState(from, null);
         return await sendWhatsAppText({ to: from, text: await localizeOutbound(NOBODY_OWES_ME_REPLY, await userLang(account)), kind: 'ad' });
       }
-      const filled = parseSlots(text, { waId: from, accountId: account.id });
+      // "my links", "remind 2", "cancel 2": a different request, answered at once (2026-10-24).
+      if (matchLinkCommand(text)) {
+        await updateConversationState(from, null);
+        return await handlePostOnboarding({ account, from, text });
+      }
+      // The amount, and what it is for when the answer says it ("R150 for braids", 2026-10-24); a payer's
+      // number in the answer is never read as the amount.
+      const filled = parseLinkAsk(text);
       if (!filled.amountCents) {
+        // What it is for, said first ("for braids"): kept, and the amount asked again.
+        if (filled.description && !looksLikeQuestion(text) && sanitizeLinkDescription(filled.description).ok) {
+          await updateConversationState(from, 'REQUEST_MONEY_AMOUNT', { ...(data || {}), note: filled.description });
+          return await sendWhatsAppText({ to: from, text: await localizeOutbound(`🙏 *Get paid for ${sanitizeLinkDescription(filled.description).text}*\n\nHow much would you like to request? (R5 to R3000)\n\nFor example "R150", or reply "cancel" to stop.`, await userLang(account)) });
+        }
         if (isConversationalEscape(text)) {
           await updateConversationState(from, null);
           return await handlePostOnboarding({ account, from, text });
@@ -4901,7 +5080,51 @@ async function handleConversationState({ from, text, state, data, account }) {
           text: await localizeOutbound(`Please reply with the amount you'd like to request, e.g. "R150", or "cancel" to stop.`, await userLang(account)),
         });
       }
-      return await handleCreatePaymentRequest({ from, account, amountCents: filled.amountCents, rawText: text });
+      return await handleCreatePaymentRequest({
+        from,
+        account,
+        amountCents: filled.amountCents,
+        rawText: text,
+        note: filled.description || data?.note || null,
+        payer: filled.payer || data?.payer || null,
+        adPayerName: data?.adPayerName || null,
+        replacedCents: data?.replacedCents || null,
+      });
+    }
+
+    case 'REQUEST_MONEY_NOTE': {
+      // "What is the R150 for?" (founder 2026-10-24: every link says what it is for). The answer makes the link
+      // (or goes on to the fee choice); "cancel" ends it; a question or another request leaves the flow and is
+      // answered as it would be anywhere else, so this step never traps.
+      const trimmed = text.trim();
+      if (/^(cancel|stop|no|home|menu|back|exit)$/i.test(trimmed.toLowerCase())) {
+        await updateConversationState(from, null);
+        return await sendWhatsAppText({ to: from, text: await localizeOutbound(`👍 Cancelled. No link was created.`, await userLang(account)) });
+      }
+      if (matchLinkCommand(text) || looksLikeQuestion(text) || looksLikeOtherRequest(text)) {
+        await updateConversationState(from, null);
+        return await handlePostOnboarding({ account, from, text });
+      }
+      const answer = parseLinkAsk(text);
+      const amountCents = Number.isInteger(data?.amountCents) ? data.amountCents : null;
+      // A new amount in the answer ("R200 for nails") starts the link again with it.
+      if (answer.amountCents && answer.amountCents !== amountCents) {
+        return await handleCreatePaymentRequest({ from, account, amountCents: answer.amountCents, rawText: text, note: answer.description, payer: answer.payer || data?.payer || null, adPayerName: data?.adPayerName || null, replacedCents: data?.replacedCents || null });
+      }
+      // The answer is the description: "braids", "for braids", "R150 for braids". An answer that is only the
+      // amount again is asked once more, by the flow's own question.
+      const saidFor = answer.description || (answer.amountCents ? null : text);
+      return await handleCreatePaymentRequest({
+        from,
+        account,
+        amountCents,
+        rawText: '',
+        confirmed: !!data?.confirmed,
+        note: saidFor,
+        payer: data?.payer || null,
+        adPayerName: data?.adPayerName || null,
+        replacedCents: data?.replacedCents || null,
+      });
     }
 
     case 'AD_FIRST_LINK': {
@@ -4915,7 +5138,8 @@ async function handleConversationState({ from, text, state, data, account }) {
       const ask = parseFirstLinkAsk(text);
       if (ask) {
         await updateConversationState(from, null);
-        return await handleCreatePaymentRequest({ from, account, amountCents: ask.amountCents, rawText: text, adPayerName: ask.payerName || null });
+        // The prompt asks for the amount and what it is for in one answer (2026-10-24): "250 braids" makes the link.
+        return await handleCreatePaymentRequest({ from, account, amountCents: ask.amountCents, rawText: text, adPayerName: ask.payerName || null, noteHint: ask.note || null });
       }
       const faq = classifyAdEntry(text);
       if (faq === 'FAQ_PAY_SOMEONE' && !adLooksLikeQuestion(text)) {
@@ -4944,6 +5168,11 @@ async function handleConversationState({ from, text, state, data, account }) {
           text: await localizeOutbound(`👍 Cancelled. No link was created.`, await userLang(account)),
         });
       }
+      // "my links", "remind 2", "cancel 2": a different request, answered at once (2026-10-24).
+      if (matchLinkCommand(text)) {
+        await updateConversationState(from, null);
+        return await handlePostOnboarding({ account, from, text });
+      }
       // "1" = link for the amount asked; "2" = grossed-up link that nets it.
       // Amount echoes ("R380" / "R390") count as picking that option.
       const one = /^(1|1️⃣|one|first)$/i.test(pick) || parseSlots(text, {}).amountCents === data.amountCents;
@@ -4960,6 +5189,10 @@ async function handleConversationState({ from, text, state, data, account }) {
           rawText: data.rawText || '',
           confirmed: true,
           adPayerName: data.adPayerName || null,
+          // What it is for and who pays were settled before the choice (2026-10-24).
+          note: data.note || null,
+          payer: data.payer || null,
+          replacedCents: data.replacedCents || null,
         });
       }
       if (isConversationalEscape(text)) {
@@ -5039,6 +5272,14 @@ async function handleConversationState({ from, text, state, data, account }) {
           to: from,
           text: await localizeOutbound(`⏳ That payment request is no longer open. Nothing was paid.`, await userLang(account)),
         });
+      }
+      // Read the freeze again right before the debit: an account frozen between the confirm and the PIN pays nothing.
+      {
+        const { readPayoutFreeze, FROZEN_SEND_COPY } = await import('../../../lib/payout-freeze.js');
+        if (await readPayoutFreeze({ prisma, accountId: account.id, fallbackProfile: account.profile || null })) {
+          logStructured('payrequest_pay_refused_frozen', { accountId: account.id, code: request.id, at: 'pin' });
+          return await sendWhatsAppText({ to: from, text: await localizeOutbound(FROZEN_SEND_COPY, await userLang(account)) });
+        }
       }
 
       // The request code IS the idempotency key: exactly one payer's debit
@@ -7072,7 +7313,7 @@ async function handleConversationState({ from, text, state, data, account }) {
           if (data?.send) {
             logStructured('send_execute_success', { from, accountId: account.id, previewId, delivered: executeData.delivered, amountCents: executeData.amountCents ?? amountCents, recipientMasked: maskMsisdn(recipientMsisdn) });
             await sendWhatsAppText({ to: from, text: await localizeOutbound(sendReceiptText({ amountCents: executeData.amountCents ?? amountCents, recipientMsisdn, newBalanceCents: executeData.newBalance || 0 }), await userLang(account)), kind: 'receipt' });
-            await notifyGiftRecipient({ account, recipientMsisdn, product: 'MONEY', amountCents: executeData.amountCents ?? amountCents, delivered: executeData.delivered });
+            if (!executeData.replayed) await notifyGiftRecipient({ account, recipientMsisdn, product: 'MONEY', amountCents: executeData.amountCents ?? amountCents, delivered: executeData.delivered });
             return await sendPostTransactionCta(from);
           }
 
@@ -7833,8 +8074,10 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
       break;
     }
 
+    // The Pay agent's start_pay_link carries what the link is for (2026-10-24); the flow re-checks it like any
+    // other description, prefers what the message itself says, and asks when neither has one.
     case 'REQUEST_MONEY':
-      return await handleCreatePaymentRequest({ from, account, amountCents, rawText: text });
+      return await handleCreatePaymentRequest({ from, account, amountCents, rawText: text, noteHint: typeof result.slots?.description === 'string' ? result.slots.description : null });
 
     case 'LIST_PRODUCTS':
       return await handleListAllProducts({ from, account });

@@ -17,7 +17,9 @@ import { payoutOutcomeParams, payoutOutcomeMessage } from '../lib/payouts.js';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
+// The account was opened by the customer's own message, so they wrote to WaPay (BUGLOG #144).
 const dbWithLastInbound = (agoMs) => ({
+  account: { findFirst: async () => ({ id: 'a1', profile: {} }) },
   conversationTurn: {
     findFirst: async ({ where }) => {
       assert.equal(where.role, 'user', 'the window is measured from the customer\'s last message');
@@ -87,6 +89,27 @@ test('outside the window: direct send first, then an approved template, then fre
   const fourth = await notifyCustomer({ to: '27600000901', accountId: 'a1', text: 'paid', deps: { prisma: closed, ...d } });
   assert.equal(fourth.rail, 'text_fallback', 'direct send off and no template configured');
   assert.ok(!d.calls.some((c) => c[0] === 'direct'), 'a disabled rail is never called');
+  delete process.env.WAPAY_TEMPLATE_PAYOUT_OUTCOME;
+});
+
+test('outside the window, a number that never wrote to WaPay gets nothing on any rail (BUGLOG #144)', async () => {
+  process.env.WAPAY_TEMPLATE_PAYOUT_OUTCOME = 'wapay_payment_receipt';
+  const refused = [];
+  const stranger = {
+    account: { findFirst: async () => null },
+    conversationTurn: { findFirst: async () => null },
+    processedMessage: { create: async ({ data }) => { refused.push(data.waMessageId); return data; } },
+  };
+  const r = rails();
+  const out = await notifyCustomer({ to: '27600000977', accountId: null, text: 'paid', templateEnv: 'WAPAY_TEMPLATE_PAYOUT_OUTCOME', deps: { prisma: stranger, ...r } });
+  assert.deepEqual(out, { ok: false, rail: null, error: 'NEVER_WROTE' });
+  assert.deepEqual(r.calls, [], 'no direct send, no template, no free-form text');
+  assert.ok(refused.some((k) => k.startsWith('bi-refused:notify-event:')), 'counted for the compliance check');
+  // a pre-registered payer record that never wrote is not consent either
+  const preRegistered = { ...stranger, account: { findFirst: async () => ({ id: 'p1', profile: { origin: { kind: 'PAYER' } } }) } };
+  const r2 = rails();
+  assert.equal((await notifyCustomer({ to: '27600000977', accountId: 'p1', text: 'paid', deps: { prisma: preRegistered, ...r2 } })).error, 'NEVER_WROTE');
+  assert.deepEqual(r2.calls, []);
   delete process.env.WAPAY_TEMPLATE_PAYOUT_OUTCOME;
 });
 

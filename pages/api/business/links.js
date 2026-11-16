@@ -19,6 +19,7 @@
  */
 
 import { sendWhatsAppText, sendWhatsAppTemplate, sendWhatsAppUtilityDirect, directSendEnabled } from '@wapay/whatsapp';
+import { recordLinkVisit } from '../../../lib/link-visits.js';
 import prisma from '../../../lib/prisma.js';
 import { requireBusinessContext } from '../../../lib/business-auth.js';
 import {
@@ -77,6 +78,8 @@ export default async function handler(req, res) {
         note: body.note,
         ttlDays: body.ttlDays === undefined ? undefined : Number(body.ttlDays),
       });
+      // Where it was made (lib/link-visits.js, 2026-10-25).
+      if (out?.link?.code) await recordLinkVisit({ req, kind: 'CREATED', code: out.link.code, accountId: business.accountId || null, source: 'business' });
       let nudge = { available: false };
       if (out.link.customerId && nudgeEnabled()) {
         nudge = { available: await customerEligibleForNudge({ businessId: business.id, customerId: out.link.customerId }) };

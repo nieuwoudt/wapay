@@ -89,13 +89,14 @@ async function run() {
   {
     const a = await s.say('Buy electricity');
     const b = await s.say('50');
-    const c = await s.say('Please create a payment link for R20');
+    // 2026-10-24: every link says what it is for, so the ask carries it (without it the flow asks once).
+    const c = await s.say('Please create a payment link for R20 for lunch');
     verdict('Founder repro: "payment link" escapes the meter ask', [
       { level: 'FAIL', ok: has(a.replyText, /electricity/i) && has(a.replyText, /amount|how much/i), what: 'electricity flow opens with an amount ask' },
       { level: 'FAIL', ok: has(b.replyText, /meter/i), what: 'R50 moves to the meter ask' },
       { level: 'FAIL', ok: !has(c.replyText, /valid meter number/i), what: 'the link ask is NOT answered with a meter error' },
       { level: 'FAIL', ok: has(c.replyText, /switching over/i), what: 'the switch is acknowledged out loud' },
-      { level: 'FAIL', ok: has(c.replyText, /pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/), what: 'a real R20 pay link comes back (free band creates in one step)' },
+      { level: 'FAIL', ok: has(c.replyText, /pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/) && has(c.replyText, /For: lunch/), what: 'a real R20 pay link comes back with what it is for (free band creates in one step)' },
     ], s);
   }
 
@@ -107,8 +108,12 @@ async function run() {
     const b = await s.say('I want to buy airtime');
     const c = await s.say('cancel');
     const d = await s.say('hi');
-    const e = await s.say('please pay me R250');
+    const e = await s.say('please pay me R250 for braids');
     const f = await s.say('1');
+    // 2026-10-24: tracking in the chat. One message each; the newest link is number 1.
+    const g = await s.say('my links');
+    const h = await s.say('remind 1');
+    const i = await s.say('cancel 1');
     verdict('Fluidity: electricity → airtime → home → get-paid link', [
       { level: 'FAIL', ok: has(a.replyText, /electricity/i), what: 'electricity flow opens' },
       { level: 'FAIL', ok: has(b.replyText, /switching over/i) && has(b.replyText, /airtime/i), what: 'airtime ask mid-electricity acknowledges and switches' },
@@ -116,6 +121,10 @@ async function run() {
       { level: 'FAIL', ok: has(d.replyText, /balance|help|airtime|menu/i), what: '"hi" lands on the home screen' },
       { level: 'FAIL', ok: has(e.replyText, /1️⃣|reply \*?1|R2[67]\d/i), what: 'R250 request offers the fee choice before creating' },
       { level: 'FAIL', ok: has(f.replyText, /pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/), what: 'choosing 1 mints exactly one link' },
+      { level: 'FAIL', ok: f.replies.length === 1 && has(f.replyText, /is asking you to pay R250\*\nFor: braids\n\nPay here: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/), what: 'ONE message after the link is made, the card to forward' },
+      { level: 'FAIL', ok: g.replies.length === 1 && has(g.replyText, /Your open payment links\*\n1\. R250 for braids · today · PR[A-HJKMNP-Z]{6}/), what: '"my links" lists the open links, newest first, in one message' },
+      { level: 'FAIL', ok: h.replies.length === 1 && has(h.replyText, /^🔔 \*Reminder: .* is asking you to pay R250\*\nFor: braids/), what: '"remind 1" answers with one reminder to forward' },
+      { level: 'FAIL', ok: i.replies.length === 1 && has(i.replyText, /Cancelled: R250 for braids \(PR[A-HJKMNP-Z]{6}\)\. That link no longer works\./), what: '"cancel 1" cancels that link' },
     ], s);
   }
 
@@ -935,11 +944,11 @@ async function run() {
         const ad = createSession(AD_WA_ID);
         // 2026-10-20 (creative review): the cost answer now runs straight into onboarding step 1
         // in the same turn, so there is no "How it works" / "Open my account" tap any more; the
-        // first-link prompt carries no example and "amount name" is enough.
+        // first-link prompt carries no example, and since 2026-10-24 "amount and what it is for" is enough.
         const a = await ad.say('What does it cost?', { referral: REF, profile: { name: 'Thandi QA' } });
         const d = await ad.say('2580');
         const e = await ad.say('I accept');
-        const f = await ad.say('R20 Thandi');
+        const f = await ad.say('R20 braids');
         const g = await ad.say('Can I buy airtime?');
         const h = await ad.say('How do I get my money out?');
         const i = await ad.say('stop');
@@ -951,8 +960,8 @@ async function run() {
           { level: 'FAIL', ok: has(a.replyText, /Under R50, getting paid is free/) && !has(a.replyText, /\[Open my account\]/) && has(a.replyText, /pin|onboarding_step_3/i), what: 'the cost answer carries no button and reaches the PIN step in the same turn' },
           { level: 'FAIL', ok: !has(a.replyText, /Welcome to WaPay/i) && !a.replies.some((r) => /onboarding_step_1/.test(r.text)), what: 'no second welcome, no welcome template' },
           { level: 'FAIL', ok: has(d.replyText, /accept|consent|onboarding_step_4|Step 3 of 3/i), what: 'the PIN moves to the consent step' },
-          { level: 'FAIL', ok: has(e.replyText, /Let's get you paid\. Who owes you, and how much\?/), what: 'completion asks for the first link, not the business question' },
-          { level: 'FAIL', ok: has(f.replyText, /Here's your payment link for R20: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/) && has(f.replyText, /Forward it to Thandi/), what: '"R20 Thandi" (no example to copy) mints the link with the short forwardable copy' },
+          { level: 'FAIL', ok: has(e.replyText, /Let's get you paid\. How much, and what is it for\?/), what: 'completion asks for the first link (amount and what it is for), not the business question' },
+          { level: 'FAIL', ok: f.replies.length === 1 && has(f.replyText, /is asking you to pay R20\*\nFor: braids\n\nPay here: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/), what: '"R20 braids" (amount and what it is for in one answer) mints the link as ONE forwardable message' },
           { level: 'FAIL', ok: links === 1, what: 'exactly one link exists' },
           { level: 'FAIL', ok: has(g.replyText, /coming soon/), what: '"Can I buy airtime?" is coming soon' },
           { level: 'FAIL', ok: has(h.replyText, /PayShap/) && has(h.replyText, /\[Nedbank cash\]/), what: 'money-out answer with the three pay-out buttons' },
@@ -1050,7 +1059,7 @@ async function run() {
         const rowA = await prisma.account.findFirst({ where: { waId: ONE } });
         const consents = rowA ? await prisma.consent.findMany({ where: { accountId: rowA.id } }) : [];
         const implied = rowA ? await prisma.auditLog.findFirst({ where: { accountId: rowA.id, event: 'CONSENT_IMPLIED' } }) : null;
-        const b = await one.say('please pay me R20');
+        const b = await one.say('please pay me R20 for lunch');
         const c = await one.say('balance');
         const links = rowA ? await prisma.paymentRequest.count({ where: { accountId: rowA.id } }) : 0;
         verdict('One-step 1: the first message opens the account in ONE message, terms accepted by continuing, no PIN, with the evidence', [
@@ -1095,13 +1104,13 @@ async function run() {
         const REF = { source_url: 'https://fb.me/wapay-qa', source_type: 'ad', source_id: 'qa-ad-onestep', headline: 'Please pay me', body: 'Get paid on WhatsApp', media_type: 'image', ctwa_clid: `qa-clid-onestep-${process.pid}` };
         const ad = createSession(ADONE);
         const j = await ad.say('What does it cost?', { referral: REF, profile: { name: 'Thandi QA' } });
-        const k = await ad.say('R20 Thandi');
+        const k = await ad.say('R20 braids');
         const rowAd = await prisma.account.findFirst({ where: { waId: ADONE } });
         verdict('One-step 3: an ad arrival gets the answer, the first-link question and the terms in one message, then the link', [
-          { level: 'FAIL', ok: j.replies.length === 1 && has(j.replyText, /Under R50, getting paid is free/) && has(j.replyText, /Who owes you, and how much\?/) && j.replyText.trim().endsWith(TERMS), what: 'one message: answer, question, terms' },
+          { level: 'FAIL', ok: j.replies.length === 1 && has(j.replyText, /Under R50, getting paid is free/) && has(j.replyText, /How much, and what is it for\?/) && j.replyText.trim().endsWith(TERMS), what: 'one message: answer, question, terms' },
           { level: 'FAIL', ok: !has(j.replyText, /three quick steps|Step \d of \d|PIN/) && !j.replies.some((r) => r.kind === 'template'), what: 'no steps left, no PIN, no template' },
           { level: 'FAIL', ok: rowAd?.onboardingState === 'S5_COMPLETED' && rowAd?.profile?.attribution?.entry === 'Q3' && Boolean(rowAd?.profile?.attribution?.onboardedAt), what: 'opened, entry Q3, the onboarding time for the Growth tab' },
-          { level: 'FAIL', ok: has(k.replyText, /Here's your payment link for R20: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/), what: 'the first link at once' },
+          { level: 'FAIL', ok: k.replies.length === 1 && has(k.replyText, /is asking you to pay R20\*\nFor: braids\n\nPay here: https:\/\/pleasepayme\.co\.za\/PR[A-HJKMNP-Z]{6}/), what: 'the first link at once, as one forwardable message' },
         ], ad);
 
         // 11. The payer's reply: a paid link pre-registers the payer; the v2 receipt's tap opens the account with the receipt.

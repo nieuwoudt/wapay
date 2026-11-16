@@ -27,6 +27,8 @@ const shape = (b) => ({
   destinationId: b.destinationId ? String(b.destinationId).slice(0, 64) : null,
   details: b.details && typeof b.details === 'object' ? { accountNumber: b.details.accountNumber, bank: b.details.bank, mobile: b.details.mobile, mine: b.details.mine === true } : null,
   identity: b.identity && typeof b.identity === 'object' ? { fullName: b.identity.fullName, idNumber: b.identity.idNumber, countryOfIssue: b.identity.countryOfIssue } : null,
+  // A bank account's speed (lib/payout-speed.js, 2026-11-11): 'SAME_DAY' or the next business day.
+  speed: String(b.speed || '').toUpperCase() === 'SAME_DAY' ? 'SAME_DAY' : null,
 });
 
 export function createPayoutHandler(depsOverride = null) {
@@ -47,7 +49,7 @@ export function createPayoutHandler(depsOverride = null) {
     try {
       if (b.action === 'check') return reply(res, await payoutCheck(deps, { account, ...shape(b) }));
       if (b.action === 'request') {
-        const out = await payoutRequest(deps, { account, intentId: String(b.intentId || ''), ...shape(b), save: b.save === true, nickname: b.nickname || null, proof: b.proof });
+        const out = await payoutRequest(deps, { account, intentId: String(b.intentId || ''), ...shape(b), save: b.save === true, nickname: b.nickname || null, proof: b.proof, feeCents: intOf(b.feeCents) });
         console.log(JSON.stringify({ type: 'app_payout', accountId: account.id, ok: !!out.ok, payoutStatus: out.payoutStatus || null, error: out.error || null, reference: out.reference || null }));
         return reply(res, out);
       }

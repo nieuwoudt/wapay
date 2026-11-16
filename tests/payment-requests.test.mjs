@@ -302,9 +302,14 @@ test('static: the swap cancels the newest PENDING request then creates fresh', (
   const start = processorSource.indexOf('async function handleChangeRequestAmount');
   const body = processorSource.slice(start, processorSource.indexOf('\n}', start) + 2);
   assert.match(body, /getLatestPendingRequest\(\{ accountId: account\.id \}\)/);
-  assert.match(body, /cancelPaymentRequest\(\{ code: latest\.id, accountId: account\.id \}\)/);
-  assert.match(body, /that link no longer works/i, 'old link death is announced');
-  assert.match(body, /handleCreatePaymentRequest\(\{ from, account, amountCents, rawText \}\)/);
+  assert.match(body, /cancelPaymentRequest\(\{ code: latest\.id, accountId: account\.id \}\)\)\) replacedCents = latest\.amountCents;/);
+  // One message per turn (2026-10-24): no separate cancel message; the old link's end rides in this turn's next
+  // message and on the new link itself, which keeps what the old one was for unless the customer says otherwise.
+  assert.ok(!/sendWhatsAppText/.test(body.slice(body.indexOf('let replacedCents'))), 'no separate cancel message (only the business-ticket answer above it sends anything)');
+  assert.match(body, /const note = parseLinkAsk\(rawText\)\.description \|\| latest\?\.note \|\| null;/);
+  assert.match(body, /handleCreatePaymentRequest\(\{ from, account, amountCents, rawText, note, replacedCents, replacedNow: replacedCents != null \}\)/);
+  assert.match(processorSource, /link is cancelled and no longer works\./, 'old link death is announced in the next message');
+  assert.match(readFileSync(fileURLToPath(new URL('../lib/pay-links.js', import.meta.url)), 'utf8'), /This link replaces the earlier \$\{rands\(replacedCents\)\} link, which no longer works\./);
   const sc = processorSource.indexOf("intent: 'REQUEST_MONEY_CHANGE'");
   const create = processorSource.indexOf("intent: 'REQUEST_MONEY'");
   assert.ok(sc > -1 && sc < create, 'change short-circuit runs before plain create');

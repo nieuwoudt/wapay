@@ -24,6 +24,7 @@ import { deliverRequestPaidNotifications } from '../lib/request-notify.js';
 import { receiptV2TemplateFor, payerPreregisterFor, oneStepSignupFor, FLAGS, RECEIPT_V2_ENV } from '../lib/onboarding-flags.js';
 import { payerReceiptLine, payerPendingLine, receiptButtonPayload, receiptCodeFromPayload, RECEIPT_BUTTON_PAYLOAD, shortSastDate } from '../lib/one-step-signup.js';
 import { parseReferralCode } from '../lib/referrals.js';
+import { claimTable } from './helpers/notify-claims.mjs';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const processor = read('../pages/api/webhooks/message-processor-v2.js');
@@ -91,7 +92,9 @@ test('pre-registration: a number that already has an account, in either stored f
 
 // ---------------------------------------------------------------- the receipt leg
 
-function notifyPrisma() {
+// BUGLOG #144 (2026-10-27): a receipt goes only to a payer number that wrote to WaPay; `payerWrote`
+// gives the payer an account opened by their own message, else the number is unknown to WaPay.
+function notifyPrisma({ payerWrote = true } = {}) {
   return {
     paymentRequest: { findUnique: async () => ({ id: CODE, status: 'PAID', amountCents: 25000, paidAt: new Date('2026-10-22T09:30:00Z'), accountId: 'acc_requester' }) },
     providerRequest: {
@@ -99,7 +102,13 @@ function notifyPrisma() {
       update: async () => ({}),
     },
     wallet: { findFirst: async () => null },
-    account: { findUnique: async () => ({ id: 'acc_requester', displayName: 'Thandi Nkosi' }) },
+    account: {
+      findUnique: async () => ({ id: 'acc_requester', displayName: 'Thandi Nkosi' }),
+      findFirst: async ({ where }) => (payerWrote && JSON.stringify(where).includes(PAYER_WA) ? { id: 'acc_payer', profile: {} } : null),
+    },
+    // Each leg is claimed before it is sent; the flag is merged in SQL (BUGLOG #145).
+    processedMessage: claimTable().processedMessage,
+    $executeRaw: async () => 1,
   };
 }
 function sends() {
@@ -120,6 +129,19 @@ const withEnv = async (env, fn) => {
   Object.assign(process.env, env);
   try { return await fn(); } finally { for (const k of keys) { if (prev[k] === undefined) delete process.env[k]; else process.env[k] = prev[k]; } }
 };
+
+test('the receipt leg (BUGLOG #144): a payer number that never wrote to WaPay gets nothing on any rail, switch on or off; the record is still made when the switch covers it', async () => {
+  for (const env of [{ WAPAY_TEMPLATE_PAYMENT_RECEIPT: 'wapay_payment_receipt', [RECEIPT_V2_ENV]: 'wapay_payment_receipt_v2' }, { [FLAGS.PAYER_PREREGISTER]: 'on', [RECEIPT_V2_ENV]: 'wapay_payment_receipt_v2', WAPAY_TEMPLATE_PAYMENT_RECEIPT: 'wapay_payment_receipt', WHATSAPP_DIRECT_SEND: 'true' }]) {
+    await withEnv(env, async () => {
+      const pre = [];
+      const { calls, send } = sends();
+      const out = await deliverRequestPaidNotifications({ code: CODE, prisma: notifyPrisma({ payerWrote: false }), send, preRegisterPayer: async (a) => { pre.push(a); return { ok: true }; } });
+      assert.equal(out.payer, 'never_wrote');
+      assert.equal(calls.filter((c) => c.to === PAYER_WA).length, 0, 'no text, no Direct Send, no template to a stranger');
+      assert.equal(pre.length, env[FLAGS.PAYER_PREREGISTER] ? 1 : 0, 'the record is data, not a message');
+    });
+  }
+});
 
 test('the receipt leg, switch off: nothing is pre-registered and the current template goes exactly as before', async () => {
   await withEnv({ WAPAY_TEMPLATE_PAYMENT_RECEIPT: 'wapay_payment_receipt', [RECEIPT_V2_ENV]: 'wapay_payment_receipt_v2' }, async () => {
@@ -184,7 +206,7 @@ test('the v2 rule: the name set AND the switch covering the payer; a failed v2 s
 
 test('the receipt leg: the POPIA note sits with the pre-registration, which never blocks the receipt', () => {
   const at = notifySource.indexOf('if (payerPreregisterFor(payerWaId)) {');
-  const firstSend = notifySource.indexOf('const sent = await send.text({', at);
+  const firstSend = notifySource.indexOf('await send.text({', at);
   assert.ok(at > 0 && firstSend > at, 'the record is made before the receipt goes, so a tap finds it');
   assert.match(notifySource.slice(at - 600, at), /POPIA: the number was given for this receipt; it is used for nothing else until they\s*\n?\s*\/\/ write to WaPay\./);
   assert.match(notifySource, /\.catch\(\(error\) => log\('request_notify_preregister_error'/);

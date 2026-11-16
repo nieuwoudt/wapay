@@ -21,6 +21,8 @@ function PayOutScreen() {
   const [dest, setDest] = useState(null); // a saved destination { id, label, ... }
   const [details, setDetails] = useState({ bank: '', accountNumber: '', mine: true, mobile: '' });
   const [amountText, setAmountText] = useState('');
+  // A bank account's speed (lib/payout-speed.js, 2026-11-11): the next business day (cheaper) or the same day.
+  const [speed, setSpeed] = useState('NEXT_DAY');
   const [check, setCheck] = useState(null);
   const [ident, setIdent] = useState({ fullName: '', idNumber: '', countryOfIssue: '' });
   const [save, setSave] = useState(false);
@@ -58,13 +60,14 @@ function PayOutScreen() {
     destinationId: dest?.id || null,
     details: dest ? null : { bank: details.bank, accountNumber: details.accountNumber, mine: details.mine, mobile: details.mobile },
     identity: ident.fullName || ident.idNumber ? { fullName: ident.fullName || undefined, idNumber: ident.idNumber || undefined, countryOfIssue: passport ? ident.countryOfIssue : undefined } : null,
+    speed,
     ...extra,
   });
 
-  const doCheck = () => {
+  const doCheck = (extra = {}) => {
     setError(''); setProblem(null);
     run(async () => {
-      const r = await api('/api/app/payout', { method: 'POST', body: { action: 'check', ...body() } });
+      const r = await api('/api/app/payout', { method: 'POST', body: { action: 'check', ...body(extra) } });
       if (!r.ok) {
         if (r.data.line) setProblem({ line: r.data.line, kyc: r.data.kyc?.canVerify && r.data.error === 'KYC_REQUIRED', error: r.data.error, maxNowCents: r.data.maxNowCents });
         else setError(r.data.error === 'BAD_ACCOUNT_NUMBER' ? 'Check the account number.' : r.data.error === 'BAD_BANK' ? 'Pick the bank.' : r.data.error === 'BAD_MOBILE' ? 'Check the cellphone number.' : 'That amount could not be checked. Please try again.');
@@ -86,7 +89,7 @@ function PayOutScreen() {
       const step1 = await api('/api/app/pin', { method: 'POST', body: { purpose: 'payout', intentId: check.intentId, amountCents: check.amountCents, pin } });
       setPin('');
       if (!step1.ok) { setError(pinError(step1)); return; }
-      const r = await api('/api/app/payout', { method: 'POST', body: { action: 'request', intentId: check.intentId, ...body(), save, nickname: save ? nickname : null, proof: step1.data.proof } });
+      const r = await api('/api/app/payout', { method: 'POST', body: { action: 'request', intentId: check.intentId, ...body(), save, nickname: save ? nickname : null, proof: step1.data.proof, feeCents: check.feeCents } });
       if (r.ok) { setResult(r.data); setStep('done'); setIdent({ fullName: '', idNumber: '', countryOfIssue: '' }); setDetails({ bank: '', accountNumber: '', mine: true, mobile: '' }); return; }
       if (r.data.error === 'KYC_REQUIRED') { setProblem({ line: r.data.line, kyc: !!r.data.kyc?.canVerify, error: r.data.error }); setStep('amount'); return; }
       setError(r.data.line || 'The pay-out did not go through. Nothing has left your balance.');
@@ -165,7 +168,7 @@ function PayOutScreen() {
               {methods.map((x) => (
                 <button key={x.method} type="button" className="opt" onClick={() => pickNew(x)} disabled={x.maxNowCents == null}>
                   <span className="ic"><Icon name={x.family === 'BANK' ? 'bank' : 'phone'} /></span>
-                  <span className="m"><b>{x.label}</b><span>{`Fee from ${Rs(x.feeFromCents)} · from ${Rs(x.minCents)}`}{x.maxNowCents == null ? ` · needs ${Rs(x.minCents + x.feeFromCents)} with the fee` : ''}</span></span>
+                  <span className="m"><b>{x.label}</b><span>{x.speeds ? `${Rs(x.speeds.nextDayFeeCents)} fee next business day, ${Rs(x.speeds.sameDayFeeCents)} same day · from ${Rs(x.minCents)}` : `Fee from ${Rs(x.feeFromCents)} · from ${Rs(x.minCents)}`}{x.maxNowCents == null ? ` · needs ${Rs(x.minCents + x.feeFromCents)} with the fee` : ''}</span></span>
                   <Icon name="chevron" size={18} />
                 </button>
               ))}
@@ -225,7 +228,7 @@ function PayOutScreen() {
             </div>
           ) : null}
           <Notice tone="error">{error}</Notice>
-          {!kycUrl ? <div className="sticky"><button type="button" className="btn" disabled={busy || !amountCents} onClick={doCheck}>{busy ? 'Checking…' : 'Continue'}</button></div> : null}
+          {!kycUrl ? <div className="sticky"><button type="button" className="btn" disabled={busy || !amountCents} onClick={() => doCheck()}>{busy ? 'Checking…' : 'Continue'}</button></div> : null}
           {ctx.rulesNote ? <p className="note">{ctx.rulesNote}</p> : null}
         </>
       )}
@@ -235,7 +238,14 @@ function PayOutScreen() {
           {header('Confirm your pay-out', null, 'amount')}
           <div className="card">
             <Kv k="Amount" v={R(check.amountCents)} />
-            <Kv k="Fee" v={R(check.feeCents)} />
+            {check.speeds ? (
+              <div className="speeds" role="radiogroup" aria-label="When should it go?">
+                <label className="check"><input type="radio" name="speed" checked={check.speed !== 'SAME_DAY'} onChange={() => { setSpeed('NEXT_DAY'); doCheck({ speed: 'NEXT_DAY' }); }} />Next business day ({check.speeds.NEXT_DAY.when}): {R(check.speeds.NEXT_DAY.feeCents)} fee</label>
+                <label className="check"><input type="radio" name="speed" disabled={!check.speeds.SAME_DAY.available} checked={check.speed === 'SAME_DAY'} onChange={() => { setSpeed('SAME_DAY'); doCheck({ speed: 'SAME_DAY' }); }} />Same day: {R(check.speeds.SAME_DAY.feeCents)} fee{check.speeds.SAME_DAY.available ? '' : ' (not open: some of this money reached your balance less than 2 hours ago, or the balance does not cover the fee)'}</label>
+              </div>
+            ) : null}
+            <Kv k="Fee" v={check.express ? `${R(check.feeCents)} (double the usual ${R(check.normalFeeCents)})` : R(check.feeCents)} />
+            {check.feeNote ? <p className="note">{check.feeNote}</p> : null}
             <Kv k="Total from your balance" v={R(check.totalCents)} strong />
             <Kv k="To" v={`${check.destinationLabel} · ${check.methodLabel}`} />
             {check.nameOnAccount ? <Kv k="Name on the account" v={check.nameOnAccount} /> : null}

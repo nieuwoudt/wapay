@@ -87,7 +87,7 @@ function client(perform, statusScript) {
   };
 }
 async function parked({ prisma, ledger, c, intentId = 'intent-7000' }) {
-  const r = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId, method: 'PAYSHAP', amountCents: 5000, recipient, providers, authorization: proofFor(kycd, { intentId: intentId, amountCents: 5000 }) });
+  const r = await requestPayout({ prisma, ledger, client: c, account: kycd, intentId, method: 'PAYSHAP', speed: 'SAME_DAY', amountCents: 5000, recipient, providers, authorization: proofFor(kycd, { intentId: intentId, amountCents: 5000 }) });
   assert.equal(r.status, 'PENDING');
   return r;
 }

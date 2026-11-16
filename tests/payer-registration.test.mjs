@@ -32,6 +32,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { maskedRequesterLabel } from '../lib/payment-requests.js';
+import { claimTable, jsonbMerge } from './helpers/notify-claims.mjs';
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const processorSource = read('../pages/api/webhooks/message-processor-v2.js');
@@ -83,8 +84,9 @@ test('pay page: PAID state carries the receipt + onboarding deep link', () => {
   assert.match(payPageSource, /Get my receipt \+ my own WaPay/);
 });
 
-test('pay page: fine print honestly discloses BOTH uses of the number', () => {
-  assert.match(payPageSource, /number is used to send your\s+receipt on WhatsApp and to offer you your own free WaPay/);
+test('pay page: fine print honestly says what the number is for, and that WaPay never writes first (BUGLOG #144)', () => {
+  assert.match(payPageSource, /Your number stays with this payment as its receipt\. If you already chat with WaPay, the receipt comes to that chat; if not, tap Get my receipt after paying\. WaPay never messages a number that has not written to it\./);
+  assert.ok(!/offer you your own free WaPay/.test(payPageSource), 'no promise of an unasked-for message');
 });
 
 // ---------------------------------------------------------------------------
@@ -100,9 +102,18 @@ test('checkout: payer number comes from the POST body only, never the query stri
 
 test('checkout: payer number is validated + normalised, and NEVER blocks payment', () => {
   assert.match(checkoutSource, /isValidSaMsisdn\(raw\) \? normaliseMsisdn\(raw\) : null/);
-  // The only failure paths are the pre-existing method/code/request guards.
+  // The only failure paths are the pre-existing method/code/request guards, plus (founder 2026-11-10,
+  // lib/own-link.js) the own-link pages: they apply only when the typed number IS the requester's own,
+  // never to a bad, missing or other number.
   const statuses = [...checkoutSource.matchAll(/res\.status\((\d{3})\)/g)].map((m) => m[1]);
-  assert.deepEqual(statuses.sort(), ['400', '404', '405', '410'].sort(), 'no new failure path for the payer field');
+  assert.deepEqual(statuses.sort(), ['200', '400', '403', '404', '405', '410'].sort(), 'no new failure path for the payer field');
+  const ownStart = checkoutSource.indexOf('if (isOwnNumber(payerMsisdn, requester)) {');
+  const ownEnd = checkoutSource.indexOf('if (!intent) {', ownStart);
+  assert.ok(ownStart > 0 && ownEnd > ownStart, 'the own-link branch is one block before the intent');
+  for (const s of ['res.status(403)', 'res.status(200)']) {
+    const at = checkoutSource.indexOf(s);
+    assert.ok(at > ownStart && at < ownEnd, `${s} only inside the own-link branch`);
+  }
   const badCodeIdx = checkoutSource.indexOf("res.status(400).send('bad code')");
   assert.ok(badCodeIdx > -1, 'the 400 is the bad-CODE guard, not a payer guard');
 });
@@ -126,8 +137,10 @@ test('checkout: the receipt destination rides the SIGNED PayFast session (custom
 });
 
 test('checkout: return URL is ?r=1, cancel URL stays bare, redirect is 303', () => {
-  assert.match(checkoutSource, /returnUrl: `\$\{base\}\/pay\/\$\{code\}\?r=1`/);
-  assert.match(checkoutSource, /cancelUrl: `\$\{base\}\/pay\/\$\{code\}`/);
+  assert.match(checkoutSource, /returnUrl: `\$\{payBase\}\/pay\/\$\{code\}\?r=1`/);
+  assert.match(checkoutSource, /const payBase = String\(process\.env\.PAYLINK_BASE_URL \|\| ''\)/, 'payers return to the pay link address, not the deployment address (2026-10-24)');
+  assert.match(checkoutSource, /notifyUrl: `\$\{base\}\/api\/payfast\/itn`/, 'the server-to-server notice stays on the API base');
+  assert.match(checkoutSource, /cancelUrl: `\$\{payBase\}\/pay\/\$\{code\}`/);
   assert.match(checkoutSource, /res\.redirect\(303, checkoutUrl\)/);
 });
 
@@ -162,13 +175,20 @@ test('notify: flags are set ONLY after a send succeeds — exactly-once with rep
   const flips = [...notifySource.matchAll(/if \(sent\?\.ok\) delivered = true/g)].length
               + [...notifySource.matchAll(/if \(tpl\?\.ok\) delivered = true/g)].length;
   assert.ok(flips >= 4, 'both legs flip delivered only on a successful send');
-  const persists = [...notifySource.matchAll(/if \(delivered\) \{/g)].length;
-  assert.ok(persists >= 2, 'flags persist only when delivered');
-  assert.match(notifySource, /\.\.\.intent\.metadata, \.\.\.patch/, 'flag persist merges metadata (BUGLOG #24)');
+  assert.match(notifySource, /async function finishNotifyLeg[\s\S]{0,200}if \(delivered\) \{[\s\S]{0,500}persistFlag\(/, 'flags persist only when delivered');
+  // BUGLOG #145: merged in SQL on the row as it is now, never a spread of the copy read at the start (BUGLOG #24).
+  assert.match(notifySource, /COALESCE\("metadata", '\{\}'::jsonb\) \|\| \$\{JSON\.stringify\(patch\)\}::jsonb WHERE "idemKey" = \$\{idemKey\}/);
+  assert.ok(!/\.\.\.intent\.metadata, \.\.\.patch/.test(notifySource), 'no stale spread of the metadata');
+  // Each leg is claimed before its first send; the loser sends nothing (tests/request-notify-once.test.mjs).
+  const reqClaim = notifySource.indexOf("claimNotifyLeg({ prisma, leg: 'requester'");
+  const payClaim = notifySource.indexOf("claimNotifyLeg({ prisma, leg: 'payer'");
+  assert.ok(reqClaim > 0 && reqClaim < notifySource.indexOf('await send.text({ to: meta.waId'), 'requester claim before its send');
+  assert.ok(payClaim > 0 && payClaim < notifySource.indexOf('await send.text({\n', payClaim), 'payer claim before its send');
 });
 
 test('notify: send outcomes read from the RESOLVED result — send fns never throw', () => {
-  assert.match(notifySource, /const sent = await send\.text\(/);
+  assert.match(notifySource, /const sent = [^\n]*await send\.text\(/);
+  assert.match(notifySource, /serviceWindowOpen\(prisma, \{ waId: payerWaId \}\)/, 'the payer\'s window is decided before plain text (2026-10-23: accepted-then-131047 lost receipts)');
   assert.match(notifySource, /sent\?\.ok/);
   assert.match(notifySource, /tpl\?\.ok/);
 });
@@ -208,7 +228,10 @@ test('notify (behavioral): repairs a lost send, then never double-sends', async 
       update: async ({ data }) => { intentRow.metadata = data.metadata; return intentRow; },
     },
     wallet: { findFirst: async () => ({ availableCents: 8500 }) },
-    account: { findUnique: async () => ({ displayName: 'Nieuwoudt', msisdn: '27787051175' }) },
+    // The payer's number wrote to WaPay before (BUGLOG #144: only such a number gets a receipt).
+    account: { findUnique: async () => ({ displayName: 'Nieuwoudt', msisdn: '27787051175' }), findFirst: async () => ({ id: 'payer1', profile: {} }) },
+    processedMessage: claimTable().processedMessage,
+    $executeRaw: jsonbMerge(() => intentRow),
   };
   const sends = [];
   const send = { text: async (a) => { sends.push(['text', a.to]); return { ok: true }; }, template: async (a) => { sends.push(['tpl', a.to]); return { ok: true }; } };
@@ -224,7 +247,7 @@ test('notify (behavioral): repairs a lost send, then never double-sends', async 
   assert.equal(sends.length, 2, 'a redelivery never double-sends');
 });
 
-test('notify (behavioral): out-of-window payer falls back to the approved template', async () => {
+test('notify (behavioral): a payer who wrote to WaPay before, now outside the window, gets the approved template', async () => {
   const { deliverRequestPaidNotifications } = await import('../lib/request-notify.js');
   process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT = 'wapay_payment_receipt';
   const intentRow = { idemKey: 'wapay-payreq-PRTESTAC', providerRef: 'pf1', metadata: { waId: '27787051175', accountId: 'acc1', amountCents: 900, grossCents: 1000, payerMsisdn: '0726252243', requesterNotifiedAt: '2026-08-25' } };
@@ -232,7 +255,9 @@ test('notify (behavioral): out-of-window payer falls back to the approved templa
     paymentRequest: { findUnique: async () => ({ id: 'PRTESTAC', status: 'PAID', amountCents: 1000, accountId: 'acc1' }) },
     providerRequest: { findUnique: async () => ({ ...intentRow, metadata: { ...intentRow.metadata } }), update: async ({ data }) => { intentRow.metadata = data.metadata; return intentRow; } },
     wallet: { findFirst: async () => null },
-    account: { findUnique: async () => ({ msisdn: '27787051175' }) },
+    account: { findUnique: async () => ({ msisdn: '27787051175' }), findFirst: async () => ({ id: 'payer1', profile: {} }) },
+    processedMessage: claimTable().processedMessage,
+    $executeRaw: jsonbMerge(() => intentRow),
   };
   const sends = [];
   const send = {
@@ -357,4 +382,33 @@ test('new copy: no betting words, no cash-out promises', () => {
     );
     assert.ok(!/cash\s*-?\s*out|withdraw/i.test(source), 'no cash-out claims');
   }
+});
+
+test('a payer number that never wrote to WaPay gets nothing: no plain text, no Direct Send, no template (BUGLOG #144, 2026-10-27)', async () => {
+  const { deliverRequestPaidNotifications } = await import('../lib/request-notify.js');
+  process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT = 'wapay_payment_receipt';
+  process.env.WHATSAPP_DIRECT_SEND = 'true';
+  const calls = [];
+  const send = {
+    text: async (a) => { calls.push(['text', a.to]); return { ok: true }; },
+    template: async (a) => { calls.push(['template', a.to, a.templateName]); return { ok: true }; },
+    direct: async (a) => { calls.push(['direct', a.to]); return { ok: true }; },
+  };
+  const intent = { idemKey: 'wapay-payreq-PRWINDOW', status: 'SUCCESS', providerRef: '123', metadata: { accountId: 'req1', waId: '27830000001', payerMsisdn: '0729990002', amountCents: 9500, grossCents: 10000, requesterNotifiedAt: true } };
+  const refusals = [];
+  const prisma = {
+    paymentRequest: { findUnique: async () => ({ id: 'PRWINDOW', accountId: 'req1', status: 'PAID', amountCents: 10000, businessId: null, note: null }) },
+    providerRequest: { findUnique: async () => intent, update: async ({ data }) => { Object.assign(intent.metadata, data.metadata || {}); return intent; } },
+    account: { findFirst: async () => null, findUnique: async () => ({ id: 'req1', waId: '27830000001', displayName: 'Thandi', profile: {} }) },
+    conversationTurn: { findFirst: async () => null },
+    wallet: { findFirst: async () => null },
+    processedMessage: { create: async ({ data }) => { refusals.push(data.waMessageId); return data; } },
+  };
+  const out = await deliverRequestPaidNotifications({ code: 'PRWINDOW', prisma, send, preRegisterPayer: async () => null });
+  delete process.env.WAPAY_TEMPLATE_PAYMENT_RECEIPT;
+  delete process.env.WHATSAPP_DIRECT_SEND;
+  assert.equal(out.payer, 'never_wrote');
+  assert.deepEqual(calls.filter((c) => c[1] === '27729990002'), [], 'nothing to a number that never wrote');
+  assert.ok(!intent.metadata.payerNotifiedAt, 'not marked as told');
+  assert.ok(refusals.some((k) => /^bi-refused:payer-receipt:/.test(k)), 'the refusal is counted for the compliance check');
 });

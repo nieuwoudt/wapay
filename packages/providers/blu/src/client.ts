@@ -121,23 +121,41 @@ export class BluClient {
         responseBody: errorBody,
       });
 
+      // The operator probe reads statusCode and reason off these errors
+      // (2026-10-27: the voucher endpoint started refusing us and the chat
+      // could only say "Status Check Failed"). The reason is Blu's message
+      // with any run of eight or more digits masked, never the token.
+      const reason = this.extractErrorMessage(
+        errorBody && typeof errorBody === 'object' ? errorBody : { message: String(errorBody ?? '').slice(0, 160) },
+        res.statusCode
+      ).replace(/\d{8,}/g, (m) => `${'*'.repeat(m.length - 2)}${m.slice(-2)}`).slice(0, 160);
       if (res.statusCode === 401 || res.statusCode === 403) {
-        throw new Error('AUTH');
+        const err = new Error('AUTH');
+        (err as any).statusCode = res.statusCode;
+        (err as any).reason = reason;
+        throw err;
       }
       if (res.statusCode === 400 || res.statusCode === 404) {
         return { status: 'UNKNOWN' };
       }
 
-      throw new Error('RETRYABLE');
+      const err = new Error('RETRYABLE');
+      (err as any).statusCode = res.statusCode;
+      (err as any).reason = reason;
+      throw err;
     } catch (e: any) {
-      if (e.message === 'AUTH') {
+      if (e?.message === 'AUTH' || (e?.message === 'RETRYABLE' && e?.statusCode)) {
         throw e;
       }
       console.error('[Blu] Status check error', {
         pin: maskVoucherPin(pin),
         error: e?.message || e,
       });
-      throw new Error('RETRYABLE');
+      // No HTTP answer at all: name the transport failure (timeout, reset, DNS).
+      const err = new Error('RETRYABLE');
+      (err as any).statusCode = null;
+      (err as any).reason = `transport: ${String(e?.code || e?.name || e?.message || 'unknown').slice(0, 80)}`;
+      throw err;
     }
   }
 

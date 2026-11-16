@@ -188,14 +188,15 @@ test('the ad arrival: the answer and the first-link question in the one message,
   const kinds = ['Q1', 'Q2', 'Q3', 'Q4', 'OPEN', 'HOW', 'COST', 'FAQ_PAY_ME_HOW', 'FAQ_MONEY_OUT', 'FAQ_CASH_IN', 'FAQ_VAS', 'FAQ_PAY_SOMEONE', 'free_text'];
   for (const kind of kinds) {
     const text = withTermsLine(adOpenedReply(kind, { firstName: 'Thandi', fee }));
-    assert.match(text, /Who owes you, and how much\? Type the amount and their name\./, kind);
+    // 2026-10-24: the first-link question asks for the amount and what it is for in one answer (every link says what it is for).
+    assert.match(text, /How much, and what is it for\? Type the amount and a few words, and I'll make a link you can forward\./, kind);
     assert.ok(!/three quick steps|open your account|OTP|code we sent|Step \d of \d/i.test(text), `${kind}: nothing about steps still to come`);
     assert.deepEqual(copyViolations(text), [], `${kind}: ${text}`);
     assert.ok(text.endsWith(TERMS_LINE), kind);
   }
   assert.match(adOpenedReply('Q3', { fee }), /Under R50, getting paid is free/);
   assert.match(adOpenedReply('Q4', {}), /Your WaPay account is open/);
-  assert.equal(adOpenedReply('Q1', { firstName: 'Thandi' }), "You're all set, Thandi. Let's get you paid. Who owes you, and how much? Type the amount and their name.");
+  assert.equal(adOpenedReply('Q1', { firstName: 'Thandi' }), "You're all set, Thandi. Let's get you paid. How much, and what is it for? Type the amount and a few words, and I'll make a link you can forward.");
 });
 
 test('the processor: one message, sent before the account opens, no template and no model on the way', () => {

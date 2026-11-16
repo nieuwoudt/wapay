@@ -1,7 +1,7 @@
 {
   "title": "WaPay Money Map",
-  "version": "1.3",
-  "date": "2026-10-04",
+  "version": "1.5",
+  "date": "2026-11-11",
   "referenceAmountsCents": [
     5000,
     20000,
@@ -289,7 +289,7 @@
       "name": "Card payment by debit card on Adumo (Nedbank via SHB)",
       "counterparty": "Adumo Online / SHB Financial Services",
       "productState": "OFF",
-      "productNote": "Built to the edge of our credentials and proven on Adumo's staging (docs/ADUMO.md section 6). Carries pay links, not the deposit command. Off until WAPAY_ADUMO_ENABLED and SHB's written acceptance of third-party processing.",
+      "productNote": "Approved by SHB/Adumo 2026-10-23 (merchant WAPAY, merchant no 4741443, MCC 4814). Carries pay links, not the deposit command. In production behind WAPAY_ADUMO_ENABLED with PayFast as the primary rail until one live R5 per method has reconciled (docs/testing/adumo-production-2026-10-23.md); the switch is the founder's.",
       "payer": "receiver",
       "limits": {
         "minCents": 500,
@@ -300,21 +300,21 @@
         "bps": 145,
         "exVat": true,
         "status": "PROPOSED",
-        "source": "SHB offer email 2026-09-10 (memory adumo-shb-card-offer): debit 1.35% + Adumo gateway R0.80 + 0.10%, ex VAT; application form signed by WaPay, no written acceptance from SHB"
+        "source": "SHB offer e-mail 2026-09-10: debit 1.35% acquiring + Adumo gateway R0.80 + 0.10% (gateway on the signed application), ex VAT; the MSC is in SHB's e-mail of 2026-09-10 only; the signed application (2026-10-06) carries only Adumo's gateway fee (EMAIL_TO_SHB_12 item 1)"
       },
       "price": {
         "kind": "payreq",
         "rail": "ADUMO",
         "status": "PROPOSED",
-        "source": "lib/deposits.js cardRailFee('ADUMO'): R1 + 2.5% rounded up to 10c, free under R50 with the taper (founder decision 2026-09-10 evening); not charged while the rail is off"
+        "source": "lib/deposits.js cardRailFee('ADUMO'): the PayFast receiver fee, R2.30 + 4.20% rounded up to 10c, free under R50 with the taper (founder ruling 2026-10-23: one price on every rail, so the rail is never a price difference); not charged while PayFast is the primary rail"
       },
       "codeRef": {
         "fn": "paymentRequestFeeCents",
         "rail": "ADUMO"
       },
-      "notes": "Healthy on debit and Instant EFT; the blended margin at a 60/40 debit/credit mix is about 0.45%.",
-      "question": "Adumo receiver fee: confirm R1 + 2.5% (the lowest headline in the market, a bounded loss on pure credit-card tickets) rather than the earlier R1.50 + 3.0% recommendation, and decide whether to steer payers to Instant EFT and Capitec Pay on the pay page.",
-      "owner": "Founder"
+      "notes": "At the PayFast price WaPay keeps more than on PayFast's debit rate (R2.30 + 4.025% incl VAT): +R3.74 at R100, +R13.17 at R500, +R72.11 at R3,000. On the last 30 days of production card payments (101, R65,696) the blend of 55% debit, 30% credit and 15% Instant EFT takes card margin from about R388 to about R1,564 (main session, 2026-10-23).",
+      "question": "SHB: the MSC in writing (credit 2.35%, debit 1.35%, international 2.80%, American Express not quoted), chargeback and refund fees and any reserve (EMAIL_TO_SHB_12 items 1 and 2); move these costs to SIGNED with the document as the source. Founder: offer Instant EFT through PayFast and cards through Adumo on the pay page? PayFast's Instant EFT (2.30%) is cheaper than Ozow below about R240.",
+      "owner": "SHB (Tiisetso) for the rates; Founder for the pay-page split"
     },
     {
       "id": "in.adumo.credit_card",
@@ -332,26 +332,26 @@
         "bps": 245,
         "exVat": true,
         "status": "PROPOSED",
-        "source": "SHB offer 2026-09-10: credit 2.35% + gateway R0.80 + 0.10%, ex VAT (memory adumo-shb-card-offer; docs/ADUMO.md section 3)"
+        "source": "SHB offer e-mail 2026-09-10: credit 2.35% acquiring + Adumo gateway R0.80 + 0.10%, ex VAT; the MSC is in SHB's e-mail of 2026-09-10 only; the signed application (2026-10-06) carries only Adumo's gateway fee"
       },
       "price": {
         "kind": "payreq",
         "rail": "ADUMO",
         "status": "PROPOSED",
-        "source": "lib/deposits.js cardRailFee('ADUMO'): R1 + 2.5%"
+        "source": "lib/deposits.js cardRailFee('ADUMO'): the PayFast receiver fee, R2.30 + 4.20% rounded up to 10c, free under R50 with the taper (founder ruling 2026-10-23: one price on every rail, so the rail is never a price difference); not charged while PayFast is the primary rail"
       },
       "codeRef": {
         "fn": "paymentRequestFeeCents",
         "rail": "ADUMO"
       },
-      "notes": "A pure credit-card ticket loses a bounded few rand at R1 + 2.5%: this is the floor for a single blended fee (docs/ADUMO.md section 3). Apple Pay and Google Pay are charged at the card's rate (Tiisetso, 2026-09-10). Foreign cards 2.80%.",
+      "notes": "Apple Pay and Google Pay are charged at the card's rate (Tiisetso, 2026-09-10). At the PayFast price a credit card is margin-positive at every amount from R60 (the taper below is the deliberate subsidy) and beats PayFast's credit rate (R2.30 + 3.68% incl VAT) by +R2.24 at R100, +R5.69 at R500, +R27.25 at R3,000. American Express stays off: no rate quoted (EMAIL_TO_SHB_12 items 1 and 4b).",
       "owner": "Founder",
       "questionRef": "in.adumo.debit_card"
     },
     {
-      "id": "in.adumo.instant_eft",
+      "id": "in.adumo.international_card",
       "section": "in",
-      "name": "Instant EFT (Ozow) or Capitec Pay on Adumo",
+      "name": "Card payment by a foreign card on Adumo",
       "counterparty": "Adumo Online / SHB Financial Services",
       "productState": "OFF",
       "payer": "receiver",
@@ -360,24 +360,89 @@
         "maxCents": 300000
       },
       "cost": {
-        "fixedCents": null,
-        "bps": null,
+        "fixedCents": 80,
+        "bps": 290,
         "exVat": true,
-        "status": "UNKNOWN",
-        "source": "Tiisetso (SHB) 2026-09-10: Instant EFT is Ozow plus Capitec Pay; no rate given (memory adumo-shb-card-offer, open asks)"
+        "status": "PROPOSED",
+        "source": "SHB offer e-mail 2026-09-10: international 2.80% acquiring + Adumo gateway R0.80 + 0.10%, ex VAT; the MSC is in SHB's e-mail of 2026-09-10 only; the signed application (2026-10-06) carries only Adumo's gateway fee"
       },
       "price": {
         "kind": "payreq",
         "rail": "ADUMO",
         "status": "PROPOSED",
-        "source": "lib/deposits.js cardRailFee('ADUMO'): R1 + 2.5%, the same receiver fee for every Adumo method"
+        "source": "lib/deposits.js cardRailFee('ADUMO'): the PayFast receiver fee, R2.30 + 4.20% rounded up to 10c, free under R50 with the taper (founder ruling 2026-10-23: one price on every rail, so the rail is never a price difference); not charged while PayFast is the primary rail"
       },
       "codeRef": {
         "fn": "paymentRequestFeeCents",
         "rail": "ADUMO"
       },
-      "question": "What do Ozow Instant EFT and Capitec Pay cost through Adumo? Asked of SHB on 2026-09-10, no rate on file.",
-      "owner": "SHB (Tiisetso)"
+      "notes": "Margin-positive at the PayFast price from R60 (R0.92 + 3.335% incl VAT against R2.30 + 4.20%).",
+      "owner": "SHB (Tiisetso)",
+      "questionRef": "in.adumo.debit_card"
+    },
+    {
+      "id": "in.adumo.instant_eft",
+      "section": "in",
+      "name": "Instant EFT (Ozow) on Adumo",
+      "counterparty": "Adumo Online / SHB Financial Services",
+      "productState": "OFF",
+      "payer": "receiver",
+      "limits": {
+        "minCents": 500,
+        "maxCents": 300000
+      },
+      "cost": {
+        "fixedCents": 120,
+        "bps": 150,
+        "exVat": true,
+        "status": "PROPOSED",
+        "source": "Adumo Online merchant application, optional methods (WaPay signed 2026-10-06): Ozow R1.20 + 1.50% ex VAT, no acquiring fee named on top; Adumo's countersignature was blank on our copy and SHB has not confirmed that no fee is added"
+      },
+      "price": {
+        "kind": "payreq",
+        "rail": "ADUMO",
+        "status": "PROPOSED",
+        "source": "lib/deposits.js cardRailFee('ADUMO'): the PayFast receiver fee, R2.30 + 4.20% rounded up to 10c, free under R50 with the taper (founder ruling 2026-10-23: one price on every rail, so the rail is never a price difference); not charged while PayFast is the primary rail"
+      },
+      "codeRef": {
+        "fn": "paymentRequestFeeCents",
+        "rail": "ADUMO"
+      },
+      "question": "Confirm with SHB that Ozow and Capitec Pay are charged at the application's gateway rows (R1.20 + 1.50% and R1.20 + 2.00% ex VAT) with nothing added by SHB or Nedbank.",
+      "owner": "SHB (Tiisetso)",
+      "notes": "Against PayFast's Instant EFT (2.30% incl VAT, no fixed fee) Ozow on Adumo costs more below about R240 (-R0.81 at R100) and less above it (+R1.50 at R500, +R15.87 at R3,000)."
+    },
+    {
+      "id": "in.adumo.capitec_pay",
+      "section": "in",
+      "name": "Capitec Pay on Adumo",
+      "counterparty": "Adumo Online / SHB Financial Services",
+      "productState": "OFF",
+      "payer": "receiver",
+      "limits": {
+        "minCents": 500,
+        "maxCents": 300000
+      },
+      "cost": {
+        "fixedCents": 120,
+        "bps": 200,
+        "exVat": true,
+        "status": "PROPOSED",
+        "source": "Adumo Online merchant application, optional methods (WaPay signed 2026-10-06): Capitec Pay R1.20 + 2.00% ex VAT; as for Ozow, SHB has not confirmed that no fee is added"
+      },
+      "price": {
+        "kind": "payreq",
+        "rail": "ADUMO",
+        "status": "PROPOSED",
+        "source": "lib/deposits.js cardRailFee('ADUMO'): the PayFast receiver fee, R2.30 + 4.20% rounded up to 10c, free under R50 with the taper (founder ruling 2026-10-23: one price on every rail, so the rail is never a price difference); not charged while PayFast is the primary rail"
+      },
+      "codeRef": {
+        "fn": "paymentRequestFeeCents",
+        "rail": "ADUMO"
+      },
+      "notes": "PayFast's Capitec Pay rate is not on file (row in.payfast.capitec_pay), so no comparison is shown.",
+      "owner": "SHB (Tiisetso)",
+      "questionRef": "in.adumo.instant_eft"
     },
     {
       "id": "in.ott.voucher_load",
@@ -506,7 +571,7 @@
     {
       "id": "out.payshap",
       "section": "out",
-      "name": "Withdraw by PayShap to own bank account",
+      "name": "Withdraw by PayShap to own bank account, next business day",
       "counterparty": "OTT Payout (PayShap Account, provider 127)",
       "productState": "PILOT",
       "productNote": "On in production for the five allowlisted numbers on OTT's sandbox. Sandbox PayShap is created then pends or fails at the provider (R50 pending since 2026-10-04 08:55).",
@@ -528,15 +593,16 @@
         "bands": [
           [
             null,
-            800
+            1200
           ]
         ],
         "status": "LIVE",
-        "source": "lib/ledger-core.js FEES.cashout.PAYSHAP: R8 flat (founder +R2 on 2026-09-11 over the R6 of 2026-08-10); quoted by lib/fee-facts.js and lib/how-it-works.js"
+        "source": "lib/ledger-core.js FEES.cashout.PAYSHAP.nextDayFeeCents: R12, the default speed (founder 2026-11-07, confirmed 2026-11-11: R12 next business day or R20 same day; money under 2 hours old only gets the next business day); sent from 08:00 SAST on the next South African business day (lib/payout-speed.js); quoted by lib/fee-facts.js and lib/how-it-works.js"
       },
       "codeRef": {
         "fn": "cashout",
-        "method": "PAYSHAP"
+        "method": "PAYSHAP",
+        "speed": "NEXT_DAY"
       },
       "competitors": [
         {
@@ -556,14 +622,53 @@
           "price": "R0 (verify)"
         }
       ],
-      "notes": "The margin rail: a constant R5.12 at every amount. Dearer than every bank's own PayShap (R0 to R2), so the story is reach, never price (benchmark 2026-09-11).",
-      "question": "Pay-out fees: keep the +R2 of 2026-09-11 (PayShap R8, bank transfer R10, cash R18/R23/R30) or return to R6/R8/R16 so CashSend sits under Absa's R16 and FNB's R11? docs/PAYOUT_COMMERCIALS.md section 7 (commit bea9856) sets out options A, B and C and recommends C: keep PayShap at R8, drop the +R2 on the cash methods only (R16 / R21 / R28), which leaves R2.12 at the R700 band top and matches Absa's own R16.",
+      "notes": "The margin rail: a constant R9.12 at every amount on the next business day, R17.12 the same day. Dearer than every bank's own PayShap (R0 to R2), so the story is reach, never price (benchmark 2026-09-11).",
+      "question": "None open on price: R12 next business day / R20 same day decided by the founder on 2026-11-07 and confirmed 2026-11-11. Open: watch whether customers pick the same day enough to matter.",
+      "owner": "Founder"
+    },
+    {
+      "id": "out.payshap_same_day",
+      "section": "out",
+      "name": "Withdraw by PayShap to own bank account, same day",
+      "counterparty": "OTT Payout (PayShap Account, provider 127)",
+      "productState": "PILOT",
+      "productNote": "On in production for the five allowlisted numbers on OTT's sandbox. Sandbox PayShap is created then pends or fails at the provider (R50 pending since 2026-10-04 08:55).",
+      "payer": "customer",
+      "limits": {
+        "minCents": 5000,
+        "maxCents": 300000
+      },
+      "cost": {
+        "fixedCents": 250,
+        "bps": 0,
+        "exVat": true,
+        "status": "SIGNED",
+        "source": "OTT Payout Agreement signed by WaPay 2026-08-25, co-signed by OTT 2026-09-10, Annexure A (the 2026 Addendum template restates the same rates): R2.50 per transaction ex VAT, no percentage on Bank EFT products (WaPay /OTT Onboarding /). Applied rate unverified until OTT's statement: R12.69 of sandbox float deductions on 2026-10-04 do not reconcile to the rates (docs/PAYOUT_COMMERCIALS.md section 2; OTT asked in emails 9 and 11)."
+      },
+      "price": {
+        "kind": "bands",
+        "method": "PAYSHAP",
+        "bands": [
+          [
+            null,
+            2000
+          ]
+        ],
+        "status": "LIVE",
+        "source": "lib/ledger-core.js FEES.cashout.PAYSHAP bands: R20 when the customer picks the same day (founder 2026-11-07, confirmed 2026-11-11); refused for money that reached the balance under 2 hours ago (lib/payout-speed.js sameDayCheck)"
+      },
+      "codeRef": {
+        "fn": "cashout",
+        "method": "PAYSHAP",
+        "speed": "SAME_DAY"
+      },
+      "question": "None open on price (founder decision 2026-11-07).",
       "owner": "Founder"
     },
     {
       "id": "out.rtc",
       "section": "out",
-      "name": "Withdraw by bank transfer (RTC)",
+      "name": "Withdraw by bank transfer (RTC), next business day",
       "counterparty": "OTT Payout (no RTC provider on the test merchant)",
       "productState": "PILOT",
       "productNote": "Built; no RTC provider is active on OTT's test merchant, so the chat does not offer it. Production availability asked in EMAIL_TO_KEAMO_9_COMMERCIALS (unsent as far as the repo knows).",
@@ -585,15 +690,16 @@
         "bands": [
           [
             null,
-            1000
+            1200
           ]
         ],
         "status": "LIVE",
-        "source": "lib/ledger-core.js FEES.cashout.RTC: R10 flat (+R2 decision 2026-09-11)"
+        "source": "lib/ledger-core.js FEES.cashout.RTC.nextDayFeeCents: R12, the same two speeds as PayShap (founder 2026-11-07: \"payout to your bank is R12 for all payouts\")"
       },
       "codeRef": {
         "fn": "cashout",
-        "method": "RTC"
+        "method": "RTC",
+        "speed": "NEXT_DAY"
       },
       "competitors": [
         {
@@ -601,6 +707,45 @@
           "price": "about R40 (WAPAY_B2B_PAYOUTS.md section 8.4)"
         }
       ],
+      "question": "Can OTT enable RTC for WaPay in production, and at what price? There is no RTC provider on the sandbox merchant.",
+      "owner": "OTT (Keamo)"
+    },
+    {
+      "id": "out.rtc_same_day",
+      "section": "out",
+      "name": "Withdraw by bank transfer (RTC), same day",
+      "counterparty": "OTT Payout (no RTC provider on the test merchant)",
+      "productState": "PILOT",
+      "productNote": "Built; no RTC provider is active on OTT's test merchant, so the chat does not offer it. Production availability asked in EMAIL_TO_KEAMO_9_COMMERCIALS (unsent as far as the repo knows).",
+      "payer": "customer",
+      "limits": {
+        "minCents": 2000,
+        "maxCents": 300000
+      },
+      "cost": {
+        "fixedCents": 450,
+        "bps": 0,
+        "exVat": true,
+        "status": "SIGNED",
+        "source": "OTT Payout Addendum 2026, Annexure A clause 3.3: R4.50 per transaction ex VAT"
+      },
+      "price": {
+        "kind": "bands",
+        "method": "RTC",
+        "bands": [
+          [
+            null,
+            2000
+          ]
+        ],
+        "status": "LIVE",
+        "source": "lib/ledger-core.js FEES.cashout.RTC bands: R20 the same day (founder 2026-11-07)"
+      },
+      "codeRef": {
+        "fn": "cashout",
+        "method": "RTC",
+        "speed": "SAME_DAY"
+      },
       "question": "Can OTT enable RTC for WaPay in production, and at what price? There is no RTC provider on the sandbox merchant.",
       "owner": "OTT (Keamo)"
     },
@@ -1607,15 +1752,16 @@
         "bands": [
           [
             null,
-            800
+            1200
           ]
         ],
         "status": "LIVE",
-        "source": "lib/payouts.js quotePayout uses cashoutFeeCents: PayShap R8 shown; RTC R10, cash R18/R23/R30"
+        "source": "lib/payouts.js quotePayout uses cashoutFeeCents: PayShap R12 on the next business day (R20 when the owner picks the same day); cash R18/R23/R30 (2026-11-11)"
       },
       "codeRef": {
         "fn": "cashout",
-        "method": "PAYSHAP"
+        "method": "PAYSHAP",
+        "speed": "NEXT_DAY"
       },
       "owner": "Founder"
     },
@@ -1735,7 +1881,7 @@
     },
     {
       "id": "q.deposit_env_override",
-      "question": "Operational check, not a decision: confirm that the Vercel environment carries no WAPAY_DEPOSIT_FEE_BPS, WAPAY_DEPOSIT_FEE_FIXED_CENTS, WAPAY_ADUMO_FEE_* or WAPAY_PAYREQ_FREE_BELOW_CENTS override, since this map and the consistency test use the code defaults.",
+      "question": "Operational check, not a decision: confirm that the Vercel environment carries no WAPAY_DEPOSIT_FEE_BPS, WAPAY_DEPOSIT_FEE_FIXED_CENTS, WAPAY_ADUMO_FEE_* or WAPAY_PAYREQ_FREE_BELOW_CENTS override, since this map and the consistency test use the code defaults. Since 2026-10-23 the Adumo default is the PayFast fee, so the founder's same-price ruling needs no WAPAY_ADUMO_FEE_* value (420 and 230 would be identical).",
       "owner": "Founder (Vercel env)",
       "source": "lib/deposits.js reads these from process.env"
     }

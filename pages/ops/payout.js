@@ -32,7 +32,7 @@ export default function OpsPayoutPage() {
       const r = await fetch('/api/ops/payout-link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
       const j = await r.json().catch(() => ({}));
       setResult(j);
-      if (!r.ok && !j.result) setErr(j.error ? `Refused: ${j.error}` : 'The pay-out was refused.');
+      if (!r.ok && !j.result) setErr(j.message || (j.error ? `Refused: ${j.error}` : 'The pay-out was refused.'));
     } catch { setErr('The request failed. Check the result before trying again.'); }
     setBusy(false);
   }
@@ -53,9 +53,15 @@ export default function OpsPayoutPage() {
             <div style={s.kv}><span>Amount</span><span>{R(q?.amountCents)}</span></div>
             <div style={s.kv}><span>Fee</span><span>{R(q?.feeCents)}</span></div>
             <div style={s.kv}><span>Balance now</span><span>{R(dry.balances?.totalCents)}</span></div>
-            <div style={s.kv}><span>ID on file</span><span>{dry.identity ? `${dry.identity.idType} •••${dry.identity.idLast3}` : 'none'}</span></div>
+            <div style={s.kv}><span>ID on file</span><span style={{ textAlign: 'right' }}>{dry.identity ? `${dry.identity.idType} •••${dry.identity.idLast3}${dry.identity.source === 'LAST_PAYOUT_REQUEST' ? ` (from their waiting pay-out request${dry.identity.reference ? ` ${dry.identity.reference}` : ''})` : ''}` : 'none'}{dry.requiredFields?.fields?.includes('id_number') ? <div style={s.muted}>{q?.label || 'This method'} asks for an ID number</div> : null}</span></div>
             <div style={s.kv}><span>Float</span><span>{R(dry.float?.balanceCents)}</span></div>
-            <div style={{ ...s.kv, borderBottom: 0 }}><span>Checks</span><span>{dry.blockers?.length ? dry.blockers.join(', ') : 'all clear'}</span></div>
+            <div style={{ ...s.kv, borderBottom: 0 }}><span>Checks</span><span>{dry.blockers?.length ? 'failed' : 'all clear'}</span></div>
+            {dry.requiredFields?.from === 'STATIC' && <div style={{ ...s.muted, marginBottom: 8 }}>OTT's list of required details could not be read, so this was checked against WaPay's own list.</div>}
+            {dry.blockerDetails?.length > 0 && (
+              <ul style={{ background: '#FEF2F2', color: '#991B1B', padding: '10px 12px 10px 28px', borderRadius: 12, margin: '0 0 10px', fontSize: 14 }}>
+                {dry.blockerDetails.map((b) => <li key={b.code} style={{ margin: '2px 0' }}>{b.text}</li>)}
+              </ul>
+            )}
             <div style={s.muted}>By {dry.link?.by}: {dry.link?.reason}</div>
           </>
         )}
@@ -65,9 +71,9 @@ export default function OpsPayoutPage() {
       {result && (
         <div style={s.card}>
           <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 6 }}>{result.ok ? '✅ Sent' : '❌ Not sent'}</div>
-          <div style={s.kv}><span>Status</span><span>{result.result?.status || result.error || '—'}</span></div>
+          <div style={s.kv}><span>Status</span><span>{result.result?.status || result.result?.error || result.error || '—'}</span></div>
           <div style={s.kv}><span>Reference</span><span>{result.result?.reference || '—'}</span></div>
-          <div style={{ ...s.kv, borderBottom: 0 }}><span>Rail says</span><span>{result.result?.error || result.result?.providerRef || '—'}</span></div>
+          <div style={{ ...s.kv, borderBottom: 0 }}><span>Rail says</span><span style={{ textAlign: 'right' }}>{result.result?.message || result.message || result.result?.error || result.result?.providerRef || '—'}</span></div>
           <div style={s.muted}>A second tap returns this same result; it cannot pay twice.</div>
         </div>
       )}

@@ -4,6 +4,171 @@
 
 ---
 
+## 147. An operator pay-out link said "all clear" and the rail refused it: OTT now asks PayShap for an ID number, and the operator pay-out read only its own static field list
+
+- **Symptom (2026-11-09):** the founder tapped an operator pay-out link (`/ops/payout`) for R2,863.70 by PayShap to a customer's saved TymeBank account. The dry run on the page showed no blockers. The tap failed with BAD_RECIPIENT and no money moved.
+- **Root cause:**
+  - OTT's live GetActiveProvidersLimits now marks `id_number` Required for PayShap (provider 66), and for CashSend (67) and Nedbank cardless (4). `/api/internal/payout-status` `mapped` shows it.
+  - `lib/ops-payout.js` decided "is an ID needed" from the static `PAYOUT_METHODS.PAYSHAP.fields` (`account_number, branch_code, mobile`), while the rail's `cleanRecipient` checks OTT's live list. The chat (`lib/payout-chat.js`) and the web portal (`lib/app-money.js`) already read the live list, so only the operator path was affected.
+  - The ID came only from the identity vault. This customer had none: their ID is Didit-verified, and they typed it for an earlier pay-out request, where it is sealed in the request's metadata. The recipient went out without `id_number`, and `cleanRecipient` threw `Missing id_number`.
+  - The dry run checked neither the live fields nor whether an ID was on file, so it could not see the failure coming.
+- **Fix (CHANGELOG 136):**
+  - **One answer for "which fields".** `requiredRecipientFields(method, liveFields)` in `lib/payouts.js` holds the rule (OTT's live list wins, the static list is the fallback). `cleanRecipient` and the operator pay-out both use it. The dry run and the live run read the live list through `resolveProviders`, and the live run passes that same list to `requestPayout`.
+  - **Where the ID comes from, in order:**
+    1. the identity vault;
+    2. the newest sealed recipient on one of the customer's own pay-out requests (`idFromLastPayoutRequest`), only when the customer's ID is verified, the request's name matches the verified name (case, accents and word order ignored), and the request's ID ends with the same three characters the verification kept (`usableRequestId`);
+    3. none: the dry run blocks with NO_IDENTITY.
+
+    An ID is never invented. A request keeps its sealed recipient only while it waits for approval: approving or rejecting it drops the seal, and then step 2 finds nothing.
+  - **Any other field OTT asks for that this pay-out cannot fill** (an email address, a date of birth) blocks the dry run as MISSING_FIELDS, with the fields named.
+  - **Plain words.** The dry run and the live run return `blockerDetails` (`{ code, text }`) and `message`, for example "The customer's ID number is not on file, and PayShap asks for one." A rail refusal comes back as `result.field` + `result.message` ("PayShap refused the details: the customer's ID number is missing or not valid. No money moved."). The link page lists the texts, says where the ID came from, and notes when OTT's list could not be read.
+  - Only the last three characters of an ID leave the library.
+  - **Not changed:** the static `PAYOUT_METHODS.PAYSHAP.fields`. Adding `id_number` there changes the chat's fallback when OTT's list is missing (six chat and payouts tests assume no ID). It is left for the founder to decide. CashSend's static list is equally behind OTT.
+- **Guard:** `tests/ops-payout.test.mjs`:
+  - the incident's own `cleanRecipient` refusal;
+  - a live list that needs an ID the vault lacks blocks the dry run in plain words and never reaches the rail;
+  - the fallback pays with the request's ID and returns only its last three;
+  - another name, an unverified ID or different last three characters is never used;
+  - `idFromLastPayoutRequest` with real vault encryption;
+  - MISSING_FIELDS, and the rail's refusal in plain words.
+
+  Five of the new tests fail on the code before this fix.
+
+## 146. A card payment refunded in the PayFast or Adumo dashboard stayed in the customer's balance: nothing told the ledger
+
+- **Symptom (2026-11-08/09):** frozen account •••1332, frozen 23 Oct after the stolen-card burst, was paid three R3,000 links by card on 7 Nov. Each was credited R2,871.70 (PayFast payment ids ending 1585, 2407 and 3461). It also took a R50 card top-up on 8 Nov. The founder may refund all four in the PayFast dashboard. A dashboard refund sends the money back to the card, but the ledger keeps the LOAD_PAYFAST credits. The wallet would still show R8,683.40. The links would still read PAID in the link map, the metrics and the watchlist. And WaPay would owe the customer R8,665.10 that has already gone back to the cards, which would be paid out a second time if the freeze were ever lifted.
+- **Root cause:**
+  - `buildReversal` has been in `lib/ledger-core.js` since the ledger was written, but no route or library called it. A balance changes only through customer flows and provider callbacks, so there was no operator path for "the processor refunded this".
+  - There was no REFUNDED state for a payment request. The column is a string, but the database's check `payment_requests_status_valid` (migration 20260821_payment_requests) allows only PENDING, PAID, CANCELLED and EXPIRED, so writing REFUNDED fails.
+  - Several readers treat a status they do not know as open: the customer's Links tab (`lib/app-portal.js` `linkStatus`) and the agent's record (`lib/context-pack.js` `normaliseRequestStatus`).
+  - Nothing recorded which charge credited a card load. `buildLoad` sets no externalRef, and `markDeposit` overwrites the intent's providerRef on every delivery, so after a second charge for the same intent the intent names the duplicate, not the credit.
+- **Fix (CHANGELOG 135):** the new `lib/card-refund.js` behind `GET|POST /api/internal/card-refund` (internal key), the migration `20261109_payment_request_refunded` (the status check with REFUNDED), and the crediting charge written on every new card load.
+  - **The crediting charge, from now on.** The PayFast ITN and `settleCardPayment` (Adumo) post the load with `externalRef` = the processor reference. Only the first post writes it; a redelivery or a second charge replays the entry and never changes it.
+  - **Finding the payment.** By reference, in this order:
+    1. the card load whose externalRef is that reference;
+    2. the paid link whose payerRef is `<RAIL>:<ref>`;
+    3. the intent that last carried it, as a finder only.
+
+    By idemKey, the entry directly. The books name the crediting charge when the entry has an externalRef (ENTRY) or the link's payerRef names a card charge (LINK). Otherwise the payment is UNVERIFIED: older top-ups, and links with no payerRef or a `REPAIR:replayed` one.
+  - **Refusals, nothing written:**
+    - NOT_A_CARD_LOAD (422): anything other than LOAD_PAYFAST or LOAD_ADUMO, including a link paid from a balance (P2P_SEND under the same idemKey), a voucher load or a reversal.
+    - ALREADY_REVERSED (409): the reversal already exists for this original idemKey.
+    - SHORT (409): the available balance cannot cover the debit. The answer gives the numbers.
+    - NOT_THE_CREDITED_PAYMENT (409): the books name another charge, or a balance payment, as the one that credited. The charge named here never reached a balance.
+    - CONFIRM_ONLY_CHARGE (409): an UNVERIFIED payment without `onlyCharge: true`, the operator's word that the dashboard shows one payment for that m_payment_id.
+    - NEEDS_MIGRATION (503): a link must be marked and the status check still predates REFUNDED. This is read from `pg_constraint` up front; failing that, the database's own refusal rolls everything back.
+    - AMBIGUOUS, REFERENCE_MISMATCH, and bad input.
+  - **What one POST does, in one transaction:**
+    - Posts the full mirror of the load through `postEntry` without `allowNegative`, idemKey `card-refund-<original idemKey>`. The wallet gives back its credit, the deposit fee revenue is reversed, and CLEARING:<rail> gives back the gross the payer paid.
+    - Marks the link REFUNDED (from PAID, or from PENDING when the PAID mark had failed).
+    - Adds `metadata.refund` to the card intent. Its status stays SUCCESS, because the processor did take the money.
+  - **After the commit:** one audit row (event CARD_REFUND, id derived from the reversal, so a repair cannot write two, and `onlyChargeConfirmed` when the operator vouched) and one masked `opsPersonAlert` (key `card-refund:<idemKey>`, once per key). The operator's reason and name keep no run of 7 or more digits whole. No customer message, no processor API, no freeze or approval.
+  - **A second call** refuses ALREADY_REVERSED and finishes anything a first call that died after the commit left undone: the mark, the audit row, and the alert, which goes only if it never went. It never moves money.
+  - **The readers:**
+    - The link map pins REFUNDED as closed.
+    - The customer's Links tab shows "Refunded", never Open.
+    - The customer's activity names the debit "Link payment refunded" or "Top-up refunded", not "Balance correction".
+    - The agent reads a refunded link, and a refunded card deposit, as REFUNDED.
+    - A payer asking for a receipt on a refunded link hears it was refunded to their card, never that the money reached the requester. Cancel and remind name the refund.
+    - The business portal's closed filter includes REFUNDED.
+    - The metrics daily chart counts paid as status PAID only.
+    - The watchlist leaves refunded payments out of money paid but keeps the payer listed (the evidence stays).
+    - The metrics totals already counted only `status = 'PAID'` and already netted `REVERSAL_<X>` against X.
+  - **No processor cost line is invented.** The card fee was never booked per payment (`FEES.load`: settled separately, in clearing), so whatever PayFast or Adumo keeps on a refund shows up when CLEARING:<rail> is reconciled to the settlement statement, as their fees do today.
+- **Found in review (2026-11-09, read-only reviewer, before commit):** the status check, the overwritten providerRef, the `REPAIR:replayed` payerRef, the readers above, an alert a repair could lose, and unmasked free text. All fixed in this commit.
+- **Guard:** `tests/card-refund.test.mjs` (18 tests) runs the •••1332 shapes through the real builders, the real `postEntry` and an in-memory database that rolls back. It covers:
+  - the exact mirror, the trial balance at zero, and the stored balance equal to the journal;
+  - the double call;
+  - the repair after a crash, with the alert sent once;
+  - SHORT, both at the dry run and when the balance is spent between the check and the debit;
+  - non-card entries;
+  - the duplicate charge on a link and on a top-up;
+  - the `REPAIR:replayed` link;
+  - NEEDS_MIGRATION, both up front and from the database's refusal;
+  - the masked free text;
+  - the R50 top-up, refused without `onlyCharge`, then all four refunds leaving only what the account held before 7 Nov (R18.30 in the fixture) with balanced books;
+  - an Adumo link;
+  - the ITN and settlement stamping;
+  - the new reader branches;
+  - the route's internal key, and its source: no customer messaging, processor, freeze or approval import, and no `allowNegative`.
+
+  `tests/link-visits.test.mjs` pins REFUNDED as a closed pin. `tests/payout-approval.test.mjs` carries the watchlist's new `refundedFrozenAccounts` field.
+- **Deploy order:** apply `20261109_payment_request_refunded` to production first (`node --env-file=.env scripts/apply-migration.mjs 20261109_payment_request_refunded`). Until then link refunds answer NEEDS_MIGRATION and top-up refunds work.
+- **Not changed (follow-ups):**
+  - A freeze still does not stop money coming in: new card links and top-ups to a frozen account still credit it.
+  - Partial refunds: only whole entries reverse.
+  - The pay-out triage (`lib/payout-triage.js`) still counts a refunded payment's payer relations as a fraud signal, by design.
+  - The agent's transactions tool counts a REFUNDED row with the failed ones; the row itself says refunded.
+  - The Adumo return, the Adumo webhook and the ITN's payer-number write rewrite intent metadata from an earlier copy, so a write overlapping the refund can drop `metadata.refund`. Calling the route again restores it.
+  - What PayFast keeps or charges on a refund is not in docs/COMMERCIALS.md. For Adumo it is open with SHB (EMAIL_TO_SHB_12 item 2).
+  - Seen in review, separate bug: `pending_gifts_status_valid` (20260821_pending_gifts) allows only ISSUED, DELIVERED and CANCELLED, but `refundExpiredHeldGifts` writes REFUNDED, outside its try. The first 30-day held gifts (sends from 18 Oct) expire around 17 Nov.
+
+## 145. One Adumo payment sent the payer receipt twice: the browser return and the webhook both ran the notifications, and the "already told" flags were read before a slow send and written after it
+
+- **Symptom (founder, 2026-11-07 10:31 SAST):** he paid his own R5 test link PRAHSUHH with Apple Pay on Adumo production (merchantReference PRAHSUHH-17, SETTLED 500 cents, one charge). His WhatsApp got three messages: the requester notice ("your WaPay payment request PRAHSUHH has been paid"), then the payer receipt template ("Payment confirmed: you paid R5.00 to … Payment reference: <Adumo transactionIndex>"), then the same receipt again. Money was credited once: the ledger replays on the intent's idemKey with the same providerRef.
+- **Root cause:** Adumo finishes a payment on two paths, the payer's browser return (`pages/api/pay/adumo-return.js`) and the server notification (`pages/api/webhooks/adumo.js`). Both call `settleCardPayment`, which ends in `deliverRequestPaidNotifications`. That function read `requesterNotifiedAt` / `payerNotifiedAt` from the intent's metadata at its start and set each flag only after the send succeeded, so two concurrent calls both passed the check. Here call A finished the requester leg and set its flag before call B read the intent, but A's payer leg (window check, then the template fallback, slow) was still in flight, so B sent the receipt again. `persistFlag` also merged into the copy of the metadata read at the start (`{ ...intent.metadata, ...patch }`), so one call's write could drop the other's flag. PayFast never showed it: only the ITN settles there.
+- **Also wrong:** someone paying their own link got both the requester notice and a payer receipt, two messages for one payment, both to the same number.
+- **Fix (CHANGELOG 134):** `lib/request-notify.js`. Each leg is claimed before any send by inserting `notify-claim:<leg>:<CODE>` into `processed_messages` (unique `waMessageId`, the store the webhook and ops alerts already use for claims); the call that loses the insert sends nothing (`in_flight`, or `already` once the winner finished). A failed send deletes the claim, so the next delivery (Adumo's retry, the PayFast ITN redelivery, `/api/admin/notify-request`) still delivers. A delivered leg writes `notify-done:<leg>:<CODE>` and merges its flag in SQL (`metadata = COALESCE(metadata, '{}') || $patch::jsonb`), never by spreading a stale copy. A claim older than 5 minutes (longer than any function lives) with no done row belongs to a call that died mid-send and is taken over. A claim-store error sends nothing for that leg (a duplicate message counts against the number; a skipped notice is repaired by the next delivery). When the payer's number is the requester's own (either stored form), no payer receipt goes (`own_number`): the requester notice is the one message. The outbound guard (BUGLOG #144), the service-window rail choice and the template fallbacks are unchanged.
+- **Guard:** `tests/request-notify-once.test.mjs` (two deliveries started together send one requester notice and one payer receipt; the PRAHSUHH shape, a second call arriving while the first is sending the receipt; a lost metadata flag still stops a third send; a failed send releases the claim and a retry delivers; a stale claim is taken over and a live one is not; an own-number payment is one message in total). The same five tests fail on the previous code. `tests/payer-registration.test.mjs` pins the SQL merge, no stale spread, and each claim before its leg's first send. Fakes for the claim table: `tests/helpers/notify-claims.mjs`.
+- **Not changed (follow-up):** the Adumo return and webhook still write their outcome record with `{ ...intent.metadata, ... }` from the copy they read at the start, so on a race one route can drop the other's outcome fields or a notified flag. Messages no longer depend on those flags (the done rows decide), but the outcome record can lose fields.
+
+## 144. Meta's second "Sending spam" strike: a receipt rail could still write first to numbers that never wrote to WaPay, and two strikes reached the founder six hours late as one more line in a daily RED
+
+- **Symptom (Meta's e-mail, 26 October 2026):** "WhatsApp Business account WaPay has been identified as sending spam … the account may face restrictions or be disabled." The webhook had received the matching `account_update` event, `ACCOUNT_VIOLATION` / `SPAM`, at 20:04 UTC on 26 October, and an identical one at **20:03 UTC on 23 October** that nobody acted on. Quality rating RED without a break since 20 October, sending LIMITED, number CONNECTED. The first strike (#130) became a 30-day restriction 13 hours later (#136), lifted on review on 21 October.
+- **What WaPay sent, 18 to 27 October** (inbound `wamid`s decoded to their sender, Meta's per-message billing pulses, `conversation_turns`, payment intents; scripts `~/Projects/wapay-ops/spam2-*.mjs`):
+  - Since 23 October, 3,996 of the 4,053 messages WaPay recorded to account holders were replies within five minutes to that person's own message; the other 57 were 53 operator alerts to the founder's own number and 4 flow or receipt lines inside the customer's window. Customer messages that got three or more replies: 3 in five days. Reminders 0, marketing 0 (Meta billed no marketing).
+  - **One business-initiated message to a stranger:** at 03:07 UTC on 26 October the payment-receipt UTILITY template went to the number typed as the payer on a link created during the 22 October stolen-card wave, whose card payment settled that night. That number has never written to WaPay. Meta billed it utility. On 21 and 22 October the same rail had tried 37 such numbers as plain text, which Meta dropped (131047 in 10 minutes, 131026 "not on WhatsApp" in 24 minutes on 22 October); BUGLOG #138's fix (248f531, 23 October) moved never-wrote payers onto the template, which delivers.
+  - **Who WaPay talks to:** 86% of the minutes Meta billed from 23 to 26 October were `referral_conversion` (click-to-WhatsApp ad entries: 2,119 against 350 service). 1,839 ad conversations from 18 to 26 October (R3,806 spend; R629 and R578 on 23 and 24 October against about R400 before); 693 of 1,851 ad arrivals got one message and never wrote again; about 60% sent nothing beyond the ad's prefilled opener and button taps; ad arrivals wrote "Scam" (5), "Blocked"/"block" (3) and "stop" (3). 17 of the 28 frozen accounts wrote 177 times since 24 October and 22 customers asked about pay-outs during the pause; all were answered, none written to first.
+- **Root cause:** (1) "WaPay never starts a conversation" was a rule in the docs, not in the rails. The payer receipt (any number typed on the pay page), `notifyCustomer` outside the window, the ops support template and the business nudge accepted any number; only the 24-hour window was checked, and a typed number is not consent. (2) Meta counts blocks and reports. With nothing else started by WaPay, the remaining source is the people WaPay answers: about 230 ad arrivals a day who did not know WaPay, kept coming while the rating was RED. Meta exposes no block or report data by API, so (2) is inferred from the billing mix, the timing and the words people sent; WhatsApp Manager's Account quality page shows Meta's reason.
+- **Why the daily audit did not stop it or tell the founder in time:** it saw both strikes. The webhook stored each as a pulse row and did nothing else; the 02:00 compliance run read them six hours later (24 October 02:00, 27 October 02:01), went RED with `ACCOUNT_EVENT`, sent the e-mail (outcome not stored) and a WhatsApp line Meta delivered to the founder at 02:01 both days. But the verdict had read RED every day since 20 October (QUALITY_RED), the line was "WhatsApp compliance RED (date)" with the strike as a code mid-list, the e-mail subject was the same every day, it landed at 04:01 SAST next to the quality and audit lines and dozens of money-in and float alerts (69 money-in on 22 October), and the 24-hour window dropped the 23 October strike from the verdict by the 25th. It was a report, not a brake: nothing in it could refuse a send, and nothing said "act now". Quality was read once a day (the `phone_number_quality_update` webhook field is not subscribed).
+- **Fix (CHANGELOG 133):** `lib/outbound-guard.js` (`businessInitiatedAllowed`): a number that never wrote to WaPay (no account, a pre-registered payer record without a message, or an unreadable answer) gets nothing on any rail outside a reply; each refusal is a `bi-refused:<purpose>` row. Wired into the payer receipt (after the pre-registration record, before any rail), the requester notice's template rails, `notifyCustomer` outside the window, the ops reply after the window (force does not override it) and the business nudge. The payer gets the receipt by tapping "Get my receipt" (their own message opens the chat); the pay page's fine print now says so. `lib/meta-alerts.js`: `metaEventAlert` alerts on every Meta account event at arrival, by e-mail and WhatsApp, "🛑 ACTION NOW" for enforcement, with the 7-day count and the billing mix; `qualityWatch` reads quality, tier and status every ten minutes from the webhook and alerts on any change; `strangerCheck` checks every status Meta bills as utility, marketing or authentication against the database and alerts plus counts `stranger-<category>` when the recipient never wrote. Every alert stores `alert-out:<kind>:mail-<0|1>:wa-<n>`. `lib/meta-compliance.js`: `META_STRIKE_<minute>` over 7 days with dates (each strike is new), `SENT_TO_STRANGER` RED, refusals reported, `AD_TRAFFIC_WHILE_RED` AMBER, new reasons first, an e-mail subject that names what is new, the e-mail outcome stored. `/api/internal/meta-status?node=<id>` reads what a Meta id in an e-mail is.
+- **Guard:** `tests/spam-strike-guard.test.mjs` (the guard's definition of "wrote"; every file that can send a template or Direct Send is listed and the business-initiated ones call the guard; the receipt order; the alert at arrival, once per event, outcome on record; quality baseline, fall and recovery; the stranger check; strikes for 7 days with a new code per strike; the e-mail subject; the pay page copy), plus never-wrote cases in `notify`, `ops-reply`, `payer-registration` and `payer-preregister` tests.
+- **Lesson:** a check that is RED every day is not an alarm. Meta's enforcement needs its own alert the minute it lands, and "only people who wrote to us" has to be enforced where the message leaves, not assumed by the caller.
+
+## 143. The Link map drew every marker and showed none: Mission Control's page-wide SVG rule squeezed Leaflet's marker layer to 0px
+
+- **Symptom (founder's screenshot, 2026-10-26):** the Link map tab showed tiles and no markers, while the abroad box listed 60 opens from 13 countries.
+- **Root cause:** `pages/admin/index.js` styles every `svg` as `display:block;width:100%`. Leaflet draws `circleMarker`s into one SVG inside its overlay pane, a 0×0 box, so 100% of it is 0px: 42 circles drawn, none visible. The local preview of CHANGELOG 128 rendered the tab without the admin page's CSS, which is why it passed.
+- **Fix (CHANGELOG 130):** HTML markers (`L.divIcon`), so no SVG layer exists, plus a scoped reset (`.lm-map .leaflet-pane svg{width:auto;height:auto}`) as a second guard.
+- **Guard:** `tests/link-visits.test.mjs` locks both by source. Lesson: preview a component under the page's real global CSS, not a clean page.
+
+## 142. A frozen account could still move its money: paying someone's link from a balance is a send the freeze did not check
+
+- **Symptom (found 2026-10-26 in the founder's morning check):** on 25 October at 17:27 and 17:32 SAST two of the 28 frozen accounts (•••0522, •••8951) paid R285 each from their balances into an account opened that hour (•••8207) by paying its payment links ("Just money", "rent"). •••8207 tried to withdraw at 17:34, met the pause, and at 17:37 paid R570 back into •••0522 through •••0522's own link ("Cash").
+- **Root cause:** the freeze (BUGLOG #133) was checked by sendMoney, requestPayout, the chat's withdraw flow and the web app, but the chat's pay-a-link-from-balance leg (`handlePayRequestStart` and the PAYREQ PIN step, `buildSend` with `wapay-payreq-<code>`) and the five VAS execute routes never read it. Receiving stays open by design; spending was the hole.
+- **Fix (CHANGELOG 129):** the freeze is read before the confirmation and again before the debit on the pay-a-link leg, and `refuseSpendIfFrozen` runs before any hold in the airtime, data, electricity, fuel and voucher execute routes. Net leakage before the fix: R0 (the R570 ended back inside the frozen group).
+- **Guard:** `tests/payout-approval.test.mjs` locks both checks by source order. Lesson: a freeze must be enforced where money leaves a wallet (every debit path), not per feature.
+
+## 141. The test suite read the production database through Prisma's own .env loading
+
+- **Symptom (found 2026-10-24 while shipping the global pay-out hold):** 29 withdraw-flow tests failed the moment the hold row existed in production. They had never set a database: `node --test` passes no `DATABASE_URL`, but Prisma Client loads the project's `.env` by itself, and the fast copy's `.env` holds the production connection string. Every test that called code with a default client (`lib/prisma.js`, `getPrisma()` in `packages/domain`, the WhatsApp package's template catalogue, seven VAS routes with their own client) read production, took pooler connections and depended on production state.
+- **Root cause:** a convenience default (Prisma's automatic `.env`) met a fast copy whose `.env` is the operator's production toolbox. Nothing marked a test process as different.
+- **Fix (CHANGELOG 125):** under `node --test` (`NODE_TEST_CONTEXT`) every client points at `TEST_DATABASE_URL` or a closed local port; the VAS routes use the shared client; `pnpm test` loads `.env.test` when present. The suite passes with no database at all.
+- **Guard:** `tests/test-db-guard.test.mjs` asserts both shared clients refuse at the closed port and that every `new PrismaClient(` in the app carries the guard. Lesson: a test run must not be able to reach production by default; isolation belongs in the client, not in how someone remembers to start the tests.
+
+## 140. Stolen cards were cashed out through payment links: R20,466 with fake payer details on 22 October, R43,551 paid out before PayFast stopped card payments
+
+- **Symptom (found 2026-10-24 from PayFast's transaction export):** from 22:22 SAST on 22 October PayFast accepted no typed-card payment; only Apple Pay went through (R107, then the founder's R20). The export showed why: 61 pay-link payments with fake payer details (34 throwaway e-mails at example.com, drsonny.org and keyboard-mash domains, made-up cells such as 073 123 4567, one cell paying 10 links in an hour), R20,466, to 16 accounts opened that day, none from the ad; plus 13 payments, R36,300, where people paid their own links by card (the R3,000 pattern; one customer said the cards were international).
+- **Money:** the 24 accounts behind those payments were credited R56,342 net; R43,551 had been paid out to banks or cash by 24 October; R10,865 was still in their balances; about R11,300 circulated between them by sends.
+- **Root cause:** a payment link takes any card with any payer details and the money can leave the same day: no velocity limit per payer or per new account, no hold on card-funded money, KYC only from R3,000 in one pay-out or R10,000 a day, so many R300 payments and small pay-outs stayed under every line.
+- **Fix:** 28 accounts frozen for pay-outs and sends on 24 October (founder's instruction; list in `~/Projects/wapay-ops/frozen-2026-10-24.json`; receiving stays open); founder to confirm PayFast's block and discuss chargebacks and any reserve.
+- **Pay-outs paused for everyone (24 October, founder's instruction):** the global pay-out hold (CHANGELOG 124) has been on since 23:07 UTC on 23 October. It stays on until the founder reopens pay-outs (`POST /api/internal/payout-hold` with `held: false`, `by`, `reason`). Before reopening: the OTT float reconciled against the bank transfers, PayFast's block, chargebacks and any reserve settled, and the guard below decided and built.
+- **Guard (open, founder's decision):** card-funded money in an account younger than seven days waits 72 hours, or needs the ID check, before it can be paid out; refuse a payer number that is the recipient's own; cap card payments per payer and per new account per hour. Apple Pay still works at PayFast, so the same ring can return through new accounts until one of these is in.
+
+## 139. Turning Adumo on for its live tests would have sent every pay-page payer to Adumo
+
+- **Symptom (found 2026-10-23 before any env changed):** the go-live plan enables Adumo with `WAPAY_PRIMARY_CARD_RAIL=PAYFAST` so that only the founder's R5 tests use it. The pay page would still have shown "Pay by card, Instant EFT or Capitec Pay" (Adumo) as its main button, with PayFast as "Other ways to pay", for every customer link, before any live payment had reconciled and before SHB had accepted the pay-link model in writing.
+- **Root cause:** `pages/pay/[code].js` set `adumo = adumoEnabled()`, and the main button posts `rail=adumo` explicitly, which outranks the primary rail in checkout. The primary-rail switch governed only checkout's default, the fee quote and the portal, not the page.
+- **Fix:** `adumo = adumoEnabled() && primaryCardRail() === 'ADUMO'` (CHANGELOG 123). Verified on a local production build with Adumo enabled: PayFast primary renders one PayFast button and no Adumo text; Adumo primary renders both buttons.
+- **Guard:** `tests/adumo.test.mjs` asserts the gate. Lesson: a switch named "primary" must be read by every surface that chooses a rail, not only the one it was written for.
+
+## 138. Paid-link receipts to payers who never wrote to WaPay were dropped by Meta while WaPay counted them as sent
+
+- **Symptom (found 2026-10-23 by the new daily compliance check):** Meta refused messages with 131047 ("more than 24 hours since the customer last replied") in 10 minutes of a single day. Of the 41 receipts sent to payers other than the recipient, 38 went to payers with no open 24-hour window; no payer had become an account holder.
+- **Root cause:** `deliverRequestPaidNotifications` tried a plain text first and treated the API's acceptance as delivery. The Cloud API accepts a plain text outside the window and drops it seconds later on the status webhook (131047), so the approved receipt template, the only rail that reaches someone who never wrote, was never tried. Requester notices had the same shape (5 fell outside the window).
+- **Fix (248f531):** the window is decided before the rail (`serviceWindowOpen`: last message to WaPay, or the account's opening from the person's own first message); outside it, plain text is skipped and Direct Send then the approved template go. tests/payer-registration.test.mjs.
+- **Guard:** the daily compliance check (CHANGELOG 122) raises AMBER at five or more 131047 minutes a day and when `WAPAY_TEMPLATE_PAYMENT_RECEIPT` is unset or names a template Meta does not have. Lesson: on WhatsApp, "sent" is the API's acceptance; delivery is only what the status webhook says.
+
 ## 137. Nothing deployed for twenty hours after the repository went private: Vercel "Deployment was blocked" in four seconds
 
 - **Symptom:** every push after 11:59 UTC on 20 October (3cc45e6, a24f4b9, 41ca29d, 8a5bb24, 12ab276, f56f1fa, a138b30, 25aaac6) got two GitHub commit statuses from Vercel, "Vercel – wapay-api" and "Vercel – wapay-api-vcel", both `failure` with the description "Deployment was blocked", three to four seconds after the push; production stayed on the redeployed de305c4. Re-authorising Vercel's GitHub app changed nothing.

@@ -23,10 +23,13 @@ import { buildCheckoutUrl } from '@wapay/providers-payfast';
 
 import prisma from '../../../lib/prisma.js';
 import { getPaymentRequest } from '../../../lib/payment-requests.js';
+import { recordLinkVisit } from '../../../lib/link-visits.js';
 import { paymentRequestFeeCents } from '../../../lib/deposits.js';
 import { adumoEnabled, primaryCardRail, buildVirtualCheckout, adumoMerchantReference, autoSubmitHtml, adumoFlow } from '../../../lib/adumo.js';
 import { businessRequestPayable } from '../../../lib/business.js';
 import { normaliseMsisdn, isValidSaMsisdn } from '../../../lib/msisdn.js';
+import { kycVerified } from '../../../lib/payout-rules.js';
+import { isOwnNumber, countPaidOwnLinks, ownLinkDecision, ownLinkFirstThresholdCents, ownLinkWarnHtml, ownLinkBlockHtml } from '../../../lib/own-link.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST' && req.method !== 'GET') {
@@ -63,6 +66,8 @@ export default async function handler(req, res) {
   if (!requester || !(await businessRequestPayable({ request }))) {
     return res.status(410).send('requester unavailable');
   }
+  // Where the payment came from (lib/link-visits.js, 2026-10-25): best effort and capped, never in the way.
+  await recordLinkVisit({ req, kind: 'CHECKOUT', code, accountId: request.accountId });
 
   // FEE DIRECTION (founder decision 2026-08-22): the PAYER pays exactly
   // the request amount — the card fee is deducted from what the REQUESTER
@@ -86,6 +91,28 @@ export default async function handler(req, res) {
   if (intent?.status === 'SUCCESS') {
     return res.redirect(302, `/pay/${code}`);
   }
+
+  // Paying your own link (founder 2026-11-10, lib/own-link.js): the first time a page says we can see it
+  // and that next time needs a verified ID; after that, or from R1,000, the ID check comes first. Decided
+  // before any intent or rail session exists, so a block charges nothing.
+  if (isOwnNumber(payerMsisdn, requester)) {
+    const verified = kycVerified(requester);
+    const priorPaid = verified ? 0 : await countPaidOwnLinks({ prisma, account: requester });
+    const thresholdCents = ownLinkFirstThresholdCents();
+    const verdict = ownLinkDecision({ ownNumber: true, verified, priorPaid, amountCents, thresholdCents });
+    const acked = String(req.body?.ack || '') === '1';
+    console.log(JSON.stringify({ type: 'payrequest_own_link', requestCode: code, accountId: request.accountId, action: verdict.action, reason: verdict.reason, acked, priorPaid, amountCents, payer: `…${String(payerMsisdn).slice(-4)}`, rail }));
+    res.setHeader('Cache-Control', 'no-store');
+    if (verdict.action === 'BLOCK') {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(403).send(ownLinkBlockHtml({ code, reason: verdict.reason, thresholdCents }));
+    }
+    if (verdict.action === 'WARN' && !acked) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(ownLinkWarnHtml({ code, payer: payerMsisdn, rail: askedRail, flow: req.body?.flow, amountCents }));
+    }
+  }
+
   if (!intent) {
     try {
       intent = await prisma.providerRequest.create({
@@ -161,6 +188,8 @@ export default async function handler(req, res) {
   );
 
   const base = String(process.env.APP_BASE_URL || '').replace(/\/+$/, '');
+  // Payer-facing addresses use the pay link's own host (2026-10-24); see the return URLs below.
+  const payBase = String(process.env.PAYLINK_BASE_URL || '').trim().replace(/\/+$/, '') || base;
 
   if (rail === 'ADUMO') {
     // One merchant reference per ATTEMPT (a declined try must not collide
@@ -204,8 +233,11 @@ export default async function handler(req, res) {
     // ?r=1 = "back from PayFast": the page shows a confirming state with no
     // pay buttons while the ITN is in flight (double-charge guard). The
     // cancel URL stays bare so a cancelled payer gets the buttons back.
-    returnUrl: `${base}/pay/${code}?r=1`,
-    cancelUrl: `${base}/pay/${code}`,
+    // The payer comes back to the pay link's own address (pleasepayme.co.za), never to the
+    // API's deployment address (founder 2026-10-24: payers landed on wapay-api-finfy-ai.vercel.app
+    // after paying). PayFast's server-to-server notify stays on the API base.
+    returnUrl: `${payBase}/pay/${code}?r=1`,
+    cancelUrl: `${payBase}/pay/${code}`,
     notifyUrl: `${base}/api/payfast/itn`,
   });
 

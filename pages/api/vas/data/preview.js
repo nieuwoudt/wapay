@@ -6,12 +6,11 @@
  * Includes structured logging for debugging.
  */
 
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../../lib/prisma.js';
 import { BluVasClient } from '@wapay/providers-blu';
 import { isValidSaMsisdn, normaliseMsisdn } from '../../../../lib/msisdn.js';
 import { requireInternalAuth } from '../../../../lib/internal-auth.js';
 
-const prisma = new PrismaClient();
 
 /**
  * Structured logging helper

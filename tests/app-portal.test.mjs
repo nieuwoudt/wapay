@@ -468,7 +468,7 @@ test("pay out: a frozen account, the daily cap and the KYC threshold refuse in t
   assert.equal(h.calls.requestPayout.length, 0, 'frozen: no rail call');
   delete h.t.account[0].profile.payouts;
 
-  const cap = { ok: false, error: 'DAILY_CAP', capCents: 1000000, usedCents: 900000, remainingCents: 100000, newAccountDays: 7, isNew: true, verified: false };
+  const cap = { ok: false, error: 'DAILY_CAP', capCents: 1000000, usedCents: 900000, remainingCents: 100000, newAccount: true, newAccountDays: 7, isNew: true, verified: false };
   const h2 = harness({ async checkPayoutRules() { return cap; } });
   const s2 = await signedIn(h2);
   const capped = await checked(h2, s2);
@@ -482,7 +482,7 @@ test("pay out: a frozen account, the daily cap and the KYC threshold refuse in t
   const s3 = await signedIn(h3);
   const needs = await checked(h3, s3);
   assert.equal(needs.statusCode, 403);
-  assert.ok(needs.body.line.includes('Pay-outs of R3,000 or more need a once-off identity check on your phone.'));
+  assert.ok(needs.body.line.includes('Pay-outs over R3,000 need a once-off identity check on your phone.'), 'the threshold is read from the rule result');
   assert.ok(needs.body.line.endsWith('Verify your ID below, or choose a smaller amount.'));
   assert.equal(needs.body.kyc.canVerify, true);
   assert.ok(kycThresholdCopy(kyc).includes('Reply *VERIFY*'), 'the chat keeps its own instruction');
@@ -617,17 +617,29 @@ test('get paid: create needs the proof; one intent makes one link; the list and 
   assert.equal(prep.statusCode, 200);
   assert.ok(prep.body.intentId.startsWith(INTENT_PREFIX.link));
   assert.equal(prep.body.netCardCents, 25000 - prep.body.feeCents);
-  const base = { action: 'create', intentId: prep.body.intentId, amountCents: 25000, label: 'Test Payer', note: 'Rent https://evil.example/x' };
+  const base = { action: 'create', intentId: prep.body.intentId, amountCents: 25000, label: 'Test Payer', note: 'Rent' };
   assert.equal((await call(links, { method: 'POST', body: { ...base } })).statusCode, 401);
   assert.equal((await call(links, { method: 'POST', ...s, body: { ...base } })).statusCode, 403);
   assert.equal((await call(links, { method: 'POST', ...s, body: { ...base, proof: issuePinProof({ accountId: ACC, intentId: prep.body.intentId, amountCents: 25100 }) } })).statusCode, 403);
   assert.equal(h.calls.createPaymentRequest.length, 0);
   const proof = await proofVia(h, s, { purpose: 'link', intentId: prep.body.intentId, amountCents: 25000 });
+  // What it is for is required (founder 2026-10-24) and refused in plain words when it could mislead the payer:
+  // nothing is claimed or created, and the same proof still makes the link once the words are fixed.
+  for (const [note, reason] of [[undefined, 'EMPTY'], ['   ', 'EMPTY'], ['Rent https://evil.example/x', 'LINK'], ['call 082 123 4567', 'NUMBER'], ['WaPay admin fee', 'IMPERSONATION']]) {
+    const refused = await call(links, { method: 'POST', ...s, body: { ...base, note, proof } });
+    assert.equal(refused.statusCode, 400, String(note));
+    assert.equal(refused.body.error, 'DESCRIPTION');
+    assert.equal(refused.body.reason, reason, String(note));
+    assert.ok(refused.body.line && !/—/.test(refused.body.line), 'a plain line for the screen');
+  }
+  assert.equal(h.calls.createPaymentRequest.length, 0, 'no link without a description');
+  assert.equal(h.t.auditLog.filter((a) => a.event === 'APP_LINK_CREATED' && a.metadata.intentId === prep.body.intentId).length, 0, 'no claim row either');
   const made = await call(links, { method: 'POST', ...s, body: { ...base, proof } });
   assert.equal(made.statusCode, 200, JSON.stringify(made.body));
   assert.match(made.body.link.url, /^https:\/\/pleasepayme\.co\.za\/PR[A-Z]{6}$/);
-  assert.equal(made.body.link.note, 'Rent', 'no link inside the note the payer reads');
-  assert.match(made.body.shareText, /Tap the link to pay\. Free from a WaPay balance, or pay by card:/);
+  assert.equal(made.body.link.note, 'Rent');
+  // The share text is the chat's one forwardable card: who asks, the amount, what for, the link, how to pay.
+  assert.equal(made.body.shareText, `🙏 *Demo Customer •••919 is asking you to pay R250*\nFor: Rent\n\nPay here: ${made.body.link.url}\nNo fee for you: pay by card, Instant EFT and more, or from a WaPay balance.`);
   const replay = await call(links, { method: 'POST', ...s, body: { ...base, proof } });
   assert.equal(replay.body.link.code, made.body.link.code);
   assert.equal(h.calls.createPaymentRequest.length, 1, 'the same proof never mints a second link');
@@ -639,12 +651,39 @@ test('get paid: create needs the proof; one intent makes one link; the list and 
   assert.equal(cancel.statusCode, 200);
 });
 
+test('your links (2026-10-24): every link with its status; an open one carries the card to share, the reminder and a WhatsApp link with no number; the page is in the navigation and on home', async () => {
+  const h = harness();
+  const s = await signedIn(h);
+  const r = await call(createLinksHandler(h.deps), { cookie: s.cookie });
+  assert.equal(r.statusCode, 200);
+  const open = r.body.links.find((l) => l.code === 'PRDEMOEF');
+  const paid = r.body.links.find((l) => l.code === 'PRDEMOCD');
+  assert.equal(open.status, 'OPEN');
+  assert.ok(open.createdAt && open.expiresAt, 'when it was made and when it closes');
+  assert.match(open.shareText, /^🙏 \*Demo Customer •••919 is asking you to pay R250\*\n\nPay here: https:\/\/pleasepayme\.co\.za\/PRDEMOEF\?s=w\n/);
+  assert.match(open.reminderText, /^🔔 \*Reminder: Demo Customer •••919 is asking you to pay R250\*\n\nPay here: https:\/\/pleasepayme\.co\.za\/PRDEMOEF\?s=r\n[^\n]+\nOpen until \d{1,2} [A-Z][a-z]{2}\.$/);
+  assert.equal(open.remindUrl, `https://wa.me/?text=${encodeURIComponent(open.reminderText)}`, 'WhatsApp asks the customer who to send it to: WaPay sends nothing');
+  assert.equal(paid.status, 'PAID');
+  assert.equal(paid.paidBy, 'card');
+  assert.equal(paid.note, 'Rent');
+  assert.equal(paid.shareText, undefined, 'a paid link has nothing to share or remind');
+  assert.match(read('../components/app/Shell.js'), /\{ key: 'links', href: '\/app\/links', label: 'Links', icon: 'link' \}/);
+  const page = read('../pages/app/links.js');
+  assert.match(page, /await navigator\.share\(\{ text \}\)/, 'the reminder through the share sheet');
+  assert.match(page, /href=\{l\.remindUrl\} target="_blank"/, 'or WhatsApp opened with the text ready');
+  assert.match(page, /body: \{ action: 'cancel', code: l\.code \}/);
+  assert.match(page, /copyText\(l\.url\)/);
+  assert.match(read('../pages/app/index.js'), /href="\/app\/links"/);
+  assert.match(read('../pages/app/pay.js'), /href="\/app\/links"/);
+  assert.match(read('../pages/app/get-paid.js'), /const d = sanitizeLinkDescription\(note\);/, 'what it is for is checked before the PIN step');
+});
+
 test("get paid: the open-link cap answers honestly and releases the intent's claim", async () => {
   const h = harness({ async createPaymentRequest() { throw Object.assign(new Error('cap'), { code: 'REQUEST_LIMIT', limit: 'OPEN', openCount: 10 }); } });
   const s = await signedIn(h);
   const intentId = newIntentId('link');
   const proof = await proofVia(h, s, { purpose: 'link', intentId, amountCents: 25000 });
-  const r = await call(createLinksHandler(h.deps), { method: 'POST', ...s, body: { action: 'create', intentId, amountCents: 25000, proof } });
+  const r = await call(createLinksHandler(h.deps), { method: 'POST', ...s, body: { action: 'create', intentId, amountCents: 25000, note: 'Rent', proof } });
   assert.equal(r.statusCode, 429);
   assert.match(r.body.line, /10 payment links waiting to be paid/);
   assert.equal(h.t.auditLog.filter((a) => a.event === 'APP_LINK_CREATED' && a.metadata.intentId === intentId).length, 0);
@@ -739,7 +778,7 @@ test('profile: remove touches only your own destination; change PIN needs the cu
 // ---------------------------------------------------------------------------
 
 test("webLine keeps the chat's rule sentences and drops only the chat's instructions", () => {
-  const cap = dailyCapCopy({ capCents: 1000000, usedCents: 900000, remainingCents: 100000 });
+  const cap = dailyCapCopy({ capCents: 1000000, usedCents: 900000, remainingCents: 100000, newAccount: true });
   assert.equal(webLine(cap), '⏸ New accounts can pay out up to R10,000 in any 24 hours. You have paid out R9,000 in the last 24 hours, so up to R1,000 more works now. Choose a smaller amount.');
   const frozen = webLine(FROZEN_PAYOUT_COPY);
   assert.ok(frozen.startsWith('⏸ Pay-outs on this account are paused while we check a recent payment. Nothing has left your balance and your money is safe.'));

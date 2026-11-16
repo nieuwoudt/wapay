@@ -183,15 +183,19 @@ export default async function handler(req, res) {
   try {
     await ensureWallet({ accountId });
 
-    posted = await postEntry(
-      buildLoad({
+    posted = await postEntry({
+      ...buildLoad({
         accountId,
         rail: RAIL.PAYFAST,
         faceCents: amountCents,
         customerFeeCents: feeCents,
         idemKey: intent.idemKey,
-      })
-    );
+      }),
+      // The charge that credited (BUGLOG #146): written once, by the first post. A redelivery or a second
+      // charge for the same intent replays the entry and never changes it, while markDeposit below
+      // overwrites the intent's providerRef every time. lib/card-refund.js reads this.
+      externalRef: params.pf_payment_id || null,
+    });
 
     await markDeposit({ paymentId, status: 'SUCCESS', providerRef: params.pf_payment_id });
     // Operator alert (2026-10-19): money landed from outside; the pay-out float may need funding before the pay-out that follows.

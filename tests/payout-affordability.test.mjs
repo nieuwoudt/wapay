@@ -7,6 +7,9 @@
  * states must be reachable.
  */
 import test from 'node:test';
+// The global pay-out hold (lib/payout-hold.js) is read from production through Prisma's own .env
+// loading; these tests are about the withdraw flow, so the hold is pinned off for this file.
+(await import('../lib/payout-hold.js'))._pinPayoutHoldForTests(false);
 import assert from 'node:assert/strict';
 
 import { startWithdraw, handleWithdrawReply, affordableMaxCents } from '../lib/payout-chat.js';
@@ -76,7 +79,7 @@ test('R66 against CashSend: the menu names what it needs, the pick is refused wi
   // the entry gate counts the fee: R25 covers no option once the fee is added
   const poor = await startWithdraw({ account: verified, ask: {}, deps: { ...deps(2500), resolveProviders: async () => live, moneySituation: async () => null, gateHistory: async () => ({ count: 0, personAsked: false }) } });
   assert.equal(poor.state, null);
-  assert.match(poor.text, /You have R25 to withdraw\. A withdrawal needs at least R58 in your balance \(the R50 minimum plus the R8 PayShap fee\), so you need R33 more\./);
+  assert.match(poor.text, /You have R25 to withdraw\. A withdrawal needs at least R62 in your balance \(the R50 minimum plus the R12 PayShap fee\), so you need R37 more\./);
 });
 
 test('a bare option number typed at the amount step switches the method instead of being read as rands (founder typed "3" after "choose *3*", 2026-09-17)', async () => {

@@ -61,7 +61,7 @@ test('withdraw fees follow the payout switch', () => {
     assert.match(buildBrainKnowledge({ wicodeLive: false }), /COMING SOON through our payouts partner/);
     process.env.WAPAY_PAYOUT_ENABLED = 'true';
     const w = feeAnswer('withdraw');
-    assert.match(w, /R8 to your bank/); assert.match(w, /R10 for a bank transfer/); assert.match(w, /R18 up to R700, R23 up to R1500, R30 above/);
+    assert.match(w, /R12 to your bank account by PayShap on the next business day or R20 the same day \(the same for a bank transfer\)/); assert.match(w, /R18 up to R700, R23 up to R1500, R30 above/);
     assert.match(spendDestinationLines(), /🏧 \*Withdraw\*/);
     const k = buildBrainKnowledge({ wicodeLive: false });
     assert.match(k, /WITHDRAWALS ARE LIVE/); assert.ok(!/not available YET/.test(k), 'the coming-soon paragraph is gone when live');

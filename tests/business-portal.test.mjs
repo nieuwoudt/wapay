@@ -458,7 +458,7 @@ test('createBusinessLink: derives total from items, rejects mismatch and foreign
   const prisma = stubPrisma({ withBusiness: true });
   const { customer } = await upsertCustomer({ prisma, businessId: 'biz1', msisdn: '073 123 4567', name: 'Thabo Nkosi' });
   const out = await createBusinessLink({ prisma, business: biz(prisma), customerId: customer.id, items: [{ name: 'Wash & fold', qty: 1, unitCents: 12000 }, { name: 'Ironing', qty: 3, unitCents: 1000 }], reference: 'T-1042' });
-  assert.equal(out.link.amountCents, 15000); assert.match(out.link.url, /^https:\/\/pleasepayme\.co\.za\/PR[A-Z]{6}$/);
+  assert.equal(out.link.amountCents, 15000); assert.match(out.link.url, /^https:\/\/pleasepayme\.co\.za\/PR[A-Z]{6}\?s=b$/, 'a business link says it came through the portal');
   assert.match(out.waLink, /^https:\/\/wa\.me\/27731234567\?text=/); assert.equal(out.link.customerName, 'Thabo Nkosi');
   assert.deepEqual(biz(prisma).settings.recentItems.map((i) => i.name), ['Wash & fold', 'Ironing'], 'recent items remembered');
   await assert.rejects(() => createBusinessLink({ prisma, business: biz(prisma), items: [{ name: 'x', qty: 1, unitCents: 1000 }], amountCents: 2000 }), /does not match/);

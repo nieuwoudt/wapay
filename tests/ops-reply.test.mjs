@@ -14,7 +14,7 @@ const ID = 'cmvezlqma00hbi5od3b5anvv5';
 const NOW = Date.parse('2026-10-19T10:00:00Z');
 function db({ lastUserAt = '2026-10-19T09:21:02Z', account = { id: ID, waId: '27600000919' } } = {}) {
   return {
-    account: { findUnique: async ({ where }) => (where.id === ID ? account : null) },
+    account: { findUnique: async ({ where }) => (where.id === ID ? account : null), findFirst: async () => account },
     conversationTurn: { findFirst: async () => (lastUserAt ? { createdAt: new Date(lastUserAt) } : null) },
   };
 }
@@ -86,6 +86,17 @@ test('ops reply after the window: the support template carries the text, the tur
   const before = remembered.length;
   const failed = await opsReply({ prisma: db({ lastUserAt: '2026-10-18T09:00:00Z', account }), send, sendTemplate: async () => ({ ok: false, error: '(#132001) Template name does not exist' }), remember, accountId: ID, text: 'hi', now: NOW, env: {} });
   assert.equal(failed.status, 502); assert.equal(remembered.length, before, 'a failed template send is not remembered as said');
+});
+
+test('ops reply after the window never reaches a number that never wrote to WaPay, a pre-registered payer record included (BUGLOG #144)', async () => {
+  const templates = []; const sends = [];
+  const payerRecord = { id: ID, waId: '27600000919', displayName: 'Payer', profile: { origin: { kind: 'PAYER' } } };
+  const r = await opsReply({ prisma: db({ lastUserAt: null, account: payerRecord }), send: async (a) => { sends.push(a); return { ok: true }; }, sendTemplate: async (a) => { templates.push(a); return { ok: true }; }, accountId: ID, text: 'hi', now: NOW, env: {} });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, 'NEVER_WROTE');
+  const forced = await opsReply({ prisma: db({ lastUserAt: null, account: payerRecord }), send: async (a) => { sends.push(a); return { ok: true }; }, sendTemplate: async (a) => { templates.push(a); return { ok: true }; }, accountId: ID, text: 'hi', force: true, now: NOW, env: {} });
+  assert.equal(forced.body.error, 'NEVER_WROTE', 'force does not override it');
+  assert.equal(templates.length + sends.length, 0);
 });
 
 test('template helpers: parameter sanitiser, name switch, greeting name', () => {
