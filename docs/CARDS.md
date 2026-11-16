@@ -427,56 +427,81 @@ physical cards ordered alongside to learn delivery, assignment and PIN.
 **What exists.**
 - `lib/paycentral.js`: the wire to PayCentral's API.
 - `pages/api/internal/paycentral-probe.js`: a read-only probe.
-- `tests/paycentral.test.mjs`: 17 tests.
+- `tests/paycentral.test.mjs`: 26 tests.
 
 No customer can reach any of it yet. The WhatsApp flows and the ledger flow ("add money to my
-card": reserve, load, settle or release) are the next build.
+card": reserve, load, settle or release) are the next build. A read-only review before merge
+found two ways an early version could send a processed load twice; both are fixed and locked
+(BUGLOG #148).
 
 **One whitelisted address.**
 - **The constraint:** PayCentral whitelists one IP, 155.121.235.0. Vercel's Static IPs are a
   pair (155.121.235.0 and 155.121.235.2), and Vercel cannot pin traffic to one of them.
-- **Staging: door retry.** A call refused before PayCentral's application saw it is retried on
-  a fresh connection, which may leave from the other address, up to 6 times within 15 seconds.
-  - "Refused at the door" means:
-    - the connection was refused or timed out while connecting;
-    - the TLS handshake was cut before any request was written;
-    - a proxy refused the tunnel;
-    - a 403 came back without PayCentral's JSON.
-  - Such a call never reached PayCentral, so retrying is safe for every call, loads included.
-- **Never guess on money.** A money call that may have reached PayCentral is never retried: a
-  reset or timeout after connecting, or a 5xx. It raises `TRANSPORT_INDETERMINATE` with the
-  load's reference, and the flow must call `checkReference()` (PayCentral's audit log) before
-  releasing any hold. That is the BUGLOG #15 rule. Reads (balance, statement, info) do retry.
-- **Production: one fixed address.** Set `PAYCENTRAL_EGRESS_PROXY` to an HTTP proxy with one
-  outbound address of our own. Every PayCentral call goes through it, so no retry is needed.
-  That address goes to PayCentral with the production whitelisting request. The Johannesburg
-  egress planned for Blu (`docs/BLU_PRODUCTION_CUTOVER.md`) can be the same proxy.
-- **The probe.** `GET /api/internal/paycentral-probe` (header `x-internal-api-key`) logs in a
-  few times, each on a fresh connection, then once normally.
-  - It counts how many attempts the door refused and gives a verdict.
-  - If the normal login fails or refusals are frequent, switch to the proxy.
-  - It touches no card and no money, and reports secrets only as booleans or masks.
+- **"Never reached PayCentral" means only one thing:** this request's socket never connected.
+  Our own connector counts every connect and every failed connect, so this is a fact rather than
+  a guess from error codes. Only such a call, or a *read* refused with a 403 that carries no
+  PayCentral JSON, is retried on a fresh connection, which may leave from the other address. Up
+  to 6 attempts, within one call budget of 25 seconds.
+- **Money and state calls** (load, card allocation, freeze, unfreeze):
+  1. Each fresh connection first makes a harmless read, the door check (a balance read).
+  2. Only when the door check got through is the call sent, once, on that same connection.
+  3. If its own reconnect fails before connecting, it is safely retried.
+  4. Anything unclear after it was sent is never resent: a reset, a timeout, a redirect, a 5xx,
+     a 403 page, or a body we cannot read. It raises `TRANSPORT_INDETERMINATE` (with
+     `indeterminate: true` and the load's reference) or returns outcome `unknown`.
+- **Redirects are never followed.**
+- **Outcomes.** `loadCard` returns `loaded`, `declined` or `unknown`. Only `declined` (a failure
+  PayCentral plainly stated) means nothing happened; a "duplicate reference" refusal counts as
+  `unknown`. On `unknown` or `TRANSPORT_INDETERMINATE`, the flow calls
+  `checkReference(reference, { cardIdentifier, amountCents })` before releasing any hold (the
+  BUGLOG #15 rule). It returns:
+  - `not_found`: PayCentral never saw it, so release;
+  - `loaded`: it matches the card and amount, so settle;
+  - `declined`;
+  - `unknown`: keep the hold and ask a person.
 
-**Card data (golden thread 3.5).** `virtualAllocate` returns `seqNo` (use it as the card
-identifier), the last four digits and the expiry. PayCentral's full card number and security
-code are dropped in the client. Every PayCentral body is redacted before any log.
+  `virtualAllocate` has no reference: on `unknown`, never retry; look the card up first.
+- **Production: one fixed address.** Set `PAYCENTRAL_EGRESS_PROXY` to an HTTP proxy with one
+  outbound address of our own. Every PayCentral call goes through it. That address goes to
+  PayCentral with the production whitelisting request. The Johannesburg egress planned for Blu
+  (`docs/BLU_PRODUCTION_CUTOVER.md`) can be the same proxy.
+- **The probe.** `GET /api/internal/paycentral-probe` (header `x-internal-api-key`, optional
+  `?samples=1..10`) logs in once with retries, then makes single-attempt door checks on fresh
+  connections. It counts each as ok, refused while connecting, refused with a 403, or failed
+  after connecting, and gives a verdict.
+  - It is bounded to about 45 seconds and touches no card and no money.
+  - It reports secrets as booleans or masks only.
+  - Many refusals, or a failed login, mean switch to the proxy.
+
+**Card data (golden thread 3.5).**
+- `virtualAllocate` returns `seqNo` (use it as the card identifier), the last four digits and
+  the expiry. PayCentral's full card number and security code are dropped in the client.
+- `cardInfo` returns status, last four and balance only.
+- Every message handed back, and every log line, is redacted. That covers grouped and dashed
+  card numbers, runs of 7 or more digits, phone numbers, identity and contact fields, names,
+  addresses, secrets and documents, including JSON held in strings.
 
 **Other rules in the client.**
 - **Amounts:** integer cents in, rands out. Whole rands only until PayCentral confirms cents
   (`PAYCENTRAL_WHOLE_RANDS`).
 - **References:** a load's `reference_no` is 12 digits derived from the load's idemKey, never
-  starting with 0. The same load always carries the same reference.
-- **Tokens:** cached until a minute before expiry. A 401 logs in again once; it was a rejected
-  call, so repeating it is safe.
+  starting with 0. The caller stores it with the hold and never recomputes it or puts it in a
+  ledger idemKey. Collision odds are about 0.5% over 100,000 loads, so raise
+  `PAYCENTRAL_REFERENCE_DIGITS` once PayCentral confirms longer references. 13 digits are
+  refused, because they look like a timestamp to the ledger's guard.
+- **Tokens:** cached until a minute before expiry, one login at a time per instance. A 401 logs
+  in again once; it was a rejected call, so resending is safe.
 - **Not implemented:** `/card/transfertoprofile` (money back from a card). It has no reference,
-  so a timed-out call could not be checked and a retry could deduct twice. Ask PayCentral for
-  a reference first.
+  so a timed-out call could not be checked and a retry could deduct twice. Ask PayCentral for a
+  reference first.
 
 **To switch on staging** (once PayCentral sends the credentials):
 1. Vercel → WaPay → Settings → Environment Variables, Preview: `PAYCENTRAL_API_EMAIL`,
    `PAYCENTRAL_API_PASSWORD`, and `PAYCENTRAL_BASE_URL=https://staging-api.paycentral.co.za`.
 2. Redeploy the preview.
 3. Call the probe on the preview URL and read the verdict.
+4. Confirm on staging what the audit log returns for a real load. `checkReference` treats
+   anything unexpected as `unknown` until then.
 
 ---
 

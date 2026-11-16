@@ -1,10 +1,12 @@
 /**
  * PayCentral client (lib/paycentral.js), docs/CARDS.md 0.9 to 0.11.
  *
- * The one-whitelisted-address rules: a call refused at the door is retried on a fresh
- * connection (any kind, money included, because it never reached PayCentral); a money call
- * that may have reached PayCentral is never retried and surfaces as TRANSPORT_INDETERMINATE
- * with its reference. Card numbers and security codes never leave the module or reach a log.
+ * One whitelisted address: a call is retried only when it never reached PayCentral (its
+ * connection never connected, or a READ got a 403 without PayCentral's JSON). A money or state
+ * call goes once per connection, after a door check on that same connection; anything unclear
+ * after it was sent is 'unknown' or TRANSPORT_INDETERMINATE, never a resend. Redirects are not
+ * followed. Card numbers and security codes never leave the module or reach a log.
+ * Review 2026-11-16 found the cases marked "review": each is locked here.
  * Values that look like credentials are built at runtime (tests/no-committed-credentials).
  */
 import test from 'node:test';
@@ -15,12 +17,15 @@ import { ProxyAgent } from 'undici';
 import {
   PayCentralClient,
   _resetPayCentralState,
-  classifyTransportError,
   isDoorRefusalResponse,
+  isTunnelRefusal,
+  writeOutcome,
   redactPayCentral,
+  safeMessage,
   loadReference,
   centsToRands,
   randsToCents,
+  statementDate,
   jwtExpiryMs,
   payCentralConfigured,
 } from '../lib/paycentral.js';
@@ -29,235 +34,372 @@ const LOGIN = { email: 'test-api@example.com', password: ['test', 'pw', 'value']
 const fakeJwt = (expSec) => ['h', Buffer.from(JSON.stringify({ exp: expSec })).toString('base64url'), 's'].join('.');
 const futureToken = () => fakeJwt(Math.floor(Date.now() / 1000) + 3600);
 const PAN = ['5192', '6054', '4733', '6762'].join('');
+const PAN_GROUPED = ['5192', '6054', '4733', '6762'].join(' ');
 const CVV = String(90886);
 
 const resp = (status, body) => ({ status, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)) });
-const doorErr = () => Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('Connect Timeout Error'), { code: 'UND_ERR_CONNECT_TIMEOUT' }) });
-const resetErr = () => Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('other side closed'), { code: 'ECONNRESET' }) });
+const ok = (extra = {}) => resp(200, { status: 'Success', ...extra });
+const notFoundCard = () => resp(200, { status: 'Failure', message: 'Could not find the card' });
+const LOGIN_OK = () => resp(200, { token: futureToken() });
+// Script steps the fake understands besides responses:
+const REFUSE = Symbol('connect refused before any socket came up');
+const RESET = Symbol('socket reset after connecting');
 
-/** A fake PayCentral: `script` maps a path to a queue of answers (a response or an Error to throw). */
-function fakePayCentral(script) {
+/** A fake PayCentral. Each path has a queue of steps; the last step repeats. */
+function fakePayCentral(script, config = {}) {
   const calls = [];
-  const fetchFn = async (url, init) => {
-    const path = new URL(url).pathname;
-    calls.push({ path, body: init.body ? JSON.parse(init.body) : null, auth: init.headers.Authorization || null, dispatcher: init.dispatcher });
-    const queue = script[path];
-    if (!queue || queue.length === 0) throw new Error(`unexpected call ${path}`);
-    const next = queue.length > 1 ? queue.shift() : queue[0];
-    if (next instanceof Error) throw next;
-    return typeof next === 'function' ? next() : next;
+  let connections = 0;
+  const connectionFactory = () => {
+    const state = { connects: 0, connectFailures: 0 };
+    const id = ++connections;
+    return { dispatcher: { id, state, close: () => {} }, state };
   };
-  let dispatchers = 0;
-  const client = new PayCentralClient({
-    ...LOGIN,
-    baseUrl: 'https://staging-api.example.test',
-    fetchFn,
-    dispatcherFactory: () => ({ id: ++dispatchers, close: async () => {} }),
-    sleep: async () => {},
-  });
-  return { client, calls, dispatchers: () => dispatchers };
+  const fetchFn = async (url, init) => {
+    const u = new URL(url);
+    const st = init.dispatcher.state;
+    calls.push({ path: u.pathname, query: Object.fromEntries(u.searchParams), body: init.body ? JSON.parse(init.body) : null, conn: init.dispatcher.id, redirect: init.redirect });
+    const queue = script[u.pathname];
+    if (!queue || queue.length === 0) throw new Error(`unexpected call ${u.pathname}`);
+    const step = queue.length > 1 ? queue.shift() : queue[0];
+    if (step === REFUSE) {
+      st.connectFailures += 1;
+      throw Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) });
+    }
+    if (st.connects === 0) st.connects = 1;
+    if (step === RESET) throw Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('other side closed'), { code: 'ECONNRESET' }) });
+    return typeof step === 'function' ? step() : step;
+  };
+  const client = new PayCentralClient({ ...LOGIN, baseUrl: 'https://staging-api.example.test', fetchFn, connectionFactory, sleep: async () => {}, ...config });
+  const count = (path) => calls.filter((c) => c.path === path).length;
+  return { client, calls, count, connections: () => connections };
 }
+
+const captureLogs = async (fn) => {
+  const lines = [];
+  const orig = console.log;
+  console.log = (s) => lines.push(String(s));
+  try {
+    return { result: await fn(), logs: lines.join('\n') };
+  } finally {
+    console.log = orig;
+  }
+};
 
 test.beforeEach(() => _resetPayCentralState());
 
-test('a login refused at the door is retried on a fresh connection each time, then the call goes through', async () => {
-  const { client, calls, dispatchers } = fakePayCentral({
-    '/authenticate': [doorErr(), doorErr(), resp(200, { token: futureToken() })],
-    '/card/balance': [resp(200, { status: 'Success', balance: '25' })],
+// --- The door ---------------------------------------------------------------
+
+test('a login refused while connecting is retried on a fresh connection each time', async () => {
+  const { client, count, connections } = fakePayCentral({
+    '/authenticate': [REFUSE, REFUSE, LOGIN_OK()],
+    '/card/balance': [ok({ balance: '25' })],
   });
   const r = await client.cardBalance('591');
-  assert.deepEqual(r, { ok: true, balanceCents: 2500, message: '' });
-  assert.equal(calls.filter((c) => c.path === '/authenticate').length, 3);
-  assert.equal(dispatchers(), 4, 'every attempt gets its own connection');
-  assert.equal(new Set(calls.map((c) => c.dispatcher.id)).size, 4);
+  assert.equal(r.balanceCents, 2500);
+  assert.equal(count('/authenticate'), 3);
+  assert.equal(connections(), 4, 'one connection per attempt');
 });
 
-test('a money call refused at the door is retried (it never reached PayCentral)', async () => {
-  const { client, calls } = fakePayCentral({
-    '/authenticate': [resp(200, { token: futureToken() })],
-    '/card/load': [doorErr(), resp(200, { status: 'Success', message: 'Card Loaded successfully' })],
-  });
-  const r = await client.loadCard({ cardIdentifier: '591', amountCents: 10000, idemKey: 'card-load-intent-abc' });
-  assert.equal(r.ok, true);
-  const loads = calls.filter((c) => c.path === '/card/load');
-  assert.equal(loads.length, 2);
-  assert.equal(loads[0].body.reference_no, loads[1].body.reference_no, 'the retry carries the same reference');
-});
-
-test('a firewall 403 without PayCentral JSON is a door refusal; a PayCentral 403 is an answer', () => {
-  assert.equal(isDoorRefusalResponse(403, { _raw: true }), true);
-  assert.equal(isDoorRefusalResponse(403, {}), true);
-  assert.equal(isDoorRefusalResponse(403, { status: 'Failure', message: 'Forbidden' }), false);
-  assert.equal(isDoorRefusalResponse(200, { _raw: true }), false);
-});
-
-test('a money call that may have reached PayCentral is never retried and carries its reference', async () => {
-  const { client, calls } = fakePayCentral({
-    '/authenticate': [resp(200, { token: futureToken() })],
-    '/card/load': [resetErr()],
-  });
-  await assert.rejects(client.loadCard({ cardIdentifier: '591', amountCents: 5000, idemKey: 'card-load-intent-xyz' }), (e) => {
-    assert.equal(e.code, 'TRANSPORT_INDETERMINATE');
-    assert.equal(e.reference, loadReference('card-load-intent-xyz'));
-    return true;
-  });
-  assert.equal(calls.filter((c) => c.path === '/card/load').length, 1);
-});
-
-test('a money call answered with a 5xx is indeterminate, not retried', async () => {
-  const { client, calls } = fakePayCentral({
-    '/authenticate': [resp(200, { token: futureToken() })],
-    '/card/load': [resp(502, '<html>bad gateway</html>')],
-  });
-  await assert.rejects(client.loadCard({ cardIdentifier: '591', amountCents: 5000, idemKey: 'k1' }), { code: 'TRANSPORT_INDETERMINATE' });
-  assert.equal(calls.filter((c) => c.path === '/card/load').length, 1);
-});
-
-test('a read that failed in flight is retried', async () => {
-  const { client, calls } = fakePayCentral({
-    '/authenticate': [resp(200, { token: futureToken() })],
-    '/card/balance': [resetErr(), resp(200, { status: 'Success', balance: '52.40' })],
+test('a read refused with a firewall 403 is retried; a PayCentral 403 is an answer', async () => {
+  const { client, count } = fakePayCentral({
+    '/authenticate': [LOGIN_OK()],
+    '/card/balance': [resp(403, '<html>Forbidden</html>'), resp(403, { status: 'Failure', message: 'Not your card' })],
   });
   const r = await client.cardBalance('591');
-  assert.equal(r.balanceCents, 5240);
-  assert.equal(calls.filter((c) => c.path === '/card/balance').length, 2);
+  assert.equal(r.ok, false);
+  assert.equal(count('/card/balance'), 2);
+  assert.equal(isDoorRefusalResponse(403, null), true);
+  assert.equal(isDoorRefusalResponse(403, { Status: 'Failure' }), false, 'keys in any case');
+  assert.equal(isDoorRefusalResponse(403, { success: false }), false);
 });
 
 test('refusals beyond the attempt limit end in DOOR_REFUSED with the count', async () => {
-  const { client } = fakePayCentral({ '/authenticate': [doorErr()] });
-  await assert.rejects(client.authenticate(), (e) => {
-    assert.equal(e.code, 'DOOR_REFUSED');
-    assert.equal(e.attempts, 6);
+  const { client } = fakePayCentral({ '/authenticate': [REFUSE] });
+  await assert.rejects(client.authenticate(), (e) => e.code === 'DOOR_REFUSED' && e.attempts === 6);
+});
+
+test('a load: door check first, then the load once, on the same connection', async () => {
+  const { client, calls, count } = fakePayCentral({
+    '/authenticate': [LOGIN_OK()],
+    '/card/balance': [REFUSE, resp(403, '<html>denied</html>'), notFoundCard()],
+    '/card/load': [ok({ message: 'Card Loaded successfully' })],
+  });
+  const r = await client.loadCard({ cardIdentifier: '591', amountCents: 10000, idemKey: 'card-load-a' });
+  assert.equal(r.outcome, 'loaded');
+  assert.equal(r.reference, loadReference('card-load-a'));
+  assert.equal(count('/card/load'), 1, 'sent once');
+  const load = calls.find((c) => c.path === '/card/load');
+  const lastCheck = calls.filter((c) => c.path === '/card/balance').at(-1);
+  assert.equal(load.conn, lastCheck.conn, 'the load rides the connection whose door check got through');
+  assert.equal(load.redirect, 'manual');
+});
+
+test('review: a 403 page after a load was sent is never a door refusal: outcome unknown, sent once', async () => {
+  const { client, count } = fakePayCentral({
+    '/authenticate': [LOGIN_OK()],
+    '/card/balance': [notFoundCard()],
+    '/card/load': [resp(403, '<html>blocked by response inspection</html>')],
+  });
+  const r = await client.loadCard({ cardIdentifier: '591', amountCents: 5000, idemKey: 'card-load-b' });
+  assert.equal(r.outcome, 'unknown');
+  assert.equal(count('/card/load'), 1);
+});
+
+test('review: a redirect after a load is never followed or resent: indeterminate with the reference', async () => {
+  const { client, count } = fakePayCentral({
+    '/authenticate': [LOGIN_OK()],
+    '/card/balance': [notFoundCard()],
+    '/card/load': [resp(303, '')],
+  });
+  await assert.rejects(client.loadCard({ cardIdentifier: '591', amountCents: 5000, idemKey: 'card-load-c' }), (e) => {
+    assert.equal(e.code, 'TRANSPORT_INDETERMINATE');
+    assert.equal(e.indeterminate, true);
+    assert.equal(e.reference, loadReference('card-load-c'));
     return true;
   });
+  assert.equal(count('/card/load'), 1);
 });
 
-test('the token is cached, renewed when expired, and a 401 logs in again once', async () => {
-  const { client, calls } = fakePayCentral({
-    '/authenticate': [resp(200, { token: futureToken() })],
-    '/card/balance': [resp(200, { status: 'Success', balance: '1' }), resp(401, { status: 'Failure', message: 'Unauthorized' }), resp(200, { status: 'Success', balance: '2' })],
+test('a load reset after connecting is indeterminate, never resent', async () => {
+  const { client, count } = fakePayCentral({
+    '/authenticate': [LOGIN_OK()],
+    '/card/balance': [notFoundCard()],
+    '/card/load': [RESET],
   });
-  await client.cardBalance('591');
-  await client.cardBalance('591');
-  assert.equal(calls.filter((c) => c.path === '/authenticate').length, 2, 'one login, then one after the 401');
+  await assert.rejects(client.loadCard({ cardIdentifier: '591', amountCents: 5000, idemKey: 'k-reset' }), (e) => e.code === 'TRANSPORT_INDETERMINATE' && e.indeterminate === true);
+  assert.equal(count('/card/load'), 1);
+});
+
+test('review: a 5xx on a load is indeterminate and says so', async () => {
+  const { client, count } = fakePayCentral({
+    '/authenticate': [LOGIN_OK()],
+    '/card/balance': [notFoundCard()],
+    '/card/load': [resp(502, '<html>bad gateway</html>')],
+  });
+  await assert.rejects(client.loadCard({ cardIdentifier: '591', amountCents: 5000, idemKey: 'k-5xx' }), (e) => e.code === 'TRANSPORT_INDETERMINATE' && e.indeterminate === true);
+  assert.equal(count('/card/load'), 1);
+});
+
+test('a load whose own reconnect failed before connecting is safely retried on a new connection', async () => {
+  const { client, calls, count } = fakePayCentral({
+    '/authenticate': [LOGIN_OK()],
+    '/card/balance': [notFoundCard()],
+    '/card/load': [REFUSE, ok({ message: 'Card Loaded successfully' })],
+  });
+  const r = await client.loadCard({ cardIdentifier: '591', amountCents: 5000, idemKey: 'k-reconnect' });
+  assert.equal(r.outcome, 'loaded');
+  assert.equal(count('/card/load'), 2, 'the first never left: its socket never connected');
+  const loads = calls.filter((c) => c.path === '/card/load');
+  assert.notEqual(loads[0].conn, loads[1].conn);
+  assert.equal(loads[0].body.reference_no, loads[1].body.reference_no);
+});
+
+test('review: unreadable or unexpected answers to a write are unknown, only a plain failure is declined', () => {
+  assert.equal(writeOutcome(null), 'unknown', 'non-JSON body');
+  assert.equal(writeOutcome({ status: 'Successful' }), 'unknown');
+  assert.equal(writeOutcome({ status: 'Failure', message: 'Card must be in allocated state to load.' }), 'declined');
+  assert.equal(writeOutcome({ status: 'Failure', message: 'Duplicate reference number' }), 'unknown', 'may mean done already');
+  assert.equal(writeOutcome({ Status: 'SUCCESS' }), 'ok');
+  assert.equal(writeOutcome([1, 2]), 'unknown');
+});
+
+test('a 401 on a write logs in again and sends it once more (it was rejected)', async () => {
+  const { client, count } = fakePayCentral({
+    '/authenticate': [LOGIN_OK()],
+    '/card/balance': [notFoundCard()],
+    '/card/load': [resp(401, { status: 'Failure', message: 'Unauthorized' }), ok({ message: 'Card Loaded successfully' })],
+  });
+  const r = await client.loadCard({ cardIdentifier: '591', amountCents: 5000, idemKey: 'k-401' });
+  assert.equal(r.outcome, 'loaded');
+  assert.equal(count('/card/load'), 2);
+  assert.equal(count('/authenticate'), 2);
+});
+
+// --- checkReference -----------------------------------------------------------
+
+test('checkReference: not found, loaded (matching card and amount), declined, and the unclear cases', async () => {
+  const run = async (body, opts) => {
+    _resetPayCentralState();
+    const { client } = fakePayCentral({ '/authenticate': [LOGIN_OK()], '/get/auditlog': [resp(200, body)] });
+    return client.checkReference('123456789012', opts);
+  };
+  assert.equal((await run({ status: 'Failure', message: { success: false, message: 'Reference Number Not Found' } })).outcome, 'not_found');
+  const loaded = { status: 'Success', message: { request: { cardIdentifier: '591', amount: '50' }, response: { success: 'true', message: 'Card Loaded successfully' }, success: true } };
+  assert.equal((await run(loaded, { cardIdentifier: '591', amountCents: 5000 })).outcome, 'loaded');
+  assert.equal((await run(loaded, { cardIdentifier: '592', amountCents: 5000 })).outcome, 'unknown', 'a different card');
+  assert.equal((await run(loaded, { cardIdentifier: '591', amountCents: 9900 })).outcome, 'unknown', 'a different amount');
+  const asString = { status: 'Success', message: JSON.stringify(loaded.message) };
+  assert.equal((await run(asString, { cardIdentifier: '591' })).outcome, 'loaded', 'review: a record held as a JSON string');
+  const specExample = { status: 'Success', message: { request: { 'card Identifier': PAN }, response: { success: 'true', message: 'Could not find the card' }, success: true } };
+  assert.equal((await run(specExample)).outcome, 'unknown', "the spec's contradictory example");
+  assert.equal((await run({ status: 'Success', message: [1] })).outcome, 'unknown', 'review: an array');
+  assert.equal((await run({ status: 'Success', message: { request: {}, response: { success: false, message: 'Card must be in allocated state to load.' } } })).outcome, 'declined');
+});
+
+// --- Tokens -------------------------------------------------------------------
+
+test('the token is cached, renewed near expiry, and concurrent calls share one login', async () => {
+  const { client, count } = fakePayCentral({ '/authenticate': [LOGIN_OK()], '/card/balance': [ok({ balance: '1' })] });
+  await Promise.all([client.cardBalance('1'), client.cardBalance('2'), client.cardBalance('3')]);
+  assert.equal(count('/authenticate'), 1);
 
   _resetPayCentralState();
-  const expired = fakePayCentral({
-    '/authenticate': [resp(200, { token: fakeJwt(Math.floor(Date.now() / 1000) + 30) })],
-    '/card/balance': [resp(200, { status: 'Success', balance: '1' })],
-  });
-  await expired.client.cardBalance('591');
-  await expired.client.cardBalance('591');
-  assert.equal(expired.calls.filter((c) => c.path === '/authenticate').length, 2, 'a token within a minute of expiry is renewed');
+  const soon = fakePayCentral({ '/authenticate': [resp(200, { token: fakeJwt(Math.floor(Date.now() / 1000) + 30) })], '/card/balance': [ok({ balance: '1' })] });
+  await soon.client.cardBalance('1');
+  await soon.client.cardBalance('1');
+  assert.equal(soon.count('/authenticate'), 2);
 });
 
-test('a failed login is AUTH_FAILED and the password never reaches a log', async () => {
-  const lines = [];
-  const orig = console.log;
-  console.log = (s) => lines.push(String(s));
-  try {
-    const { client } = fakePayCentral({ '/authenticate': [resp(200, { status: 'Failure', message: 'Invalid Credentials' })] });
-    await assert.rejects(client.authenticate(), { code: 'AUTH_FAILED' });
-  } finally {
-    console.log = orig;
-  }
-  assert.ok(!lines.join('\n').includes(LOGIN.password));
+test('a failed login is AUTH_FAILED, without PayCentral text or the password in message or logs', async () => {
+  const { logs } = await captureLogs(async () => {
+    const { client } = fakePayCentral({ '/authenticate': [resp(200, { status: 'Failure', message: `Invalid Credentials for ${LOGIN.email}` })] });
+    await assert.rejects(client.authenticate(), (e) => e.code === 'AUTH_FAILED' && !e.message.includes(LOGIN.email));
+  });
+  assert.ok(!logs.includes(LOGIN.password));
 });
+
+// --- Card data ------------------------------------------------------------------
 
 test('virtualAllocate hands back seq_no, last four and expiry: never the card number or security code', async () => {
-  const lines = [];
-  const orig = console.log;
-  console.log = (s) => lines.push(String(s));
-  let r;
-  try {
+  const { result, logs } = await captureLogs(async () => {
     const { client, calls } = fakePayCentral({
-      '/authenticate': [resp(200, { token: futureToken() })],
-      '/card/virtualAllocate': [resp(200, { status: 'Success', message: 'Card created Successfully', card_no: PAN, seq_no: '591', expiry_date: '2029-07-20', secure_code: Number(CVV) })],
+      '/authenticate': [LOGIN_OK()],
+      '/card/balance': [notFoundCard()],
+      '/card/virtualAllocate': [ok({ message: `Card ${PAN_GROUPED} issued, CVV ${CVV}`, card_no: PAN, seq_no: '591', expiry_date: '2029-07-20', secure_code: Number(CVV) })],
     });
-    r = await client.virtualAllocate({ cellphoneNumber: '27820000000', firstName: 'Test', lastName: 'Holder', idOrPassportNumber: 'TESTPASSPORT1' });
+    const r = await client.virtualAllocate({ cellphoneNumber: '27820000000', firstName: 'Test', lastName: 'Holder', idOrPassportNumber: 'TESTPASSPORT1' });
     assert.equal(calls.find((c) => c.path === '/card/virtualAllocate').body.loadAmount, '0');
-  } finally {
-    console.log = orig;
-  }
-  assert.deepEqual(r, { ok: true, message: 'Card created Successfully', seqNo: '591', last4: PAN.slice(-4), expiryDate: '2029-07-20' });
-  const text = JSON.stringify(r) + lines.join('\n');
-  assert.ok(!text.includes(PAN), 'no card number');
+    return r;
+  });
+  assert.deepEqual(result, { outcome: 'created', ok: true, message: 'Card created', seqNo: '591', last4: PAN.slice(-4), expiryDate: '2029-07-20' });
+  const text = JSON.stringify(result) + logs;
+  assert.ok(!text.includes(PAN) && !text.includes(PAN_GROUPED), 'no card number');
   assert.ok(!text.includes(CVV), 'no security code');
 });
 
-test('redactPayCentral masks card numbers, security codes, IDs, contacts, secrets, documents and long digit runs', () => {
-  const out = redactPayCentral({
-    cardNumber: PAN,
-    card_no: PAN,
-    secure_code: CVV,
-    idOrPassport: '9876543210123',
-    emailId: 'holder@example.com',
-    cellPhoneNumber: '27820000000',
-    idDocumentContent: 'base64-content',
-    nested: { request: { 'card Identifier': PAN }, note: `ref ${PAN} end` },
-    seq_no: '591',
+test('review: a failure message carrying a card number comes back masked', async () => {
+  const { client } = fakePayCentral({
+    '/authenticate': [LOGIN_OK()],
+    '/card/balance': [notFoundCard()],
+    '/card/virtualAllocate': [resp(200, { status: 'Failure', message: `Card ${PAN_GROUPED} could not be issued` })],
   });
-  const text = JSON.stringify(out);
-  for (const secret of [PAN, CVV, '9876543210123', 'holder@example.com', '27820000000', 'base64-content']) assert.ok(!text.includes(secret), secret);
-  assert.equal(out.card_no, `•••${PAN.slice(-4)}`);
-  assert.equal(out.secure_code, '[hidden]');
-  assert.equal(out.seq_no, '591', 'a sequence number is not a secret');
+  const r = await client.virtualAllocate({ cellphoneNumber: '27820000000', firstName: 'T' });
+  assert.equal(r.outcome, 'declined');
+  assert.ok(!r.message.includes(PAN_GROUPED));
 });
 
-test('loadReference: deterministic, 12 digits, never a leading zero, different per load', () => {
+test('review: bad load amounts on virtualAllocate are refused, not silently zero', async () => {
+  const { client } = fakePayCentral({ '/authenticate': [LOGIN_OK()] });
+  await assert.rejects(client.virtualAllocate({ cellphoneNumber: '27820000000', firstName: 'T', loadCents: -100 }), { code: 'BAD_INPUT' });
+  await assert.rejects(client.virtualAllocate({ cellphoneNumber: '27820000000', firstName: 'T', loadCents: Number.NaN }), { code: 'BAD_INPUT' });
+});
+
+test('cardInfo returns a fixed safe set, never the raw record', async () => {
+  const { client } = fakePayCentral({
+    '/authenticate': [LOGIN_OK()],
+    '/card/info': [ok({ cardNumber: PAN, firstName: 'Steve', idOrPassport: '9876543210', emailId: 'x@example.com', cellPhoneNumber: '27112340859', cardStatusId: '1', currentbalance: 0 })],
+  });
+  const r = await client.cardInfo('591');
+  assert.deepEqual(r, { ok: true, statusId: '1', last4: PAN.slice(-4), balanceCents: 0 });
+});
+
+test('review: redaction covers dashed and grouped card numbers, numbers, JSON in strings and more keys', () => {
+  const out = redactPayCentral({
+    card_no: PAN.replace(/(\d{4})(?=\d)/g, '$1-'),
+    cardNo: Number(PAN),
+    note: `paid with ${PAN_GROUPED}, call 082 123 4567`,
+    secureCode: CVV,
+    Authorization: 'Bearer abc',
+    cellNumber: '27820000000',
+    mobile: '0821234567',
+    'Email Address': 'holder@example.com',
+    firstName: 'Steve',
+    addressLine1: '1 Main Road',
+    idDocument: 'base64-content',
+    record: JSON.stringify({ cellPhoneNumber: '27112340859', secure_code: CVV, idOrPassport: 'A1234567' }),
+    seq_no: '591',
+    when: '2021-07-20 17:39:15',
+  });
+  const text = JSON.stringify(out);
+  for (const secret of [PAN, PAN_GROUPED, CVV, 'Bearer abc', '27820000000', '0821234567', '082 123 4567', 'holder@example.com', 'Steve', '1 Main Road', 'base64-content', '27112340859', 'A1234567']) {
+    assert.ok(!text.includes(secret), secret);
+  }
+  assert.equal(out.seq_no, '591');
+  assert.equal(out.when, '2021-07-20 17:39:15', 'dates survive');
+  assert.equal(safeMessage(`card ${PAN}`), `card •••${PAN.slice(-4)}`);
+});
+
+// --- Pure helpers ---------------------------------------------------------------
+
+test('loadReference: deterministic, 12 digits, no leading zero, lengths that look like timestamps refused', () => {
   const a = loadReference('card-load-1');
   assert.match(a, /^[1-9]\d{11}$/);
   assert.equal(loadReference('card-load-1'), a);
   assert.notEqual(loadReference('card-load-2'), a);
   assert.match(loadReference('card-load-1', 15), /^[1-9]\d{14}$/);
+  assert.throws(() => loadReference('k', 13), { code: 'BAD_INPUT' });
+  assert.throws(() => loadReference('k', 10), { code: 'BAD_INPUT' });
   assert.throws(() => loadReference(''), { code: 'BAD_INPUT' });
 });
 
-test('amounts: whole rands until cents are confirmed; parsing never uses float math', () => {
+test('amounts: whole rands until cents are confirmed; safe integers only; parsing without float math', () => {
   assert.equal(centsToRands(10000), '100');
   assert.throws(() => centsToRands(1250), { code: 'AMOUNT_NOT_WHOLE_RANDS' });
   assert.equal(centsToRands(1250, { wholeRands: false }), '12.50');
   assert.equal(centsToRands(5, { wholeRands: false }), '0.05');
   assert.throws(() => centsToRands(0), { code: 'BAD_INPUT' });
+  assert.throws(() => centsToRands(1e21), { code: 'BAD_INPUT' });
   assert.equal(randsToCents('52.00'), 5200);
   assert.equal(randsToCents(25.4), 2540);
+  assert.equal(randsToCents('25,40'), 2540, 'review: decimal comma');
+  assert.equal(randsToCents('1,250.00'), 125000);
+  assert.ok(Object.is(randsToCents('-0.00'), 0), 'review: no negative zero');
   assert.equal(randsToCents('-0.10'), -10);
   assert.equal(randsToCents('abc'), null);
+  assert.throws(() => statementDate('not a date'), { code: 'BAD_INPUT' });
 });
 
-test('transport errors: refused while connecting is the door; a reset after connecting is unknown', () => {
-  assert.equal(classifyTransportError(doorErr()), 'DOOR');
-  assert.equal(classifyTransportError(Object.assign(new Error('x'), { cause: { code: 'ECONNREFUSED' } })), 'DOOR');
-  assert.equal(classifyTransportError(new Error('Client network socket disconnected before secure TLS connection was established')), 'DOOR');
-  assert.equal(classifyTransportError(new Error('Proxy response (403) !== 200 when HTTP Tunneling')), 'DOOR');
-  assert.equal(classifyTransportError(resetErr()), 'UNKNOWN');
+test('a proxy refusing the tunnel is recognised as never sent', () => {
+  assert.equal(isTunnelRefusal(Object.assign(new Error('fetch failed'), { cause: new Error('Proxy response (403) !== 200 when HTTP Tunneling') })), true);
+  assert.equal(isTunnelRefusal(new Error('other side closed')), false);
 });
 
-test('one fixed egress: with PAYCENTRAL_EGRESS_PROXY every call shares one proxy connection', () => {
+test('one fixed egress: one shared proxy connection; a bad proxy URL is refused without echoing it', () => {
   const client = new PayCentralClient({ ...LOGIN, egressProxy: 'http://proxy.example.test:8080' });
-  const a = client._dispatcher();
-  const b = client._dispatcher();
+  const a = client._connection();
+  const b = client._connection();
   assert.ok(a.dispatcher instanceof ProxyAgent);
   assert.equal(a.dispatcher, b.dispatcher);
-  assert.equal(a.fresh, false);
-  const direct = new PayCentralClient({ ...LOGIN })._dispatcher();
-  assert.equal(direct.fresh, true);
+  assert.equal(a.shared, true);
+  const secretish = ['http://user', 'hunter2-test@:bad'].join(':');
+  assert.throws(() => new PayCentralClient({ ...LOGIN, egressProxy: secretish }), (e) => e.code === 'CONFIG' && !e.message.includes('hunter2-test'));
+  const direct = new PayCentralClient({ ...LOGIN })._connection();
+  assert.equal(direct.shared, false);
+  assert.deepEqual(direct.state, { connects: 0, connectFailures: 0 });
   direct.dispatcher.close();
   _resetPayCentralState();
 });
 
-test('configuration: the client refuses to start without a login; the check reports booleans', () => {
+test('review: a call has one time budget; past it nothing more is sent', async () => {
+  const { client, count } = fakePayCentral({ '/authenticate': [LOGIN_OK()] }, { callBudgetMs: 0 });
+  await assert.rejects(client.authenticate(), { code: 'TRANSPORT_FAILED' });
+  assert.equal(count('/authenticate'), 0);
+});
+
+test('configuration: no login, no client; the check reports booleans', () => {
   assert.throws(() => new PayCentralClient({ email: '', password: '' }), { code: 'CONFIG' });
   assert.equal(payCentralConfigured({}), false);
   assert.equal(payCentralConfigured({ PAYCENTRAL_API_EMAIL: 'a', PAYCENTRAL_API_PASSWORD: 'b' }), true);
   assert.equal(jwtExpiryMs('not-a-jwt'), null);
 });
 
-test('the probe route needs the internal key, only logs in, and never returns a secret', () => {
+test('the probe needs the internal key, stays read-only and bounded, and never resets shared state', () => {
   const src = readFileSync(new URL('../pages/api/internal/paycentral-probe.js', import.meta.url), 'utf8');
   assert.match(src, /x-internal-api-key/);
   assert.match(src, /status\(401\)/);
-  assert.doesNotMatch(src, /loadCard|virtualAllocate|allocatePhysical|freezeCard|unfreezeCard/, 'read-only: no card or money call');
-  assert.match(src, /password: !!process\.env\.PAYCENTRAL_API_PASSWORD/, 'the password is reported as a boolean');
-  assert.doesNotMatch(src, /egress:\s*process\.env\.PAYCENTRAL_EGRESS_PROXY,/, 'the proxy URL (it may hold credentials) is never returned');
+  assert.doesNotMatch(src, /loadCard|virtualAllocate|allocatePhysical|freezeCard|unfreezeCard/, 'no card or money call');
+  assert.doesNotMatch(src, /_resetPayCentralState/, 'review: never closes connections other requests use');
+  assert.match(src, /WALL_BUDGET_MS/);
+  assert.match(src, /readAttempts: 1/);
+  assert.match(src, /password: !!process\.env\.PAYCENTRAL_API_PASSWORD/);
 });

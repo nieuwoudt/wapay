@@ -4,27 +4,31 @@
 
 ---
 
-## 2026-11-16 (144) — PayCentral client: one whitelisted address handled in code, card data kept out, a probe
+## 2026-11-16 (144) — PayCentral client: one whitelisted address handled in code, money calls sent once, card data kept out, a probe
 
 PayCentral whitelists one IP (155.121.235.0), but Vercel's Static IPs are a pair that Vercel cannot
 pin. The changes:
-- `lib/paycentral.js` is the client for the staging API v2.1.5: login with a cached token, virtual
-  and physical card allocation, loads with a reference derived from the idemKey, the audit-log
-  check, balance, statement, card info, freeze and unfreeze.
-- **Door retry.** A call refused before it reached PayCentral (connection refused or timed out
-  while connecting, TLS cut before the request, a proxy refusal, a 403 without PayCentral's JSON)
-  is retried on a fresh connection, up to 6 times within 15 seconds.
-- **Never guess on money.** A money call that may have reached PayCentral is never retried and
-  raises `TRANSPORT_INDETERMINATE` with its reference.
+- `lib/paycentral.js` is the client for the staging API v2.1.5: login with a cached single-flight
+  token, virtual and physical card allocation, loads with a reference derived from the idemKey,
+  `checkReference` (outcomes `not_found`, `loaded`, `declined`, `unknown`), balance, statement,
+  card info, freeze and unfreeze.
+- **"Never sent"** means that request's socket never connected, counted by our own connector.
+  Only then, or for a read refused with a non-JSON 403, is a call retried on a fresh connection.
+- **Money and state calls** are sent once, after a door check on the same connection. Redirects
+  are never followed. Anything unclear after sending is `TRANSPORT_INDETERMINATE` or outcome
+  `unknown`, never a resend.
+- **One time budget** per call (25 s).
 - **One fixed address.** `PAYCENTRAL_EGRESS_PROXY` routes every call through one address for
   production.
-- **Card data.** The card number and security code from `virtualAllocate` never leave the client
-  (golden thread 3.5), and every body is redacted before logging.
-- **Probe.** `GET /api/internal/paycentral-probe` (internal key, read-only) measures the door
-  refusals and gives a verdict.
-- **Docs.** env.template, `docs/CARDS.md` §0.11, CAPABILITIES.
+- **Card data.** The card number and security code never leave the client (golden thread 3.5).
+  Messages, records and logs are redacted.
+- **Probe.** `GET /api/internal/paycentral-probe` (internal key, read-only, about 45 s at most)
+  counts how the door refuses us.
 
-Tests: `tests/paycentral.test.mjs`, 17 tests. Not wired to customers.
+A read-only review before merge found two ways an earlier draft could resend a processed load (a
+followed redirect, a 403 page after processing) plus several smaller issues; all are fixed and
+locked (BUGLOG #148). Tests: `tests/paycentral.test.mjs` (26), plus a local check on a real socket.
+Docs: `docs/CARDS.md` §0.11, CAPABILITIES, GOLDEN_THREAD 3.5, env.template. Not wired to customers.
 
 ---
 

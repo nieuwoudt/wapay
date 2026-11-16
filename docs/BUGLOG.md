@@ -4,6 +4,40 @@
 
 ---
 
+## 148. The new PayCentral client could send a processed load twice: a followed redirect or a non-JSON 403 read as "never reached PayCentral"
+
+- **Symptom (2026-11-16, read-only review before merge; never in production):** against a local
+  test server, one `loadCard` call produced 3 loads when the server answered 303, and one
+  `virtualAllocate` with a load produced 6 cards when the server answered 403 HTML. Both ended in
+  `DOOR_REFUSED`, which tells the caller "nothing was sent": a caller would have released the hold.
+- **Root cause.** The door retry (one whitelisted address, Vercel's pair of addresses) judged
+  "never reached" from error codes and from the shape of a 403:
+  - fetch followed redirects, so a failed follow-up connection made a processed POST look refused;
+  - a 403 page can come after the application processed the call, for example from a firewall
+    that inspects responses.
+
+  Also found in the same review:
+  - unreadable answers came back as plain failures;
+  - the `indeterminate` flag was missing on a 5xx;
+  - messages and the audit record were not fully redacted;
+  - the probe could outrun Vercel's 60 seconds and closed a shared proxy connection.
+- **Fix (CHANGELOG 144).**
+  - "Never sent" now means only that this request's socket never connected, counted by our own
+    connector.
+  - A money or state call is sent once, on a connection whose harmless door check (a balance
+    read) got through.
+  - Redirects are never followed.
+  - Anything unclear after sending is `TRANSPORT_INDETERMINATE` or outcome `unknown`, never a
+    resend.
+  - `checkReference` returns `not_found`, `loaded`, `declined` or `unknown`, and checks the card
+    and amount.
+  - Every message is redacted; `cardInfo` returns a fixed safe set.
+  - One time budget per call; the probe has a wall budget and resets nothing.
+- **Guard:** `tests/paycentral.test.mjs`, the tests marked "review" (redirect, 403 page after
+  sending, 5xx flag, unclear outcomes, message and record redaction, the budget, the probe). A
+  local check against a real socket confirmed that a closed port is refused 6 times and a
+  redirect after a load is not resent.
+
 ## 147. An operator pay-out link said "all clear" and the rail refused it: OTT now asks PayShap for an ID number, and the operator pay-out read only its own static field list
 
 - **Symptom (2026-11-09):** the founder tapped an operator pay-out link (`/ops/payout`) for R2,863.70 by PayShap to a customer's saved TymeBank account. The dry run on the page showed no blockers. The tap failed with BAD_RECIPIENT and no money moved.
