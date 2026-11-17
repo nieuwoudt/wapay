@@ -87,6 +87,7 @@ Six kinds of guard are in use. A new operator route uses `requireAdmin` or `requ
 | `/api/admin/init-templates, /list-wabas` | GET | internal key (since CHANGELOG 141) | Legacy: refreshes templates; lists WhatsApp Business Accounts with the token. |
 | `/api/internal/card-refund` | GET, POST | internal key (requireInternalAuth) | Dry run or booking of a card refund. |
 | `/api/internal/card-chargeback` | GET, POST | internal key (requireInternalAuth) | Dry run or booking of a card chargeback: the wallet gives back what it holds, the rest is WaPay's loss. |
+| `/api/internal/card-withhold` | GET, POST | internal key (requireInternalAuth) | Dry run or booking of a withhold of disputed card money into a WaPay-held liability, or its release back to the same wallet. |
 | `/api/internal/ops-payout` | POST | internal key | Operator pay-out; dry run by default. |
 | `/api/internal/payout-hold, /payout-freeze, /payout-review` | GET, POST | internal key | Global hold and approval mode; per-account freeze; review list with clear and freeze. |
 | `/api/internal/ops-reply, /audit-run, /audit-resolve, /compliance-check, /template-create, /blu-voucher-probe` | POST (some GET) | internal key | Operator reply; audit run and resolve; compliance verdict; templates through the Graph API; Blu voucher status probe. |
@@ -296,12 +297,12 @@ The pay-out float is read before every pay-out; float loads are recorded in the 
 - **Since:** CHANGELOG 94, 95, 101, 111, 120
 - **Described in:** docs/CAPABILITIES.md and docs/GROWTH_DASHBOARD.md
 
-### Card refund and chargeback routes
+### Card refund, chargeback and withhold routes
 
-Books a refund the founder made in the PayFast or Adumo dashboard as the exact reversal of the card credit, never below zero. Since CHANGELOG 143 also books a chargeback (the cardholder's bank took the payment back): the wallet gives back its available balance, the rest goes to `EXPENSE:CHARGEBACK:<RAIL>`, pay-out holds are not touched, and a refund and a chargeback of the same payment refuse each other.
+Books a refund the founder made in the PayFast or Adumo dashboard as the exact reversal of the card credit, never below zero. Since CHANGELOG 143 also books a chargeback (the cardholder's bank took the payment back): the wallet gives back its available balance, the rest goes to `EXPENSE:CHARGEBACK:<RAIL>`, pay-out holds are not touched, and a refund and a chargeback of the same payment refuse each other. Since CHANGELOG 146 disputed card money can also be withheld before anything is refunded: the wallet the load credited gives at most its available balance to `LIABILITY:CARD_DISPUTE:<RAIL>`, a release is the exact mirror, and a later refund or chargeback of that load posts the release first in the same transaction, so the withheld money is used before the balance. Withheld money is still owed: `/api/admin/payout-reconciliation` reports it as `cardDisputes` with `owedTotalCents` (wallets plus withheld) and checks that the liability equals the open withholds. The customer's activity and the record the agent reads show the withheld amount apart from the balance; nothing is sent to the customer.
 
-- **Code:** `lib/card-refund.js`, `lib/ledger-core.js` (`buildReversal`, `buildChargeback`), `pages/api/internal/card-refund.js`, `pages/api/internal/card-chargeback.js`, `lib/card-settlement.js`, `pages/api/payfast/itn.js`
-- **Routes:** `/api/internal/card-refund`, `/api/internal/card-chargeback`
+- **Code:** `lib/card-refund.js`, `lib/ledger-core.js` (`buildReversal`, `buildChargeback`, `buildCardWithhold`, `buildCardWithholdRelease`), `pages/api/internal/card-refund.js`, `pages/api/internal/card-chargeback.js`, `pages/api/internal/card-withhold.js`, `lib/card-settlement.js`, `pages/api/payfast/itn.js`, `lib/context-pack.js` (the withheld figure the agent reads), `pages/api/admin/payout-reconciliation.js` (`cardDisputes`)
+- **Routes:** `/api/internal/card-refund`, `/api/internal/card-chargeback`, `/api/internal/card-withhold`
 - **Data:** JournalEntry.externalRef; payment_requests.status REFUNDED (migration 20261109_payment_request_refunded); audit_log
 - **Tests:** `tests/card-refund.test.mjs`
 - **Since:** CHANGELOG 135 (2026-11-09)
