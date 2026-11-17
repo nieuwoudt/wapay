@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-11-17 (143) — A card chargeback is booked in the ledger: the wallet gives back what it still holds, never below zero, and the rest is WaPay's loss
+
+When the cardholder's bank takes a card payment back, PayFast or Adumo reverses it from the merchant account whether
+or not WaPay still holds the money. The card-refund route (135) refuses SHORT in that case, so a chargeback on money
+that had already been paid out could not be recorded at all. The new internal route records it. It calls no processor:
+the processor already took the money.
+
+    GET  /api/internal/card-chargeback?providerRef=<pf_payment_id>   dry run: the postings, the wallet part, the loss part, the link, referenceCheck
+    POST /api/internal/card-chargeback  {"providerRef":"<pf_payment_id>","reason":"chargeback: goods not received","by":"founder"}
+
+Same inputs, header and `onlyCharge` rule as `/api/internal/card-refund`. No migration: it needs the REFUNDED status of
+`20261109_payment_request_refunded`, which is applied.
+
+- **The books** (`buildChargeback` in `lib/ledger-core.js`, idemKey `card-chargeback-<original idemKey>`, source
+  still `REVERSAL_LOAD_<RAIL>`):
+  - CLEARING:<rail> gives back the gross and the deposit fee revenue is reversed, exactly as a refund;
+  - the credited wallet gives back at most its AVAILABLE balance, worked out inside the posting transaction from a
+    fresh read and never taken from the request;
+  - the remainder is a debit to the new account `EXPENSE:CHARGEBACK:<RAIL>` (`ACCT.chargebackLoss`), so the entry
+    balances and margin counts the loss. Account codes are free strings: no schema change.
+- **Holds are not reachable.** Money set aside for a pay-out awaiting approval stays set aside; releasing a hold is the
+  founder's decision. The dry run shows `pendingCents` so the operator can reject the pay-out first if the hold should
+  cover the chargeback.
+- **Never below zero.** A balance that moves between the read and the debit refuses BALANCE_MOVED (409) and writes
+  nothing; call again. SHORT never refuses a chargeback.
+- **One take-back per payment.** A refund and a chargeback of the same card load refuse each other (ALREADY_REVERSED,
+  `reversedAs` says which exists); nothing is repaired across kinds. A second chargeback call finishes a missing link
+  mark, audit row or alert, with the first call's split.
+- **Readers:** the paid link closes as REFUNDED and the intent's `metadata.refund` gains `kind: "CHARGEBACK"` and the
+  loss, so the link map, the agent, the watchlist and the own-link rule stop counting it as paid. The customer's
+  activity names it "reversed by the card's bank". Audit event CARD_CHARGEBACK; one masked ops alert
+  (`card-chargeback:<idemKey>`); the customer is sent nothing.
+- **Not changed:** the admin metrics and growth routes (their reversal netting is a separate fix).
+- **Rule:** docs/GOLDEN_THREAD.md 2.15 extended (and 2.10 names the chargeback beside the refund).
+- **Tests:** `tests/card-refund.test.mjs` +7 (the split and the trial balance, a full and an empty wallet, a pay-out
+  hold untouched, refund and chargeback refusing each other with the repair, the balance that moves, `buildChargeback`
+  bounds, the route). Suite 1,531/1,531 and `next build` green on `c4c15b6` plus this change.
+
 ## 2026-11-13 (142) — The architecture record re-baselined after 139 commits: the whole system on one page, map Version 16, two golden-thread rules corrected
 
 No code. A read-only review compared every document of record with the tree at `6df86a2`.

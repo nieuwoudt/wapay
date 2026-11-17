@@ -539,3 +539,221 @@ test('the route: internal key first, GET is the dry run, POST books; it calls no
   assert.match(lib, /opsPersonAlert/, 'the one outbound line is the masked ops alert');
   assert.equal(cardRefundAlertText({ plan: { rail: 'PAYFAST', accountId: ACC, phone: '•••1332', original: { providerRef: '3051111585' }, amounts: { chargedCents: 300000, walletDebitCents: 287170, feeReversedCents: 12830 }, paymentRequest: null }, reason: 'x', by: 'y' }).includes('27600001332'), false);
 });
+
+// ---------------------------------------------------------------------------
+// Chargebacks (2026-11-17): the cardholder's bank took a card payment back after the money had left the balance.
+// The account here is a neutral fixture: one R3,000 link paid by card, then all but 70 cents sent on.
+// ---------------------------------------------------------------------------
+const { buildChargeback } = await import('../lib/ledger-core.js');
+const { planCardChargeback, postCardChargeback, chargebackIdemKeyFor, cardChargebackAlertText, REVERSAL_KIND } = await import('../lib/card-refund.js');
+const { default: chargebackHandler } = await import('../pages/api/internal/card-chargeback.js');
+
+const CB = 'cacctchargebackfixture0001';
+const CB_WA = '27600000990';
+
+/** A link paid by card on the fixture account, exactly as checkout + the ITN leave it (the load names its charge). */
+async function seedChargeback({ leaveCents = 70, heldCents = 0 } = {}) {
+  const db = memoryDb();
+  db.t.account.push({ id: CB, waId: CB_WA }, { id: OTHER, waId: '27600000077' });
+  db.t.wallet.push({ id: 'wc', accountId: CB, balanceType: 'SPEND', availableCents: 0, pendingCents: 0 }, { id: 'wo', accountId: OTHER, balanceType: 'SPEND', availableCents: 0, pendingCents: 0 });
+  const code = 'PRCHGBKA';
+  const amountCents = 300000;
+  const feeCents = paymentRequestFeeCents(amountCents, 'PAYFAST');
+  const idemKey = `wapay-payreq-${code}`;
+  db.t.paymentRequest.push({ id: code, accountId: CB, amountCents, status: 'PAID', payerRef: 'PAYFAST:3099990001', paidAt: new Date(), createdAt: new Date(), expiresAt: new Date(Date.now() + 6 * 86400e3) });
+  db.t.providerRequest.push({ id: `pfreq-${code}`, provider: 'PAYFAST', route: 'payrequest', idemKey, status: 'SUCCESS', providerRef: '3099990001', accountId: CB, requestTs: new Date(), metadata: { accountId: CB, waId: CB_WA, amountCents: amountCents - feeCents, feeCents, grossCents: amountCents, requestCode: code, rail: 'PAYFAST', payerMsisdn: CB_WA } });
+  await postEntry({ ...buildLoad({ accountId: CB, rail: 'PAYFAST', faceCents: amountCents - feeCents, customerFeeCents: feeCents, idemKey }), externalRef: '3099990001' }, { tx: db });
+  // The money left WaPay before the bank took the payment back (here: sent on; a pay-out looks the same to the wallet).
+  const credited = amountCents - feeCents;
+  if (credited - leaveCents > 0) await postEntry(buildSend({ fromAccountId: CB, toAccountId: OTHER, amountCents: credited - leaveCents, idemKey: 'send-before-chargeback' }), { tx: db });
+  // A pay-out awaiting approval sets money aside: available goes down, pending up.
+  if (heldCents) {
+    const w = db.t.wallet.find((x) => x.accountId === CB);
+    w.availableCents -= heldCents;
+    w.pendingCents += heldCents;
+  }
+  return { db, code, idemKey };
+}
+
+test('chargeback: the wallet gives back what it holds, the rest is WaPay\'s loss; the dry run writes nothing', async () => {
+  const { db, code, idemKey } = await seedChargeback();
+  assert.equal(balanceOf(db, CB), 70);
+  const before = structuredClone(db.t);
+
+  const plan = await planCardChargeback({ prisma: db, providerRef: '3099990001' });
+  assert.equal(plan.ok, true);
+  assert.equal(plan.kind, 'CHARGEBACK');
+  assert.equal(plan.lossAccount, 'EXPENSE:CHARGEBACK:PAYFAST');
+  assert.deepEqual(plan.amounts, { chargedCents: 300000, walletCreditCents: 287170, feeRevenueCents: 12830, walletDebitCents: 70, feeReversedCents: 12830, lossCents: 287100 });
+  assert.deepEqual(plan.wallet, { balanceType: 'SPEND', availableCents: 70, pendingCents: 0, debitCents: 70, afterCents: 0 });
+  assert.equal(plan.reversal.idemKey, chargebackIdemKeyFor(idemKey));
+  assert.equal(plan.reversal.source, 'REVERSAL_LOAD_PAYFAST', 'readers that net REVERSAL_<X> against X keep working');
+  assert.deepEqual(db.t, before, 'a dry run writes nothing');
+  // The refund of the same payment is still SHORT, as before: a chargeback is the only way to book it.
+  assert.equal((await planCardRefund({ prisma: db, providerRef: '3099990001' })).refused, 'SHORT');
+
+  const { sent, deps } = alerts();
+  const out = await postCardChargeback({ prisma: db, providerRef: '3099990001', reason: 'chargeback, goods not received', by: 'founder', deps });
+  assert.equal(out.ok, true);
+  assert.equal(out.reversed, true);
+  assert.deepEqual({ wallet: out.amounts.walletDebitCents, loss: out.amounts.lossCents }, { wallet: 70, loss: 287100 });
+  assert.equal(balanceOf(db, CB), 0, 'never below zero');
+  assert.equal(out.wallet.afterCents, 0);
+
+  const rev = db.t.journalEntry.find((e) => e.idemKey === chargebackIdemKeyFor(idemKey));
+  assert.equal(rev.source, 'REVERSAL_LOAD_PAYFAST');
+  assert.equal(rev.externalRef, '3099990001');
+  assert.equal(rev.metadata.kind, 'CARD_CHARGEBACK');
+  assert.equal(rev.metadata.lossCents, 287100);
+  const lines = db.t.journalLine.filter((l) => l.entryId === rev.id).map((l) => [l.accountCode, l.debitCents ?? 0, l.creditCents ?? 0]).sort();
+  assert.deepEqual(lines, [['CLEARING:PAYFAST', 0, 300000], ['EXPENSE:CHARGEBACK:PAYFAST', 287100, 0], ['REVENUE:FEE:DEPOSIT', 12830, 0], [`WALLET:${CB}:SPEND`, 70, 0]].sort());
+  assert.equal(trialBalance(db), 0, 'the books balance');
+  assert.equal(derived(db, CB), balanceOf(db, CB), 'the stored balance equals the journal');
+  assert.equal(netOf(db, 'CLEARING:PAYFAST'), 0, 'clearing gave back the whole gross');
+  assert.equal(netOf(db, 'REVENUE:FEE:DEPOSIT'), 0, 'the fee was never earned');
+
+  assert.equal(db.t.paymentRequest.find((r) => r.id === code).status, 'REFUNDED', 'the link is closed');
+  const intent = db.t.providerRequest.find((r) => r.idemKey === idemKey);
+  assert.equal(intent.status, 'SUCCESS');
+  assert.equal(intent.metadata.refund.kind, 'CHARGEBACK', 'the readers that read metadata.refund stop counting it as paid');
+  assert.equal(intent.metadata.refund.lossCents, 287100);
+
+  assert.equal(db.t.auditLog.length, 1);
+  assert.equal(db.t.auditLog[0].event, 'CARD_CHARGEBACK');
+  assert.match(db.t.auditLog[0].id, /^audit_card_chargeback_/);
+  assert.equal(db.t.auditLog[0].metadata.lossCents, 287100);
+  assert.equal(db.t.auditLog[0].metadata.lossAccount, 'EXPENSE:CHARGEBACK:PAYFAST');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].key, `card-chargeback:${idemKey}`);
+  assert.match(sent[0].text, /Chargeback booked: R3,000\.00 charged by card \(PayFast …0001/);
+  assert.match(sent[0].text, /R0\.70 off the balance, now R0\.00; fee revenue R128\.30 reversed; R2,871\.00 written off as WaPay's chargeback loss/);
+  assert.match(sent[0].text, /No message went to the customer/);
+  assert.ok(!/27600000990/.test(JSON.stringify({ out, texts: sent.map((s) => s.text), audit: db.t.auditLog })), 'masked numbers only');
+});
+
+test('chargeback: a wallet that still holds the credit gives it all back (no loss line); an empty one gives nothing', async () => {
+  const full = await seedChargeback({ leaveCents: 287170 });
+  const a = await postCardChargeback({ prisma: full.db, providerRef: '3099990001', reason: 'chargeback', deps: alerts().deps });
+  assert.deepEqual({ wallet: a.amounts.walletDebitCents, loss: a.amounts.lossCents }, { wallet: 287170, loss: 0 });
+  assert.equal(netOf(full.db, 'EXPENSE:CHARGEBACK:PAYFAST'), 0, 'no loss line at all');
+  assert.equal(balanceOf(full.db, CB), 0);
+  assert.equal(trialBalance(full.db), 0);
+
+  const empty = await seedChargeback({ leaveCents: 0 });
+  const b = await postCardChargeback({ prisma: empty.db, providerRef: '3099990001', reason: 'chargeback', deps: alerts().deps });
+  assert.deepEqual({ wallet: b.amounts.walletDebitCents, loss: b.amounts.lossCents }, { wallet: 0, loss: 287170 });
+  const rev = empty.db.t.journalEntry.find((e) => e.idemKey === chargebackIdemKeyFor(empty.idemKey));
+  assert.equal(empty.db.t.journalLine.filter((l) => l.entryId === rev.id && l.accountCode.startsWith('WALLET:')).length, 0, 'no zero wallet line');
+  assert.equal(balanceOf(empty.db, CB), 0);
+  assert.equal(derived(empty.db, CB), 0);
+  assert.equal(trialBalance(empty.db), 0);
+});
+
+test('chargeback: money set aside for a pay-out awaiting approval is not reachable; only the available balance is', async () => {
+  const { db } = await seedChargeback({ leaveCents: 270000, heldCents: 266800 });
+  assert.equal(balanceOf(db, CB), 3200);
+  const plan = await planCardChargeback({ prisma: db, providerRef: '3099990001' });
+  assert.equal(plan.wallet.pendingCents, 266800, 'the dry run shows the hold');
+  assert.equal(plan.amounts.walletDebitCents, 3200);
+  const out = await postCardChargeback({ prisma: db, providerRef: '3099990001', reason: 'chargeback', deps: alerts().deps });
+  assert.equal(out.amounts.walletDebitCents, 3200);
+  assert.equal(out.amounts.lossCents, 287170 - 3200);
+  const w = db.t.wallet.find((x) => x.accountId === CB);
+  assert.deepEqual({ available: w.availableCents, pending: w.pendingCents }, { available: 0, pending: 266800 }, 'the hold is untouched');
+});
+
+test('a refund and a chargeback of the same payment refuse each other; a second chargeback repairs, never re-posts', async () => {
+  // Refund first (the wallet still holds the credit), then the bank's chargeback arrives: refused, nothing written.
+  const r = await seedChargeback({ leaveCents: 287170 });
+  assert.equal((await postCardRefund({ prisma: r.db, providerRef: '3099990001', reason: 'refunded in PayFast', deps: alerts().deps })).ok, true);
+  const afterRefund = structuredClone(r.db.t);
+  const cb = await postCardChargeback({ prisma: r.db, providerRef: '3099990001', reason: 'chargeback', deps: alerts().deps });
+  assert.equal(cb.refused, 'ALREADY_REVERSED');
+  assert.equal(cb.reversedAs, 'REFUND');
+  assert.equal(cb.repaired, undefined, 'nothing is repaired across kinds');
+  assert.equal(refusalStatus(cb.refused), 409);
+  assert.deepEqual(r.db.t, afterRefund);
+  assert.equal((await planCardChargeback({ prisma: r.db, providerRef: '3099990001' })).reversedAs, 'REFUND');
+
+  // Chargeback first: the refund is refused the same way.
+  const c = await seedChargeback();
+  const { sent, seen, deps } = alerts();
+  assert.equal((await postCardChargeback({ prisma: c.db, providerRef: '3099990001', reason: 'chargeback', by: 'founder', deps })).ok, true);
+  const refund = await postCardRefund({ prisma: c.db, providerRef: '3099990001', reason: 'refund', deps });
+  assert.equal(refund.refused, 'ALREADY_REVERSED');
+  assert.equal(refund.reversedAs, 'CHARGEBACK');
+
+  // The same chargeback again: no second entry; a lost audit row and alert are finished, with the first call's split.
+  const entries = c.db.t.journalEntry.length;
+  c.db.t.auditLog.length = 0;
+  sent.length = 0;
+  seen.clear();
+  const again = await postCardChargeback({ prisma: c.db, providerRef: '3099990001', reason: 'chargeback', deps });
+  assert.equal(again.refused, 'ALREADY_REVERSED');
+  assert.equal(again.reversedAs, 'CHARGEBACK');
+  assert.equal(again.repaired.auditWritten, true);
+  assert.equal(c.db.t.journalEntry.length, entries);
+  assert.equal(c.db.t.auditLog[0].event, 'CARD_CHARGEBACK');
+  assert.equal(c.db.t.auditLog[0].metadata.lossCents, 287100);
+  assert.equal(c.db.t.auditLog[0].metadata.by, 'founder');
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].text, /R2,871\.00 written off/);
+  assert.equal(trialBalance(c.db), 0);
+});
+
+test('chargeback: a balance that moves between the read and the debit refuses BALANCE_MOVED and writes nothing', async () => {
+  const { db } = await seedChargeback();
+  // The read inside the transaction sees more than the wallet holds by the time the debit runs.
+  const stale = { ...db, wallet: { ...db.wallet, findFirst: async () => ({ availableCents: 50000, pendingCents: 0 }) } };
+  stale.$transaction = (fn) => db.$transaction(() => fn(stale));
+  const snapshot = structuredClone(db.t);
+  const { sent, deps } = alerts();
+  const out = await postCardChargeback({ prisma: stale, providerRef: '3099990001', reason: 'chargeback', deps });
+  assert.equal(out.ok, false);
+  assert.equal(out.refused, 'BALANCE_MOVED');
+  assert.equal(refusalStatus(out.refused), 409);
+  assert.deepEqual(db.t, snapshot, 'everything rolled back');
+  assert.equal(sent.length, 0);
+});
+
+test('buildChargeback: balanced, never more than the wallet credit, the source a reversal of the load', () => {
+  const original = buildLoad({ accountId: CB, rail: 'ADUMO', faceCents: 287170, customerFeeCents: 12830, idemKey: 'wapay-payreq-PRADUMOC' });
+  const e = buildChargeback({ original, idemKey: 'card-chargeback-wapay-payreq-PRADUMOC', walletDebitCents: 100 });
+  assert.equal(e.source, 'REVERSAL_LOAD_ADUMO');
+  const sum = e.postings.reduce((s, p) => s + (p.debitCents || 0) - (p.creditCents || 0), 0);
+  assert.equal(sum, 0);
+  assert.ok(e.postings.some((p) => p.accountCode === ACCT.chargebackLoss('ADUMO') && p.debitCents === 287070));
+  assert.equal(ACCT.chargebackLoss('PAYFAST'), 'EXPENSE:CHARGEBACK:PAYFAST');
+  assert.throws(() => buildChargeback({ original, idemKey: 'card-chargeback-x1', walletDebitCents: 287171 }), /between 0 and 287170/);
+  assert.throws(() => buildChargeback({ original, idemKey: 'card-chargeback-x1', walletDebitCents: -1 }));
+  assert.equal(REVERSAL_KIND.CHARGEBACK, 'CHARGEBACK');
+  assert.equal(cardChargebackAlertText({ plan: { rail: 'PAYFAST', accountId: CB, phone: '•••0990', original: { providerRef: '3099990001' }, amounts: { chargedCents: 300000, walletDebitCents: 70, feeReversedCents: 12830, lossCents: 287100 }, paymentRequest: null }, reason: 'x', by: 'y' }).includes(CB_WA), false);
+});
+
+test('the chargeback route: internal key first, GET is the dry run, POST books; no processor, no customer message, no amount from the request', async () => {
+  const call = async ({ method = 'GET', headers = {}, query = {}, body = {} }) => {
+    const res = { code: null, json: null, headers: {}, status(c) { this.code = c; return this; }, setHeader(k, v) { this.headers[k] = v; }, json(j) { this.json = j; return this; } };
+    await chargebackHandler({ method, headers, query, body, url: '/api/internal/card-chargeback' }, res);
+    return res;
+  };
+  assert.equal((await call({})).code, 401, 'no key, no answer');
+  const key = { 'x-internal-api-key': process.env.WAPAY_INTERNAL_API_KEY };
+  assert.equal((await call({ method: 'PUT', headers: key })).code, 405);
+  const dry = await call({ headers: key });
+  assert.equal(dry.code, 400);
+  assert.equal(dry.json.dryRun, true);
+  assert.equal(dry.json.refused, 'NO_REFERENCE');
+  assert.equal((await call({ method: 'POST', headers: key, body: { providerRef: '3099990001' } })).json.refused, 'NO_REASON');
+
+  const route = read('../pages/api/internal/card-chargeback.js');
+  assert.ok(route.indexOf('requireInternalAuth(req, res)') < route.indexOf('planCardChargeback('), 'the key before anything is read');
+  assert.doesNotMatch(route, /walletDebitCents|amountCents|accountId: src/, 'the request cannot choose an amount or a wallet');
+  const lib = read('../lib/card-refund.js');
+  for (const forbidden of [/from '\.\/say\.js'/, /from '\.\/notify\.js'/, /providers-payfast/, /from '\.\/adumo\.js'/, /payout-approval/, /allowNegative: true/]) {
+    assert.doesNotMatch(lib + route, forbidden, `no ${forbidden}`);
+  }
+  // The customer's activity names a chargeback, not a refund to the card.
+  const portal = read('../lib/app-portal.js');
+  assert.ok(portal.indexOf("key.startsWith('card-chargeback-')") > -1);
+  assert.ok(portal.indexOf("key.startsWith('card-chargeback-')") < portal.indexOf("key.startsWith('card-refund-')"), 'checked before the REVERSAL_LOAD_ catch-all');
+});
