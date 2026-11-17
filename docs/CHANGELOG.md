@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-11-17 (146) — Disputed card money can be withheld from a balance into a WaPay-held liability, released back, or used first by a refund or chargeback of the same payment
+
+When a card payment is disputed or cannot be verified and nothing has been refunded yet, the founder needed a way to take the money it credited off the customer's balance without calling it income and without sending anything back to the processor. Until now the only tools were a full refund (refused SHORT when the balance had been spent) and a chargeback (only once the bank acts).
+
+- `POST /api/internal/card-withhold` (GET = dry run), internal key. `buildCardWithhold` (lib/ledger-core.js): the wallet the card load credited gives at most its available balance, read inside the posting transaction, never more than that load credited, to `LIABILITY:CARD_DISPUTE:<RAIL>` (`ACCT.cardDispute`). Source `CARD_WITHHOLD_<RAIL>`, idemKey `card-withhold-<original idemKey>`: one per card load. Money under a pay-out hold is never reachable; never below zero; a balance that moves mid-call refuses BALANCE_MOVED; nothing to take refuses NOTHING_TO_WITHHOLD.
+- `release: true`: `buildCardWithholdRelease`, the exact mirror back to the same wallet (source `CARD_RELEASE_<RAIL>`, idemKey `card-release-<original idemKey>`), once. The dry run shows the balance after.
+- A refund or chargeback of a withheld load posts that release first, in the same transaction, with `closedBy` naming the reversal: the withheld money is used before the balance (the refund's SHORT check and the chargeback's wallet part count it), the liability closes with it, and the release key means it is never used twice. The reversal entries keep their shapes, so the money-in netting (CHANGELOG 144) is unchanged.
+- The link stays PAID; the intent's `metadata.withhold` records the amount, who and why; audit events CARD_WITHHOLD / CARD_WITHHOLD_RELEASE; one masked ops alert each; nothing is sent to the customer.
+- Mission Control: `/api/admin/payout-reconciliation` returns `cardDisputes` (the liability, the open and closed withholds, a check that the liability equals the open withholds, and `owedTotalCents` = wallets + withheld), because the wallet sums alone no longer show everything WaPay owes.
+- The customer's activity names the lines ("Held while a card payment is checked", "Held money released", "Held money applied to the card reversal"); the customer record the agent reads shows the withheld amount apart from the balance, as not spendable.
+- GOLDEN_THREAD 2.15 extended, 2.10 names it. No migration: account codes are journal-line strings.
+
+Tests: card-refund +8 (33); suite and `next build` green on fdb90b6 plus this change.
+
 ## 2026-11-17 (145) — An ops alert reaches the operator outside their 24-hour window: a real alert template, and template values on one line
 
 Pay-out request alerts reached the operator's WhatsApp only while they had written to WaPay in the last 24 hours.

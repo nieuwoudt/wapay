@@ -19,6 +19,7 @@
 import prisma from '../../../lib/prisma.js';
 import { requireAdmin } from '../../../lib/admin-auth.js';
 import { reconcilePayoutBooks, electricityBooks, ELECTRICITY_HOLD_PREFIX } from '../../../lib/payout-books.js';
+import { cardDisputeBooks } from '../../../lib/card-refund.js';
 
 export const config = { maxDuration: 25 };
 
@@ -33,7 +34,7 @@ export default async function handler(req, res) {
   if (!requireAdmin(req).ok) return res.status(401).json({ error: 'UNAUTHORIZED' });
 
   try {
-    const [payoutRows, holds, entries, walletSums, elecRows, elecHolds] = await Promise.all([
+    const [payoutRows, holds, entries, walletSums, elecRows, elecHolds, disputeEntries] = await Promise.all([
       prisma.providerRequest.findMany({
         where: { route: 'ott-payout' },
         select: { idemKey: true, status: true, requestTs: true, metadata: true },
@@ -65,6 +66,13 @@ export default async function handler(req, res) {
         select: { idemKey: true, status: true, amountCents: true, createdAt: true },
         take: 5000,
       }),
+      // Card money withheld from balances while a card payment is checked (2026-11-17): owed money that is in no
+      // wallet row, so clientFunds alone undercounts it.
+      prisma.journalEntry.findMany({
+        where: { OR: [{ source: { startsWith: 'CARD_WITHHOLD_' } }, { source: { startsWith: 'CARD_RELEASE_' } }] },
+        select: { idemKey: true, source: true, lines: { select: { accountCode: true, debitCents: true, creditCents: true } } },
+        take: 5000,
+      }),
     ]);
 
     // Electricity rows carry the meter number in their metadata; only the
@@ -82,9 +90,12 @@ export default async function handler(req, res) {
     });
 
     const books = reconcilePayoutBooks({ payoutRows: rows, holds, entries, walletSums });
+    const cardDisputes = cardDisputeBooks({ entries: disputeEntries });
     res.setHeader('Cache-Control', 'private, no-store');
     return res.status(200).json({
       ...books,
+      // What WaPay owes in all: the wallets plus the withheld card money (LIABILITY:CARD_DISPUTE).
+      cardDisputes: { ...cardDisputes, owedTotalCents: (books.clientFunds?.totalCents ?? 0) + cardDisputes.withheldCents },
       electricity: electricityBooks({ rows: elec, holds: elecHolds }),
       supplier: { fundedCents: fundedCents(), floatKey: 'OTT_PAYOUT' },
     });
