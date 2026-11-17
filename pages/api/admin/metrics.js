@@ -15,6 +15,7 @@ import { trialBalance, reconcileWallets } from '../../../lib/ledger-post.js';
 import { sastDayStart } from '../../../lib/payout-float.js';
 import { paymentRequestFeeCents } from '../../../lib/deposits.js';
 import { cashoutFeeCents } from '../../../lib/ledger-core.js';
+import { flowOfRow } from '../../../lib/money-flows.js';
 
 // PayShap pay-out: the customer pays the flat fee; OTT charges R2.50 ex VAT = R2.88 incl (docs/COMMERCIALS.md, Money out).
 const PAYSHAP_FEE_CENTS = cashoutFeeCents('PAYSHAP', 10000);
@@ -46,16 +47,6 @@ async function safe(fn, fallback = null) {
   }
 }
 
-/** Journal flow bucketing by entry source (see lib/ledger-core.js builders). */
-function bucketOf(source) {
-  if (!source) return 'other';
-  if (source.startsWith('LOAD_')) return 'in';
-  if (source.startsWith('SPEND_') || source.startsWith('VOUCHER_GIFT_')) return 'spend';
-  if (source === 'P2P_SEND') return 'transfer';
-  if (source.startsWith('CASHOUT')) return 'out';
-  return 'other';
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'method' });
   if (!requireAdmin(req).ok) return res.status(401).json({ error: 'UNAUTHORIZED' });
@@ -78,7 +69,9 @@ export default async function handler(req, res) {
       safe(() => prisma.hold.count({ where: { status: 'ACTIVE' } })),
       // Money flows AGGREGATED IN SQL (review 2026-08-28: the old row-fetch
       // truncated at 5000 rows and silently understated GMV). One row per
-      // (source, week) — bounded — with wallet credit/debit summed.
+      // (source, week) — bounded — with wallet credit/debit summed. The lines
+      // counted are lib/money-flows.js FLOW_LINE_PATTERNS: wallet lines, plus the
+      // part of a charged-back card load that WaPay absorbed.
       safe(() =>
         prisma.$queryRaw`
           SELECT je.source AS source,
@@ -86,7 +79,8 @@ export default async function handler(req, res) {
                  sum(coalesce(jl."creditCents", 0))::bigint AS credit,
                  sum(coalesce(jl."debitCents", 0))::bigint AS debit
           FROM "JournalEntry" je
-          JOIN "JournalLine" jl ON jl."entryId" = je.id AND jl."accountCode" LIKE 'WALLET:%'
+          JOIN "JournalLine" jl ON jl."entryId" = je.id
+            AND (jl."accountCode" LIKE 'WALLET:%' OR jl."accountCode" LIKE 'EXPENSE:CHARGEBACK:%')
           WHERE je."createdAt" > ${since}
           GROUP BY 1, 2`
       ),
@@ -358,15 +352,13 @@ export default async function handler(req, res) {
   const wkKey = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
   const num = (v) => (typeof v === 'bigint' ? Number(v) : Number(v || 0));
 
-  // Flows + GMV from the SQL aggregate. REVERSAL_<X> nets against bucketOf(X).
+  // Flows + GMV from the SQL aggregate. A REVERSAL_<X> row comes off the flow of X
+  // (lib/money-flows.js: a reversal is the mirror of its original).
   const flows = { in: 0, spend: 0, transfer: 0, out: 0 };
   const weeklyFlows = new Map();
   for (const r of entries || []) {
-    let source = r.source, sign = 1;
-    if (source && source.startsWith('REVERSAL_')) { source = source.slice('REVERSAL_'.length); sign = -1; }
-    const b = bucketOf(source);
+    const { bucket: b, cents: moved } = flowOfRow(r);
     if (b === 'other') continue;
-    const moved = sign * (b === 'in' ? num(r.credit) : num(r.debit));
     flows[b] += moved;
     if (b !== 'out') {
       const key = wkKey(r.wk);

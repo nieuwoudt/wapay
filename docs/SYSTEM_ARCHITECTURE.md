@@ -84,8 +84,9 @@ Six kinds of guard are in use. A new operator route uses `requireAdmin` or `requ
 | `/api/admin/notify-request` | POST | internal key | Re-runs the paid notifications for a link. |
 | `/api/admin/sync-vas-catalog, /whatsapp-debug` | POST; GET, POST | ADMIN_API_KEY in header or query string | Legacy: catalogue sync; WhatsApp config and a test send. |
 | `/api/admin/vas-ensure-unique, /version` | POST; GET | ADMIN_API_KEY header | Legacy: adds a constraint; returns the commit. |
-| `/api/admin/init-templates, /list-wabas` | GET | none found | Legacy: refreshes templates; lists WhatsApp Business Accounts with the token. |
+| `/api/admin/init-templates, /list-wabas` | GET | internal key (since CHANGELOG 141) | Legacy: refreshes templates; lists WhatsApp Business Accounts with the token. |
 | `/api/internal/card-refund` | GET, POST | internal key (requireInternalAuth) | Dry run or booking of a card refund. |
+| `/api/internal/card-chargeback` | GET, POST | internal key (requireInternalAuth) | Dry run or booking of a card chargeback: the wallet gives back what it holds, the rest is WaPay's loss. |
 | `/api/internal/ops-payout` | POST | internal key | Operator pay-out; dry run by default. |
 | `/api/internal/payout-hold, /payout-freeze, /payout-review` | GET, POST | internal key | Global hold and approval mode; per-account freeze; review list with clear and freeze. |
 | `/api/internal/ops-reply, /audit-run, /audit-resolve, /compliance-check, /template-create, /blu-voucher-probe` | POST (some GET) | internal key | Operator reply; audit run and resolve; compliance verdict; templates through the Graph API; Blu voucher status probe. |
@@ -295,12 +296,12 @@ The pay-out float is read before every pay-out; float loads are recorded in the 
 - **Since:** CHANGELOG 94, 95, 101, 111, 120
 - **Described in:** docs/CAPABILITIES.md and docs/GROWTH_DASHBOARD.md
 
-### Card refund route
+### Card refund and chargeback routes
 
-Books a refund the founder made in the PayFast or Adumo dashboard as the exact reversal of the card credit, never below zero.
+Books a refund the founder made in the PayFast or Adumo dashboard as the exact reversal of the card credit, never below zero. Since CHANGELOG 143 also books a chargeback (the cardholder's bank took the payment back): the wallet gives back its available balance, the rest goes to `EXPENSE:CHARGEBACK:<RAIL>`, pay-out holds are not touched, and a refund and a chargeback of the same payment refuse each other.
 
-- **Code:** `lib/card-refund.js`, `pages/api/internal/card-refund.js`, `lib/card-settlement.js`, `pages/api/payfast/itn.js`
-- **Routes:** `/api/internal/card-refund`
+- **Code:** `lib/card-refund.js`, `lib/ledger-core.js` (`buildReversal`, `buildChargeback`), `pages/api/internal/card-refund.js`, `pages/api/internal/card-chargeback.js`, `lib/card-settlement.js`, `pages/api/payfast/itn.js`
+- **Routes:** `/api/internal/card-refund`, `/api/internal/card-chargeback`
 - **Data:** JournalEntry.externalRef; payment_requests.status REFUNDED (migration 20261109_payment_request_refunded); audit_log
 - **Tests:** `tests/card-refund.test.mjs`
 - **Since:** CHANGELOG 135 (2026-11-09)
@@ -501,7 +502,7 @@ A slow electricity sale keeps its hold and is reconciled by re-sending the same 
 
 Where each account came from, the ad account's daily numbers, events back to Meta, and the planning model beside measured inputs.
 
-- **Code:** `lib/growth-attribution.js`, `lib/meta-ads.js`, `lib/meta-capi.js`, `lib/scale-model.js`, `pages/api/admin/growth.js`
+- **Code:** `lib/growth-attribution.js`, `lib/meta-ads.js`, `lib/meta-capi.js`, `lib/scale-model.js`, `pages/api/admin/growth.js`, `lib/money-flows.js` (the flow reading shared with `pages/api/admin/metrics.js`, CHANGELOG 144)
 - **Routes:** `/api/admin/growth`, `/api/internal/ads-pipe-check`, `/api/internal/ads-breakdown`, `/api/internal/capi-dataset`, `/api/internal/capi-test-send`
 - **Data:** ad_insights_daily; ad_catalog (migration 20261010_ad_insights); Account.profile.attribution
 - **Switches:** META_ADS_ACCESS_TOKEN; META_AD_ACCOUNT_ID; META_CAPI_DATASET_ID; META_CAPI_ACCESS_TOKEN; META_CAPI_ALLOW_NON_PRODUCTION; META_CAPI_TEST_EVENT_CODE

@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-11-17 (144) — Mission Control: a refunded or charged-back card payment comes off money in and GMV
+
+The Dashboard and the Growth tab add up money flows from the journal, one row per entry source, and mean to take a
+reversal off the flow it reverses. They read the wrong column to do it: a reversal is the mirror of its original, so
+its amount sits on the opposite side, and the old reading subtracted nothing. A card payment that was refunded
+(135) or charged back (143) therefore still counted as money in and as GMV. Reporting only: no balance, no posting
+and no customer-facing figure is involved.
+
+- **One reading for both tabs.** `lib/money-flows.js` (new, pure): `flowBucket(source)` and `flowOfRow({ source,
+  credit, debit })`. Money in is what the counted lines were credited; spend, transfers and money out are what they
+  were debited; a `REVERSAL_<X>` row comes off the flow of X by its opposite column. `pages/api/admin/metrics.js` and
+  `pages/api/admin/growth.js` both call it and keep no private copy of the buckets.
+- **A chargeback takes the whole load off.** The wallet gives back only what it still holds and the rest is WaPay's
+  loss (143), so the two SQL aggregates now count `EXPENSE:CHARGEBACK:%` lines beside `WALLET:%` lines
+  (`FLOW_LINE_PATTERNS`). That account appears only in chargeback entries, so no other row changes.
+- **What moves on the page.** Money in, GMV and the weekly flow bars fall by the refunds and chargebacks booked in
+  the window. Revenue, margin, float and the trial balance were already right and are untouched.
+- **Docs:** `docs/ADMIN_DASHBOARD_DESIGN.md` section 4 states the reversal rule; `docs/SYSTEM_ARCHITECTURE.md` gains
+  the chargeback route row (143) and corrects the row of the two Meta set-up routes gated in 141.
+- **Tests:** `tests/money-flows.test.mjs` (8): entries from the real builders, aggregated the way the SQL aggregates
+  them: a refund, a chargeback at any wallet part, a reversed purchase and a reversed send each net to zero; bigint
+  sums; both routes use the helper and count the same lines. BUGLOG #152.
+
 ## 2026-11-17 (143) — A card chargeback is booked in the ledger: the wallet gives back what it still holds, never below zero, and the rest is WaPay's loss
 
 When the cardholder's bank takes a card payment back, PayFast or Adumo reverses it from the merchant account whether

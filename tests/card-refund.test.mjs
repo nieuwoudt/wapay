@@ -507,10 +507,12 @@ test('after a refund the link map, the customer\'s links, the agent and the watc
   prisma.providerRequest.findMany = async ({ where }) => (where.route === 'payrequest' ? [{ accountId: F, metadata: { payerMsisdn: '0600005055', amountCents: 287170, refund: { at: 'x' } } }] : []);
   const all = await watchlist({ prisma });
   assert.deepEqual(all.payers, [{ number: '•••5055', paidAccounts: 0, paidFrozenAccounts: 0, refundedFrozenAccounts: 1, totalCents: 0, isFrozenAccount: false }], 'a payer whose every payment was refunded is still watched');
-  // Metrics read status = 'PAID' and net REVERSAL_<X> against X; a REFUNDED link drops out of both by construction.
+  // Metrics read status = 'PAID' and take REVERSAL_<X> off the flow of X through lib/money-flows.js (the netting
+  // itself is proved in tests/money-flows.test.mjs); a REFUNDED link drops out of both by construction.
   const metrics = read('../pages/api/admin/metrics.js');
   assert.match(metrics, /WHERE status = 'PAID'/);
-  assert.match(metrics, /startsWith\('REVERSAL_'\)/);
+  assert.match(metrics, /flowOfRow\(r\)/);
+  assert.match(read('../lib/money-flows.js'), /startsWith\('REVERSAL_'\)/);
 });
 
 test('the route: internal key first, GET is the dry run, POST books; it calls no processor and messages no customer', async () => {

@@ -4,6 +4,13 @@
 
 ---
 
+## 152. Mission Control counted a refunded or charged-back card payment as money in
+
+- **Symptom (2026-11-17, read while a chargeback was being booked):** the Dashboard's money in and GMV, and the Growth tab's GMV, did not fall when a card payment was reversed in the ledger.
+- **Root cause:** both routes aggregate wallet lines per entry source and flip the sign for a `REVERSAL_<X>` row, and then read the same column as for the original. A reversal is the mirror of its original, so that column is zero on a reversal and nothing was subtracted. The rule was written twice, once per route, with the same slip. No test built a reversal and added it up.
+- **Fix:** one pure reading, `lib/money-flows.js` `flowOfRow`, used by both routes: a reversal comes off by its opposite column. The aggregates also count the part of a chargeback that WaPay absorbs, so the whole load comes off.
+- **Guard:** `tests/money-flows.test.mjs` builds loads, purchases and sends with the real ledger builders, reverses them and requires each flow to net to zero; it also requires both routes to import the helper, to keep no private bucket function and to count the same lines.
+
 ## 151. Four leftover routes answered anyone: an echo stub, a balance read by account id, and two Meta set-up routes
 
 - **Symptom (security sweep, 2026-11-13):** `pages/api/webhook-test.js` echoed a query value; `/api/wallet/balance` returned a balance and a name for any account id; `/api/admin/list-wabas` and `/api/admin/init-templates` ran Meta Graph calls on the production token. None had a caller in the product.

@@ -83,6 +83,9 @@ horizontal bars with the conversion labels between bars.
 - **GMV (period)** = Σ wallet credits (loads + received transfers) + Σ VAS/voucher purchase
   amounts, deduplicated by journal entry (a request paid = ONE event: payer→payee transfer).
   State the formula on the page footer — investors ask.
+  A reversal comes off the flow it reverses (2026-11-17, `lib/money-flows.js`): a refunded card payment, a
+  charged-back card payment (the whole load, including the part WaPay absorbs) and a reversed purchase or
+  send are subtracted in the period the reversal is booked.
 - **Net revenue** = Σ postings into `FEES`/commission accounts − free-band subsidy (PayFast
   cost on R0-fee card requests) − promo credits. Gross also shown on hover.
 - **Float** = Σ `Wallet.availableCents + pendingCents` across SPEND wallets (our liability).
