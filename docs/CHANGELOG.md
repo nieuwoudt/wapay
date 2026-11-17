@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-11-17 (145) — An ops alert reaches the operator outside their 24-hour window: a real alert template, and template values on one line
+
+Pay-out request alerts reached the operator's WhatsApp only while they had written to WaPay in the last 24 hours.
+Outside that window `notifyCustomer` needs an approved template, and `WAPAY_TEMPLATE_OPS_ALERT` had held placeholder
+text since 23 Oct (compliance-check AMBER), so the alert fell through to a free-form text Meta drops. Two fixes.
+
+- **A real template.** `wapay_ops_alert` (UTILITY, one body value) was submitted through
+  `/api/internal/template-create`. Spec and switch-on steps: `docs/templates/wapay_ops_alert.md`. Once Meta approves it,
+  `WAPAY_TEMPLATE_OPS_ALERT=wapay_ops_alert` in Vercel and a redeploy turn it on; no code reads the name otherwise.
+- **Template values on one line.** Meta refuses a template body value with a new line, a tab or more than four spaces
+  in a row (error 132018), and every ops alert is several lines. `templateParamText` in `lib/notify.js` (pure) joins
+  lines with " · ", collapses runs of spaces and cuts a value over 850 characters with "…"; `notifyCustomer` applies it
+  to every template value, so the single-line values the other templates send are unchanged.
+- **Tests:** `tests/notify.test.mjs` +1: the flattening rules, and a multi-line ops alert outside the window going out
+  on the template rail with nothing Meta would refuse. Suite 1,540/1,540 and `next build` green on 222132a plus this
+  change.
+
 ## 2026-11-17 (144) — Mission Control: a refunded or charged-back card payment comes off money in and GMV
 
 The Dashboard and the Growth tab add up money flows from the journal, one row per entry source, and mean to take a

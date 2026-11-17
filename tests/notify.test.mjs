@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { notifyCustomer, windowIsOpen, WINDOW_MS } from '../lib/notify.js';
+import { notifyCustomer, windowIsOpen, WINDOW_MS, templateParamText, TEMPLATE_PARAM_MAX } from '../lib/notify.js';
 import { payoutOutcomeParams, payoutOutcomeMessage } from '../lib/payouts.js';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
@@ -90,6 +90,25 @@ test('outside the window: direct send first, then an approved template, then fre
   assert.equal(fourth.rail, 'text_fallback', 'direct send off and no template configured');
   assert.ok(!d.calls.some((c) => c[0] === 'direct'), 'a disabled rail is never called');
   delete process.env.WAPAY_TEMPLATE_PAYOUT_OUTCOME;
+});
+
+test('a multi-line text sent as a template value arrives on one line, as Meta requires (no new line, tab or 5 spaces)', async () => {
+  assert.equal(templateParamText('Pay-out request\nR500 by PayShap\n\n  level 1/5\tapprove: https://x.test/a'), 'Pay-out request · R500 by PayShap · level 1/5 approve: https://x.test/a');
+  assert.equal(templateParamText('R50'), 'R50', 'a short value passes unchanged');
+  assert.equal(templateParamText(null), '');
+  const long = templateParamText('x'.repeat(TEMPLATE_PARAM_MAX + 200));
+  assert.equal(long.length, TEMPLATE_PARAM_MAX);
+  assert.ok(long.endsWith('…'));
+
+  process.env.WAPAY_TEMPLATE_OPS_ALERT = 'wapay_ops_alert';
+  const b = rails({ directOk: false });
+  const alert = 'Pay-out request\nR500 by PayShap from •••1234\nApprove: https://x.test/a';
+  const out = await notifyCustomer({ to: '27600000901', accountId: 'a1', text: alert, kind: 'ops', templateEnv: 'WAPAY_TEMPLATE_OPS_ALERT', templateParams: [alert], deps: { prisma: dbWithLastInbound(WINDOW_MS + 60_000), ...b } });
+  assert.equal(out.rail, 'template');
+  const sent = b.calls.find((c) => c[0] === 'template')[1].components[0].parameters[0].text;
+  assert.ok(!/[\n\t]| {5}/.test(sent), 'nothing Meta refuses with 132018');
+  assert.equal(sent, 'Pay-out request · R500 by PayShap from •••1234 · Approve: https://x.test/a');
+  delete process.env.WAPAY_TEMPLATE_OPS_ALERT;
 });
 
 test('outside the window, a number that never wrote to WaPay gets nothing on any rail (BUGLOG #144)', async () => {
