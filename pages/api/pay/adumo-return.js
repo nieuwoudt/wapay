@@ -5,18 +5,24 @@
  * auid, merchant reference and GROSS amount must all match the intent we
  * created; then the same settlement as the PayFast ITN, idempotent on the
  * intent's idemKey. Unsigned fields are stored for forensics, never trusted.
+ *
+ * The unsigned reference and the ?code= in the address only FIND the intent.
+ * Which link is credited is decided by the signed token: its reference must
+ * name this link (expected.code), or nothing is credited (review 2026-11-13).
  */
-import prisma from '../../../lib/prisma.js';
+import prismaDefault from '../../../lib/prisma.js';
 import { verifyAdumoResponse, codeFromMerchantReference, adumoOutcomeRecord } from '../../../lib/adumo.js';
 import { settleCardPayment } from '../../../lib/card-settlement.js';
 import { recordItnDebug } from '../../../lib/deposits.js';
 
 export const config = { maxDuration: 25 };
 
-export default async function handler(req, res) {
+/** The handler with its collaborators named, so a test can replay a return against stand-ins. */
+export function createAdumoReturnHandler({ prisma = prismaDefault, settle = settleCardPayment, recordDebug = recordItnDebug, adumo = undefined } = {}) {
+  return async function handler(req, res) {
   if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).send('method not allowed');
   const fields = req.method === 'POST' ? (req.body && typeof req.body === 'object' ? req.body : {}) : {};
-  const mref = String(fields._MERCHANTREFERENCE || fields.mref || req.query.mref || '');
+  const mref = String(fields._MERCHANTREFERENCE || fields.mref || req.query.mref || '').trim();
   const code = codeFromMerchantReference(mref) || String(req.query.code || '').toUpperCase();
   if (!/^[A-Z]{6,12}$/.test(code)) return res.status(400).send('bad reference');
   const sourceIp = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
@@ -26,10 +32,10 @@ export default async function handler(req, res) {
   const grossCents = Number.isInteger(intent.metadata?.grossCents) ? intent.metadata.grossCents : Number(intent.metadata?.amountCents || 0) + Number(intent.metadata?.feeCents || 0);
   const expectedMref = mref || intent.metadata?.adumoRef || null;
 
-  const v = verifyAdumoResponse({ fields: { ...req.query, ...fields }, expected: { mref: expectedMref, amountCents: grossCents } });
+  const v = verifyAdumoResponse({ fields: { ...req.query, ...fields }, expected: { mref: expectedMref, code, amountCents: grossCents }, ...(adumo ? { config: adumo } : {}) });
   if (!v.ok) {
     console.error(JSON.stringify({ type: 'adumo_return_rejected', reason: v.error, detail: v.detail, requestCode: code, sourceIp }));
-    await recordItnDebug({ paymentId: intent.id, rawItn: { ...fields, _RESPONSE_TOKEN: fields._RESPONSE_TOKEN ? '[present]' : undefined }, reason: `ADUMO_${v.error}`, sourceIp }).catch(() => {});
+    await recordDebug({ paymentId: intent.id, rawItn: { ...fields, _RESPONSE_TOKEN: fields._RESPONSE_TOKEN ? '[present]' : undefined }, reason: `ADUMO_${v.error}`, sourceIp }).catch(() => {});
     // The payer sees the page again; nothing was credited. If Adumo did
     // approve, its webhook (verified independently) still settles it.
     return res.redirect(302, `/pay/${code}?e=unverified`);
@@ -41,7 +47,10 @@ export default async function handler(req, res) {
     console.log(JSON.stringify({ type: 'adumo_return_not_approved', requestCode: code, status: v.status, errorCode: v.errorCode, bankErrorCode: v.bankErrorCode, method: v.method }));
     return res.redirect(302, `/pay/${code}?e=${encodeURIComponent(v.status || 'declined')}`);
   }
-  const out = await settleCardPayment({ intent, rail: 'ADUMO', providerRef: v.transactionIndex || expectedMref || code, payerMsisdn: intent.metadata?.payerMsisdn || null });
+  const out = await settle({ intent, rail: 'ADUMO', providerRef: v.transactionIndex || expectedMref || code, payerMsisdn: intent.metadata?.payerMsisdn || null });
   console.log(JSON.stringify({ type: 'adumo_return_settled', requestCode: code, ok: out.ok, replayed: out.replayed, transactionIndex: v.transactionIndex, method: v.method, methodClass: v.methodClass }));
   return res.redirect(302, `/pay/${code}?r=1`);
+  };
 }
+
+export default createAdumoReturnHandler();

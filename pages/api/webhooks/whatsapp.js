@@ -52,6 +52,8 @@ export default async function handler(req, res) {
 
     if (mode === 'subscribe' && expectedToken && token === expectedToken) {
       console.log('✅ Webhook verified successfully!');
+      // Plain text, stated: the echoed value must never be read as a page (review 2026-11-13).
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       return res.status(200).send(challenge);
     } else {
       console.error('❌ Webhook verification failed:', { mode, tokenMatch: token === expectedToken });

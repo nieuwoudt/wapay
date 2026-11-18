@@ -4,7 +4,7 @@
 
 ---
 
-## 2026-11-16 (144) — PayCentral client: one whitelisted address handled in code, money calls sent once, card data kept out, a probe
+## 2026-11-16 (151) — PayCentral client: one whitelisted address handled in code, money calls sent once, card data kept out, a probe
 
 PayCentral whitelists one IP (155.121.235.0), but Vercel's Static IPs are a pair that Vercel cannot
 pin. The changes:
@@ -27,12 +27,12 @@ pin. The changes:
 
 A read-only review before merge found two ways an earlier draft could resend a processed load (a
 followed redirect, a 403 page after processing) plus several smaller issues; all are fixed and
-locked (BUGLOG #148). Tests: `tests/paycentral.test.mjs` (26), plus a local check on a real socket.
+locked (BUGLOG #153). Tests: `tests/paycentral.test.mjs` (26), plus a local check on a real socket.
 Docs: `docs/CARDS.md` §0.11, CAPABILITIES, GOLDEN_THREAD 3.5, env.template. Not wired to customers.
 
 ---
 
-## 2026-10-23 (143) — Cards: PayCentral's staging API read, products chosen (DigiCentral + CashCentral+), static IP plan, reply to Odette (docs only)
+## 2026-10-23 (150) — Cards: PayCentral's staging API read, products chosen (DigiCentral + CashCentral+), static IP plan, reply to Odette (docs only)
 
 PayCentral sent the staging API specification v2.1.5, its onboarding document and the
 white-label deck, plus the static-IP whitelisting fees: staging R950 excl VAT for 3 months,
@@ -54,7 +54,7 @@ repo). Products as decided the same day: DigiCentral and CashCentral first, Cash
 
 ---
 
-## 2026-10-20 (142) — Cards: PayCentral's NDA reviewed and filled, the product deck read; the cards branch brought up to main (docs only)
+## 2026-10-20 (149) — Cards: PayCentral's NDA reviewed and filled, the product deck read; the cards branch brought up to main (docs only)
 
 PayCentral sent its standard NDA and product deck and told the founder WaPay can start issuing
 virtual and physical cards. `docs/CARDS.md` §0.8 records:
@@ -68,11 +68,11 @@ virtual and physical cards. `docs/CARDS.md` §0.8 records:
 - four new open questions, and a no-code pilot through the portal with company money.
 
 CAPABILITIES' PayCentral row updated. The branch merged `main` (the credentials scrub and
-pay-out rules). This branch's entries are renumbered after main's (first 88 and 89, then 109 to 111, now 140 to 142), the same way the scrub's were.
+pay-out rules). This branch's entries are renumbered after main's (first 88 and 89, then 109 to 111, now 147 to 149), the same way the scrub's were.
 
 ---
 
-## 2026-10-16 (141) — Cards: the route is PayCentral (Paymentology direct needs 30,000 cards); plan rewritten for a pre-funded card (docs only)
+## 2026-10-16 (148) — Cards: the route is PayCentral (Paymentology direct needs 30,000 cards); plan rewritten for a pre-funded card (docs only)
 
 On the founder's call Paymentology set a 30,000-card minimum for direct work and referred
 WaPay to PayCentral. PayCentral is a South African programme manager on Paymentology's
@@ -94,7 +94,7 @@ is search-sourced and labelled.
 
 ---
 
-## 2026-10-15 (140) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
+## 2026-10-15 (147) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
 
 The founder asked whether WaPay can issue customers virtual cards through Paymentology,
 how it maps onto the product, and what to send Paymentology's sales form.
@@ -120,6 +120,173 @@ pages were read through search extracts and every fact carries its source. CAPAB
 Paymentology as discovery. No code changed.
 
 ---
+## 2026-11-17 (146) — Disputed card money can be withheld from a balance into a WaPay-held liability, released back, or used first by a refund or chargeback of the same payment
+
+When a card payment is disputed or cannot be verified and nothing has been refunded yet, the founder needed a way to take the money it credited off the customer's balance without calling it income and without sending anything back to the processor. Until now the only tools were a full refund (refused SHORT when the balance had been spent) and a chargeback (only once the bank acts).
+
+- `POST /api/internal/card-withhold` (GET = dry run), internal key. `buildCardWithhold` (lib/ledger-core.js): the wallet the card load credited gives at most its available balance, read inside the posting transaction, never more than that load credited, to `LIABILITY:CARD_DISPUTE:<RAIL>` (`ACCT.cardDispute`). Source `CARD_WITHHOLD_<RAIL>`, idemKey `card-withhold-<original idemKey>`: one per card load. Money under a pay-out hold is never reachable; never below zero; a balance that moves mid-call refuses BALANCE_MOVED; nothing to take refuses NOTHING_TO_WITHHOLD.
+- `release: true`: `buildCardWithholdRelease`, the exact mirror back to the same wallet (source `CARD_RELEASE_<RAIL>`, idemKey `card-release-<original idemKey>`), once. The dry run shows the balance after.
+- A refund or chargeback of a withheld load posts that release first, in the same transaction, with `closedBy` naming the reversal: the withheld money is used before the balance (the refund's SHORT check and the chargeback's wallet part count it), the liability closes with it, and the release key means it is never used twice. The reversal entries keep their shapes, so the money-in netting (CHANGELOG 144) is unchanged.
+- The link stays PAID; the intent's `metadata.withhold` records the amount, who and why; audit events CARD_WITHHOLD / CARD_WITHHOLD_RELEASE; one masked ops alert each; nothing is sent to the customer.
+- Mission Control: `/api/admin/payout-reconciliation` returns `cardDisputes` (the liability, the open and closed withholds, a check that the liability equals the open withholds, and `owedTotalCents` = wallets + withheld), because the wallet sums alone no longer show everything WaPay owes.
+- The customer's activity names the lines ("Held while a card payment is checked", "Held money released", "Held money applied to the card reversal"); the customer record the agent reads shows the withheld amount apart from the balance, as not spendable.
+- GOLDEN_THREAD 2.15 extended, 2.10 names it. No migration: account codes are journal-line strings.
+
+Tests: card-refund +8 (33); suite and `next build` green on fdb90b6 plus this change.
+
+## 2026-11-17 (145) — An ops alert reaches the operator outside their 24-hour window: a real alert template, and template values on one line
+
+Pay-out request alerts reached the operator's WhatsApp only while they had written to WaPay in the last 24 hours.
+Outside that window `notifyCustomer` needs an approved template, and `WAPAY_TEMPLATE_OPS_ALERT` had held placeholder
+text since 23 Oct (compliance-check AMBER), so the alert fell through to a free-form text Meta drops. Two fixes.
+
+- **A real template.** `wapay_ops_alert` (UTILITY, one body value) was submitted through
+  `/api/internal/template-create`. Spec and switch-on steps: `docs/templates/wapay_ops_alert.md`. Once Meta approves it,
+  `WAPAY_TEMPLATE_OPS_ALERT=wapay_ops_alert` in Vercel and a redeploy turn it on; no code reads the name otherwise.
+- **Template values on one line.** Meta refuses a template body value with a new line, a tab or more than four spaces
+  in a row (error 132018), and every ops alert is several lines. `templateParamText` in `lib/notify.js` (pure) joins
+  lines with " · ", collapses runs of spaces and cuts a value over 850 characters with "…"; `notifyCustomer` applies it
+  to every template value, so the single-line values the other templates send are unchanged.
+- **Tests:** `tests/notify.test.mjs` +1: the flattening rules, and a multi-line ops alert outside the window going out
+  on the template rail with nothing Meta would refuse. Suite 1,540/1,540 and `next build` green on 222132a plus this
+  change.
+
+## 2026-11-17 (144) — Mission Control: a refunded or charged-back card payment comes off money in and GMV
+
+The Dashboard and the Growth tab add up money flows from the journal, one row per entry source, and mean to take a
+reversal off the flow it reverses. They read the wrong column to do it: a reversal is the mirror of its original, so
+its amount sits on the opposite side, and the old reading subtracted nothing. A card payment that was refunded
+(135) or charged back (143) therefore still counted as money in and as GMV. Reporting only: no balance, no posting
+and no customer-facing figure is involved.
+
+- **One reading for both tabs.** `lib/money-flows.js` (new, pure): `flowBucket(source)` and `flowOfRow({ source,
+  credit, debit })`. Money in is what the counted lines were credited; spend, transfers and money out are what they
+  were debited; a `REVERSAL_<X>` row comes off the flow of X by its opposite column. `pages/api/admin/metrics.js` and
+  `pages/api/admin/growth.js` both call it and keep no private copy of the buckets.
+- **A chargeback takes the whole load off.** The wallet gives back only what it still holds and the rest is WaPay's
+  loss (143), so the two SQL aggregates now count `EXPENSE:CHARGEBACK:%` lines beside `WALLET:%` lines
+  (`FLOW_LINE_PATTERNS`). That account appears only in chargeback entries, so no other row changes.
+- **What moves on the page.** Money in, GMV and the weekly flow bars fall by the refunds and chargebacks booked in
+  the window. Revenue, margin, float and the trial balance were already right and are untouched.
+- **Docs:** `docs/ADMIN_DASHBOARD_DESIGN.md` section 4 states the reversal rule; `docs/SYSTEM_ARCHITECTURE.md` gains
+  the chargeback route row (143) and corrects the row of the two Meta set-up routes gated in 141.
+- **Tests:** `tests/money-flows.test.mjs` (8): entries from the real builders, aggregated the way the SQL aggregates
+  them: a refund, a chargeback at any wallet part, a reversed purchase and a reversed send each net to zero; bigint
+  sums; both routes use the helper and count the same lines. BUGLOG #152.
+
+## 2026-11-17 (143) — A card chargeback is booked in the ledger: the wallet gives back what it still holds, never below zero, and the rest is WaPay's loss
+
+When the cardholder's bank takes a card payment back, PayFast or Adumo reverses it from the merchant account whether
+or not WaPay still holds the money. The card-refund route (135) refuses SHORT in that case, so a chargeback on money
+that had already been paid out could not be recorded at all. The new internal route records it. It calls no processor:
+the processor already took the money.
+
+    GET  /api/internal/card-chargeback?providerRef=<pf_payment_id>   dry run: the postings, the wallet part, the loss part, the link, referenceCheck
+    POST /api/internal/card-chargeback  {"providerRef":"<pf_payment_id>","reason":"chargeback: goods not received","by":"founder"}
+
+Same inputs, header and `onlyCharge` rule as `/api/internal/card-refund`. No migration: it needs the REFUNDED status of
+`20261109_payment_request_refunded`, which is applied.
+
+- **The books** (`buildChargeback` in `lib/ledger-core.js`, idemKey `card-chargeback-<original idemKey>`, source
+  still `REVERSAL_LOAD_<RAIL>`):
+  - CLEARING:<rail> gives back the gross and the deposit fee revenue is reversed, exactly as a refund;
+  - the credited wallet gives back at most its AVAILABLE balance, worked out inside the posting transaction from a
+    fresh read and never taken from the request;
+  - the remainder is a debit to the new account `EXPENSE:CHARGEBACK:<RAIL>` (`ACCT.chargebackLoss`), so the entry
+    balances and margin counts the loss. Account codes are free strings: no schema change.
+- **Holds are not reachable.** Money set aside for a pay-out awaiting approval stays set aside; releasing a hold is the
+  founder's decision. The dry run shows `pendingCents` so the operator can reject the pay-out first if the hold should
+  cover the chargeback.
+- **Never below zero.** A balance that moves between the read and the debit refuses BALANCE_MOVED (409) and writes
+  nothing; call again. SHORT never refuses a chargeback.
+- **One take-back per payment.** A refund and a chargeback of the same card load refuse each other (ALREADY_REVERSED,
+  `reversedAs` says which exists); nothing is repaired across kinds. A second chargeback call finishes a missing link
+  mark, audit row or alert, with the first call's split.
+- **Readers:** the paid link closes as REFUNDED and the intent's `metadata.refund` gains `kind: "CHARGEBACK"` and the
+  loss, so the link map, the agent, the watchlist and the own-link rule stop counting it as paid. The customer's
+  activity names it "reversed by the card's bank". Audit event CARD_CHARGEBACK; one masked ops alert
+  (`card-chargeback:<idemKey>`); the customer is sent nothing.
+- **Not changed:** the admin metrics and growth routes (their reversal netting is a separate fix).
+- **Rule:** docs/GOLDEN_THREAD.md 2.15 extended (and 2.10 names the chargeback beside the refund).
+- **Tests:** `tests/card-refund.test.mjs` +7 (the split and the trial balance, a full and an empty wallet, a pay-out
+  hold untouched, refund and chargeback refusing each other with the repair, the balance that moves, `buildChargeback`
+  bounds, the route). Suite 1,531/1,531 and `next build` green on `c4c15b6` plus this change.
+
+## 2026-11-13 (142) — The architecture record re-baselined after 139 commits: the whole system on one page, map Version 16, two golden-thread rules corrected
+
+No code. A read-only review compared every document of record with the tree at `6df86a2`.
+
+- **`docs/SYSTEM_ARCHITECTURE.md` (new):** hosts, every route with its guard, the crons and their steps, tables by
+  domain, suppliers, 61 switches, the chat brain component by component, and the 34 subsystems built around it since
+  6 October, each with its code, tables, switches, tests and where it is described. Ten structural risks, each with
+  its smallest next step.
+- **`docs/AGENT_ARCHITECTURE_V2.md` v1.12:** "State on 2026-11-13" at the end of section 13. Phase 3 has not started;
+  five component states differ from map Version 15; six details corrected under the same badge.
+- **Map Version 16** (`docs/architecture/rows.json`, the template, republished at the same address): where we are,
+  the caption, and the product table restated from the documents of record and the day's production readings. The
+  five wrong badges are corrected in words; the drawings are not redrawn yet.
+- **`docs/GOLDEN_THREAD.md`:** 2.2 names the operator pay-out as the one other proof issuer (the structure test must
+  be widened to see it); 2.10 is rewritten, because "admin routes are read-only" stopped being true on 26 October;
+  O10 says the ID check is by threshold, not off.
+- **`docs/CAPABILITIES.md`:** the header, the web portal row (live, not a branch), the one-step row (on main), the
+  test count, and a row for the programme board.
+- **`CLAUDE.md`:** the system page and the programme board join the state documents; rule 6, the repository is
+  public.
+- **Still behind** (on the programme board): `WAPAY_STATUS.md` sections 2 to 10, `PAYOUT_RULES.md`, `KYC.md`,
+  `LAUNCH_SCOPE.md`, `ADUMO.md`, `BLU_PRODUCTION_CUTOVER.md`, `audits/PROCESS_CHECKS.md`.
+
+## 2026-11-13 (141) — Security sweep: a card credit is bound to the link its signed reference names; a PIN attempt is spent before it is checked; four leftover routes closed; held sends can be refunded
+
+A read-only sweep of the whole repository by three reviewers (public surface and sign-in, money integrity, secrets and
+the model boundary), every finding re-read in the code by the main session before anything changed. The findings and
+what is still open live on the programme board (private), not in this repository. What changed:
+
+- **Card credit (`lib/adumo.js`, `pages/api/pay/adumo-return.js`, `pages/api/webhooks/adumo.js`; BUGLOG #148):**
+  `verifyAdumoResponse` takes `expected.code` and refuses a token whose SIGNED reference does not name that link, or
+  that carries no reference. Both routes pass the link code. The unsigned reference and the `?code=` in the address
+  only find the intent. The return route is now `createAdumoReturnHandler(deps)` so a test can run it end to end.
+- **PIN attempts (`packages/auth/src/pin.ts`; BUGLOG #149):** `claimPinAttempt` spends the attempt before the PIN is
+  checked, as a compare-and-set on the count the request read, with the lock written in the same statement as the
+  attempt that reaches it. `verifyPIN` claims, then checks; a request that cannot claim checks nothing. Thresholds
+  are unchanged (15 minutes from the 5th wrong try, a hard lock from the 10th). The query is typed against the
+  Prisma client, so a wrong field fails the build.
+- **Leftover routes (BUGLOG #151):** `pages/api/webhook-test.js` deleted; `/api/wallet/balance`,
+  `/api/admin/list-wabas` and `/api/admin/init-templates` need the internal key; `X-Content-Type-Options: nosniff` on
+  every `/api` answer; the WhatsApp verification echo is sent as `text/plain`.
+- **Held sends (`lib/pending-gifts.js`, migration `20261113_pending_gifts_refunded`; BUGLOG #150):** the status check
+  on `pending_gifts` gains `REFUNDED`; the sweep stops and logs when the database refuses the close instead of
+  throwing. **The migration must be applied to production before 17 Nov** (`node --env-file=.env
+  scripts/apply-migration.mjs 20261113_pending_gifts_refunded`).
+- **Tests:** `tests/pin-lockout-atomic.test.mjs` (a burst of 200 simultaneous wrong PINs: at most five checked before
+  the lock, ten in all), `tests/public-surface-gates.test.mjs` (every admin and internal route checks a credential
+  before it touches the database or the network), `tests/adumo.test.mjs` (one payment, one link),
+  `tests/send-money.test.mjs` (the migration, and a database that refuses). `tests/vas-routes-internal.test.mjs` no
+  longer fails when the checkout path has a space in it.
+- **Not changed:** what the sweep left open is tracked on the programme board for the pay-outs session and the founder.
+
+Suite 1,520 pass, 0 fail; `next build` passes.
+
+## 2026-11-13 (140) — The programme board: every workstream, session and open item in one place, in Mission Control and on a private page
+
+The founder's ask: "consolidate them for me into a nice dashboard view ... from a management point of view and a
+development buildout view ... make sure it gets updated and linked to threads."
+
+- **Where the content lives.** The repository is public and the board is not (security findings, fraud specifics,
+  what waits on whom). The master is `WAPAY_PROGRAMME_BOARD.json` in the private workspace folder, outside the
+  repository. A published snapshot is ONE finished row in `agent_jobs` (kind `programme-board`, key `current`, status
+  `DONE`), which the job drain never claims. No migration, no money path.
+- **`lib/programme-board.js`:** the shape, `validateBoard` (ids, owners, dates, references, and a refusal of any run
+  of nine or more digits and of anything shaped like a credential), `saveBoard`, `loadBoard`.
+- **Routes:** `GET /api/admin/programme` (admin session) for the tab; `GET` and `POST /api/internal/programme`
+  (internal key): the read returns counts only, the write validates before it stores.
+- **Mission Control:** a ninth tab, Programme (`components/admin/ProgrammeTab.js`), with five views: Management
+  (needs you, workstreams, waiting on others, watch, shipped), Build (items per workstream), Threads (each session,
+  where it stopped, a link), Security (the sweep) and System (architecture components, subsystems, documents). Links
+  from the board are followed only to Claude addresses.
+- **`scripts/programme-board.mjs`:** `check`, `page`, `publish`, `status`. The key reaches curl on standard input.
+- **`docs/programme/`:** the rules (`README.md`) and the page template. A scheduled daily run refreshes the board.
+- **Tests:** `tests/programme-board.test.mjs`; `tests/inbox.test.mjs` now expects nine tabs.
+
 ## 2026-11-11 (139) — A pay-out to a bank account has two speeds: R12 on the next business day or R20 the same day; money under 2 hours old goes on the next business day only
 
 The founder's decision (7 Nov, confirmed 11 Nov "12 yes"): "payout to your bank is R12 for all payouts, and if you want

@@ -14,8 +14,13 @@
  */
 
 import prisma from '../../../lib/prisma.js';
+import { requireInternalAuth } from '../../../lib/internal-auth.js';
 
 export default async function handler(req, res) {
+  // Internal key (review 2026-11-13): this answered anyone who named an account id with that
+  // account's balance and name. Nothing in the product calls it; the chat and the portals read
+  // the balance server-side.
+  if (!requireInternalAuth(req, res)) return;
   if (req.method !== 'GET') {
     res.setHeader('Allow', ['GET']);
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });

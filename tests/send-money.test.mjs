@@ -105,6 +105,40 @@ test('unclaimed after 30 days: back to the sender once', async () => {
   assert.equal(buildGiftRefund({ senderAccountId: 'acc-a', amountCents: 2000, giftId: 'g' }).idemKey, 'gift-refund-g');
 });
 
+test('the database may close a held send as REFUNDED, and a database that refuses moves nothing and never throws', async () => {
+  // The check of 20260821 allowed ISSUED, DELIVERED and CANCELLED only: no refund could ever close.
+  const first = read('packages/domain/prisma/migrations/20260821_pending_gifts/migration.sql');
+  assert.ok(!/pending_gifts_status_valid[^\n]*REFUNDED/.test(first), 'the first migration is left as it was applied');
+  const fix = read('packages/domain/prisma/migrations/20261113_pending_gifts_refunded/migration.sql');
+  assert.match(fix, /DROP CONSTRAINT IF EXISTS "pending_gifts_status_valid";/, 'idempotent: safe to run twice');
+  assert.match(fix, /ADD CONSTRAINT "pending_gifts_status_valid" CHECK \("status" IN \('ISSUED', 'DELIVERED', 'CANCELLED', 'REFUNDED'\)\);/);
+  // Every status the code writes to this table is one the check allows.
+  const allowed = fix.match(/CHECK \("status" IN \(([^)]*)\)/)[1].split(',').map((x) => x.trim().replace(/'/g, ''));
+  const written = [...new Set([...read('lib/pending-gifts.js').matchAll(/status: '([A-Z_]+)'/g)].map((m) => m[1]))];
+  for (const st of written) assert.ok(allowed.includes(st), `${st} is written by lib/pending-gifts.js and allowed by the check`);
+
+  const { prisma, ledger } = world();
+  await sendMoney({ prisma, ledger, sender, previewId: 'p4b', recipientMsisdn: '0600000904', amountCents: 2000, authorization: proofFor(sender, { intentId: 'p4b', amountCents: 2000 }) });
+  await sendMoney({ prisma, ledger, sender, previewId: 'p4c', recipientMsisdn: '0600000905', amountCents: 1000, authorization: proofFor(sender, { intentId: 'p4c', amountCents: 1000 }) });
+  for (const g of prisma.gifts) g.createdAt = new Date(Date.now() - 31 * 86400 * 1000);
+  const real = prisma.pendingGift.updateMany;
+  let calls = 0;
+  prisma.pendingGift.updateMany = async () => { calls += 1; const e = new Error('new row for relation "pending_gifts" violates check constraint "pending_gifts_status_valid"'); e.code = 'P2010'; throw e; };
+  const err = console.error; const logged = []; console.error = (l) => logged.push(String(l));
+  let out;
+  try { out = await refundExpiredHeldGifts({ prisma, ledger }); } finally { console.error = err; }
+  assert.deepEqual(out, [], 'nothing refunded, nothing thrown');
+  assert.equal(calls, 1, 'the sweep stops at the first refusal instead of failing once per row');
+  assert.equal(prisma.wallets.get('acc-a'), 47000, 'the sender is not credited while the row cannot close');
+  assert.ok(prisma.gifts.every((g) => g.status === 'ISSUED'), 'both sends are still held and still claimable');
+  assert.ok(logged.some((l) => l.includes('held_gift_refund_close_refused')), 'and the refusal is logged by name');
+  // Once the database accepts the close, the same sweep refunds both, once each.
+  prisma.pendingGift.updateMany = real;
+  assert.equal((await refundExpiredHeldGifts({ prisma, ledger })).length, 2);
+  assert.equal(prisma.wallets.get('acc-a'), 50000);
+  assert.deepEqual(await refundExpiredHeldGifts({ prisma, ledger }), []);
+});
+
 test('no PIN proof, a proof for another amount, or your own number: nothing moves', async () => {
   for (const authorization of [null, proofFor(sender, { intentId: 'p5', amountCents: 9999 })]) {
     const { prisma, ledger } = world({ members: [thandi] });

@@ -185,8 +185,9 @@
     "<b>\"Like ChatGPT or Claude\"</b> should not mean open-ended chat inside a money product. Every off-topic turn costs a model call and a Meta message and adds risk. The persona stays warm and stays on the customer's money and the life around it; it declines the rest in one line.",
     "<b>The calendar.</b> The work is about twenty-four working days of Claude sessions, but with one founder reviewing, deploying and testing on his own phone, that is six to eight calendar weeks. The founder-visible milestone stays early: ledger-aware answers in the first week, his own number on the new brain in the second or third."
   ],
-  "phaseMapCaption": "Five phase columns in build order; every badge is re-checked against the tree on each ship, not taken from the changelog. The rust bar is the Phase 3 gate: the eval condition is met, and the pilot week RESTARTED on 4 October; 46 clean agent turns on 4 and 6 October, no gate fired, day 3 of 7. The dashed line is where the build stands. The table below it is the honest answer to what a customer can actually do today, and its withdrawal row changed grade on 4 October: a customer withdrawal has completed.",
+  "phaseMapCaption": "Five phase columns in build order. The badges were last re-checked against the tree on 13 November and five differ from what is drawn (see Where we are). The rust bar is the Phase 3 gate: the eval condition was met on 18 September and the pilot week stood at day 3 of 7 on 6 October, with no record since. The dashed line is where the build stands: unchanged since 6 October on the agent; the work since went into the subsystems around it. The table below it is the honest answer to what a customer can do today.",
   "whereWeAre": [
+    "13 November: a re-baseline after 139 commits in which this map was not touched. The agent is where it was on 6 October: it answers the pilot numbers only, Phase 3 has not started, no hook was deleted, and the layer in front of the model grew from 29 to about 44 intercepts while the chat brain grew from 8,304 to 9,826 lines. What grew instead is everything around it, 34 subsystems, almost all rules and operator tooling for money out after the stolen-card cash-outs of 20 to 22 October: pay-out rules, approval of every pay-out by hand, fraud triage and the watchlist, the per-account freeze, the own-link rule, the send through the ledger, the personal web portal, the Link map, the Meta guardrails, the daily audit loop, the card refund route and two pay-out speeds. They are recorded in docs/SYSTEM_ARCHITECTURE.md with their code, tables, switches and tests. Five badges on the drawings are now wrong and are corrected in words here until the drawings are redone: retire dead code and rewrite the text locks are partial, not shipped; the Vercel plan decision is partial (two daily crons, no ten-minute sweep); promote per language is next, not shadow; notifyCustomer is still partial, now behind the outbound guard. The same day brought the programme board (a ninth tab in Mission Control) and a security sweep whose two critical findings are fixed. Latest code: 6df86a2 plus CHANGELOG 140 and 141.",
     "6 October: the founder ran a long live session (12:46 to 16:06) and sent thirteen annotated screenshots. The agent handled 31 turns on the pilot number; the faults were composition, not money: a deposit question answered with one rail and a question back, a yes/no question turned into a start tool and the Add Money card, deal lists as plain lines. All three are fixed in both prompts and mechanically in the output gate (BUGLOG #89), proven through the harness against the real brain: three deposit bullets ending “To find out more, just ask”, “Yes.” first for the OTT voucher question, and the airtime list in the Telkom shape with affordability and best value. The Blu thread carried the VAS half: a slow electricity vend keeps its hold and is reconciled by re-sending the same request id (BUGLOG #88), and an insufficient balance in a purchase now names the shortfall, sends the top-up link in the same turn, parks and resumes. The pilot week: day 3 of 7, no gate fired on money copy. Latest code bafa652.",
     "4 October: the pilot week restarted with 14 real agent turns (7 replies, 7 proposals, 0 gates fired, 0 errors, p50 about 3 s). Day 1 of 7 is clean. The same morning the founder completed the first customer withdrawal in WaPay's history: Nedbank cardless R20 on OTT's sandbox, through the chat, settled in our ledger (OTT 126382). PayShap stayed pending at OTT and CashSend failed at OTT's provider; both behaved exactly as the money rules require (hold kept, hold released). Three side threads now run in parallel and report to the main session: Blu VAS production enablement (docs/HANDOVER_BLU_V1.md), payouts end to end + the commercial model (docs/HANDOVER_PAYOUTS_V1.md), and the WaPay Money Map commercials dashboard (docs/HANDOVER_COMMERCIALS_V1.md). Between 23 September and 4 October the architecture itself did not move: the pay-out wire format (BUGLOG #80) and the Adumo rail (reporting, reconcile, proven on staging) were rail work, not agent work. Latest code bafa652 (changelog 69: founder review 5, the architecture half; 65: saved pay-out details in the record, the Pay-out reconciliation card, the clarify-step slot rescue), after the payouts thread’s 24d07f8 (remembered beneficiaries, compound answers, the commercial model; migration applied) and the Money Map’s 3355df3 and b9e1366 the same morning.",
     "Phase 2 is deployed behind the pilot list and THE PILOT WEEK IS RUNNING. It started on 19 September with 18 real agent turns, the first this build has ever had. Latest code 0deb5b7.",
@@ -394,100 +395,108 @@
   "products": [
     [
       "Deposit by card or EFT",
-      "Put real money into your wallet (PayFast)",
-      "LIVE, real money",
-      "YES. 4 settled deposits, newest 12 Sep 2026. Real rand left a real bank.",
+      "Put real money into your wallet",
+      "LIVE, real money, PayFast",
+      "YES. PayFast has taken no typed card since 22 Oct (Apple Pay only). Adumo is approved, configured in production and has settled one Apple Pay test; it is not the primary rail.",
       "A",
-      "Nothing. This is the one rail where real money moves."
+      "The card rail decision; SHB's written acceptance of pay links before Adumo carries customers."
     ],
     [
       "Pay links (Please Pay Me)",
       "Send someone a link that charges them and pays you",
-      "LIVE, real money on the card leg",
-      "YES. 4 links PAID, 12 open, newest created 19 Sep 2026.",
+      "LIVE, real money",
+      "YES, and abused: stolen cards were cashed out through links on 20 to 22 Oct. About two genuine payments since launch (funnel of 27 Oct). The own-link rule and the Link map are live.",
       "A",
-      "Nothing outstanding."
+      "A payment method real payers can finish; the money-in block for frozen accounts."
     ],
     [
       "Balance, transactions, history",
       "Read your own money back",
       "LIVE",
-      "YES. Answered from the ledger on every turn, and on your phone today.",
+      "YES. Answered from the ledger on every turn, in the chat and on the web portal.",
       "A",
-      "The RECEIPT guard was suppressing two true answers; fixed 19 Sep."
-    ],
-    [
-      "OTT voucher, buy for yourself or gift",
-      "A voucher PIN you can spend at OTT partners",
-      "LIVE but on OTT's TEST host",
-      "PARTLY. 3 vouchers issued, 4 gifts delivered, newest 25 Aug 2026. No voucher has ever been redeemed at a real till.",
-      "B",
-      "Apply the live OTT credentials and drop test- from OTT_BASE_URL, then redeem one for real."
+      "Nothing outstanding."
     ],
     [
       "Send money to a person",
-      "Send to a WaPay number, or a voucher to anyone",
-      "LIVE",
-      "PARTLY. 1 P2P send, 26 Aug 2026. The voucher leg rides the TEST host above.",
-      "C",
-      "A second live send, and the same OTT cutover."
+      "Move balance to another WaPay number, or hold it for someone who has not joined",
+      "LIVE, through the ledger since 18 Oct",
+      "YES for a member (a R400 send on 10 Nov). The non-member leg (held, claimed on join, refunded after 30 days) is unconfirmed on production, and its refund needed the migration of 13 Nov.",
+      "A",
+      "Apply migration 20261113_pending_gifts_refunded; confirm one non-member send."
+    ],
+    [
+      "Withdraw to a bank or ATM",
+      "Pay out to PayShap, a bank account or cardless cash",
+      "LIVE on OTT production since 8 Oct, open to every customer since 12 Oct; every pay-out approved by hand since 26 Oct; two speeds since 13 Nov",
+      "YES. 73 pay-outs paid on the books on 13 Nov. On that day OTT's gateway refuses production's calls, so nothing can be paid until OTT allows our new fixed addresses.",
+      "A",
+      "OTT allows the address pair; the pay-out integrity fixes from the security sweep."
+    ],
+    [
+      "Personal web portal",
+      "Your money without WhatsApp: balance, get paid, top up, send, pay out, ID check",
+      "LIVE at app.wapay.co.za since 21 Oct",
+      "YES. Sign-in with cell number and PIN; the same PIN proof as the chat.",
+      "A",
+      "The web PIN reset must tell the owner and write its wait first."
+    ],
+    [
+      "WaPay for Business",
+      "Take payments as a business, customer list, itemised links",
+      "LIVE, invite list only",
+      "PARTLY. The portal and links work; it rides the pay-link rail graded A above. No real merchant yet.",
+      "B",
+      "A business price; one real merchant."
     ],
     [
       "Fuel voucher (UniFuel, wiCode)",
       "A code for a pump at Shell or Engen",
-      "Founder pilot only, Yoyo TEST",
-      "PARTLY. 1 purchase, 31 Aug 2026. No wiCode has worked at a real pump.",
+      "Founder pilot, Yoyo TEST; the switch reads live for customers since 29 Oct",
+      "PARTLY. One purchase, 31 Aug. No code has worked at a real pump.",
       "C",
-      "Yoyo campaign IDs and signed retainer, then one real pump test."
+      "Set WAPAY_WICODE_LIVE=false; a signed Yoyo contract and production credentials."
     ],
     [
       "Airtime",
       "Top up any SA mobile number",
-      "Code live, Blu QA credentials",
-      "FLOW YES, VEND NO. 19 Sep: \"mine\" resolved, R10 survived, confirm and PIN accepted, vend refused. The only airtime that ever vended was 2 Jan 2026 to 0840012300, a supplier TEST number. No real number has ever worked.",
-      "C",
-      "Blu production credentials. The chat half is done and proven; nothing else in the flow is in the way."
+      "Coming soon for everyone; Blu QA credentials only",
+      "NO. Blu has never issued production credentials.",
+      "D",
+      "Block A from the founder's phone, Blu's sign-off, production credentials."
     ],
     [
       "Data bundles",
       "Buy a data bundle for any number",
-      "Code live, Blu QA credentials",
-      "NO. Zero purchases in production, ever. Shares the airtime code path, so the same supplier limit applies.",
+      "Coming soon for everyone; Blu QA credentials only",
+      "NO. Zero purchases in production, ever.",
       "D",
-      "Blu production credentials, then one end-to-end purchase."
+      "As airtime."
     ],
     [
       "Electricity",
       "Prepaid electricity token for a meter",
-      "Code live, Blu QA credentials",
-      "NO. Zero purchases in production, ever. A silent R50 default was found and removed on 19 Sep before any customer met it (BUGLOG #79).",
+      "Coming soon for everyone; Blu QA credentials only",
+      "NO. Zero purchases in production, ever. Blu's QA electricity lookup answered 500 when last tried.",
       "D",
-      "Blu production credentials, then one token against a real meter."
+      "As airtime, and Blu's QA electricity fixed."
+    ],
+    [
+      "OTT voucher, buy for yourself",
+      "A voucher PIN you can spend at OTT partners",
+      "Switched off for customers since 18 Oct",
+      "NO longer offered. Three vouchers were issued on OTT's TEST host in August; none was redeemed at a till.",
+      "F",
+      "The founder's product decision; the live issuing credentials were received and never applied."
     ],
     [
       "Load a voucher into your wallet",
       "Redeem an OTT or Blu voucher as balance",
-      "Code live, OTT TEST host",
+      "Switched off; Blu load on for the founder's number only (QA)",
       "NO. No redemption in production.",
       "F",
-      "The OTT live cutover, then redeem one real voucher."
-    ],
-    [
-      "Withdraw to a bank or ATM",
-      "Cash out to PayShap, an ATM or an eWallet",
-      "ON, pilot allowlist only, OTT sandbox; production credentials in hand",
-      "YES, ONCE, ON THE SANDBOX: 2026-10-04 08:39 the founder's Nedbank cardless R20 (+R18 fee) completed through the chat, OTT reference 126382, our WPB4D27FAF672A7E, the first customer withdrawal ever to finish. Same morning: PayShap R50 accepted and PENDING at OTT (status 99, R58 held, WP88A417B750FC36); ABSA CashSend R50 FAILED at OTT's provider (97), money returned. All three ran after the 23 Sep wire-format fix (BUGLOG #80); the format is right for every provider, the sandbox's PayShap and CashSend providers are what fail.",
-      "C",
-      "The payouts thread (docs/HANDOVER_PAYOUTS_V1.md): our own collection instructions after a success, 'minimum withdrawals from', remembered beneficiaries with consent, compound answers ('50 and 2') confirmed in one line, the PayShap pending resolved and told once, the commercial model per provider; then the production flip (providers on the production merchant, webhook, float, four envs, redeploy, allowlist kept)."
-    ],
-    [
-      "WaPay for Business",
-      "Take payments as a business, customer CRM",
-      "LIVE, invite list only",
-      "PARTLY. The portal and links work; it rides the same pay-link rail graded A above.",
-      "B",
-      "Attach business.wapay.co.za and onboard one real merchant."
+      "The redemption agreement with OTT; Blu production."
     ]
   ],
-  "productsNote": "Graded on what production actually did, not on what the code supports. Every figure is a count of real rows in the production database on 19 September 2026, except the withdrawal row, which was re-counted on 4 October 2026 after the founder's three live attempts. A is real money end to end; B is proven but on a supplier's test host; C is proven in the chat with the supplier account in the way; D means nobody has ever completed one; F means it has been tried and has never worked. The airtime, data and electricity line is one story and it is not a chat problem: BLU_BASE_URL points at Blu's QA host, which vends only to four whitelisted test numbers, so no real customer number can be topped up on any of the three until the production cutover. The chat now says that honestly before taking a PIN, instead of telling the customer their own number is broken."
+  "productsNote": "Re-stated on 13 November 2026 from the documents of record and that day's production readings (flags, pay-out status, reconciliation), not from a new count of rows: the desktop session cannot reach the database. A is real money end to end; B is proven but on a supplier's test host or behind an invite; C is proven in the chat with the supplier account in the way; D is code only; F is switched off."
 }

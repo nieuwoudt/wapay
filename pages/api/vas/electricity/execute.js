@@ -357,7 +357,8 @@ export default async function handler(req, res) {
       accountId,
       meterNumber,
       amountCents,
-      token: bluResult.token,
+      // The token itself is the customer's electricity and goes only to the customer (review 2026-11-13).
+      tokenPresent: Boolean(bluResult.token),
       providerRef: bluResult.providerRef,
       success: true,
       totalTime,

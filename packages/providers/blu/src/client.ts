@@ -28,6 +28,22 @@ export type BluVoucherStatus = {
  * - BLU_BASIC_USER: Basic auth username (optional)
  * - BLU_BASIC_PASS: Basic auth password (optional)
  */
+/**
+ * A supplier's error body as the log may see it: any echo of the voucher PIN is
+ * replaced by its mask, and the text is cut. For logging only; the code that
+ * decides what the error means reads the real body (review 2026-11-13).
+ */
+export function bodyForLog(body: unknown, pin: string): string {
+  let text: string;
+  try {
+    text = typeof body === 'string' ? body : JSON.stringify(body) ?? '';
+  } catch {
+    return '[unserialisable]';
+  }
+  const safe = pin && pin.length >= 6 ? text.split(pin).join(maskVoucherPin(pin)) : text;
+  return safe.slice(0, 2000);
+}
+
 export class BluClient {
   private base = requireEnv('BLU_BASE_URL');
   private user = process.env.BLU_BASIC_USER || '';
@@ -65,10 +81,13 @@ export class BluClient {
   async checkStatus(pin: string): Promise<BluVoucherStatus> {
     // Blu Swagger: GET /voucher/variable/vouchers?token={PIN}
     const url = `${this.base}/voucher/variable/vouchers?token=${encodeURIComponent(pin)}`;
+    // What the logs see: the path, never the PIN. The address above carries the whole PIN as a
+    // query value, and a voucher PIN is a bearer secret until it is redeemed (review 2026-11-13).
+    const logUrl = `${this.base}/voucher/variable/vouchers?token=${maskVoucherPin(pin)}`;
 
     try {
       console.log('[Blu] Status check request', {
-        url,
+        url: logUrl,
         method: 'GET',
         pin: maskVoucherPin(pin),
       });
@@ -114,11 +133,11 @@ export class BluClient {
       }
 
       console.error('[Blu] Status check failed', {
-        url,
+        url: logUrl,
         method: 'GET',
         pin: maskVoucherPin(pin),
         statusCode: res.statusCode,
-        responseBody: errorBody,
+        responseBody: bodyForLog(errorBody, pin),
       });
 
       // The operator probe reads statusCode and reason off these errors
@@ -253,7 +272,7 @@ export class BluClient {
             method: 'POST',
             requestBody: { requestId: idemKey, token: masked, amount: amountCents },
             statusCode: res.statusCode,
-            responseBody: errorData,
+            responseBody: bodyForLog(errorData, pin),
             extractedMessage: message,
           });
           

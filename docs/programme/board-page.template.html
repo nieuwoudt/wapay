@@ -1,0 +1,328 @@
+<title>WaPay Programme Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one column, a header that says how fresh the board is, five views on the hash, lists before tables. */
+:root{
+  --bg:#f4f7f4;--surface:#ffffff;--sunk:#eaf0eb;--ink:#13201a;--ink2:#46574d;--ink3:#74857b;--line:#dbe4dd;
+  --accent:#23743f;--accent-soft:rgba(53,152,83,.13);--on-accent:#ffffff;
+  --good:#2f9e5b;--warn:#b97a08;--crit:#c23d2b;--info:#5f7187;--parked:#8b9299;
+  --crit-soft:rgba(194,61,43,.11);--warn-soft:rgba(185,122,8,.13);--good-soft:rgba(47,158,91,.13);
+  --text:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1411;--surface:#141d19;--sunk:#19241f;--ink:#e6efe9;--ink2:#a8b8ae;--ink3:#7a8a80;--line:#25332b;
+  --accent:#6fcf90;--accent-soft:rgba(111,207,144,.15);--on-accent:#08130d;
+  --good:#5cc586;--warn:#e3ad45;--crit:#f08471;--info:#93a6bd;--parked:#8b9299;
+  --crit-soft:rgba(240,132,113,.15);--warn-soft:rgba(227,173,69,.15);--good-soft:rgba(92,197,134,.15);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1411;--surface:#141d19;--sunk:#19241f;--ink:#e6efe9;--ink2:#a8b8ae;--ink3:#7a8a80;--line:#25332b;
+  --accent:#6fcf90;--accent-soft:rgba(111,207,144,.15);--on-accent:#08130d;
+  --good:#5cc586;--warn:#e3ad45;--crit:#f08471;--info:#93a6bd;--parked:#8b9299;
+  --crit-soft:rgba(240,132,113,.15);--warn-soft:rgba(227,173,69,.15);--good-soft:rgba(92,197,134,.15);
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:400 14px/1.5 var(--text);font-variant-numeric:tabular-nums;
+  padding-block:22px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline;justify-content:space-between}
+h1{font:700 22px/1.2 var(--text);letter-spacing:-.01em;margin:0;text-wrap:balance}
+h1 span{color:var(--accent)}
+.fresh{color:var(--ink3);font-size:12.5px}
+nav{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:0}
+nav a{color:var(--ink2);text-decoration:none;font-weight:600;font-size:13px;padding:8px 12px;border-bottom:2px solid transparent;margin-bottom:-1px}
+nav a:hover{color:var(--ink)}
+nav a.on{color:var(--accent);border-bottom-color:var(--accent)}
+a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+main{display:flex;flex-direction:column;gap:22px;min-width:0}
+section{display:flex;flex-direction:column;gap:8px;min-width:0}
+h2{font:700 15px/1.3 var(--text);margin:0;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+h2 small{font:500 12.5px var(--text);color:var(--ink3)}
+.lede{color:var(--ink2);font-size:13px;margin:0;max-width:70ch}
+.counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.counts div{background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.counts b{font:700 24px/1.1 var(--text);letter-spacing:-.02em}
+.counts b.hot{color:var(--crit)}
+.counts span{color:var(--ink3);font-size:12px}
+.pulse{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;padding:4px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink2)}
+.chip b{color:var(--ink);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.s-good,.s-green{background:var(--good)}.s-warn,.s-amber{background:var(--warn)}.s-crit,.s-red{background:var(--crit)}.s-info{background:var(--info)}.s-parked{background:var(--parked)}
+.alert{font-size:13px;color:var(--ink2);margin:0;padding:8px 12px;border-radius:8px;background:var(--crit-soft)}
+.alert.warn{background:var(--warn-soft)}
+.alert b{color:var(--ink)}
+.list{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.item{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;padding:10px 14px;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.item .t{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.item .m{grid-column:2;color:var(--ink3);font-size:12.5px;display:flex;flex-wrap:wrap;gap:2px 12px}
+.item .d{grid-column:2;color:var(--ink2);font-size:13px;max-width:78ch;overflow-wrap:anywhere}
+.item .w{grid-column:2;color:var(--ink2);font-size:12.5px}
+.item .id{font-family:var(--mono);font-size:11.5px;color:var(--ink3)}
+.late{color:var(--crit);font-weight:600}
+.p{font:700 11px/1 var(--text);padding:4px 6px;border-radius:5px;align-self:start;margin-top:2px;letter-spacing:.02em;background:var(--sunk);color:var(--ink2)}
+.p.P0{background:var(--crit-soft);color:var(--crit)}.p.P1{background:var(--warn-soft);color:var(--warn)}
+.pill{font:600 11px/1 var(--text);padding:4px 7px;border-radius:999px;background:var(--sunk);color:var(--ink2);white-space:nowrap;text-transform:lowercase}
+.pill.crit{background:var(--crit-soft);color:var(--crit)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.good{background:var(--good-soft);color:var(--good)}
+.empty{padding:14px;color:var(--ink3);font-size:13px}
+.more{border:0;background:none;color:var(--accent);font:600 12.5px var(--text);padding:10px 14px;cursor:pointer;text-align:left;border-top:1px solid var(--line);width:100%}
+.scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font:600 11px var(--text);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 12px;border-top:1px solid var(--line);vertical-align:top}
+tr:first-child td{border-top:0}
+td.n,th.n{text-align:right}
+td.nw{white-space:nowrap}
+tr.go{cursor:pointer}
+tr.go:hover td{background:var(--accent-soft)}
+.filters{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+select,input[type=search]{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;max-width:100%}
+input[type=search]{flex:1 1 200px;min-width:0}
+label.chk{display:inline-flex;gap:6px;align-items:center;color:var(--ink2);font-size:13px}
+.copy{border:1px solid var(--line);background:var(--surface);color:var(--ink2);font:600 11.5px var(--text);padding:3px 8px;border-radius:6px;cursor:pointer}
+a.lnk{color:var(--accent);font-weight:600;font-size:12.5px}
+footer{color:var(--ink3);font-size:12px;border-top:1px solid var(--line);padding-top:12px;max-width:80ch}
+@media (max-width:560px){.item{padding:10px 12px}h1{font-size:19px}}
+@media (prefers-reduced-motion:no-preference){tr.go td,nav a{transition:background .12s,color .12s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><span>WaPay</span> Programme Board</h1>
+    <div class="fresh" id="fresh"></div>
+  </header>
+  <nav id="nav" aria-label="Views"></nav>
+  <main id="view"></main>
+  <footer>Private. Customer numbers are masked and no credential is ever written here. The same board is in Mission Control under Programme; both are published from one master file, so neither is edited by hand.</footer>
+</div>
+
+<script>
+const BOARD = /*__BOARD_JSON__*/null;
+(function () {
+  const VIEWS = [['management', 'Management'], ['build', 'Build'], ['threads', 'Threads'], ['security', 'Security'], ['system', 'System']];
+  const PRIO = { P0: 0, P1: 1, P2: 2, P3: 3 };
+  const STATUS = { OPEN: 'open', IN_PROGRESS: 'in progress', BLOCKED: 'blocked', DECISION: 'your decision', WATCH: 'watch', PARKED: 'parked', DONE: 'done' };
+  const SEV = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 };
+  const state = { ws: 'all', openOnly: true, owner: 'all', q: '' };
+  const b = BOARD || {};
+  const threads = Object.fromEntries((b.threads || []).map((t) => [t.id, t]));
+  const items = b.items || [];
+  const open = items.filter((i) => i.status !== 'DONE');
+
+  function h(tag, attrs) {
+    const el = document.createElement(tag);
+    for (const k in attrs || {}) {
+      const v = attrs[k];
+      if (v == null || v === false) continue;
+      if (k === 'class') el.className = v; else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2), v); else el.setAttribute(k, v === true ? '' : v);
+    }
+    for (let i = 2; i < arguments.length; i++) {
+      const c = arguments[i];
+      if (c == null || c === false) continue;
+      if (Array.isArray(c)) c.forEach((x) => x != null && x !== false && el.append(x)); else el.append(c);
+    }
+    return el;
+  }
+  const safeHref = (u) => (/^(https:\/\/claude\.ai\/|claude:\/\/)[^\s"<>]+$/.test(String(u || '')) ? String(u) : null);
+  const when = (s) => { const d = new Date(s); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' }); };
+  const byPriority = (x, y) => (PRIO[x.priority] - PRIO[y.priority]) || String(x.due || '9999').localeCompare(String(y.due || '9999')) || String(x.id).localeCompare(String(y.id));
+  const ownerText = (o) => {
+    const s = String(o || '');
+    if (s === 'founder') return 'you';
+    if (s === 'main') return 'main session';
+    if (s.indexOf('supplier:') === 0) return s.slice(9);
+    if (s.indexOf('thread:') === 0) return (threads[s.slice(7)] || {}).title || 'a session';
+    return s;
+  };
+  const isLate = (it) => it.due && it.status !== 'DONE' && new Date(it.due + 'T23:59:59') < new Date();
+
+  function itemRow(it, opts) {
+    const o = opts || {};
+    return h('div', { class: 'item' },
+      h('span', { class: 'p ' + it.priority }, it.priority),
+      h('div', { class: 't' }, it.title),
+      h('div', { class: 'm' },
+        h('span', {}, STATUS[it.status] || it.status),
+        o.hideOwner ? null : h('span', {}, ownerText(it.owner)),
+        it.due ? h('span', { class: isLate(it) ? 'late' : '' }, (isLate(it) ? 'overdue ' : 'due ') + it.due) : null,
+        h('span', { class: 'id' }, it.id)),
+      it.detail ? h('div', { class: 'd' }, it.detail) : null,
+      it.blockedOn ? h('div', { class: 'w' }, h('b', {}, 'Waits on: '), it.blockedOn) : null,
+      it.evidence ? h('div', { class: 'w' }, it.evidence) : null);
+  }
+  function list(rows, emptyText, first, opts) {
+    const box = h('div', { class: 'list' });
+    if (!rows.length) { box.append(h('div', { class: 'empty' }, emptyText)); return box; }
+    let all = rows.length <= first;
+    const draw = () => {
+      box.replaceChildren();
+      (all ? rows : rows.slice(0, first)).forEach((it) => box.append(itemRow(it, opts)));
+      if (rows.length > first) box.append(h('button', { class: 'more', type: 'button', onclick: () => { all = !all; draw(); } }, all ? 'Show fewer' : 'Show all ' + rows.length));
+    };
+    draw();
+    return box;
+  }
+  const section = (title, count, lede) => h('section', {}, h('h2', {}, title, count == null ? null : h('small', {}, String(count))), lede ? h('p', { class: 'lede' }, lede) : null);
+
+  function management() {
+    const out = [];
+    const mine = open.filter((i) => i.owner === 'founder' && i.status !== 'WATCH' && i.status !== 'PARKED').sort(byPriority);
+    const others = open.filter((i) => String(i.owner).indexOf('supplier:') === 0).sort(byPriority);
+    const watch = open.filter((i) => i.status === 'WATCH').sort(byPriority);
+    const p0 = open.filter((i) => i.priority === 'P0').length;
+    const late = open.filter(isLate).length;
+    out.push(h('div', { class: 'counts' },
+      h('div', {}, h('b', {}, String(mine.length)), h('span', {}, 'need you')),
+      h('div', {}, h('b', { class: p0 ? 'hot' : '' }, String(p0)), h('span', {}, 'P0 open')),
+      h('div', {}, h('b', { class: late ? 'hot' : '' }, String(late)), h('span', {}, 'past their date')),
+      h('div', {}, h('b', {}, String(others.length)), h('span', {}, 'waiting on others')),
+      h('div', {}, h('b', {}, String(open.length)), h('span', {}, 'open in all'))));
+    if ((b.pulse || []).length) {
+      const s = section('Production right now');
+      s.append(h('div', { class: 'pulse' }, b.pulse.map((p) => h('span', { class: 'chip', title: p.note || '' }, h('span', { class: 'dot s-' + p.state }), p.label + ' ', h('b', {}, String(p.value))))));
+      b.pulse.filter((p) => p.note && (p.state === 'crit' || p.state === 'warn')).forEach((p) => s.append(h('p', { class: 'alert' + (p.state === 'warn' ? ' warn' : '') }, h('b', {}, p.label + ': '), p.note)));
+      out.push(s);
+    }
+    const a = section('Needs you', mine.length, 'Decisions and actions only you can take, most urgent first.');
+    a.append(list(mine, 'Nothing is waiting on you.', 10, { hideOwner: true })); out.push(a);
+
+    const w = section('Workstreams', (b.workstreams || []).length, 'One line each. Select a row to see its items.');
+    const tb = h('tbody');
+    (b.workstreams || []).forEach((x) => {
+      const n = open.filter((i) => i.ws === x.id); const hot = n.filter((i) => i.priority === 'P0').length;
+      tb.append(h('tr', { class: 'go', tabindex: '0', onclick: () => go(x.id), onkeydown: (e) => { if (e.key === 'Enter') go(x.id); } },
+        h('td', { class: 'nw' }, h('span', { class: 'dot s-' + x.state }), ' ', h('b', {}, x.name)),
+        h('td', { style: 'min-width:240px' }, x.summary),
+        h('td', { style: 'min-width:170px' }, x.next || ''),
+        h('td', { class: 'n' }, String(n.length)),
+        h('td', { class: 'n' }, hot ? h('span', { class: 'late' }, String(hot)) : '0')));
+    });
+    w.append(h('div', { class: 'scroll' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Workstream'), h('th', {}, 'Where it stands'), h('th', {}, 'Next'), h('th', { class: 'n' }, 'Open'), h('th', { class: 'n' }, 'P0'))), tb)));
+    out.push(w);
+
+    const o = section('Waiting on others', others.length, 'Suppliers and partners who owe an answer or a credential.');
+    o.append(list(others, 'Nobody outside owes anything.', 6)); out.push(o);
+    const wt = section('Watch', watch.length, 'Risks that need no action today and must not be forgotten.');
+    wt.append(list(watch, 'Nothing on watch.', 6)); out.push(wt);
+
+    if ((b.shipped || []).length) {
+      const s = section('Shipped lately', null);
+      const t = h('tbody');
+      b.shipped.slice(0, 16).forEach((x) => t.append(h('tr', {}, h('td', { class: 'nw' }, x.date), h('td', {}, x.what), h('td', { class: 'nw' }, x.ref || ''))));
+      s.append(h('div', { class: 'scroll' }, h('table', {}, t))); out.push(s);
+    }
+    return out;
+  }
+  function go(id) { state.ws = id; location.hash = 'build'; if (current() === 'build') render(); }
+
+  function build() {
+    const out = [];
+    const sel = h('select', { id: 'f-ws', 'aria-label': 'Workstream', onchange: (e) => { state.ws = e.target.value; render(); } }, h('option', { value: 'all' }, 'All workstreams'), (b.workstreams || []).map((w) => h('option', { value: w.id }, w.name)));
+    sel.value = state.ws;
+    const own = h('select', { id: 'f-owner', 'aria-label': 'Owner', onchange: (e) => { state.owner = e.target.value; render(); } },
+      [['all', 'Anyone'], ['founder', 'You'], ['main', 'Main session'], ['thread', 'Other sessions'], ['supplier', 'Suppliers']].map((x) => h('option', { value: x[0] }, x[1])));
+    own.value = state.owner;
+    const chk = h('input', { id: 'f-open', type: 'checkbox', onchange: (e) => { state.openOnly = e.target.checked; render(); } }); chk.checked = state.openOnly;
+    const q = h('input', { id: 'f-q', type: 'search', placeholder: 'Search items', 'aria-label': 'Search items', oninput: (e) => { state.q = e.target.value; drawGroups(); } }); q.value = state.q;
+    out.push(h('div', { class: 'filters' }, sel, own, h('label', { class: 'chk' }, chk, 'open only'), q));
+    const groups = h('div', { style: 'display:flex;flex-direction:column;gap:22px' });
+    out.push(groups);
+    function drawGroups() {
+      groups.replaceChildren();
+      const needle = state.q.trim().toLowerCase();
+      let shown = 0;
+      (b.workstreams || []).filter((w) => state.ws === 'all' || w.id === state.ws).forEach((w) => {
+        const rows = items.filter((i) => i.ws === w.id && (!state.openOnly || i.status !== 'DONE')
+          && (state.owner === 'all' || i.owner === state.owner || String(i.owner).indexOf(state.owner + ':') === 0)
+          && (!needle || (i.title + ' ' + (i.detail || '') + ' ' + i.id + ' ' + (i.blockedOn || '')).toLowerCase().indexOf(needle) >= 0)).sort(byPriority);
+        if (!rows.length && state.ws === 'all') return;
+        shown += rows.length;
+        const s = h('section', {}, h('h2', {}, h('span', { class: 'dot s-' + w.state }), w.name, h('small', {}, String(rows.length))), h('p', { class: 'lede' }, w.summary));
+        if ((w.live || []).length && state.ws !== 'all') s.append(h('p', { class: 'lede' }, h('b', {}, 'Live: '), w.live.join(' · ')));
+        if ((w.threads || []).length) s.append(h('p', { class: 'lede' }, h('b', {}, 'Sessions: '), w.threads.map((id) => (threads[id] || {}).title || id).join(' · ')));
+        s.append(list(rows, 'No items match.', state.ws === 'all' && !needle ? 6 : 200));
+        groups.append(s);
+      });
+      if (!shown && state.ws === 'all') groups.append(h('div', { class: 'list' }, h('div', { class: 'empty' }, 'No items match.')));
+    }
+    drawGroups();
+    return out;
+  }
+
+  function threadsView() {
+    const s = section('Sessions', (b.threads || []).length, 'Each working session, what it owns and where it stopped. The link opens the session in the Claude app on the computer that holds it; if it does nothing, find the session by its title.');
+    const box = h('div', { class: 'list' });
+    (b.threads || []).slice().sort((x, y) => String(y.lastActive).localeCompare(String(x.lastActive))).forEach((t) => {
+      const n = open.filter((i) => i.owner === 'thread:' + t.id || i.thread === t.id).length;
+      const link = safeHref(t.link);
+      const copy = link ? h('button', { class: 'copy', type: 'button', onclick: (e) => { const btn = e.currentTarget; (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(() => { btn.textContent = 'Copied'; }, () => { btn.textContent = link; }); } }, 'Copy link') : null;
+      box.append(h('div', { class: 'item' },
+        h('span', { class: 'pill ' + (t.state === 'active' ? 'good' : '') }, t.state),
+        h('div', { class: 't' }, t.title),
+        h('div', { class: 'm' }, h('span', {}, 'last active ' + String(t.lastActive).slice(0, 10)), h('span', {}, n + ' open'), link ? h('a', { class: 'lnk', href: link }, 'Open session') : null, copy),
+        t.role ? h('div', { class: 'd' }, t.role) : null,
+        t.leftOff ? h('div', { class: 'w' }, h('b', {}, 'Left off: '), t.leftOff) : null));
+    });
+    if (!(b.threads || []).length) box.append(h('div', { class: 'empty' }, 'No sessions recorded.'));
+    s.append(box);
+    return [s];
+  }
+
+  function security() {
+    const sec = b.security || {};
+    const f = (sec.findings || []).slice().sort((x, y) => ((x.status === 'OPEN' ? 0 : 1) - (y.status === 'OPEN' ? 0 : 1)) || (SEV[x.severity] - SEV[y.severity]));
+    const s = section('Security sweep' + (sec.sweptAt ? ' of ' + String(sec.sweptAt).slice(0, 10) : ''), f.length, sec.summary || '');
+    const box = h('div', { class: 'list' });
+    f.forEach((x) => box.append(h('div', { class: 'item' },
+      h('span', { class: 'p ' + (x.severity === 'CRITICAL' || x.severity === 'HIGH' ? 'P0' : x.severity === 'MEDIUM' ? 'P1' : '') }, x.severity),
+      h('div', { class: 't' }, x.title),
+      h('div', { class: 'm' }, h('span', { class: 'pill ' + (x.status === 'FIXED' ? 'good' : x.status === 'OPEN' ? 'crit' : 'warn') }, x.status), x.commit ? h('span', {}, x.commit) : null, h('span', { class: 'id' }, x.id)),
+      x.scenario ? h('div', { class: 'd' }, x.scenario) : null,
+      x.fix ? h('div', { class: 'w' }, h('b', {}, 'Fix: '), x.fix) : null,
+      x.where ? h('div', { class: 'w id' }, x.where) : null)));
+    if (!f.length) box.append(h('div', { class: 'empty' }, 'No findings recorded.'));
+    s.append(box);
+    return [s];
+  }
+
+  function system() {
+    const a = b.architecture || {}; const out = [];
+    const s = section('Architecture' + (a.mapVersion ? ' · map ' + a.mapVersion : ''), null, a.phase || '');
+    if (safeHref(a.mapUrl)) s.append(h('p', { class: 'lede' }, h('a', { class: 'lnk', href: safeHref(a.mapUrl), target: '_blank', rel: 'noreferrer' }, 'Open the architecture map')));
+    const t = h('tbody');
+    (a.components || []).forEach((c) => t.append(h('tr', {}, h('td', { class: 'nw' }, h('b', {}, c.id), ' ' + c.name), h('td', { class: 'nw' }, c.state), h('td', {}, c.note || ''))));
+    if ((a.components || []).length) s.append(h('div', { class: 'scroll' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Component'), h('th', {}, 'State'), h('th', {}, 'Note'))), t)));
+    out.push(s);
+    if ((a.subsystems || []).length) {
+      const s2 = section('Subsystems', a.subsystems.length);
+      const t2 = h('tbody');
+      a.subsystems.forEach((c) => t2.append(h('tr', {}, h('td', {}, h('b', {}, c.name), c.note ? h('div', { style: 'color:var(--ink2)' }, c.note) : null), h('td', { class: 'nw' }, c.state), h('td', {}, c.doc || ''))));
+      s2.append(h('div', { class: 'scroll' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Subsystem'), h('th', {}, 'State'), h('th', {}, 'Described in'))), t2)));
+      out.push(s2);
+    }
+    if ((b.docs || []).length) {
+      const s3 = section('Documents', b.docs.length);
+      const t3 = h('tbody');
+      b.docs.forEach((d) => t3.append(h('tr', {}, h('td', { class: 'nw' }, d.doc), h('td', {}, h('span', { class: 'pill ' + (d.state === 'stale' ? 'crit' : 'good') }, d.state)), h('td', {}, d.note || ''))));
+      s3.append(h('div', { class: 'scroll' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Document'), h('th', {}, 'State'), h('th', {}, 'Note'))), t3)));
+      out.push(s3);
+    }
+    return out;
+  }
+
+  const current = () => { const k = location.hash.replace('#', ''); return VIEWS.some((v) => v[0] === k) ? k : 'management'; };
+  function render() {
+    const k = current();
+    document.getElementById('nav').replaceChildren(...VIEWS.map((v) => h('a', { href: '#' + v[0], class: v[0] === k ? 'on' : '', 'aria-current': v[0] === k ? 'page' : null }, v[1])));
+    const view = document.getElementById('view');
+    if (!BOARD) { view.replaceChildren(h('div', { class: 'list' }, h('div', { class: 'empty' }, 'This page has no board data. Build it with scripts/programme-board.mjs page.'))); return; }
+    document.getElementById('fresh').textContent = 'as of ' + when(b.asOf) + (b.build ? ' · build ' + b.build : '') + (b.updatedBy ? ' · ' + b.updatedBy : '');
+    view.replaceChildren(...(k === 'build' ? build() : k === 'threads' ? threadsView() : k === 'security' ? security() : k === 'system' ? system() : management()));
+  }
+  window.addEventListener('hashchange', render);
+  render();
+})();
+</script>

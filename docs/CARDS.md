@@ -432,7 +432,7 @@ physical cards ordered alongside to learn delivery, assignment and PIN.
 No customer can reach any of it yet. The WhatsApp flows and the ledger flow ("add money to my
 card": reserve, load, settle or release) are the next build. A read-only review before merge
 found two ways an early version could send a processed load twice; both are fixed and locked
-(BUGLOG #148).
+(BUGLOG #153).
 
 **One whitelisted address.**
 - **The constraint:** PayCentral whitelists one IP, 155.121.235.0. Vercel's Static IPs are a

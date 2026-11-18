@@ -33,6 +33,19 @@ const nextConfig = {
     return [
       { source: '/app', headers: app },
       { source: '/app/:path*', headers: app },
+      // The operator consoles and the operator links (review 2026-11-13): a pay-out is approved by a
+      // tap on these pages, so no other site may put them in a frame, and their addresses (an operator
+      // link carries its token) are never sent on as a referrer. The bare root is here because the
+      // admin and business hosts serve their console at "/".
+      { source: '/', headers: app },
+      { source: '/admin', headers: app },
+      { source: '/admin/:path*', headers: app },
+      { source: '/business', headers: app },
+      { source: '/business/:path*', headers: app },
+      { source: '/ops/:path*', headers: app },
+      // No API answer is ever guessed to be a page (review 2026-11-13): a route that echoes text
+      // without a content type cannot run as HTML on the admin or portal hosts.
+      { source: '/api/:path*', headers: [{ key: 'X-Content-Type-Options', value: 'nosniff' }] },
     ];
   },
 

@@ -19,6 +19,7 @@ import { requireAdmin } from '../../../lib/admin-auth.js';
 import { INPUTS, preset, boundStatus, measuredToInputs, scenarioUrl, SCALE_MODEL_URL, projectionMatrix, trajectory } from '../../../lib/scale-model.js';
 import { adsConfigured, snapshotAdInsights, lastAdsFetchAt, LAST_FETCH_KEY } from '../../../lib/meta-ads.js';
 import { capiConfigured, capiConfig } from '../../../lib/meta-capi.js';
+import { flowOfRow } from '../../../lib/money-flows.js';
 
 export const config = { maxDuration: 55 };
 
@@ -41,14 +42,6 @@ const month = (d) => (d ? new Date(d).toISOString().slice(0, 7) : null);
 const ratio = (a, b) => (b > 0 ? a / b : null);
 const pct = (a, b) => (b > 0 ? Math.round((1000 * a) / b) / 10 : null);
 const perCents = (cents, n) => (n > 0 ? Math.round(cents / n) : null);
-
-function bucketOf(source) {
-  if (!source) return 'other';
-  if (source.startsWith('LOAD_')) return 'in';
-  if (source.startsWith('SPEND_') || source.startsWith('VOUCHER_GIFT_')) return 'spend';
-  if (source === 'P2P_SEND') return 'transfer';
-  return 'other';
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'method' });
@@ -149,15 +142,14 @@ export default async function handler(req, res) {
   const gmvCents = await safe(async () => {
     const r = await prisma.$queryRaw`
       SELECT je.source AS source, sum(coalesce(jl."creditCents", 0))::bigint AS credit, sum(coalesce(jl."debitCents", 0))::bigint AS debit
-      FROM "JournalEntry" je JOIN "JournalLine" jl ON jl."entryId" = je.id AND jl."accountCode" LIKE 'WALLET:%'
+      FROM "JournalEntry" je JOIN "JournalLine" jl ON jl."entryId" = je.id
+        AND (jl."accountCode" LIKE 'WALLET:%' OR jl."accountCode" LIKE 'EXPENSE:CHARGEBACK:%')
       WHERE je."createdAt" > ${since} GROUP BY 1`;
+    // The same reading as the Dashboard (lib/money-flows.js): a REVERSAL_<X> row comes off the flow of X.
     let total = 0;
     for (const x of r || []) {
-      let source = x.source, sign = 1;
-      if (source && source.startsWith('REVERSAL_')) { source = source.slice(9); sign = -1; }
-      const b = bucketOf(source);
-      if (b === 'in') total += sign * num(x.credit);
-      else if (b === 'spend' || b === 'transfer') total += sign * num(x.debit);
+      const { bucket, cents } = flowOfRow(x);
+      if (bucket === 'in' || bucket === 'spend' || bucket === 'transfer') total += cents;
     }
     return total;
   }, 0);

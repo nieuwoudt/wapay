@@ -218,6 +218,41 @@ export async function setPIN(args: {
   }
 }
 
+/** What the count AFTER an attempt costs: 15 minutes from the 5th, a hard lock from the 10th. */
+export function pinLockFor(attempts: number, now: Date = new Date()): Date | null {
+  if (attempts >= HARD_LOCKOUT_ATTEMPTS) return new Date(now.getTime() + HARD_LOCKOUT_DAYS * 24 * 60 * 60 * 1000);
+  if (attempts >= SOFT_LOCKOUT_ATTEMPTS) return new Date(now.getTime() + SOFT_LOCKOUT_MINUTES * 60 * 1000);
+  return null;
+}
+
+/**
+ * Spend one attempt BEFORE the PIN is checked (review 2026-11-13).
+ *
+ * The count used to be written after the check as "the value I read, plus
+ * one", so a burst of simultaneous wrong PINs all read the same count, were
+ * all checked, and together cost one attempt: the lockout did not hold.
+ * This is a compare-and-set on the count this request read, in one statement:
+ * of any number of requests holding the same count exactly one wins, and the
+ * lock is written in the same statement as the attempt that reaches it. A
+ * request that loses has checked nothing.
+ */
+type FactorUpdateMany = NonNullable<Parameters<ReturnType<typeof getPrisma>['authFactor']['updateMany']>[0]>;
+export async function claimPinAttempt(
+  db: { authFactor: { updateMany(args: FactorUpdateMany): Promise<{ count: number }> } },
+  factor: { id: string; attempts: number },
+  now: Date = new Date(),
+): Promise<{ ok: true; attempts: number; lockedUntil: Date | null } | { ok: false }> {
+  const attempts = factor.attempts + 1;
+  const lockedUntil = pinLockFor(attempts, now);
+  // Typed against the real client, so a wrong field or filter fails the build, not the first PIN.
+  const args: FactorUpdateMany = {
+    where: { id: factor.id, attempts: factor.attempts, OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }] },
+    data: { attempts, lockedUntil, updatedAt: now },
+  };
+  const { count } = await db.authFactor.updateMany(args);
+  return count === 1 ? { ok: true, attempts, lockedUntil } : { ok: false };
+}
+
 /**
  * Verify PIN and issue token
  */
@@ -254,32 +289,33 @@ export async function verifyPIN(args: {
       return { ok: false, error: 'PIN_NOT_SET' };
     }
     
+    // Spend the attempt first, then check the PIN (claimPinAttempt says why). A request that
+    // loses the claim to a simultaneous one reads the row again: twice, so an honest double
+    // submit still goes through, and a burst does not.
+    let factor = authFactor;
+    let claim = await claimPinAttempt(prisma, factor);
+    for (let round = 0; !claim.ok && round < 2; round++) {
+      const again = await checkLockout(accountId);
+      if (again.locked) return { ok: false, error: again.reason, lockedUntil: again.until };
+      const fresh = await prisma.authFactor.findFirst({ where: { accountId, type: 'PIN' } });
+      if (!fresh) return { ok: false, error: 'PIN_NOT_SET' };
+      factor = fresh;
+      claim = await claimPinAttempt(prisma, factor);
+    }
+    if (!claim.ok) {
+      console.log(JSON.stringify({ type: 'pin_attempt_not_claimed', accountId, timestamp: new Date().toISOString() }));
+      return { ok: false, error: 'PIN_BUSY' };
+    }
+    
     // Verify PIN
     warnIfDefaultPepper();
-    const verified = await verifyPINHash(authFactor.secretHash, pin);
+    const verified = await verifyPINHash(factor.secretHash, pin);
     const isValid = verified.ok;
     
     if (!isValid) {
-      // Increment attempts
-      const newAttempts = authFactor.attempts + 1;
-      let lockedUntil: Date | null = null;
-      
-      if (newAttempts >= HARD_LOCKOUT_ATTEMPTS) {
-        // Hard lock: permanent (1 year) - requires OTP reset to unlock
-        lockedUntil = new Date(Date.now() + HARD_LOCKOUT_DAYS * 24 * 60 * 60 * 1000);
-      } else if (newAttempts >= SOFT_LOCKOUT_ATTEMPTS) {
-        // Soft lock: temporary (15 minutes)
-        lockedUntil = new Date(Date.now() + SOFT_LOCKOUT_MINUTES * 60 * 1000);
-      }
-      
-      await prisma.authFactor.update({
-        where: { id: authFactor.id },
-        data: {
-          attempts: newAttempts,
-          lockedUntil,
-          updatedAt: new Date(),
-        },
-      });
+      // The attempt and its lock were written by the claim above.
+      const newAttempts = claim.attempts;
+      const lockedUntil = claim.lockedUntil;
       
       // Log failed attempt
       await prisma.auditLog.create({
@@ -308,7 +344,7 @@ export async function verifyPIN(args: {
     // pepper is rewritten under the current one in the same update (O8).
     const rehash = verified.pepper && verified.pepper !== PIN_PEPPER ? await hashPIN(pin) : null;
     await prisma.authFactor.update({
-      where: { id: authFactor.id },
+      where: { id: factor.id },
       data: {
         attempts: 0,
         lockedUntil: null,

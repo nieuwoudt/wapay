@@ -4,7 +4,7 @@
 
 ---
 
-## 148. The new PayCentral client could send a processed load twice: a followed redirect or a non-JSON 403 read as "never reached PayCentral"
+## 153. The new PayCentral client could send a processed load twice: a followed redirect or a non-JSON 403 read as "never reached PayCentral"
 
 - **Symptom (2026-11-16, read-only review before merge; never in production):** against a local
   test server, one `loadCard` call produced 3 loads when the server answered 303, and one
@@ -21,7 +21,7 @@
   - the `indeterminate` flag was missing on a 5xx;
   - messages and the audit record were not fully redacted;
   - the probe could outrun Vercel's 60 seconds and closed a shared proxy connection.
-- **Fix (CHANGELOG 144).**
+- **Fix (CHANGELOG 151).**
   - "Never sent" now means only that this request's socket never connected, counted by our own
     connector.
   - A money or state call is sent once, on a connection whose harmless door check (a balance
@@ -37,6 +37,41 @@
   sending, 5xx flag, unclear outcomes, message and record redaction, the budget, the probe). A
   local check against a real socket confirmed that a closed port is refused 6 times and a
   redirect after a load is not resent.
+## 152. Mission Control counted a refunded or charged-back card payment as money in
+
+- **Symptom (2026-11-17, read while a chargeback was being booked):** the Dashboard's money in and GMV, and the Growth tab's GMV, did not fall when a card payment was reversed in the ledger.
+- **Root cause:** both routes aggregate wallet lines per entry source and flip the sign for a `REVERSAL_<X>` row, and then read the same column as for the original. A reversal is the mirror of its original, so that column is zero on a reversal and nothing was subtracted. The rule was written twice, once per route, with the same slip. No test built a reversal and added it up.
+- **Fix:** one pure reading, `lib/money-flows.js` `flowOfRow`, used by both routes: a reversal comes off by its opposite column. The aggregates also count the part of a chargeback that WaPay absorbs, so the whole load comes off.
+- **Guard:** `tests/money-flows.test.mjs` builds loads, purchases and sends with the real ledger builders, reverses them and requires each flow to net to zero; it also requires both routes to import the helper, to keep no private bucket function and to count the same lines.
+
+## 151. Four leftover routes answered anyone: an echo stub, a balance read by account id, and two Meta set-up routes
+
+- **Symptom (security sweep, 2026-11-13):** `pages/api/webhook-test.js` echoed a query value; `/api/wallet/balance` returned a balance and a name for any account id; `/api/admin/list-wabas` and `/api/admin/init-templates` ran Meta Graph calls on the production token. None had a caller in the product.
+- **Root cause:** set-up helpers from 2025 that predate `requireInternalAuth` and were never revisited when the VAS routes were gated.
+- **Fix:** the stub is deleted; the other three check the internal key first; `init-templates` no longer returns the error text; every `/api` answer carries `nosniff`; the WhatsApp verification echo is `text/plain`.
+- **Guard:** `tests/public-surface-gates.test.mjs`: every file under `pages/api/admin` and `pages/api/internal` must check a credential before it touches the database or the network (the admin login excepted), and the four leftovers stay closed.
+
+## 150. Money sent to someone who never joined could never go back: the database refused the status that closes the send
+
+- **Symptom (found in review 9 Nov, fixed 13 Nov, before it could bite):** the daily sweep refunds a held send after 30 days by closing its row as `REFUNDED`. The first held sends (18 Oct) reach 30 days on 17 Nov.
+- **Root cause:** `pending_gifts_status_valid` (migration `20260821_pending_gifts`) allows `ISSUED`, `DELIVERED` and `CANCELLED` only. The close was written outside the sweep's `try`, so the first expired row would have thrown and no sender would have been refunded on any night. No money could be lost or doubled: the row stays `ISSUED`, nothing posts, the recipient can still claim.
+- **Fix:** migration `20261113_pending_gifts_refunded` (idempotent) adds `REFUNDED`; `refundExpiredHeldGifts` stops and logs `held_gift_refund_close_refused` when the database refuses.
+- **Guard:** `tests/send-money.test.mjs`: every status `lib/pending-gifts.js` writes is one the check allows; a database that refuses moves nothing and never throws; once it accepts, each send is refunded once. The unit test missed this before because its in-memory table had no check.
+- **Founder:** apply the migration to production before 17 Nov.
+
+## 149. The PIN lock counted a burst of simultaneous wrong PINs as one attempt
+
+- **Symptom (security sweep, 2026-11-13; not seen in production):** the five-try lock is the only thing between a cell number and a wallet's PIN on the web portal. It held for one request at a time and not for many at once.
+- **Root cause:** `verifyPIN` checked the PIN and then wrote "the count I read, plus one". Requests that arrive together all read the same count.
+- **Fix:** `claimPinAttempt` (packages/auth) spends the attempt before the check, as a compare-and-set on the count read, and writes the lock with the attempt that reaches it. A request that loses the claim re-reads twice (so an honest double submit still works) and otherwise checks nothing.
+- **Guard:** `tests/pin-lockout-atomic.test.mjs`: 200 simultaneous wrong PINs get at most five checked before the 15-minute lock and ten in all before the hard lock; `verifyPIN` claims before it checks; no count is computed from a stale read.
+
+## 148. A card credit trusted an unsigned field to say which link it was for
+
+- **Symptom (security sweep, 2026-11-13):** the Adumo browser return decided which pay link to credit from the address and an unsigned form field, and compared the signed reference only with that same unsigned field.
+- **Root cause:** `expected.mref` in `verifyAdumoResponse` came from the request, so the check proved the caller knew the token's reference, not that the token was issued for this link; when the intent held no Adumo reference the check was skipped.
+- **Fix:** the verifier takes `expected.code` and refuses unless the SIGNED reference names that link; a token with no reference names no link. The return route and the webhook both pass it.
+- **Guard:** `tests/adumo.test.mjs`: one approved payment credits one link, however the return is replayed (padded reference, missing reference, reference in the address, another link's own reference). The test fails against the previous verifier.
 
 ## 147. An operator pay-out link said "all clear" and the rail refused it: OTT now asks PayShap for an ID number, and the operator pay-out read only its own static field list
 
