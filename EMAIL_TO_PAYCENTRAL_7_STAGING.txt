@@ -1,0 +1,38 @@
+PAYCENTRAL: TO SIYABONGA (staging funds, API access, open API questions, branding, wallets)
+Written 2026-11-18, after Siyabonga said funds were loaded for our virtual card. His screenshot
+showed R100 on the staging profile. The R100 matches Odette's staging package (the R950 staging
+fee includes "loading the client profile with an initial R100 value"); the R1,000 the founder paid
+on 11 November (quote QU-27681, R1,057.50 with fees) went to the LIVE DigiCentral account
+VC 8729334261, not staging. Background: docs/CARDS.md 0.9 to 0.12. No em dashes (founder style).
+
+-----------------------------------------------------------------------------
+
+Subject: WaPay staging: API access, funds and a few questions
+
+Hi Siyabonga,
+
+Thank you for loading the staging funds.
+
+Funds
+1. Your screenshot shows R100 on our staging profile. Separately, on 11 November we paid R1,057.50 (quote QU-27681: R1,000 plus R57.50 fees) into our live DigiCentral account, VC 8729334261. Could you confirm the R1,000 has been allocated to that live account, and that the R100 on staging is the staging package?
+
+API access (so we can start testing)
+2. Is the staging API base URL https://staging-api.paycentral.co.za, as in the API specification v2.1.5? (The staging portal is at bc-dev.paycentral.co.za.)
+3. Is our staging API login the same email and password as the staging portal, or are there separate API credentials? Please send the password separately from the username.
+4. Please confirm 155.121.235.0 is whitelisted for the staging API.
+5. The staging invoice reads "PC 6528865949". Please confirm the staging profile is set up for DigiCentral (virtual cards).
+6. Is a virtual card already allocated on the staging profile? If so, what is its sequence number?
+
+How the API works for us
+7. Loads: may an amount carry cents (for example 12.50)? Is reference_no 12 digits, and is a repeated reference refused rather than loaded twice?
+8. If a load call times out, is /get/auditlog with our reference the right way to confirm whether it happened?
+9. Please send the stopReasonID list, and tell us which reasons are a temporary freeze that /card/stopcancel can reverse.
+10. When a virtual card is created, how does the cardholder receive the card number, expiry and security code? We would prefer PayCentral to send them to the cardholder by SMS, and our system never to receive the security code.
+11. Are there webhooks for card transactions, and is there an endpoint for our profile balance?
+
+Branding and wallets
+12. Can our virtual cards carry the WaPay logo (co-branded card art), and can we show that card image inside our app? What does it cost, and is there a minimum order?
+13. Can DigiCentral cards be added to Apple Pay (Apple Wallet) and Google Pay (Google Wallet)? If so, is it by manual entry only, or can we add the card for the customer from our app (push provisioning), and through which API?
+
+Kind regards,
+Niev

@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-11-18 (152) — Cards: PayCentral staging account in place; what is outstanding, and the questions to Siyabonga (docs only)
+
+PayCentral created the staging account (portal bc-dev.paycentral.co.za, invoice "PC 6528865949")
+and loaded R100, which is the staging package; the founder's R1,000 went to the live DigiCentral
+account VC 8729334261.
+
+`docs/CARDS.md` §0.12 lists what is outstanding:
+- **From PayCentral:** the staging API login, confirmation of the base URL
+  (`https://staging-api.paycentral.co.za`), the whitelist and the product, and the open API
+  questions.
+- **Branding:** co-branded WaPay card art.
+- **Wallets:** Apple Pay and Google Pay, with manual entry or push provisioning.
+- **On our side:** merge PR #1, the Vercel variables, the probe, and a staging-only card test
+  route as the next build.
+
+It also records what we can answer already (a WaPay-designed masked card in our app). Questions:
+`EMAIL_TO_PAYCENTRAL_7_STAGING.txt`.
+
+---
+
 ## 2026-11-16 (151) — PayCentral client: one whitelisted address handled in code, money calls sent once, card data kept out, a probe
 
 PayCentral whitelists one IP (155.121.235.0), but Vercel's Static IPs are a pair that Vercel cannot

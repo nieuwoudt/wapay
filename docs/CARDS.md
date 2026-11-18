@@ -503,6 +503,78 @@ found two ways an early version could send a processed load twice; both are fixe
 4. Confirm on staging what the audit log returns for a real load. `checkReference` treats
    anything unexpected as `unknown` until then.
 
+
+### 0.12 Staging: where we are and what is outstanding (2026-11-18)
+
+**Where we are.**
+- **Staging account.** Created 2026-11-17, invoice "PC 6528865949". The staging web portal is
+  `https://bc-dev.paycentral.co.za/`.
+- **Staging API.** `https://staging-api.paycentral.co.za` (API spec v2.1.5, section 3). This is
+  the client's default `PAYCENTRAL_BASE_URL`. PayCentral is asked to confirm it, because the
+  portal sits on a different host.
+- **Funds.** Siyabonga (PayCentral) loaded funds on 2026-11-18; his screenshot shows R100 on
+  staging. That matches Odette's staging package (the R950 fee includes an initial R100). The
+  founder's R1,000 (quote QU-27681, R1,057.50, 11 November) went to the **live** DigiCentral
+  account VC 8729334261. PayCentral is asked to confirm both.
+- **Our side.** The client and probe are built (0.11), Vercel Static IPs are on, and PayCentral
+  whitelists 155.121.235.0.
+
+**Outstanding from PayCentral** (`EMAIL_TO_PAYCENTRAL_7_STAGING.txt`):
+1. **Testing.**
+   - The staging API login: email and password, sent separately.
+   - The base URL, the whitelisting of 155.121.235.0, and the DigiCentral product ("PC" on the
+     invoice).
+   - Any card already allocated, and its sequence number.
+2. **API behaviour.**
+   - Cents on loads.
+   - The `reference_no` format and uniqueness.
+   - The audit-log check after a timeout.
+   - The `stopReasonID` list.
+   - How card details reach the cardholder (we prefer an SMS from PayCentral, and never to
+     receive the security code).
+   - Webhooks, and a profile-balance endpoint.
+3. **Branding.** WaPay co-branded card art for virtual cards, showing it in our app, cost and
+   minimum.
+4. **Wallets.** Apple Pay and Google Pay for DigiCentral: manual entry only, or push provisioning
+   from our app, and through which API. The staging API spec has no tokenisation or card-art
+   call.
+
+**Outstanding on our side.**
+1. **Merge pull request #1**, so production has the client and the probe. That changes nothing
+   for customers: the card code runs only when the probe is called with the internal key.
+2. **Vercel.**
+   - Settings → Networking → Static IPs must include Production.
+   - Under Settings → Environment Variables → Production, add `PAYCENTRAL_BASE_URL`,
+     `PAYCENTRAL_API_EMAIL` and `PAYCENTRAL_API_PASSWORD` (Sensitive).
+   - Redeploy.
+3. **Run the probe** and read the verdict:
+   `curl -s -H "x-internal-api-key: …" https://pleasepayme.co.za/api/internal/paycentral-probe`
+4. **A staging-only card test route** (next build, not started). It sits behind the internal key,
+   refuses any base URL other than staging, touches no ledger and no customer, and lets the
+   founder:
+   - create a virtual card for himself;
+   - load R10 with a reference;
+   - check the reference;
+   - read the balance;
+   - freeze and unfreeze.
+5. **Then the customer build:** the WhatsApp flows ("get a card", "add money to my card",
+   "my card", freeze), the ledger flow on the two-phase pattern, and the float card in Mission
+   Control.
+
+**What we can answer already about branding and wallets.**
+- **A WaPay-designed card in our app.** We can show one, with the last four digits and the
+  expiry, using only what the client returns.
+  - The design must show the Mastercard mark.
+  - The full card number and security code never come into WaPay (golden thread 3.5), so the
+    app shows the masked card.
+- **The card art PayCentral holds.** That is the image Apple Wallet and Google Wallet show, and
+  the plastic. It needs PayCentral's co-branding ("Customise your cards" in their portal; the
+  FAQ mentions a minimum order).
+- **Apple Wallet and Google Wallet.** Adding a card needs the issuing programme enabled for
+  Mastercard tokenisation. Adding it from our app (push provisioning) needs an API PayCentral has
+  not documented, and usually a native app. Neither is possible to confirm from the spec; both
+  are asked.
+
 ---
 
 ## Paymentology direct (2026-10-15; the route at 30,000 cards)
