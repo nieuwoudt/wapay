@@ -2064,12 +2064,20 @@ async function handlePostOnboarding({ account, from, text, messageId = null }) {
 
   // BUSINESS PORTAL CODE, requested FROM the phone (WaPay for Business,
   // 2026-09-04) — the same inversion as the admin code above: the owner's own
-  // message opens the window, so the reply always delivers free-form. Numbers
-  // that own no business (and may not register) get no hint the command exists.
+  // message opens the window, so the reply always delivers free-form. A number
+  // that owns no business (and may not register) is told so, about itself only.
   if (matchBusinessLoginAsk(text)) {
     const answered = await handleBusinessLoginAsk({ from, account });
     if (answered) return answered;
-    // Not a business owner (and not invited): route normally, say nothing.
+    // Only a read error reaches here: route normally.
+  }
+
+  // "LOGIN" / "sign in" (2026-11-18, BUGLOG #153): answered by code from what exists for this number,
+  // before the model and before the Pay agent. The model had answered it with a command that does
+  // nothing for most numbers, and then asked for it again.
+  {
+    const { matchLoginAsk } = await import('../../../lib/login-ask.js');
+    if (matchLoginAsk(text)) return await handleLoginAsk({ from, account });
   }
 
   // STOP for everyone (WhatsApp Business Messaging Policy; 2026-10-20, BUGLOG #130): the word opts the customer
@@ -3202,8 +3210,9 @@ function matchAdminLoginAsk(text = '') {
 /**
  * Issue and reply with a WaPay for Business sign-in code, in-session. Returns
  * the send result when this number is an owner or an invitee (code, or an
- * honest throttle/cap line), and null for everyone else so the message routes
- * on as if the command did not exist. Called from the fresh-routing path AND
+ * honest throttle/cap line), a plain "no business on this number" line for
+ * everyone else (lib/login-ask.js, BUGLOG #153), and null only when the answer
+ * could not be read. Called from the fresh-routing path AND
  * from inside any waiting conversation state: an owner who is mid-flow must
  * still be able to get into the portal (founder live test 2026-09-06).
  */
@@ -3730,7 +3739,37 @@ async function handleBusinessLoginAsk({ from, account }) {
   if (issued.reason === 'CAPPED') {
     return await sendWhatsAppText({ to: from, text: `⏸️ That is today's limit of sign-in codes. Please try again tomorrow, or sign in with your password.` });
   }
+  // No business on this number, or a paused one (2026-11-18, BUGLOG #153): said plainly, by code. Routing
+  // on "as if the command did not exist" handed the words to the model, whose feature notes name the
+  // command, so it told the customer to type what they had just typed. A read error still returns null.
+  if (issued.reason === 'NO_BUSINESS' || issued.reason === 'SUSPENDED') {
+    const { noBusinessLoginText, pausedBusinessLoginText } = await import('../../../lib/login-ask.js');
+    const { configuredAppHost } = await import('../../../lib/app-host.js');
+    const { supportEmail } = await import('../../../lib/app-portal.js');
+    logStructured('business_login_no_code', { accountId: account.id, reason: issued.reason });
+    const line = issued.reason === 'SUSPENDED' ? pausedBusinessLoginText({ supportEmail: supportEmail() }) : noBusinessLoginText({ appHost: configuredAppHost() });
+    return await sendWhatsAppText({ to: from, text: await localizeOutbound(line, await userLang(account)), kind: 'guard' });
+  }
   return null;
+}
+
+/**
+ * "login" / "log in" / "sign in" / "how do I log in" (lib/login-ask.js): the person is already in their
+ * account here, the same account is in a browser, and a business portal code is named only to a number
+ * that has a business. Before the model and before the Pay agent, so no brain invents a sign-in step.
+ */
+async function handleLoginAsk({ from, account }) {
+  const { loginAnswer } = await import('../../../lib/login-ask.js');
+  const { configuredAppHost } = await import('../../../lib/app-host.js');
+  let hasBusiness = false;
+  try {
+    const business = await prisma.business.findUnique({ where: { accountId: account.id }, select: { status: true } });
+    hasBusiness = business?.status === 'ACTIVE';
+  } catch {
+    // Unknown is "no business": the reply then names nothing the chat might not do for this number.
+  }
+  logStructured('login_ask', { accountId: account.id, hasBusiness });
+  return await sendWhatsAppText({ to: from, text: await localizeOutbound(loginAnswer({ appHost: configuredAppHost(), hasBusiness }), await userLang(account)), kind: 'guard' });
 }
 
 function matchBusinessLoginAsk(text = '') {

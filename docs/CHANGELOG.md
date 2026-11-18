@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-11-18 (147) — "login" in the chat is answered by code, and "business login" tells a number with no business so
+
+A customer typed "login", was told by the model to say "business login", did, and was told to say it again (BUGLOG #153). The loop guard caught the second reply; the first wrong instruction had already gone.
+
+- `lib/login-ask.js`: `matchLoginAsk` (a bare sign-in ask, anchored on the whole message), `loginAnswer` (this chat is your account; the web portal with cell number and PIN; a business portal code only for an active business; forgot PIN), `noBusinessLoginText`, `pausedBusinessLoginText`.
+- `pages/api/webhooks/message-processor-v2.js`: the hook sits after the business-login hook and before the Pay agent dispatch, so both brains give the same answer. `handleBusinessLoginAsk` answers `NO_BUSINESS` and `SUSPENDED` by code; only an answer that could not be read routes on.
+- `lib/business-auth.js` `requestBusinessOtpInSession` returns the reason `NO_BUSINESS` for a finished wallet that owns no business and is not invited.
+- `lib/how-it-works.js`: the business note no longer hands "business login" to everyone.
+- Tests: `tests/login-ask.test.mjs` (8); `tests/business-portal.test.mjs` updated. The chat harness (`pnpm qa:chat`) was not run: it needs the database, which the session that wrote this could not reach.
+
 ## 2026-11-17 (146) — Disputed card money can be withheld from a balance into a WaPay-held liability, released back, or used first by a refund or chargeback of the same payment
 
 When a card payment is disputed or cannot be verified and nothing has been refunded yet, the founder needed a way to take the money it credited off the customer's balance without calling it income and without sending anything back to the processor. Until now the only tools were a full refund (refused SHORT when the balance had been spent) and a chargeback (only once the bank acts).

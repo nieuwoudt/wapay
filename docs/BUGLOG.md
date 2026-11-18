@@ -4,6 +4,13 @@
 
 ---
 
+## 153. "login" in the chat sent a customer round in a circle
+
+- **Symptom (2026-11-18):** a customer typed "login". The model told them to say "business login" for a code. They did, and were told to say it again; the loop guard replaced the second reply and promised a person.
+- **Root cause:** three things together. Nothing handled a bare sign-in ask before the model. The feature notes the model reads (`lib/how-it-works.js`) said "say business login for your portal code any time", with no condition. And "business login" answered only a number that owns a business or is invited: for everyone else it returned nothing "so the command's existence leaks nothing" and the words went back to the model, which knew the command and asked for it again.
+- **Fix:** `lib/login-ask.js`. A bare sign-in ask ("login", "log in", "sign in", "how do I log in") is answered by code, before the model and before the Pay agent: this chat is the account, the same account is in a browser at the web portal with the cell number and PIN, and a business portal code is named only to a number with an active business. "business login" from a number with no business is answered plainly, about that number only, with the one command that does something for it ("business account"); a paused business is told so. `requestBusinessOtpInSession` returns the reason `NO_BUSINESS`; a read error still returns nothing and routes on. The feature note now says "once your business is open".
+- **Guard:** `tests/login-ask.test.mjs`: the matcher's yes and no lists; every command a reply names is run through its own handler's matcher and through the loop guard; the 18 November conversation is replayed; the hook must sit after the business-login hook and before the Pay agent dispatch. `tests/business-portal.test.mjs` holds the `NO_BUSINESS` reason apart from an unfinished wallet.
+
 ## 152. Mission Control counted a refunded or charged-back card payment as money in
 
 - **Symptom (2026-11-17, read while a chargeback was being booked):** the Dashboard's money in and GMV, and the Growth tab's GMV, did not fall when a card payment was reversed in the ledger.

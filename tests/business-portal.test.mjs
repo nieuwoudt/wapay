@@ -320,7 +320,16 @@ test('registration is CLOSED by default; allowlist or WAPAY_BUSINESS_SIGNUPS=ope
   assert.equal(ok.ok, true); assert.match(ok.code, /^\d{6}$/); assert.equal(ok.hasBusiness, false);
   assert.match(prisma.otpCode._rows[0].code, /^biz:/, 'stored hashed');
   prisma.account._rows.push({ id: 'acc-x', msisdn: '0839999999', waId: '27839999999' });
-  assert.equal((await requestBusinessOtpInSession({ prisma, msisdn: '0839999999' })).ok, false, 'not allowed to register, no business: silent');
+  const unfinished = await requestBusinessOtpInSession({ prisma, msisdn: '0839999999' });
+  assert.equal(unfinished.ok, false, 'no finished wallet: no code');
+  assert.equal(unfinished.reason, undefined, 'and no reason, because nothing is known about the number');
+  // A finished wallet that owns no business and is not invited: no code, and the reason is a fact about
+  // the sender's own number, so the chat says it instead of handing the words to a model (BUGLOG #153).
+  const noBusiness = await requestBusinessOtpInSession({ prisma, msisdn: '0821112222' });
+  assert.equal(noBusiness.ok, false, 'not allowed to register, no business: no code');
+  assert.equal(noBusiness.reason, 'NO_BUSINESS');
+  assert.equal(noBusiness.code, undefined);
+  assert.equal(prisma.otpCode._rows.length, 1, 'no code row was written for them');
   const p2 = stubPrisma();
   const c = await issueCode(p2);
   p2.account._rows.push({ id: 'acc-y', msisdn: '0839999998', waId: '27839999998' });
@@ -688,15 +697,19 @@ test('processor: business-login matcher is narrow, sits after the admin hook, re
   }
   assert.match(processor, /businessId: \{ not: null \}/, '"change my amount" never mints a personal link over open business tickets');
   // The shared helper issues the code, answers throttle/cap for legitimate
-  // askers only, and stays silent for everyone else.
+  // askers only, tells a number with no business so (BUGLOG #153: silence sent
+  // the words to the model, which asked for them again), and returns null only
+  // when nothing could be read.
   const helperIdx = processor.indexOf('async function handleBusinessLoginAsk(');
   assert.ok(helperIdx > -1, 'shared helper exists');
-  const helper = processor.slice(helperIdx, processor.indexOf('\nfunction matchBusinessLoginAsk', helperIdx));
+  const helper = processor.slice(helperIdx, processor.indexOf('\nasync function handleLoginAsk(', helperIdx));
+  assert.match(helper, /issued\.reason === 'NO_BUSINESS' \|\| issued\.reason === 'SUSPENDED'/, 'no business or a paused one: a plain line, never the model');
+  assert.match(helper, /noBusinessLoginText\(/); assert.match(helper, /pausedBusinessLoginText\(/);
   assert.match(helper, /requestBusinessOtpInSession/); assert.match(helper, /issued\.ok/);
-  assert.ok(!/not a business/i.test(helper.split('issued.ok')[0]), 'silent for non-owners');
+  assert.ok(!/not a business/i.test(helper.split('issued.ok')[0]), 'nothing is said before the code function has answered');
   assert.match(helper, /issued\.reason === 'THROTTLED'/, 'an owner or invitee asking twice is told about the throttle');
   assert.match(helper, /issued\.reason === 'CAPPED'/, 'and about the daily cap');
-  assert.match(helper, /return null;\s*\n\}/, 'everyone else falls through');
+  assert.match(helper, /return null;\s*\n\}/, 'only an answer that could not be read falls through');
   // Two call sites: fresh routing (after the admin hook, before slot parsing)
   // and inside a waiting conversation state (before the state dispatch).
   assert.equal((processor.match(/await handleBusinessLoginAsk\(\{ from, account \}\)/g) || []).length, 2, 'called from fresh routing AND from inside a waiting state');
