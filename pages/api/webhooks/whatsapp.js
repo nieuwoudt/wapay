@@ -412,12 +412,13 @@ export default async function handler(req, res) {
                   const priceCat = String(status.pricing?.category || '').toLowerCase().replace(/[^a-z_]/g, '').slice(0, 30);
                   if (status.status === 'sent' && priceCat) await webhookPulse(`price-${priceCat}`);
                   // A message Meta billed as business-initiated (utility, marketing, authentication) must
-                  // have gone to someone who wrote to WaPay; one to a stranger is counted RED and alerted
-                  // (BUGLOG #144). Independent of the code path that sent it.
+                  // have gone to someone who wrote to WaPay; one to a stranger that WaPay's code sent is
+                  // counted RED and alerted (BUGLOG #144), and one another holder of the number sent is
+                  // counted apart (BUGLOG #154). Independent of the code path that sent it.
                   if (status.status === 'sent' && priceCat && priceCat !== 'service' && priceCat !== 'referral_conversion') {
                     try {
                       const { strangerCheck } = await import('../../../lib/meta-alerts.js');
-                      await Promise.race([strangerCheck({ prisma, status }), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 4000))]);
+                      await Promise.race([strangerCheck({ prisma, status, phoneNumberId: change.value?.metadata?.phone_number_id || null }), new Promise((resolve) => setTimeout(() => resolve({ skipped: 'TIMEOUT' }), 4000))]);
                     } catch {
                       // diagnostics never change the webhook's behaviour
                     }

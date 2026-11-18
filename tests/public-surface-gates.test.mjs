@@ -26,8 +26,10 @@ const walk = (dir, out = []) => {
   return out;
 };
 
-// The ways a route proves its caller today. A new route uses requireAdmin or requireInternalAuth.
-const GATE = /requireAdmin\(req\)|requireInternalAuth\(req, res\)|if \(!keyOk\(req\)\)|if \(!isAuthed\(req\)\)|req\.headers\['x-admin-key'\] !== ADMIN_KEY/;
+// The ways a route proves its caller today. A new route uses requireAdmin or requireInternalAuth. The
+// incident route uses responderAuth (lib/responder-auth.js): the internal key, or a key that opens that
+// route and nothing else (tests/incidents.test.mjs holds it to one route).
+const GATE = /requireAdmin\(req\)|requireInternalAuth\(req, res\)|responderAuth\(req\)|if \(!keyOk\(req\)\)|if \(!isAuthed\(req\)\)|req\.headers\['x-admin-key'\] !== ADMIN_KEY/;
 const LOGIN = new Set(['pages/api/admin/auth.js']);
 
 test('every admin and internal route checks a credential before it does anything', () => {

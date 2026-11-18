@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-11-18 (148) — An alert says whose code sent a message, and its facts are kept where an agent can pick them up
+
+Two alerts on 17 and 18 November said a WhatsApp utility message had reached a number that never wrote to WaPay and that "a path is missing the gate". No path was: every sender in the repository is gated. The number is also used by UniFuel's voucher delivery, which sends its own templates with its own code, and the check could not tell the two apart (BUGLOG #154). Separately, the founder asked that an alert stop being an e-mail he carries to a session: its facts should be kept where an agent can pick them up and fix the cause.
+
+- **WaPay marks its own business-initiated messages.** `packages/whatsapp/src/send.ts`: `WAPAY_SEND_TAG` in Meta's `biz_opaque_callback_data` on every template (`buildTemplatePayload`) and every Direct Send; plain replies are unchanged. `postMessage` retries once without the mark if Meta refuses it as an invalid parameter (logged as `wa_send_tag_rejected`); nothing else is retried.
+- **The check on Meta's statuses knows the sender** (`lib/meta-alerts.js` `strangerCheck`): marked and to a number that never wrote = WaPay's bug, RED and alerted at once; unmarked = another holder of the number, an `external-<category>` row, no alert below `OTHER_SENDER_ALARM_AT` (5) such minutes in 24 hours, one alarm on the day that level is reached. A status for another phone number is skipped (the webhook passes `metadata.phone_number_id`); an unreadable recipient is a `stranger-unread-` row and never a stranger.
+- **The daily compliance check** (`lib/meta-compliance.js`) reports the two apart: `SENT_TO_STRANGER` (RED) only for WaPay's own code; `OTHER_SENDER_ON_NUMBER` (AMBER, with the count) or `OTHER_SENDER_VOLUME` (RED) for another sender; `STRANGER_CHECK_BLIND` (AMBER) for unread ones. The facts line counts both.
+- **Live incidents** (`lib/incidents.js`, `lib/incident-kinds.js`): the loop guard and the two send alerts write a row into the findings table the daily audit keeps (`audit_findings`, run id `live`), masked like the audit's own rows, at the moment the alert fires and beside it, never ahead of it. The same incident again is the same row, counted; a resolved one that returns reopens as recurring and keeps its note; the daily run's "not seen in two runs" rule skips live rows (`lib/audit/store.js`). Each alert quotes the row's reference.
+- **The responder's route:** `GET /api/internal/incidents` (every open and recurring finding, P1 first, live alerts before audit findings; no account id leaves) and `POST { fingerprint, note }` to close one. `x-responder-key` (`WAPAY_RESPONDER_KEY`, 32 characters or more) opens this route and nothing else (`lib/responder-auth.js`); the internal key opens it too. The runbook is `docs/audits/INCIDENT_RESPONDER.md`.
+- Tests: `tests/outbound-attribution.test.mjs` (14), `tests/incidents.test.mjs` (12); `spam-strike-guard`, `whatsapp-direct-send` and `public-surface-gates` updated. Suite 1,583 pass; `next build` passes. No migration.
+- **To switch on:** nothing for the attribution (it is live with the deploy). For a responder outside the founder's machine: set `WAPAY_RESPONDER_KEY` in Vercel and redeploy.
+
 ## 2026-11-18 (147) — "login" in the chat is answered by code, and "business login" tells a number with no business so
 
 A customer typed "login", was told by the model to say "business login", did, and was told to say it again (BUGLOG #153). The loop guard caught the second reply; the first wrong instruction had already gone.

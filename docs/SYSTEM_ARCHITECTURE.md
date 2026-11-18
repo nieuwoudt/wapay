@@ -94,6 +94,7 @@ Six kinds of guard are in use. A new operator route uses `requireAdmin` or `requ
 | `/api/internal/flags, /float, /funnel, /meta-node, /ads-breakdown` | GET | internal key | Switch readout; live float; sign-up funnel; one Graph node; ad insights. |
 | `/api/internal/payout-status, /payout-reconcile, /payout-probe, /meta-status, /adumo-status, /ads-pipe-check, /capi-dataset, /capi-test-send, /ad-reminders` | GET or POST | internal key, checked by an inline copy in each file (401 when unset or wrong) | Rail probes, reconcile, sandbox probe, Meta status, Adumo status, ads pipe, Conversions API set-up, reminder sweep. |
 | `/api/admin/programme` | GET | admin session | The programme board snapshot for Mission Control's Programme tab (2026-11-13). |
+| `/api/internal/incidents` | GET, POST | responder key (`WAPAY_RESPONDER_KEY`, opens this route only) or internal key (responderAuth) | The incident responder's work list: every open and recurring finding, live alerts and daily-audit findings, P1 first, masked, no account id (GET); close one with a note (POST). Runbook: docs/audits/INCIDENT_RESPONDER.md. |
 | `/api/internal/programme` | GET, POST | internal key | Counts of the stored board (GET); validate and store a board (POST). Never returns content on GET. |
 
 Changed on 2026-11-13: `/api/webhook-test` is deleted; `/api/wallet/balance`, `/api/admin/list-wabas` and `/api/admin/init-templates` need the internal key; every `/api` answer carries `nosniff`; the consoles, the operator links and the bare root refuse framing.
@@ -463,6 +464,18 @@ Each night the day's redacted conversations are swept by rules and read by a mod
 - **Since:** CHANGELOG 99, 113
 - **Described in:** documented in docs/audits/DAILY_AUDIT.md; absent from the architecture record
 
+### Live incidents and the incident responder
+
+An alert's facts are kept as a row the moment it fires, in the same findings table as the daily audit, so an agent can pick it up, fix the cause and close it with the commit. WaPay's own business-initiated WhatsApp messages carry a mark, so the check on Meta's delivery statuses can tell WaPay's code from another sender on the shared number.
+
+- **Code:** `lib/incidents.js`, `lib/incident-kinds.js`, `lib/incidents-api.js`, `lib/responder-auth.js`, `lib/loop-guard.js` (loopedPhrases), `lib/meta-alerts.js` (strangerCheck, sentByWaPay), `packages/whatsapp/src/send.ts` (WAPAY_SEND_TAG, buildTemplatePayload, postMessage)
+- **Routes:** `/api/internal/incidents`
+- **Data:** audit_findings rows with run id `live`; processed_messages pulse rows `external-<category>`, `stranger-<category>`, `stranger-unread-<category>`
+- **Switches:** WAPAY_RESPONDER_KEY (32 characters or more; opens the incident route only)
+- **Tests:** `tests/incidents.test.mjs`, `tests/outbound-attribution.test.mjs`, `tests/login-ask.test.mjs`
+- **Since:** CHANGELOG 147, 148
+- **Described in:** docs/audits/INCIDENT_RESPONDER.md; docs/WHATSAPP_POLICY_COMPLIANCE.md (2026-11-18)
+
 ### Didit KYC and resume after verification
 
 Hosted identity check; after it lands the interrupted pay-out continues by itself.
@@ -644,6 +657,7 @@ Read them from `/api/internal/flags` and `/api/internal/payout-status`; never gu
 | Onboarding | `WAPAY_ONBOARDING_BUSINESS_QUESTION` | not asked unless the value is ask | The for-you-or-a-business question after sign-up (lib/business-chat.js:49-51). |
 | Onboarding | `WAPAY_ONBOARDING_MARKETING_TEMPLATES` | off | Onboarding may use marketing-category templates (packages/auth/src/onboarding.ts:86). |
 | Messaging and Meta | `WAPAY_ALLOW_MARKETING_TEMPLATES` | off | Lifts the hard block on MARKETING templates (packages/whatsapp/src/send.ts:316-331). |
+| Operations | `WAPAY_RESPONDER_KEY` | unset | A key that opens `/api/internal/incidents` and nothing else, for an incident responder that runs outside the founder's machine (lib/responder-auth.js). Unset or shorter than 32 characters: only the internal key opens the route. |
 | Messaging and Meta | `WHATSAPP_DIRECT_SEND` | off | Direct Send as a rail outside the window (lib/notify.js). |
 | Messaging and Meta | `WAPAY_SEND_CAP` | 8 (never below 3) | Texts to one number in 20 s, per instance (lib/say.js:53-56). |
 | Messaging and Meta | `WAPAY_TEMPLATE_PAYOUT_OUTCOME, WAPAY_TEMPLATE_MONEY_RECEIVED, WAPAY_TEMPLATE_SEND_REFUND, WAPAY_TEMPLATE_PAYMENT_RECEIPT, WAPAY_TEMPLATE_PAYMENT_RECEIPT_V2, WAPAY_TEMPLATE_REQUEST_PAID, WAPAY_TEMPLATE_OPS_ALERT, WAPAY_TEMPLATE_SUPPORT_FOLLOWUP, WAPAY_TEMPLATE_ADMIN_OTP, WAPAY_TEMPLATE_BUSINESS_OTP, WAPAY_TEMPLATE_BUSINESS_REQUEST` | unset = that rail is absent | Names of approved templates for notices outside the 24 hour window. |

@@ -8219,13 +8219,25 @@ async function dispatchOrchestratorAction({ from, text, account, result, pack = 
  * replacement (a person named only when the alert went); otherwise null.
  */
 async function breakEchoLoop({ from, account, reply, inbound, source = null }) {
-  const { echoLoop, loopBreakText } = await import('../../../lib/loop-guard.js');
+  const { loopedPhrases, loopBreakText } = await import('../../../lib/loop-guard.js');
   if (!reply || !inbound) return null;
   const prev = await prisma.conversationTurn.findFirst({ where: { accountId: account.id, role: 'assistant' }, orderBy: { createdAt: 'desc' }, select: { text: true } }).catch(() => null);
-  if (!echoLoop(reply, inbound, prev?.text || '')) return null;
+  const phrases = loopedPhrases(reply, inbound, prev?.text || '');
+  if (!phrases.length) return null;
+  // The alert's facts are kept as an incident (lib/incidents.js, 2026-11-18): the words the model asked
+  // for (its own words, never the customer's message), the blocked reply masked, and where to look, so
+  // the fix starts from the record and not from a screenshot of this e-mail.
   const { sendOpsAlert } = await import('../../../lib/email.js');
-  const sent = await sendOpsAlert({ subject: 'The chat was about to repeat an instruction the customer had just followed', detailsHtml: `<p>Account <code>${account.id}</code>, WhatsApp •••${String(from || '').slice(-4)}. The model asked the customer, twice, to type words they had just sent; the second reply was replaced. Check that the command exists and is handled before the model.</p>` }).catch(() => ({ success: false }));
-  logStructured('echo_loop_blocked', { from, accountId: account.id, source, alerted: !!sent?.success });
+  const { echoLoopIncident } = await import('../../../lib/incident-kinds.js');
+  const { incidentRow, recordIncident, incidentLine } = await import('../../../lib/incidents.js');
+  const incident = echoLoopIncident({ phrases, reply, accountId: account.id, displayName: account.displayName, source });
+  const ref = incidentRow(incident)?.fingerprint?.slice(0, 10) || null;
+  const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const [sent, recorded] = await Promise.all([
+    sendOpsAlert({ subject: 'The chat was about to repeat an instruction the customer had just followed', detailsHtml: `<p>Account <code>${account.id}</code>, WhatsApp •••${String(from || '').slice(-4)}. The model asked the customer, twice, to type ${esc(phrases.map((p) => `"${p}"`).join(', '))}, which nothing handles before the model; the second reply was replaced.</p><p>${esc(incidentLine({ ok: !!ref, ref }))}</p>` }).catch(() => ({ success: false })),
+    recordIncident({ prisma, ...incident }),
+  ]);
+  logStructured('echo_loop_blocked', { from, accountId: account.id, source, alerted: !!sent?.success, incident: recorded?.ref || null, phrases });
   return await localizeOutbound(loopBreakText({ personAsked: !!sent?.success }), await userLang(account));
 }
 

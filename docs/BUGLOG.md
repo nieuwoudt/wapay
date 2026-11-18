@@ -4,6 +4,13 @@
 
 ---
 
+## 154. An alert blamed a missing gate in WaPay's code for a message another system sent from the same number
+
+- **Symptom (2026-11-17 and 18):** "ACTION NOW: WhatsApp utility message to a number that never wrote" and, the next morning, the daily compliance check RED with `SENT_TO_STRANGER`: "a path is missing lib/outbound-guard.js". Every sender in the repository asks the guard or needs an account, no account matched the recipient, and nothing in any conversation happened at that minute.
+- **Root cause:** WaPay's WhatsApp number is not used by WaPay's code alone. UniFuel's voucher delivery sends its own utility templates from the same number with its own code. Meta's delivery statuses for every message from the number arrive at WaPay's webhook, and `strangerCheck` judged each one as if WaPay's code had sent it. The check also treated a recipient it could not read (a database error) as a stranger, and did not look at which phone number a status belonged to.
+- **Fix:** WaPay marks the messages its own code starts. Every template and Direct Send carries `biz_opaque_callback_data: "wapay"` (`packages/whatsapp/src/send.ts` `WAPAY_SEND_TAG`), which Meta returns on each delivery status. A status with the mark to a number that never wrote is WaPay's bug: RED and alerted at once, as before. A status without it came from another holder of the number: counted apart (`external-<category>`), reported by the daily check as AMBER `OTHER_SENDER_ON_NUMBER`, and alarmed only at five such minutes in a day (`OTHER_SENDER_VOLUME`, which is what a leaked token looks like). A status for another phone number is skipped; an unreadable recipient is recorded as a blind spot, not a stranger. If Meta ever refuses the mark as an invalid parameter the message is sent once more without it and the refusal is logged, so no notice is lost.
+- **Guard:** `tests/outbound-attribution.test.mjs` sends through a mocked Graph API (the mark is on templates and Direct Sends and on nothing else; a refused mark is retried once, unmarked; a refusal that is not about a parameter is never retried), and runs the check for a marked message, an unmarked one, a member, another number, an unreadable recipient and the volume alarm.
+
 ## 153. "login" in the chat sent a customer round in a circle
 
 - **Symptom (2026-11-18):** a customer typed "login". The model told them to say "business login" for a code. They did, and were told to say it again; the loop guard replaced the second reply and promised a person.

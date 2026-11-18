@@ -95,7 +95,9 @@ test('payer receipt leg gets the same chain', async () => {
 
 test('package: category is stamped only when explicitly asked', () => {
   const dist = read('../packages/whatsapp/dist/send.js');
-  assert.match(dist, /if \(args\.category\)\s*\n?\s*payload\.category = args\.category;/, 'category is conditional');
+  // Since BUGLOG #154 the same branch also marks the message as sent by WaPay's code (a Direct Send is
+  // business-initiated); a plain reply gets neither (tests/outbound-attribution.test.mjs sends both).
+  assert.match(dist, /if \(args\.category\) \{\s*payload\.category = args\.category;\s*payload\.biz_opaque_callback_data = WAPAY_SEND_TAG;\s*\}/, 'category is conditional');
   assert.match(dist, /sendWhatsAppText\(\{ \.\.\.args, category: 'utility' \}\)/, 'direct wrapper pins utility');
   // The utility category must never leak into ordinary sends: no other
   // assignment path exists.

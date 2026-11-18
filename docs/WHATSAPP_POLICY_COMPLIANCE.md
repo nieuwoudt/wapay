@@ -127,6 +127,23 @@ earlier, and it would let anyone make WaPay send "please pay R500" to any number
   is the same either way, so it never tells whether a number is on WaPay.
 - Reminders ("remind 2" in the chat, "Send reminder" on the web) are a message the customer sends themselves.
 
+## 2026-11-18: the number has two senders, and the check now says which one (BUGLOG #154, CHANGELOG 148)
+
+WaPay's code is not the only thing that sends from WaPay's number. UniFuel's voucher delivery sends its own utility
+templates from the same number with its own code, to the number its buyer gave. Rule 1 and `lib/outbound-guard.js`
+bind WaPay's code; they cannot bind a second codebase.
+
+- **WaPay's own messages are marked.** Every template and Direct Send WaPay's code sends carries
+  `biz_opaque_callback_data: "wapay"`, which Meta returns on each delivery status.
+- **A marked message to a number that never wrote** is a gate missing in WaPay's code: RED, alerted at once, and
+  recorded as a live incident. This has not happened since the guard went in.
+- **An unmarked one** came from another holder of the number. It is counted (`external-<category>`), shown by the
+  daily check as AMBER with the count, and alarmed only at five such minutes in a day, which is what a leaked
+  token or a runaway sender looks like.
+- **What this does not settle:** whether another product should send from this number at all. Meta counts blocks
+  and reports against the number whoever's code sent the message. That is the founder's decision; the daily count
+  is there so it is made on numbers.
+
 ## 2026-10-27: the second strike, and the rule moved into the rails (BUGLOG #144, CHANGELOG 133)
 
 Meta flagged the number for spam again: `ACCOUNT_VIOLATION` / `SPAM` at 20:03 UTC on 23 October and 20:04 UTC on

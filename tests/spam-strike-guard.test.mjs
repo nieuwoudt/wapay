@@ -118,7 +118,7 @@ test('the webhook alerts on account events and checks business-initiated statuse
   const pulse = hook.indexOf("await webhookPulse(`account-${bits");
   const alert = hook.indexOf('metaEventAlert({ field: change.field, value: v, prisma })');
   assert.ok(pulse > 0 && alert > pulse && alert - pulse < 900, 'the alert follows the pulse row in the same block');
-  assert.match(hook, /strangerCheck\(\{ prisma, status \}\)/);
+  assert.match(hook, /strangerCheck\(\{ prisma, status, phoneNumberId: change\.value\?\.metadata\?\.phone_number_id \|\| null \}\)/);
   assert.match(hook, /priceCat !== 'service' && priceCat !== 'referral_conversion'/);
   assert.match(hook, /Promise\.all\(\[deliveryStallCheck\(\{ prisma \}\), qualityWatch\(\{ prisma \}\)\]\)/);
   assert.ok(!/res\.(status|send|json)\([^)]*\)[\s\S]{0,40}metaEventAlert/.test(hook), 'awaited before the ACK, never after it');
@@ -146,8 +146,10 @@ test('a business-initiated message Meta delivered to a number that never wrote i
   const deps = { sendOpsAlert: async (a) => { mails.push(a); return { success: true }; }, opsPersonAlert: async () => ({ sent: 1 }) };
   assert.equal((await strangerCheck({ prisma: db, status: { status: 'sent', recipient_id: '27830000001', pricing: { category: 'utility' } }, now: NOW, deps })).stranger, false);
   assert.deepEqual(await strangerCheck({ prisma: db, status: { status: 'sent', recipient_id: '27830000099', pricing: { category: 'service' } }, now: NOW, deps }), { skipped: true });
-  const hit = await strangerCheck({ prisma: db, status: { status: 'sent', recipient_id: '27830000099', pricing: { category: 'utility' } }, now: NOW, deps });
+  // The status carries WaPay's mark: WaPay's own code sent it (tests/outbound-attribution.test.mjs covers an unmarked one).
+  const hit = await strangerCheck({ prisma: db, status: { status: 'sent', recipient_id: '27830000099', pricing: { category: 'utility' }, biz_opaque_callback_data: 'wapay' }, now: NOW, deps });
   assert.equal(hit.stranger, true);
+  assert.equal(hit.external, false);
   assert.ok(db.rows.some((r) => r.waMessageId === 'stranger-utility:2026-10-27T13:00'));
   assert.match(mails[0].detailsHtml, /•••0099/);
   assert.ok(!/27830000099/.test(mails[0].detailsHtml), 'last four digits only');

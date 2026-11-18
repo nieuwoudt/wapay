@@ -51,6 +51,78 @@ function resolveCredentials(): { accessToken: string; phoneNumberId: string } {
 }
 
 /**
+ * WaPay's mark on the messages its own code starts (2026-11-18, BUGLOG #154).
+ *
+ * WaPay's WhatsApp number is not used by WaPay's code alone: UniFuel's voucher delivery sends its own
+ * templates from the same number with its own code. Meta's delivery statuses for every message from the
+ * number arrive at WaPay's webhook, and the check that looks for a business-initiated message to someone
+ * who never wrote to WaPay (lib/meta-alerts.js strangerCheck) could not tell whose code had sent one, so
+ * it reported a missing gate in WaPay's code when there was none.
+ *
+ * Every template and every Direct Send that leaves this file carries this value in Meta's
+ * `biz_opaque_callback_data` (a string the sender sets and Meta returns, unread, on each delivery status
+ * of that message). A status that carries it was sent by WaPay's code; one that does not was sent by
+ * something else that holds the number. Plain replies are not marked: Meta bills them as service and the
+ * check never looks at them.
+ */
+export const WAPAY_SEND_TAG = 'wapay';
+
+/** True when a delivery status (or any object carrying Meta's echo of the field) bears WaPay's mark. Pure. */
+export function sentByWaPay(status: { biz_opaque_callback_data?: unknown } | null | undefined): boolean {
+  return typeof status?.biz_opaque_callback_data === 'string' && /^wapay(?:$|[:\s])/.test(status.biz_opaque_callback_data);
+}
+
+/** The template message as Meta receives it, mark included. Pure and exported so a test locks the wire shape. */
+export function buildTemplatePayload(args: { to: string; templateName: string; languageCode: string; components?: unknown[] }): Record<string, any> {
+  return {
+    messaging_product: 'whatsapp',
+    to: args.to,
+    type: 'template',
+    template: {
+      name: args.templateName,
+      language: {
+        code: args.languageCode,
+      },
+      components: args.components || [],
+    },
+    biz_opaque_callback_data: WAPAY_SEND_TAG,
+  };
+}
+
+/** Meta's answer to an invalid request parameter (error code 100) on an HTTP 400. Pure. */
+export function invalidParameter(statusCode: number, data: any): boolean {
+  return statusCode === 400 && Number(data?.error?.code) === 100;
+}
+
+/**
+ * POST one message. A marked message that Meta refuses as an invalid parameter is sent once more without
+ * the mark: a notice about someone's money is worth more than knowing whose code sent it, and the refusal
+ * is logged so the mark is fixed rather than silently lost. Nothing else is retried.
+ */
+async function postMessage(url: string, accessToken: string, payload: Record<string, any>): Promise<{ statusCode: number; data: any }> {
+  const post = async (bodyObject: Record<string, any>) => {
+    const { statusCode, body } = await request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(bodyObject),
+    });
+    const data = await body.json() as any;
+    return { statusCode, data };
+  };
+  const first = await post(payload);
+  if (!('biz_opaque_callback_data' in payload) || !invalidParameter(first.statusCode, first.data)) return first;
+  const { biz_opaque_callback_data: _mark, ...unmarked } = payload;
+  const second = await post(unmarked);
+  if (second.statusCode < 400) {
+    console.error(JSON.stringify({ type: 'wa_send_tag_rejected', messageType: payload.type, error: String(first.data?.error?.message || '').slice(0, 160) }));
+  }
+  return second.statusCode < 400 ? second : first;
+}
+
+/**
  * Mark an inbound message read and show the typing indicator while the reply
  * is prepared (Meta: developers.facebook.com/docs/whatsapp/cloud-api/typing-indicators;
  * the indicator lasts up to 25 s or until we send). Strictly best-effort:
@@ -348,31 +420,12 @@ export async function sendWhatsAppTemplate(args: SendTemplateArgs): Promise<{
     
     const url = `${WHATSAPP_API_BASE}/${phoneNumberId}/messages`;
     
-    const payload = {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'template',
-      template: {
-        name: templateName,
-        language: {
-          code: resolvedLanguage,
-        },
-        components: components || [],
-      },
-    };
+    // Marked as sent by WaPay's code (WAPAY_SEND_TAG above), so its delivery status says so.
+    const payload = buildTemplatePayload({ to, templateName, languageCode: resolvedLanguage, components });
     
     console.log(`📤 Sending WhatsApp template: ${templateName} (${resolvedLanguage}) to ${to}`);
     
-    const { statusCode, body } = await request(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    
-    const data = await body.json() as any;
+    const { statusCode, data } = await postMessage(url, accessToken, payload);
     
     if (statusCode >= 400) {
       console.error('❌ WhatsApp template send failed:', data);
@@ -487,20 +540,16 @@ export async function sendWhatsAppText(args: SendTextArgs): Promise<{
         body: text,
       },
     };
-    if (args.category) payload.category = args.category;
+    // A Direct Send is business-initiated (Meta bills it as utility), so it carries WaPay's mark like a
+    // template does. A plain reply is left exactly as it was.
+    if (args.category) {
+      payload.category = args.category;
+      payload.biz_opaque_callback_data = WAPAY_SEND_TAG;
+    }
     
     console.log(`📤 Sending WhatsApp text to ${to}`);
     
-    const { statusCode, body } = await request(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    
-    const data = await body.json() as any;
+    const { statusCode, data } = await postMessage(url, accessToken, payload);
     
     if (statusCode >= 400) {
       console.error('❌ WhatsApp text send failed:', data);
