@@ -1,0 +1,27 @@
+PAYCENTRAL: ONE WHITELISTED IP ONLY; WHICH PRODUCT TO FUND
+Written 2026-11-16, in reply to PayCentral: "We can only whitelist one IP address. Could you also
+please let us know which product you will be testing? We can only fund one product."
+Vercel Static IPs give a pair per region and Vercel's guidance is to allowlist both, so we ask for
+an exception rather than pick one. Fallback if refused: route PayCentral calls through a single
+dedicated egress (Fly.io Johannesburg, the option in docs/BLU_PRODUCTION_CUTOVER.md, or a paid
+static-IP proxy). Product: DigiCentral. Fill in the name. No em dashes (founder style).
+REVISED 2026-11-16 (founder): do not ask PayCentral to change its process. Give one address
+(155.121.235.0) and adjust on our side; describe the platform as hosted on AWS (true: Vercel
+functions run on AWS, Stockholm). Vercel has no setting to pin one address of the pair, so the
+PayCentral client retries a call refused at the whitelist (safe: a refused call never reached
+PayCentral) for staging, and production goes through one dedicated egress address we control.
+
+-----------------------------------------------------------------------------
+
+Hi <name>,
+
+Thank you, no problem.
+
+1. IP address: please whitelist 155.121.235.0. Our platform is hosted on AWS.
+
+2. Product: we will test DigiCentral (virtual cards). Please fund that one.
+
+3. Timing: when can we expect staging to be live for us to test? If it is easier, we are happy to join a quick Teams call to get our access set up.
+
+Kind regards,
+Niev

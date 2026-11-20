@@ -1,0 +1,56 @@
+PAYCENTRAL: REPLY TO ODETTE (staging access, products, white-label, API questions)
+Written 2026-10-23. Background: docs/CARDS.md section 0.9. No em dashes (founder style).
+Before sending: fill in the two IP addresses (Vercel > Settings > Static IPs), sign the
+onboarding document, and attach it with your ID copy and the CIPC registration documents.
+Remove the NDA line if the signed NDA has already gone back.
+
+-----------------------------------------------------------------------------
+
+To: Odette
+Cc: Diego Langeveldt, Shyanne Hendricks
+Subject: Re: PayCentral API documentation and static IP whitelisting
+
+Hi Odette,
+
+Thank you for the API specification, the product deck and the onboarding document, and for the introductions. Diego and Shyanne, good to meet you both.
+
+1. Static IP whitelisting
+We would like to go ahead with staging now (R950 excluding VAT for three months). Please send the invoice.
+Our platform runs on Vercel, so our API calls leave through a fixed pair of static IP addresses for our region:
+- <IP address 1>
+- <IP address 2>
+Please confirm that the staging fee covers both addresses, and that production (R1,500 per month excluding VAT) will whitelist the same pair.
+
+2. Products, our plan and onboarding
+We plan to start issuing cards as soon as staging is live, beginning with DigiCentral (virtual) and CashCentral (physical) for our wallet customers. We would also like CashCentral+ and BeyondCentral available on our profile from the start, so that we can offer them to selected customers as we grow. Separately, we want to test FuelCentral as a standalone product for our UniFuel fuel business. We have selected all five on the onboarding document, and would appreciate the standard costing for each for now.
+Shyanne, the completed and signed onboarding document is attached, with a copy of my ID and our company registration documents. The signed NDA is attached as well.
+
+3. White-label pack
+What we are building is the white-label solution we discussed: WaPay-branded cards that our customers request, load and manage inside WaPay on WhatsApp, through your API. Our customers load small amounts, typically R50 to R500. At that size a percentage load fee (5% on DigiCentral, 7.5% on BeyondCentral) or a flat R17 to R45 per load on the CashCentral and FuelCentral cards does not work for consumers. Please price the white-label pack with a flat fee per load or per active card per month, and include card art, the SMS sender name and the minimum order for branded cards.
+
+4. Questions on the API (staging v2.1.5)
+a. What is the production base URL, and does production match this specification?
+b. Amounts: may a load carry cents (for example 12.50), or whole rands only?
+c. reference_no: what is the exact format (the text says 12 digits, the examples show letters and 15 digits)? Is it enforced as unique, so that a repeated reference is refused instead of loading twice? Can /card/transfertoprofile take a reference as well?
+d. If a load call times out, is /get/auditlog with our reference the right way to confirm whether the load happened?
+e. Virtual cards: /card/virtualAllocate returns the full card number and the security code. We would prefer never to receive the security code. Can you send the card details to the cardholder directly by SMS (or offer a secure page), and can we use seq_no as the card identifier in every call?
+f. Is there a webhook or notification for card transactions (purchases, declines, refunds)? If not, how often may we call /card/cards_statement?
+g. Is there an endpoint for our profile balance and profile statement, for our daily reconciliation?
+h. Please send the stopReasonID list. Which reasons are a temporary freeze that /card/stopcancel can reverse?
+i. emailId is required on /card/allocate. Many of our customers have no email address. Can it be optional?
+j. How long is the token valid, and do staging and production use separate credentials?
+k. How does a DigiCentral cardholder complete 3-D Secure for online purchases?
+l. Can merchant categories such as gambling and cryptocurrency be blocked for our cards?
+m. Can physical cards (CashCentral, CashCentral+, BeyondCentral, FuelCentral) be couriered to each cardholder, or are they dispatched to us in bulk?
+n. What is the card "wallet" (/wallet/balance, /card/load_card_from_wallet), relative to our profile and the card?
+o. Is FuelCentral available as a virtual card as well, or physical only? Is its spending limited to fuel stations, and is it issued, loaded and managed through the same API calls as the other cards?
+p. Can one customer hold more than one card (for example DigiCentral and CashCentral), and can a customer move from CashCentral to CashCentral+ or BeyondCentral later? If so, does that need a new card, and what extra FICA do the higher-limit cards require?
+q. Do CashCentral and DigiCentral work at international online merchants, or is that only BeyondCentral?
+
+Thank you, and I look forward to working with you all.
+
+Kind regards,
+Nieuwoudt Gresse
+Director, WaPay (Pty) Ltd
+078 705 1175
+niev@wapay.co.za

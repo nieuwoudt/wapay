@@ -1,0 +1,27 @@
+PAYCENTRAL: REPLY TO DIEGO (meeting Monday after 10:00; ask them to share API information)
+Written 2026-11-06, in reply to Diego's "Monday after 10:00 should work best" on the thread
+"PayCentral intro with WaPay". Reply all (Odette, Shyanne, Nikan, Siyabonga stay in copy).
+It corrects Niev's earlier offer to send documentation: the ask is for PayCentral to share
+information with us. No em dashes (founder style).
+
+-----------------------------------------------------------------------------
+
+Subject: Re: PayCentral intro with WaPay
+
+Hi Diego,
+
+Thank you. Monday after 10:00 works well. Please send through the meeting request so we can confirm the time.
+
+One correction to my earlier note: rather than us sending documentation, it would help most if your team could share information with us ahead of the meeting. In particular, how we can use your API to:
+
+1. Generate virtual cards from within our own platform and portal.
+2. Manage the issuing of virtual cards to our members.
+3. Top up our members' cards from our side.
+4. Issue and manage physical cards for our members, including how the cards reach them.
+
+Any documentation beyond the staging API specification we already have (version 2.1.5), access to a test environment, and an outline of the white-label setup would be very useful for us to review over the weekend.
+
+Looking forward to Monday.
+
+Kind regards,
+Niev

@@ -1,0 +1,24 @@
+PAYCENTRAL: REPLY ON PORTAL ACCESS AND TRAINING
+Written 2026-11-07, in reply to PayCentral's follow-up on portal access (offer of a short Microsoft
+Teams training session). "Monday 11" read as Monday 9 November at 11:00 (the 11th is a Wednesday).
+Diego's IT and Commercial meeting is also Monday after 10:00, time not yet confirmed: check
+they do not clash. Fill in the sender's name. No em dashes (founder style).
+
+-----------------------------------------------------------------------------
+
+Subject: Re: Portal access
+
+Hi <name>,
+
+Thank you for following up. Yes, absolutely, let's do it. A short Teams training session would be very helpful.
+
+Would Monday, 9 November at 11:00 work for you? If you don't mind, please send through a meeting request.
+
+If possible, could the session also cover:
+1. Creating and loading a virtual card (DigiCentral).
+2. Ordering a few physical cards (CashCentral) for our own testing, and how they are delivered.
+3. Funding our profile.
+4. Our API credentials and how API access is set up for us.
+
+Kind regards,
+Niev

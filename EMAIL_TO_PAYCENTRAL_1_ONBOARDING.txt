@@ -1,0 +1,59 @@
+PAYCENTRAL: FIRST EMAIL (referred by Paymentology)
+Written 2026-10-16, after Paymentology's call: direct work with Paymentology needs 30,000 cards,
+so they referred WaPay to PayCentral. Background and reasoning: docs/CARDS.md section 0.
+No em dashes (founder style). Fill in <name> and check the two notes at the bottom.
+
+-----------------------------------------------------------------------------
+
+Subject: WaPay: virtual and physical Mastercard cards for our wallet customers (referred by Paymentology)
+
+Hi <name>,
+
+Paymentology suggested we speak to you. WaPay is a live digital wallet in South Africa that customers use inside WhatsApp. They load money by card, Instant EFT and retail vouchers, buy airtime, data and electricity, request payments with a link, and withdraw to their bank. Every balance movement is recorded in our own double-entry ledger, and every spend is confirmed with the customer's PIN.
+
+We would like to offer our customers a WaPay card: a virtual Mastercard first and a physical card later. Customers would request it in WhatsApp and add money to it from their WaPay balance. We would integrate through your API. Ideally the card carries the WaPay brand.
+
+These are the questions that decide how we build it:
+
+The programme
+1. Your cards are built for businesses paying their own people. Can WaPay be the business client and issue cards to members of the public (our wallet customers)? What does Standard Bank need from us for that, and which agreements would we sign?
+2. Which FICA information must we collect for each cardholder (we understand name, surname, cellphone and SA ID or work permit for the R25,000 products)? Do you or Standard Bank verify it, or do you rely on our verification? Can foreign nationals with a passport hold a card?
+3. Is the card balance always held on your side (we fund our PayCentral account by EFT and load cards from it), or can a card authorise against a balance held in our system?
+
+The API
+4. Could you send us the API documentation and sandbox credentials, so we can issue test cards and build while we discuss terms?
+5. Which calls exist for: creating a cardholder, issuing a virtual card, ordering a physical card, loading, unloading or reversing a load, freezing and unfreezing, cancelling, reading the card balance and listing card transactions?
+6. Are loads idempotent with our own reference, and how do we check the status of a load if our call times out?
+7. Do you send webhooks for card transactions (purchases, declines, refunds) and loads, and how are they signed?
+8. How does the customer see the virtual card number, CVV and expiry: email, SMS, an API, or a secure page we can link to? We must never send card numbers in a WhatsApp message.
+9. Can we block merchant categories (for example gambling) and set limits per card through the API?
+
+The card
+10. Can the virtual card art and the card-details message carry the WaPay brand? What is the minimum order for branded physical cards, and the lead time?
+11. Do the cards support 3-D Secure for online purchases, and how is the customer challenged (SMS one-time code to their cellphone)?
+12. Can the cards be added to Apple Pay, Google Pay or Samsung Pay?
+13. For physical cards: how are they delivered to the customer, how are they activated, and how does the customer get or set their PIN?
+
+Commercials
+14. Your published DigiCentral fee is 4% to 5% of each load. Our customers make many small loads (R50 to R500), so a percentage fee at that level is not workable for us. Can you quote a flat fee per load, or a much lower percentage with a cap, for a programme of our size?
+15. Please share the full schedule for a custom programme: set-up or development fees, monthly platform fees, per card fees (virtual and physical), load and unload fees, dormancy fees, card-to-card or reversal fees, and any minimum monthly volume.
+16. How do we fund our PayCentral account (bank details, lead time from EFT to available balance), and do you provide a daily statement or API for reconciliation?
+
+Timeline
+17. What are the steps from here to a live pilot with our own cards, and how long does each usually take?
+
+We can send a programme overview, our customer journey in WhatsApp, our KYC approach and projected volumes. Tell us what you need first.
+
+Kind regards,
+Niev
+WaPay
+niev@wapay.co.za
+
+-----------------------------------------------------------------------------
+NOTES FOR THE FOUNDER (not part of the email)
+
+1. Question 2 asks about passports because withdrawals already serve passport holders (payouts
+   round 5). If PayCentral says SA ID or work permit only, the card is not for every customer.
+2. Question 14 is the commercial heart. At the published 4% to 5% plus the VAT we cannot
+   recover, a R200 load costs us R9.20 to R11.50, more than a PayShap withdrawal (R8 to the
+   customer). Do not agree a percentage load fee without running it through docs/COMMERCIALS.md.

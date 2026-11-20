@@ -4,6 +4,166 @@
 
 ---
 
+## 2026-11-20 (153) — Cards: PayCentral's answers applied, a staging card test route, and what Apple Pay and Google Pay would take
+
+PayCentral's answers in code:
+- loads carry cents by default (`PAYCENTRAL_WHOLE_RANDS=true` forces whole rands);
+- `STOP_REASONS` holds PayCentral's list (all reversible), and a customer freeze uses 70 ("other");
+- `isStagingBaseUrl`.
+
+New route: `POST /api/internal/paycentral-staging-test`.
+- It sits behind the internal key and refuses anything but the staging API.
+- It creates, loads (capped at R500), checks a reference, reads balance and statement, and
+  freezes and unfreezes a test virtual card.
+- It touches no ledger and no customer, and logs no body.
+
+Docs:
+- `docs/CARDS.md` §0.13: the answers, the first-card steps, and why WaPay cannot enable Apple Pay
+  or Google Pay on its own (issuer agreements, MDES tokenisation, native-app entitlements), with
+  sources;
+- `docs/SYSTEM_ARCHITECTURE.md`: the two PayCentral routes, the supplier and the subsystem;
+- CAPABILITIES and env.template.
+
+Tests: `tests/paycentral.test.mjs` (30).
+
+---
+
+## 2026-11-18 (152) — Cards: PayCentral staging account in place; what is outstanding, and the questions to Siyabonga (docs only)
+
+PayCentral created the staging account (portal bc-dev.paycentral.co.za, invoice "PC 6528865949")
+and loaded R100, which is the staging package; the founder's R1,000 went to the live DigiCentral
+account VC 8729334261.
+
+`docs/CARDS.md` §0.12 lists what is outstanding:
+- **From PayCentral:** the staging API login, confirmation of the base URL
+  (`https://staging-api.paycentral.co.za`), the whitelist and the product, and the open API
+  questions.
+- **Branding:** co-branded WaPay card art.
+- **Wallets:** Apple Pay and Google Pay, with manual entry or push provisioning.
+- **On our side:** merge PR #1, the Vercel variables, the probe, and a staging-only card test
+  route as the next build.
+
+It also records what we can answer already (a WaPay-designed masked card in our app). Questions:
+`EMAIL_TO_PAYCENTRAL_7_STAGING.txt`.
+
+---
+
+## 2026-11-16 (151) — PayCentral client: one whitelisted address handled in code, money calls sent once, card data kept out, a probe
+
+PayCentral whitelists one IP (155.121.235.0), but Vercel's Static IPs are a pair that Vercel cannot
+pin. The changes:
+- `lib/paycentral.js` is the client for the staging API v2.1.5: login with a cached single-flight
+  token, virtual and physical card allocation, loads with a reference derived from the idemKey,
+  `checkReference` (outcomes `not_found`, `loaded`, `declined`, `unknown`), balance, statement,
+  card info, freeze and unfreeze.
+- **"Never sent"** means that request's socket never connected, counted by our own connector.
+  Only then, or for a read refused with a non-JSON 403, is a call retried on a fresh connection.
+- **Money and state calls** are sent once, after a door check on the same connection. Redirects
+  are never followed. Anything unclear after sending is `TRANSPORT_INDETERMINATE` or outcome
+  `unknown`, never a resend.
+- **One time budget** per call (25 s).
+- **One fixed address.** `PAYCENTRAL_EGRESS_PROXY` routes every call through one address for
+  production.
+- **Card data.** The card number and security code never leave the client (golden thread 3.5).
+  Messages, records and logs are redacted.
+- **Probe.** `GET /api/internal/paycentral-probe` (internal key, read-only, about 45 s at most)
+  counts how the door refuses us.
+
+A read-only review before merge found two ways an earlier draft could resend a processed load (a
+followed redirect, a 403 page after processing) plus several smaller issues; all are fixed and
+locked (BUGLOG #153). Tests: `tests/paycentral.test.mjs` (26), plus a local check on a real socket.
+Docs: `docs/CARDS.md` §0.11, CAPABILITIES, GOLDEN_THREAD 3.5, env.template. Not wired to customers.
+
+---
+
+## 2026-10-23 (150) — Cards: PayCentral's staging API read, products chosen (DigiCentral + CashCentral+), static IP plan, reply to Odette (docs only)
+
+PayCentral sent the staging API specification v2.1.5, its onboarding document and the
+white-label deck, plus the static-IP whitelisting fees: staging R950 excl VAT for 3 months,
+production R1,500 a month excl VAT. `docs/CARDS.md` §0.9 covers:
+- the standard prices, which are unusable at our ticket size (DigiCentral 5% to 3.75%,
+  CashCentral+ R45 per load), so we negotiate the white-label pack;
+- the static IP plan: Vercel Static IPs on `arn1` ($100 per project per month, a pair from a
+  shared pool), with a dedicated proxy or Secure Compute as the fallback;
+- every endpoint mapped to our flows;
+- what the spec changes: the CVV comes back from `virtualAllocate`, so cards are keyed on
+  `seq_no` and responses redacted; cents still to confirm; `reference_no` and `/get/auditlog`
+  as the load's idempotency and timeout recovery; the deduct call has no reference; no
+  webhooks, so alerts mean polling; email required on physical allocation; no profile-balance
+  endpoint.
+
+`EMAIL_TO_PAYCENTRAL_2_STAGING.txt` is the reply: staging go-ahead, products, the white-label
+ask and 17 API questions. The onboarding form was pre-filled for the founder (not in the
+repo). Products as decided the same day: DigiCentral and CashCentral first, CashCentral+ and BeyondCentral for selected customers, FuelCentral as a standalone UniFuel test. CAPABILITIES' PayCentral row updated.
+
+---
+
+## 2026-10-20 (149) — Cards: PayCentral's NDA reviewed and filled, the product deck read; the cards branch brought up to main (docs only)
+
+PayCentral sent its standard NDA and product deck and told the founder WaPay can start issuing
+virtual and physical cards. `docs/CARDS.md` §0.8 records:
+- the NDA's terms: mutual, perpetual, uncapped mutual indemnity, AFSA arbitration in
+  Johannesburg, changes only by hand signature, advisors allowed, no exclusivity, not a POPIA
+  agreement;
+- what was filled in for WaPay. The filled PDF is not in the repo;
+- the deck's facts: Bank Zero now listed beside Standard Bank; seven products including
+  FuelCentral; physical cards dispatched in bulk to the client; cardholders assigned with ID or
+  passport; PayCentral-branded SMS alerts, app and support;
+- four new open questions, and a no-code pilot through the portal with company money.
+
+CAPABILITIES' PayCentral row updated. The branch merged `main` (the credentials scrub and
+pay-out rules). This branch's entries are renumbered after main's (first 88 and 89, then 109 to 111, now 147 to 149), the same way the scrub's were.
+
+---
+
+## 2026-10-16 (148) — Cards: the route is PayCentral (Paymentology direct needs 30,000 cards); plan rewritten for a pre-funded card (docs only)
+
+On the founder's call Paymentology set a 30,000-card minimum for direct work and referred
+WaPay to PayCentral. PayCentral is a South African programme manager on Paymentology's
+processing, with Standard Bank as issuer, virtual (DigiCentral) and physical (CashCentral)
+Mastercard cards, a one-card minimum and its own API. `docs/CARDS.md` section 0:
+- what PayCentral is, and what changes against the Paymentology plan;
+- the model: cards are pre-funded, so the card is a destination we load from the wallet with
+  the payout-style two-phase flow, not a rail that spends our balance. The authorisation
+  endpoint, STIP, the hold lifecycle work, the PaySecure page and SFTP all drop out;
+- new ledger builders, and a loaded card treated as money out under the payouts counsel brief;
+- the published fees: 4% to 5% per virtual load, which our flat-fee model cannot carry, so
+  negotiate;
+- branding, the sandbox, and the next steps.
+
+`EMAIL_TO_PAYCENTRAL_1_ONBOARDING.txt` is the first email, with 17 questions. The Paymentology
+email is marked superseded. CAPABILITIES lists PayCentral as the current card route and
+Paymentology direct as parked. Their sites are blocked from this environment, so the research
+is search-sourced and labelled.
+
+---
+
+## 2026-10-15 (147) — Virtual cards: Paymentology discovery, architecture on our ledger, onboarding text (docs only)
+
+The founder asked whether WaPay can issue customers virtual cards through Paymentology,
+how it maps onto the product, and what to send Paymentology's sales form.
+`docs/CARDS.md`:
+- the parties: Paymentology processes, Bank Zero is the sponsor through the April 2026
+  alliance, Mastercard is the scheme;
+- the balance decision: ActiveFAST, so our ledger approves each authorisation and there is one
+  balance, against PassiveFAST, a separate card balance;
+- the regulatory and funds questions for counsel and Bank Zero, including the wallet's
+  closed-loop framing and identity checks being off for withdrawals;
+- every FAST message mapped onto `reserveHold`, new `adjustHold` and `captureFromHold`, and
+  `postEntry`;
+- the gaps: the one-shot hold, forced posts, idemKeys from TID/RID against the epoch guard, a
+  verified cardholder identity, the authorisation endpoint's cold-start latency, a
+  browser-decrypted PaySecure card page, client-hosted SFTP reports, 3DS without SMS, and
+  alert template costs;
+- the founder's architecture brief reconciled against the codebase; branding (yes, with Bank
+  Zero and Mastercard approval of the art); commercials (none published); a gated build plan.
+
+`EMAIL_TO_PAYMENTOLOGY_1_ONBOARDING.txt` holds the form text (long and short) and a 22-question
+follow-up email. Paymentology's sites were blocked by this session's network policy, so their
+pages were read through search extracts and every fact carries its source. CAPABILITIES lists
+Paymentology as discovery. No code changed.
+
+---
 ## 2026-11-17 (146) — Disputed card money can be withheld from a balance into a WaPay-held liability, released back, or used first by a refund or chargeback of the same payment
 
 When a card payment is disputed or cannot be verified and nothing has been refunded yet, the founder needed a way to take the money it credited off the customer's balance without calling it income and without sending anything back to the processor. Until now the only tools were a full refund (refused SHORT when the balance had been spent) and a chargeback (only once the bank acts).
