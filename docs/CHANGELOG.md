@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-11-20 (150) — A record made before senders were told apart is no longer read as WaPay's own send, and the check shows that Meta returns WaPay's mark
+
+The build of CHANGELOG 148 went live on 20 November at 14:54 UTC. A message recorded that morning by the build before it was stored under the name the new build keeps for WaPay's own sends, so the daily check called it "WaPay's own code sent" (BUGLOG #156).
+
+- `lib/meta-alerts.js`: `MARK_LIVE_SINCE` (`'2026-11-20T14:55'`), the first minute from which a `stranger-<category>` row means the status carried WaPay's mark. `strangerCheck` writes a `marked-<category>:<minute>` row for every business-initiated status that carries the mark, in parallel with its read of the recipient: a category and a minute, no number.
+- `lib/meta-compliance.js`: `measurePulses` returns `unattributed` (stranger rows older than the mark) and `marked`; the verdict adds AMBER `STRANGER_SENDER_NOT_RECORDED` for the former and never counts them as `SENT_TO_STRANGER`. The daily read includes the `marked-` rows.
+- **How to read it:** `GET /api/internal/compliance-check` returns `pulses.marked`. The first time it is not empty after a WaPay template or Direct Send, Meta returning the mark is proven on a real send. If WaPay templates go out for a day and it stays empty, the mark is not coming back and BUGLOG #154's split cannot be trusted: say so on the incident list.
+- Tests: `tests/outbound-attribution.test.mjs` (15 → 17), `tests/spam-strike-guard.test.mjs` (its stranger row dated after the mark). Suite 1,586 pass; `next build` passes. No migration.
+- **To switch on:** nothing; it is live with the deploy. The record of 20 November's morning message leaves the daily check's 24 hours at 11:55 UTC on 21 November.
+
 ## 2026-11-20 (149) — The Link map draws again: each tile names the site, so OpenStreetMap stops blocking it
 
 From 13 November every tile on Mission Control's Links map was OpenStreetMap's "Access blocked" image; the pins still drew on top (BUGLOG #155). The console's own `Referrer-Policy: same-origin` (CHANGELOG 141) stopped the browser naming the site when it asked for a tile, and OpenStreetMap's tile policy refuses a request that does not.

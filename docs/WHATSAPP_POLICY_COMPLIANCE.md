@@ -140,6 +140,12 @@ bind WaPay's code; they cannot bind a second codebase.
 - **An unmarked one** came from another holder of the number. It is counted (`external-<category>`), shown by the
   daily check as AMBER with the count, and alarmed only at five such minutes in a day, which is what a leaked
   token or a runaway sender looks like.
+- **A record older than the mark** (before 20 November 2026, 14:55 UTC, when the marking build went live) says a
+  message went to a number that never wrote and cannot say whose code sent it. The daily check reports it AMBER
+  as `STRANGER_SENDER_NOT_RECORDED`, never as WaPay's own send (BUGLOG #156, CHANGELOG 150).
+- **Proof that the mark comes back.** Every marked delivery status leaves a `marked-<category>` row; the daily
+  check returns the count as `pulses.marked`. An empty count on a day WaPay sent templates means the split above
+  cannot be trusted that day.
 - **What this does not settle:** whether another product should send from this number at all. Meta counts blocks
   and reports against the number whoever's code sent the message. That is the founder's decision; the daily count
   is there so it is made on numbers.

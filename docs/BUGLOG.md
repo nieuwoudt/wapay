@@ -4,6 +4,13 @@
 
 ---
 
+## 156. A record made before the fix was read by the fix as "WaPay's own code sent it"
+
+- **Symptom (2026-11-20, caught before it reached anyone):** the build that tells senders apart (BUGLOG #154) went live at 14:54 UTC. Run by hand a minute later, the daily compliance check still said RED, `SENT_TO_STRANGER`, "WaPay's own code sent", for a message of that morning that carried no WaPay mark and matched no account. The next scheduled run (02:00 UTC) would have mailed that sentence as a new red reason.
+- **Root cause:** the build before #154 stored every business-initiated message to a number that never wrote as a `stranger-<category>` row, whoever sent it. #154 kept that name for "the status carried WaPay's mark" and gave unmarked messages a new name, without saying what a row written by the old build means. For 24 hours after any deploy of that kind, the daily check reads the old build's rows with the new build's meaning. A second gap sat beside it: nothing in the database showed whether Meta returns the mark at all, and no session can read Vercel's logs. If the mark never came back, WaPay's own sends would read as another sender's and nobody would know.
+- **Fix:** `lib/meta-alerts.js` `MARK_LIVE_SINCE` is the first minute the marking build answered. `measurePulses` counts a `stranger-` row older than that as `unattributed`, and the verdict reports it AMBER as `STRANGER_SENDER_NOT_RECORDED`: a message went to a number that never wrote, and the record does not say whose code sent it. From that minute on the rule is unchanged: a `stranger-` row is WaPay's own send and RED. `strangerCheck` also writes one `marked-<category>` row a minute for any business-initiated status that carries the mark, whoever received it; the compliance check returns the count as `pulses.marked`, so the first marked delivery proves the mark comes back.
+- **Guard:** `tests/outbound-attribution.test.mjs`: the row of the morning before the build is AMBER and never "WaPay's own code sent"; the minute before the boundary is unattributed and the boundary minute is RED; a row with no readable minute is not excused; a marked status leaves its proof row once a minute and an unmarked one leaves none. Five of these fail on the code before the fix. When a stored row changes meaning, the change says what the rows already stored mean.
+
 ## 155. The Link map showed "Access blocked" on every tile for a week
 
 - **Symptom (2026-11-13 to 20):** Mission Control's Links map drew its pins over a grid of OpenStreetMap's "403 Access blocked: App is not following the tile usage policy" image. The data was correct; the map behind it was gone.

@@ -15,7 +15,7 @@ import { MockAgent, setGlobalDispatcher, getGlobalDispatcher } from '../packages
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const wa = await import('@wapay/whatsapp');
-const { strangerCheck, sentByWaPay, OTHER_SENDER_ALARM_AT } = await import('../lib/meta-alerts.js');
+const { strangerCheck, sentByWaPay, OTHER_SENDER_ALARM_AT, MARK_LIVE_SINCE } = await import('../lib/meta-alerts.js');
 const { measurePulses, complianceVerdict, summaryText } = await import('../lib/meta-compliance.js');
 
 const NOW = Date.parse('2026-11-18T13:00:00Z');
@@ -189,7 +189,28 @@ test('a member is never a stranger, whoever sent the message, and replies are ne
   assert.deepEqual(await strangerCheck({ prisma: db, status: sent({ recipient_id: MEMBER, biz_opaque_callback_data: 'wapay' }), now: NOW, deps }), { stranger: false });
   assert.deepEqual(await strangerCheck({ prisma: db, status: sent({ pricing: { category: 'service' } }), now: NOW, deps }), { skipped: true });
   assert.deepEqual(await strangerCheck({ prisma: db, status: sent({ status: 'delivered' }), now: NOW, deps }), { skipped: true });
-  assert.equal(db.rows.length, 0); assert.equal(mails.length, 0);
+  assert.deepEqual(db.rows.map((r) => r.waMessageId), ['marked-utility:2026-11-18T13:00'], 'nothing about a stranger; only the proof that the mark came back');
+  assert.equal(mails.length, 0);
+});
+
+test('a marked status leaves proof that Meta returns the mark, once a minute, with no number in it', async () => {
+  const db = store();
+  const { deps } = mailbox();
+  const marked = sent({ recipient_id: MEMBER, biz_opaque_callback_data: 'wapay' });
+  await strangerCheck({ prisma: db, status: marked, now: NOW, deps });
+  await strangerCheck({ prisma: db, status: marked, now: NOW + 20_000, deps });
+  await strangerCheck({ prisma: db, status: { ...marked, pricing: { category: 'authentication' } }, now: NOW + 60_000, deps });
+  assert.deepEqual(db.rows.map((r) => r.waMessageId), ['marked-utility:2026-11-18T13:00', 'marked-authentication:2026-11-18T13:01']);
+  // An unmarked status, a reply and a status for another number leave none.
+  const other = store();
+  await strangerCheck({ prisma: other, status: sent({ recipient_id: MEMBER }), now: NOW, deps });
+  await strangerCheck({ prisma: other, status: sent({ recipient_id: MEMBER, biz_opaque_callback_data: 'wapay', pricing: { category: 'service' } }), now: NOW, deps });
+  await strangerCheck({ prisma: other, status: marked, phoneNumberId: '222', env: { META_WHATSAPP_PHONE_NUMBER_ID: '111' }, now: NOW, deps });
+  assert.equal(other.rows.length, 0);
+  // The daily check counts them and they change no verdict.
+  const day = verdictFor(['marked-utility:2026-11-21T09:10', 'marked-utility:2026-11-21T09:11', 'marked-authentication:2026-11-21T09:12']);
+  assert.deepEqual(day.pulses.marked, { utility: 2, authentication: 1 });
+  assert.equal(day.verdict, 'GREEN');
 });
 
 test('a status for another phone number on the account is skipped; with no number to compare, the check runs', async () => {
@@ -211,7 +232,7 @@ test('a recipient that could not be read is not called a stranger; the blind spo
   let r;
   try { r = await strangerCheck({ prisma: db, status: sent({ biz_opaque_callback_data: 'wapay' }), now: NOW, deps }); } finally { console.error = quiet; }
   assert.deepEqual(r, { skipped: 'UNREADABLE' });
-  assert.deepEqual(db.rows.map((x) => x.waMessageId), ['stranger-unread-utility:2026-11-18T13:00']);
+  assert.deepEqual(db.rows.map((x) => x.waMessageId).sort(), ['marked-utility:2026-11-18T13:00', 'stranger-unread-utility:2026-11-18T13:00']);
   assert.equal(mails.length, 0);
 });
 
@@ -252,7 +273,7 @@ test("the daily check reports another sender's messages apart from WaPay's own",
   assert.match(one.reasons[0].text, /UniFuel/);
   assert.ok(!/missing lib\/outbound-guard/.test(one.reasons[0].text), 'no one is sent to look for a gate that is not missing');
 
-  const own = verdictFor(['stranger-utility:2026-11-17T15:35']);
+  const own = verdictFor(['stranger-utility:2026-11-21T09:10']);
   assert.equal(own.verdict, 'RED');
   assert.deepEqual(own.reasons.map((r) => r.code), ['SENT_TO_STRANGER']);
   assert.match(own.reasons[0].text, /WaPay's own code sent/);
@@ -269,6 +290,32 @@ test("the daily check reports another sender's messages apart from WaPay's own",
   assert.equal(verdictFor([]).verdict, 'GREEN');
 });
 
+test("a record written before WaPay marked its sends is not called WaPay's own send", () => {
+  // 20 November 2026: the build that tells senders apart went live at 14:54 UTC. The row for that
+  // morning's message was written by the build before it, under the name the new build keeps for
+  // WaPay's own sends, and the next daily check would have said "WaPay's own code sent".
+  const old = verdictFor(['stranger-utility:2026-11-20T11:55', 'price-utility:2026-11-20T11:55']);
+  assert.deepEqual(old.pulses.unattributed, { utility: 1 });
+  assert.deepEqual(old.pulses.strangers, {});
+  assert.equal(old.verdict, 'AMBER');
+  assert.deepEqual(old.reasons.map((r) => r.code), ['STRANGER_SENDER_NOT_RECORDED']);
+  assert.match(old.reasons[0].text, /does not say whose code sent it/);
+  assert.ok(!/WaPay's own code sent|missing lib\/outbound-guard/.test(old.reasons[0].text));
+
+  // The boundary: the last minute before the build is unattributed, its first minute is WaPay's own.
+  assert.equal(MARK_LIVE_SINCE, '2026-11-20T14:55');
+  assert.deepEqual(verdictFor(['stranger-utility:2026-11-20T14:54']).reasons.map((r) => r.code), ['STRANGER_SENDER_NOT_RECORDED']);
+  assert.deepEqual(verdictFor(['stranger-utility:2026-11-20T14:55']).reasons.map((r) => r.code), ['SENT_TO_STRANGER']);
+  // A row with no readable minute is not excused.
+  assert.deepEqual(verdictFor(['stranger-utility']).reasons.map((r) => r.code), ['SENT_TO_STRANGER']);
+  // Both in one day: WaPay's own send is still RED and leads.
+  const both = verdictFor(['stranger-utility:2026-11-20T11:55', 'stranger-marketing:2026-11-20T16:00']);
+  assert.equal(both.verdict, 'RED');
+  assert.equal(both.reasons[0].code, 'SENT_TO_STRANGER');
+  assert.deepEqual(both.pulses.strangers, { marketing: 1 });
+  assert.deepEqual(both.pulses.unattributed, { utility: 1 });
+});
+
 // ------------------------------------------------------------------ the wiring
 
 test('the sender marks templates and Direct Sends, the webhook passes the sending number, the daily check reads the new rows', () => {
@@ -282,4 +329,5 @@ test('the sender marks templates and Direct Sends, the webhook passes the sendin
   const daily = read('../lib/meta-compliance.js');
   assert.match(daily, /waMessageId: \{ startsWith: 'external-' \}/);
   assert.match(daily, /waMessageId: \{ startsWith: 'stranger-' \}/);
+  assert.match(daily, /waMessageId: \{ startsWith: 'marked-' \}/);
 });

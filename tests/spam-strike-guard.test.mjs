@@ -164,7 +164,8 @@ test('compliance: strikes count for seven days with their dates and a code that 
     { waMessageId: 'account-account_update:ACCOUNT_VIOLATION:SPAM:2026-10-26T20:04' },
   ]);
   assert.deepEqual(strikes, [{ bits: 'account_update:ACCOUNT_VIOLATION:SPAM', at: '2026-10-23T20:03' }, { bits: 'account_update:ACCOUNT_VIOLATION:SPAM', at: '2026-10-26T20:04' }]);
-  const pulses = measurePulses([{ waMessageId: 'stranger-utility:2026-10-27T01:00' }, { waMessageId: 'bi-refused:payer-receipt:2026-10-27T01:01' }, ...Array.from({ length: 17 }, (_, i) => ({ waMessageId: `price-referral_conversion:2026-10-27T0${i % 10}:${10 + i}` })), ...Array.from({ length: 3 }, (_, i) => ({ waMessageId: `price-service:2026-10-27T03:${10 + i}` }))]);
+  // The stranger row is dated after WaPay's sends were marked (BUGLOG #156): only then does the name mean "WaPay's own code sent it".
+  const pulses = measurePulses([{ waMessageId: 'stranger-utility:2026-11-27T01:00' }, { waMessageId: 'bi-refused:payer-receipt:2026-10-27T01:01' }, ...Array.from({ length: 17 }, (_, i) => ({ waMessageId: `price-referral_conversion:2026-10-27T0${i % 10}:${10 + i}` })), ...Array.from({ length: 3 }, (_, i) => ({ waMessageId: `price-service:2026-10-27T03:${10 + i}` }))]);
   assert.deepEqual(pulses.strangers, { utility: 1 });
   assert.deepEqual(pulses.refused, { 'payer-receipt': 1 });
   const v = complianceVerdict({ meta: { ok: true, quality: 'RED', templates: [] }, pulses, behaviour: {}, strikes, previousCodes: ['QUALITY_RED', 'META_STRIKE_202610232003'] });
