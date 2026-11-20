@@ -482,8 +482,8 @@ found two ways an early version could send a processed load twice; both are fixe
   addresses, secrets and documents, including JSON held in strings.
 
 **Other rules in the client.**
-- **Amounts:** integer cents in, rands out. Whole rands only until PayCentral confirms cents
-  (`PAYCENTRAL_WHOLE_RANDS`).
+- **Amounts:** integer cents in, rands with cents out. PayCentral confirmed cents on 2026-11-18;
+  `PAYCENTRAL_WHOLE_RANDS=true` would force whole rands.
 - **References:** a load's `reference_no` is 12 digits derived from the load's idemKey, never
   starting with 0. The caller stores it with the hold and never recomputes it or puts it in a
   ledger idemKey. Collision odds are about 0.5% over 100,000 loads, so raise
@@ -574,6 +574,80 @@ found two ways an early version could send a processed load twice; both are fixe
   Mastercard tokenisation. Adding it from our app (push provisioning) needs an API PayCentral has
   not documented, and usually a native app. Neither is possible to confirm from the spec; both
   are asked.
+
+
+### 0.13 PayCentral's answers, the staging test route, and wallets (2026-11-18 to 2026-11-20)
+
+**PayCentral's answers.**
+- **Environments.** Live and staging are separate; the R100 on staging is the staging package.
+- **Staging API.** `https://staging-api.paycentral.co.za`; the staging portal is
+  `bc-dev.paycentral.co.za`. The API login is the portal login, and its password is set with
+  "Forgot password" on the portal.
+- **Access.** 155.121.235.0 is whitelisted. A DigiCentral profile exists in staging, with no card
+  created yet.
+- **Loads.** Loads may carry cents. A repeated reference is rejected as a duplicate (the client
+  treats that as `unknown`, never as "nothing happened").
+- **Reference checks.** PayCentral confirms a reference's outcome on request. The automated check
+  stays `checkReference`; `unknown` goes to a person.
+- **Freezes.** Stop reasons 1 lost, 2 stolen, 6 PIN tries exceeded, 7 suspected fraud, 70 other,
+  89 no longer in use. None is permanent: `/card/stopcancel` lifts any of them. The client's
+  `STOP_REASONS` uses 70 for a customer's own freeze.
+- **Card details.** PayCentral e-mails a new virtual card's details to the cardholder, and the
+  cardholder can see them in PayCentral's app and on getmybalance.co.za. `virtualAllocate` takes
+  no e-mail address, so where that e-mail goes is still to confirm. This matters for customers
+  without e-mail.
+- **Webhooks:** none, so purchase alerts mean polling statements.
+- **Profile balance:** no answer yet on an endpoint for it.
+- **Branding:** co-branded card art is being checked by PayCentral (options, cost, minimum).
+- **Wallets:** DigiCentral is not enabled for Apple Pay or Google Pay.
+
+**Apple Pay and Google Pay: what it would take.** WaPay cannot enable this on its own.
+- **Apple.** Apple contracts with the card-issuing bank, and a programme manager takes part under
+  that agreement. Each issuer goes through Apple's certification, and the token must stay in step
+  with the card through its lifecycle
+  ([Apple Issuer Functional Requirements](https://register-media.cdn-apple.com/Apple_Pay_Partner_Docs/Apple_Pay_Specifications-Issuer_Functional_Requirements_Version_3.5.pdf),
+  [program manager terms](https://stripe.com/en-at/legal/issuing/crb/apple-payment-platform-program-manager-customer-terms-and-conditions)).
+- **Google.** Google onboards participating issuers through its Issuer Console; push provisioning
+  is gated behind an NDA and an app allow-list
+  ([Google Pay issuers](https://developers.google.com/pay/issuers/overview/get-started)).
+- **The card network.** The issuer's processor must tokenise the card range with Mastercard
+  (MDES), with card art and terms configured at the token service.
+- **Our app.** Adding a card from an app (push provisioning) needs a native iOS app with Apple's
+  managed in-app provisioning entitlement, and an Android app on Google's allow-list
+  ([Apple PassKit entitlements](https://developer.apple.com/library/archive/documentation/Miscellaneous/Reference/EntitlementKeyReference/ApplePayandPassKitEntitlements/ApplePayandPassKitEntitlements.html)).
+  WaPay has only WhatsApp and a web portal today.
+- **The realistic routes:**
+  - PayCentral (or Paymentology behind it) enables tokenisation for a WaPay white-label range;
+    Paymentology supports MDES and Apple and Google Pay on its own platform (0.9);
+  - a PayCentral product that already supports wallets;
+  - Paymentology direct (sections 1 to 11) at scale.
+
+  Asked of PayCentral.
+- **Accepting Apple Pay and Google Pay as payments into WaPay** (pay links, deposits) is a
+  separate thing. Adumo's hosted page already offers both (`docs/ADUMO.md`).
+
+**The staging test route.** `POST /api/internal/paycentral-staging-test` (header
+`x-internal-api-key`):
+- **Actions:** `create` (a virtual card for the founder), `load` (capped at R500; `testId` fixes
+  the reference, so repeating it repeats the same load), `check`, `balance`, `statement`, `freeze`
+  and `unfreeze`.
+- **Safety:** it refuses any base URL other than staging, touches no ledger or customer, and never
+  logs a body.
+
+**First virtual card: the steps.**
+1. Set the portal password: `bc-dev.paycentral.co.za` → Log in → Forgot password, for the
+   registered e-mail. (Sign up refuses addresses already set up by PayCentral; the founder hit
+   that on 2026-11-19 and asked PayCentral to check the registration.)
+2. Quickest proof, no code: create a virtual card in the staging portal and see how its details
+   arrive.
+3. Through our code:
+   - merge PR #1;
+   - make sure Vercel → Settings → Networking → Static IPs includes Production;
+   - add `PAYCENTRAL_BASE_URL=https://staging-api.paycentral.co.za`, `PAYCENTRAL_API_EMAIL` and
+     `PAYCENTRAL_API_PASSWORD` (Sensitive) to Production;
+   - redeploy;
+   - run the probe;
+   - call the test route: `create`, then `load` R10, `check`, `balance`, `freeze`, `unfreeze`.
 
 ---
 

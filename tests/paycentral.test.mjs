@@ -28,7 +28,10 @@ import {
   statementDate,
   jwtExpiryMs,
   payCentralConfigured,
+  isStagingBaseUrl,
+  STOP_REASONS,
 } from '../lib/paycentral.js';
+import stagingTestHandler from '../pages/api/internal/paycentral-staging-test.js';
 
 const LOGIN = { email: 'test-api@example.com', password: ['test', 'pw', 'value'].join('-') };
 const fakeJwt = (expSec) => ['h', Buffer.from(JSON.stringify({ exp: expSec })).toString('base64url'), 's'].join('.');
@@ -342,11 +345,12 @@ test('loadReference: deterministic, 12 digits, no leading zero, lengths that loo
   assert.throws(() => loadReference(''), { code: 'BAD_INPUT' });
 });
 
-test('amounts: whole rands until cents are confirmed; safe integers only; parsing without float math', () => {
-  assert.equal(centsToRands(10000), '100');
-  assert.throws(() => centsToRands(1250), { code: 'AMOUNT_NOT_WHOLE_RANDS' });
-  assert.equal(centsToRands(1250, { wholeRands: false }), '12.50');
-  assert.equal(centsToRands(5, { wholeRands: false }), '0.05');
+test('amounts: cents allowed (PayCentral, 2026-11-18), whole rands on request; safe integers only; no float math', () => {
+  assert.equal(centsToRands(1250), '12.50');
+  assert.equal(centsToRands(10000), '100.00');
+  assert.equal(centsToRands(5), '0.05');
+  assert.equal(centsToRands(10000, { wholeRands: true }), '100');
+  assert.throws(() => centsToRands(1250, { wholeRands: true }), { code: 'AMOUNT_NOT_WHOLE_RANDS' });
   assert.throws(() => centsToRands(0), { code: 'BAD_INPUT' });
   assert.throws(() => centsToRands(1e21), { code: 'BAD_INPUT' });
   assert.equal(randsToCents('52.00'), 5200);
@@ -402,4 +406,88 @@ test('the probe needs the internal key, stays read-only and bounded, and never r
   assert.match(src, /WALL_BUDGET_MS/);
   assert.match(src, /readAttempts: 1/);
   assert.match(src, /password: !!process\.env\.PAYCENTRAL_API_PASSWORD/);
+});
+
+// --- PayCentral's answers (2026-11-18) and the staging test route ------------------
+
+test('freezing uses PayCentral stop reasons: "Other" for a customer freeze, anything else refused', async () => {
+  const { client, calls } = fakePayCentral({
+    '/authenticate': [LOGIN_OK()],
+    '/card/balance': [notFoundCard()],
+    '/card/cancel': [ok({ message: 'Card has been successfully stopped' })],
+  });
+  const r = await client.freezeCard({ cardIdentifier: '591' });
+  assert.equal(r.outcome, 'ok');
+  assert.equal(calls.find((c) => c.path === '/card/cancel').body.stopReasonID, STOP_REASONS.OTHER);
+  assert.deepEqual(Object.values(STOP_REASONS).sort((a, b) => a - b), [1, 2, 6, 7, 70, 89]);
+  await assert.rejects(client.freezeCard({ cardIdentifier: '591', stopReasonId: 3 }), { code: 'BAD_INPUT' });
+});
+
+test('isStagingBaseUrl recognises only the staging API host', () => {
+  assert.equal(isStagingBaseUrl('https://staging-api.paycentral.co.za'), true);
+  assert.equal(isStagingBaseUrl('https://staging-api.paycentral.co.za/'), true);
+  assert.equal(isStagingBaseUrl('https://api.paycentral.co.za'), false);
+  assert.equal(isStagingBaseUrl('https://staging-api.paycentral.co.za.evil.example'), false);
+  assert.equal(isStagingBaseUrl('not a url'), false);
+});
+
+const fakeRes = () => ({
+  statusCode: 200,
+  body: null,
+  headers: {},
+  setHeader(k, v) { this.headers[k] = v; },
+  status(c) { this.statusCode = c; return this; },
+  json(b) { this.body = b; return this; },
+});
+
+async function withEnv(vars, fn) {
+  const keys = Object.keys(vars);
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  for (const k of keys) {
+    if (vars[k] === undefined) delete process.env[k];
+    else process.env[k] = vars[k];
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const k of keys) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  }
+}
+
+test('the staging test route refuses before any network call: method, key, live URL, config, input, amount cap', async () => {
+  const key = ['test', 'internal', 'key'].join('-');
+  const call = async (method, headers, body) => {
+    const res = fakeRes();
+    await stagingTestHandler({ method, headers, body }, res);
+    return res;
+  };
+  const env = { WAPAY_INTERNAL_API_KEY: key, PAYCENTRAL_BASE_URL: 'https://staging-api.paycentral.co.za', PAYCENTRAL_API_EMAIL: LOGIN.email, PAYCENTRAL_API_PASSWORD: LOGIN.password, PAYCENTRAL_EGRESS_PROXY: undefined };
+  await withEnv(env, async () => {
+    assert.equal((await call('GET', {}, {})).statusCode, 405);
+    assert.equal((await call('POST', {}, { action: 'balance', seqNo: '1' })).statusCode, 401);
+    assert.equal((await call('POST', { 'x-internal-api-key': 'wrong' }, {})).statusCode, 401);
+    const h = { 'x-internal-api-key': key };
+    assert.equal((await call('POST', h, { action: 'load', seqNo: '591', amountCents: 50001, testId: 'abcd' })).statusCode, 400, 'R500 cap');
+    assert.equal((await call('POST', h, { action: 'load', seqNo: '591', amountCents: 1000 })).statusCode, 400, 'testId required');
+    assert.equal((await call('POST', h, { action: 'create', firstName: 'T' })).statusCode, 400, 'cellphone required');
+    assert.equal((await call('POST', h, { action: 'nope' })).statusCode, 400);
+  });
+  await withEnv({ ...env, PAYCENTRAL_BASE_URL: 'https://api.paycentral.co.za' }, async () => {
+    const r = await call('POST', { 'x-internal-api-key': key }, { action: 'balance', seqNo: '1' });
+    assert.equal(r.statusCode, 403);
+    assert.equal(r.body.error, 'STAGING_ONLY');
+  });
+  await withEnv({ ...env, PAYCENTRAL_API_PASSWORD: undefined }, async () => {
+    assert.equal((await call('POST', { 'x-internal-api-key': key }, { action: 'balance', seqNo: '1' })).statusCode, 503);
+  });
+});
+
+test('the staging test route touches no ledger, wallet or database and never logs', () => {
+  const src = readFileSync(new URL('../pages/api/internal/paycentral-staging-test.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /ledger-post|ledger-core|prisma|reserveHold|postEntry/);
+  assert.doesNotMatch(src, /console\.(log|error|warn)/);
+  assert.match(src, /isStagingBaseUrl\(\)/);
 });

@@ -94,6 +94,8 @@ Six kinds of guard are in use. A new operator route uses `requireAdmin` or `requ
 | `/api/internal/payout-status, /payout-reconcile, /payout-probe, /meta-status, /adumo-status, /ads-pipe-check, /capi-dataset, /capi-test-send, /ad-reminders` | GET or POST | internal key, checked by an inline copy in each file (401 when unset or wrong) | Rail probes, reconcile, sandbox probe, Meta status, Adumo status, ads pipe, Conversions API set-up, reminder sweep. |
 | `/api/admin/programme` | GET | admin session | The programme board snapshot for Mission Control's Programme tab (2026-11-13). |
 | `/api/internal/programme` | GET, POST | internal key | Counts of the stored board (GET); validate and store a board (POST). Never returns content on GET. |
+| `/api/internal/paycentral-probe` | GET | internal key (checked in the route, fails closed) | PayCentral connectivity: one login, then single-attempt door checks; read-only, about 45 s at most. |
+| `/api/internal/paycentral-staging-test` | POST | internal key, and refuses unless PAYCENTRAL_BASE_URL is the staging API | Founder's staging card test: create a virtual card, load (capped at R500), check a reference, balance, statement, freeze, unfreeze. No ledger, no customer. |
 
 Changed on 2026-11-13: `/api/webhook-test` is deleted; `/api/wallet/balance`, `/api/admin/list-wabas` and `/api/admin/init-templates` need the internal key; every `/api` answer carries `nosniff`; the consoles, the operator links and the bare root refuse framing.
 
@@ -135,6 +137,7 @@ One row is not a job although it lives in `agent_jobs`: kind `programme-board`, 
 | PayFast | Card and EFT in: deposits and paid links | packages/providers/payfast/src (checkout, itn, signature), pages/api/payfast/itn.js, lib/deposits.js | production (per CAPABILITIES section 7; PAYFAST_SANDBOX is an env value) |
 | Adumo Online (Nedbank through SHB) | Second card rail | lib/adumo.js, lib/adumo-reporting.js | unknown (merchant approved 23 Oct; WAPAY_ADUMO_ENABLED is an env value) |
 | Didit | Identity verification | lib/didit-kyc.js, pages/api/webhooks/didit.js | unknown (keys are env values) |
+| PayCentral (cards; Paymentology processes, Standard Bank or Bank Zero issues) | Prepaid Mastercard cards: DigiCentral virtual first | lib/paycentral.js, pages/api/internal/paycentral-probe.js, pages/api/internal/paycentral-staging-test.js | staging (`https://staging-api.paycentral.co.za`, the code default); not wired to customers |
 | UniFuel (Yoyo wiCode behind it) | Fuel vouchers | lib/unifuel-client.js, pages/api/webhooks/unifuel.js, lib/fuel-settlement.js | test (Yoyo TEST per CAPABILITIES) |
 | Yoyo direct | Dormant; no importer in lib or pages | packages/providers/yoyo | unknown |
 | Resend | Ops e-mail | lib/email.js | unknown (key is an env value) |
@@ -306,6 +309,18 @@ Books a refund the founder made in the PayFast or Adumo dashboard as the exact r
 - **Tests:** `tests/card-refund.test.mjs`
 - **Since:** CHANGELOG 135 (2026-11-09)
 - **Described in:** documented in docs/GOLDEN_THREAD.md 2.15 and docs/CAPABILITIES.md section 7
+
+### PayCentral card client
+
+The wire to PayCentral's card API, used so far only by two operator routes. PayCentral whitelists one address, while Vercel's Static IPs are a pair. So a call is retried only when its connection never connected, and a money or state call goes once, after a door check on the same connection. Card numbers and security codes never leave the client. Nothing here touches the ledger yet.
+
+- **Code:** `lib/paycentral.js`, `pages/api/internal/paycentral-probe.js`, `pages/api/internal/paycentral-staging-test.js`
+- **Routes:** `/api/internal/paycentral-probe`, `/api/internal/paycentral-staging-test`
+- **Data:** none (no table yet; tokens cached in memory per instance)
+- **Switches:** `PAYCENTRAL_BASE_URL`, `PAYCENTRAL_API_EMAIL`, `PAYCENTRAL_API_PASSWORD`, `PAYCENTRAL_EGRESS_PROXY`, `PAYCENTRAL_WHOLE_RANDS`, `PAYCENTRAL_DOOR_ATTEMPTS`, `PAYCENTRAL_REFERENCE_DIGITS`
+- **Tests:** `tests/paycentral.test.mjs`
+- **Since:** CHANGELOG 151 (2026-11-16)
+- **Described in:** docs/CARDS.md 0.11 and 0.12; docs/GOLDEN_THREAD.md 3.5
 
 ### Own-link rule
 

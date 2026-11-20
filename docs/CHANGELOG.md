@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-11-20 (153) — Cards: PayCentral's answers applied, a staging card test route, and what Apple Pay and Google Pay would take
+
+PayCentral's answers in code:
+- loads carry cents by default (`PAYCENTRAL_WHOLE_RANDS=true` forces whole rands);
+- `STOP_REASONS` holds PayCentral's list (all reversible), and a customer freeze uses 70 ("other");
+- `isStagingBaseUrl`.
+
+New route: `POST /api/internal/paycentral-staging-test`.
+- It sits behind the internal key and refuses anything but the staging API.
+- It creates, loads (capped at R500), checks a reference, reads balance and statement, and
+  freezes and unfreezes a test virtual card.
+- It touches no ledger and no customer, and logs no body.
+
+Docs:
+- `docs/CARDS.md` §0.13: the answers, the first-card steps, and why WaPay cannot enable Apple Pay
+  or Google Pay on its own (issuer agreements, MDES tokenisation, native-app entitlements), with
+  sources;
+- `docs/SYSTEM_ARCHITECTURE.md`: the two PayCentral routes, the supplier and the subsystem;
+- CAPABILITIES and env.template.
+
+Tests: `tests/paycentral.test.mjs` (30).
+
+---
+
 ## 2026-11-18 (152) — Cards: PayCentral staging account in place; what is outstanding, and the questions to Siyabonga (docs only)
 
 PayCentral created the staging account (portal bc-dev.paycentral.co.za, invoice "PC 6528865949")
