@@ -8,7 +8,9 @@
  * - the leftovers the sweep found stay closed: the echo stub is gone, the
  *   balance route and the two Meta set-up routes need the internal key;
  * - no API answer can be sniffed into a page, and the one value the WhatsApp
- *   verification echoes is sent as plain text.
+ *   verification echoes is sent as plain text;
+ * - the Link map's tiles name the site (origin only) although the console
+ *   sends no referrer, so OpenStreetMap does not block them.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -80,4 +82,22 @@ test('no API answer is sniffed into a page, and the verification echo is plain t
   for (const m of checkout.matchAll(/res(?:\.status\(200\))?\.send\((ownLinkWarnHtml|autoSubmitHtml)\(/g)) {
     assert.ok(checkout.lastIndexOf("res.setHeader('Content-Type', 'text/html; charset=utf-8');", m.index) > m.index - 400, `${m[1]} is sent as text/html`);
   }
+});
+
+test('the Link map still draws under the console referrer policy: each tile names the site, never the page', async () => {
+  const cfg = read('next.config.js');
+  const map = read('components/admin/LinkMapTab.js');
+  // The console sends no referrer to another site (above), and OpenStreetMap answers a tile asked for
+  // without one with its "Access blocked" image: from 13 to 20 November every tile was that image (BUGLOG #155).
+  assert.match(cfg, /\{ key: 'Referrer-Policy', value: 'same-origin' \}/);
+  assert.match(map, /export const TILE_REFERRER_POLICY = 'strict-origin';/, 'the origin only: no path, no query, no operator token');
+  const at = map.indexOf("L.tileLayer('https://tile.openstreetmap.org/");
+  assert.ok(at > -1, 'the map draws OpenStreetMap tiles');
+  const options = map.slice(at, map.indexOf('.addTo(m)', at));
+  assert.match(options, /referrerPolicy: TILE_REFERRER_POLICY,/, 'the tile layer carries its own referrer policy');
+  // Leaflet puts the attribute on each tile only from 1.9 on, and only when the option is a string.
+  assert.equal(JSON.parse(read('package.json')).dependencies.leaflet, '1.9.4');
+  const { createRequire } = await import('node:module');
+  const leaflet = readFileSync(createRequire(import.meta.url).resolve('leaflet/dist/leaflet-src.js'), 'utf8');
+  assert.match(leaflet, /if \(typeof this\.options\.referrerPolicy === 'string'\) \{\s*tile\.referrerPolicy = this\.options\.referrerPolicy;/);
 });

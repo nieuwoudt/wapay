@@ -4,6 +4,13 @@
 
 ---
 
+## 155. The Link map showed "Access blocked" on every tile for a week
+
+- **Symptom (2026-11-13 to 20):** Mission Control's Links map drew its pins over a grid of OpenStreetMap's "403 Access blocked: App is not following the tile usage policy" image. The data was correct; the map behind it was gone.
+- **Root cause:** the security sweep put `Referrer-Policy: same-origin` on the console pages (CHANGELOG 141), so that an operator link's address never leaves the site. A tile request to `tile.openstreetmap.org` is cross-origin, so it went with no referrer at all, and OpenStreetMap's tile policy refuses a browser request that does not say which site it comes from. Nothing on the page tested the map against the header.
+- **Fix:** the tile layer sets its own policy, `strict-origin` (`components/admin/LinkMapTab.js` `TILE_REFERRER_POLICY`), which Leaflet 1.9.4 sets on each tile image. OpenStreetMap is told the site and nothing more: no path, no query, no token. The console's header stays as it is.
+- **Guard:** `tests/public-surface-gates.test.mjs` asserts the console header, the tile layer's policy, Leaflet pinned at 1.9.4 and the Leaflet line that applies a string policy to each tile. It fails on the code before this fix.
+
 ## 154. An alert blamed a missing gate in WaPay's code for a message another system sent from the same number
 
 - **Symptom (2026-11-17 and 18):** "ACTION NOW: WhatsApp utility message to a number that never wrote" and, the next morning, the daily compliance check RED with `SENT_TO_STRANGER`: "a path is missing lib/outbound-guard.js". Every sender in the repository asks the guard or needs an account, no account matched the recipient, and nothing in any conversation happened at that minute.

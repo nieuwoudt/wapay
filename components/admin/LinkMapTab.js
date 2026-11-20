@@ -1,7 +1,8 @@
 /**
  * Mission Control's Links tab (founder 2026-10-25): where payment links are made, shared, opened and paid
  * from. The map is Leaflet (bundled, pinned 1.9.4) over OpenStreetMap's standard tiles (no key; light use as the
- * tile policy asks, with its attribution); the data is
+ * tile policy asks, with its attribution, and each tile request names this site as its referrer, which the
+ * policy requires: TILE_REFERRER_POLICY below); the data is
  * GET /api/admin/link-map (lib/link-map.js). Areas come from the internet connection, never GPS.
  *
  * The pins (founder 2026-10-26): a WaPay mark wherever a link was made, shared, opened or paid from, coloured
@@ -18,6 +19,8 @@ const R = (c) => 'R' + (Math.round(c || 0) / 100).toLocaleString('en-ZA', { maxi
 const when = (d) => new Date(d).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const MARK = '/brand/wapay-mark-64-white.png';
 const SA_BOUNDS = [[-34.9, 16.4], [-22.1, 32.9]];
+/** Tile requests name the site only (no path, no query), and only over https: what OpenStreetMap needs, nothing more. */
+export const TILE_REFERRER_POLICY = 'strict-origin';
 const TIP_LINES = 5;
 const GAP = 6;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -191,6 +194,10 @@ function LinkMap({ pins, statuses, show, focus }) {
       m.fitBounds(SA_BOUNDS);
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 12,
+        // The page sends no referrer anywhere else (next.config.js, Referrer-Policy: same-origin), and
+        // OpenStreetMap refuses a tile asked for without one: every tile came back as its "Access blocked"
+        // image (BUGLOG #155). Each tile says only which site asks (the origin), never the page's path.
+        referrerPolicy: TILE_REFERRER_POLICY,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(m);
       lib.current = L;

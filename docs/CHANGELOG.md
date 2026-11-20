@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-11-20 (149) — The Link map draws again: each tile names the site, so OpenStreetMap stops blocking it
+
+From 13 November every tile on Mission Control's Links map was OpenStreetMap's "Access blocked" image; the pins still drew on top (BUGLOG #155). The console's own `Referrer-Policy: same-origin` (CHANGELOG 141) stopped the browser naming the site when it asked for a tile, and OpenStreetMap's tile policy refuses a request that does not.
+
+- `components/admin/LinkMapTab.js`: the tile layer sets `referrerPolicy: TILE_REFERRER_POLICY` (`'strict-origin'`), which Leaflet 1.9.4 puts on every tile image. Each tile request now says which site asks and nothing else: no path, no query, so no operator token. The console's header in `next.config.js` is unchanged.
+- Checked against OpenStreetMap on 20 November: the same tile, asked for without a referrer, is the blocked image; asked for with the site's origin, it is the map.
+- Tests: `tests/public-surface-gates.test.mjs` locks the console header, the tile layer's own policy, the pinned Leaflet version and the line in Leaflet that applies it (it fails on the old code). Suite 1,584 pass; `next build` passes, and the built map chunk carries the policy. No migration.
+- **To switch on:** nothing; it is live with the deploy.
+
 ## 2026-11-18 (148) — An alert says whose code sent a message, and its facts are kept where an agent can pick them up
 
 Two alerts on 17 and 18 November said a WhatsApp utility message had reached a number that never wrote to WaPay and that "a path is missing the gate". No path was: every sender in the repository is gated. The number is also used by UniFuel's voucher delivery, which sends its own templates with its own code, and the check could not tell the two apart (BUGLOG #154). Separately, the founder asked that an alert stop being an e-mail he carries to a session: its facts should be kept where an agent can pick them up and fix the cause.
