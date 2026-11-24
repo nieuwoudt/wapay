@@ -3,6 +3,7 @@
 Piece 1 of the apps work (brief `docs/prompting/prompts/2026-11-24-app-landing-and-install.md`,
 picture `docs/briefs/app-landing/mock.html`, CHANGELOG 151). Built on branch
 `feat/app-landing-install`. **Not merged, not pushed, not deployed.** Nothing below is live.
+Reviewed the same day: `docs/testing/adversarial-review-2026-11-24.md`.
 
 ## 1. What changed for a customer
 
@@ -10,15 +11,18 @@ picture `docs/briefs/app-landing/mock.html`, CHANGELOG 151). Built on branch
   (Chat, Pay, Activity, Profile).
 - A member sees "Good morning, <first name>", the balance as a chip (the eye button hides it), and
   chips to Get paid, Send, Pay out, Top up and My links. Typing "balance", "recent", "my links"
-  shows a card in the thread; "pay out", "top up", "send", "get paid", "help" open their screens.
+  shows a card in the thread, read fresh each time; "pay out", "top up", "send", "get paid",
+  "help" open their screens. Asking where a pay-out is shows activity. "home" or the Chat tab comes
+  back to the first view.
 - Someone not signed in sees what WaPay does and four chips: Open an account (their own WhatsApp
   opens with a message ready), Pay a link, What is WaPay?, Log in. Typing a cell number opens the
   log-in step. Pay, Activity and Profile are greyed and say "Log in or open your account first."
 - A PIN, an ID number or an account number typed in the message box is shown as dots, answered
-  with one fixed line, and sent nowhere.
+  with one fixed line, and sent nowhere. A number that is not a cell number is told so plainly.
+- A log-out that did not reach WaPay says "You are still logged in" and changes nothing.
 - The whole app follows the phone's dark or light setting.
 - The app can be added to the home screen and then opens full screen. With no connection it
-  shows an offline screen and no balance.
+  shows a "No connection" screen and no balance.
 
 Nothing here calls a model, sends a WhatsApp message or moves money in a new way. No new
 environment variable is needed.
@@ -55,7 +59,24 @@ Screenshots are in `docs/testing/app-landing-2026-11-24/`.
 | Menu, Log out; tapped a greyed menu item | Back to the visitor screen; "Log in or open your account first." with the two buttons |
 | Opened `/app/pay-out` signed out | Sent to `/app/login?next=/app/pay-out`: the same screen with the log-in step open; after log-in, the pay-out screen |
 
-Automated: `node --test tests/*.test.mjs` 1,599 pass, 0 fail (1,586 before, 13 new in
+After the review's fixes the changed screens were walked again (390 x 844 and 390 x 600):
+
+| What was done | What was seen |
+|---|---|
+| Not signed in, typed "Open my account" | The line about WhatsApp and the Open WhatsApp button, not the log-in step |
+| Tapped Log in, then "What is WaPay?" | The log-in step opened, then closed; the answer in full view |
+| Typed a landline number, "what is the weather", "I have a problem" | Dots and "That does not look like a South African cell number"; the neutral fallback with its two buttons; the support address |
+| Tapped a greyed menu item; typed "home" | "Log in or open your account first."; back to the first view |
+| Logged in; typed "where is my pay out", "has Thandi paid", "what does a pay out cost" | The activity card; the links card; the chat's own fee line. No page opened |
+| The eye button, then "balance" | "Your balance is hidden. Tap the eye at the top to show it." in place of both cards |
+| Pressed the Chat tab | Back to the first view, the chip reading "Available ••••" |
+| Log out with the request made to fail | "You are still logged in: the log-out did not reach WaPay." and the member screen unchanged; then a real log-out returned to the visitor screen |
+| 390 x 600; dark | Mark, greeting, chips, message box and menu all on screen with no overlap; the dark set |
+
+The server's log for that pass shows only the reads on load, the log-in and the log-out: nothing
+typed in the message box reached it.
+
+Automated: `node --test tests/*.test.mjs` 1,602 pass, 0 fail (1,586 before this piece, 16 new in
 `tests/app-landing.test.mjs`, one of which runs the service worker's code against page loads, API
 calls, posts and a failed network); `next build` passes.
 
@@ -82,14 +103,26 @@ step is real money: stop at the confirm screen unless you mean it.
    either way, and the note decides whether the return needs work.
 5. **The ID check from the installed app:** Profile, Verify, and after Didit note where the phone
    lands. Same expectation and the same note.
-6. **Offline:** switch on flight mode and open the installed app. Expected: "You are offline",
+6. **Offline:** switch on flight mode and open the installed app. Expected: "No connection",
    no balance. Switch flight mode off and tap Try again.
 7. **Keyboard:** on both phones tap the message box and check that the box stays visible above
    the keyboard while you type.
 8. **A session that has ended:** leave the app a day (or change your PIN in the chat), open Pay
    out from the menu: the log-in step opens, and after the PIN you are on Pay out.
 
-## 5. Left out of this piece (and where it goes)
+## 5. Choices made where the brief left room
+
+- The service worker stores nothing at all (the brief allowed a cached shell).
+- "Open an account" is two taps: the chip, then the Open WhatsApp button under a line that says
+  what will happen.
+- The home-screen hint is shown to members only.
+- The `+` button only pastes a pay link from the clipboard; the microphone button points at the
+  keyboard's own dictation and records nothing.
+- The hide button hides the balance and the activity, in the chip and in the cards; a link's own
+  amount stays.
+- No language choice in the menu yet.
+
+## 6. Left out of this piece (and where it goes)
 
 - Sign-up on the web: one tap on WhatsApp to prove the number, a first PIN on the web. Piece 2,
   with its own brief and review, because it is a new way into an account and changes golden-thread
