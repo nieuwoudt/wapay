@@ -57,8 +57,9 @@ export function AppHead({ title }) {
       <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       <meta name="robots" content="noindex, nofollow" />
       <meta name="color-scheme" content="light dark" />
-      <meta name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)" />
-      <meta name="theme-color" content="#0E100F" media="(prefers-color-scheme: dark)" />
+      {/* One bar colour per setting. Each has its own key: without one, next/head keeps only the last tag of a name. */}
+      <meta key="theme-light" name="theme-color" content="#F4F6F8" media="(prefers-color-scheme: light)" />
+      <meta key="theme-dark" name="theme-color" content="#0E100F" media="(prefers-color-scheme: dark)" />
       <meta name="referrer" content="same-origin" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-title" content="WaPay" />

@@ -85,10 +85,10 @@ The slide-over menu, on the fixture (390 x 844, light and dark):
 
 | What was done | What was seen |
 |---|---|
-| Not signed in, tapped the menu button | A panel slid in from the left over the screen, rounded on its right edge, the screen shaded behind it: Open an account, Log in, Pay a link; What is WaPay?, How does it work?, What does it cost?, Can I buy airtime, data or electricity?; a member's places greyed; Help. Everything behind the panel is inert while it is open |
+| Not signed in, tapped the menu button | A panel slid in from the left over the screen, rounded on its right edge, the screen shaded behind it: Open an account, Log in, Pay a link; What is WaPay?, How does it work?, What does it cost?, Can I buy airtime or data?; a member's places greyed; Help. Everything behind the panel is inert while it is open |
 | Tapped a greyed place | The menu closed; "Log in or open your account first." with the two buttons |
 | Tapped beside the menu; pressed Escape (with the message box focused before opening) | Closed both ways; the menu button had the keyboard, not the message box, and nothing was left inert |
-| Tapped "Can I buy airtime, data or electricity?" | The menu closed; the question shown as the person's own line, then the ad flow's answer ("Not yet, those are coming soon...") with the Open WhatsApp button |
+| Tapped "Can I buy airtime or data?" | The menu closed; the question shown as the person's own line, then the ad flow's answer ("Not yet, those are coming soon...") with the Open WhatsApp button |
 | Logged in, opened the menu (dark) | The first name; Home; Get paid, Send, Pay out, Top up, My links, Pay a link; Airtime, Data, Electricity, Fuel, In-store, Vouchers, each "Coming soon"; Activity, Profile; Help, Log out. The list scrolls inside the panel |
 | Tapped Airtime | The menu closed; "Airtime: coming soon." in the thread. Nothing was bought and no page opened |
 | Tapped Pay a link, typed a pay code as a phone types it | The menu closed with the message box ready; the code opened its pay page's address |

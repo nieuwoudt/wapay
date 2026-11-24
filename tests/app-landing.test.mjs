@@ -478,8 +478,9 @@ test('every colour is a variable with a dark set: the app follows the phone', ()
   assert.deepEqual([...new Set(rules.match(/#[0-9A-Fa-f]{3,8}\b/g) || [])], ['#6B7280']);
   assert.ok(!/:\s*(white|black)\b/.test(rules), 'no named colour either');
   const shell = read('../components/app/Shell.js');
-  assert.match(shell, /<meta name="theme-color" content="#F4F6F8" media="\(prefers-color-scheme: light\)" \/>/);
-  assert.match(shell, /<meta name="theme-color" content="#0E100F" media="\(prefers-color-scheme: dark\)" \/>/);
+  // Each of the two bar colours carries its own key: next/head drops all but the last tag of one name otherwise (seen on the live page, 24 Nov).
+  assert.match(shell, /<meta key="theme-light" name="theme-color" content="#F4F6F8" media="\(prefers-color-scheme: light\)" \/>/);
+  assert.match(shell, /<meta key="theme-dark" name="theme-color" content="#0E100F" media="\(prefers-color-scheme: dark\)" \/>/);
   // No page of the app paints a colour of its own either.
   for (const page of ['activity', 'forgot-pin', 'get-paid', 'help', 'index', 'links', 'login', 'pay', 'pay-out', 'profile', 'send', 'top-up']) {
     assert.ok(!/#[0-9A-Fa-f]{6}\b/.test(read(`../pages/app/${page}.js`)), `${page}: colours come from the variables`);

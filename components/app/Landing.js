@@ -336,7 +336,7 @@ export default function Landing({ mode = 'home' }) {
         { key: 'about', icon: 'chat', ...ask('about', 'What is WaPay?') },
         { key: 'how', icon: 'check', ...ask('how', 'How does it work?') },
         { key: 'fees', icon: 'fee', ...ask('fees', 'What does it cost?') },
-        { key: 'vas', icon: 'phone', ...ask('vas', 'Can I buy airtime, data or electricity?') },
+        { key: 'vas', icon: 'phone', ...ask('vas', 'Can I buy airtime or data?') },
       ] },
       // A member's places, greyed: a tap says to log in or open an account first.
       { title: 'After you log in', items: [...MONEY, { key: 'activity', label: 'Activity', icon: 'activity' }].map(({ href, ...item }) => ({ ...item, dim: true, onClick: lockedTap })) },
