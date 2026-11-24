@@ -16,11 +16,16 @@
  * flow's own answers), never from wording typed into this file. Money shown
  * here is read fresh each time it is asked for; a read that fails says so and
  * never shows an older figure.
+ *
+ * The menu button opens the slide-over menu (components/app/Drawer.js): every
+ * place in the app for a member; for someone not signed in, how to start, what
+ * WaPay is, and the member's places greyed until they log in.
  */
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useRef, useState } from 'react';
 import Shell from './Shell.js';
+import Drawer from './Drawer.js';
 import { ActivityRow, Banner, Field, Icon, Notice, Pill, PinField, R, Row, Rs, Spinner, api, forgetSession, loadSession, shortDate, useBusy } from './kit.js';
 import { BAD_CELL_LINE, SECRET_LINE, greetingFor, payLinkCodeOf, routeMessage, safeNext } from '../../lib/app-chat-router.js';
 
@@ -147,6 +152,7 @@ export default function Landing({ mode = 'home' }) {
   const seq = useRef(0);
   const boxRef = useRef(null);
   const lastRef = useRef(null);
+  const menuBtn = useRef(null);
 
   const authed = !!cfg?.authed;
   const push = (...items) => setThread((cur) => [...cur, ...items.map((it) => ({ id: (seq.current += 1), ...it }))]);
@@ -190,13 +196,6 @@ export default function Landing({ mode = 'home' }) {
     document.addEventListener('visibilitychange', onShow);
     return () => document.removeEventListener('visibilitychange', onShow);
   }, [authed]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!menu) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') setMenu(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [menu]);
-
   // The home-screen hint: Android offers its own prompt, an iPhone needs telling where the button is.
   useEffect(() => {
     if (keep.get(INSTALL_KEY)) return undefined;
@@ -236,6 +235,8 @@ export default function Landing({ mode = 'home' }) {
   };
 
   const lockedTap = async () => {
+    // The log-in step is put away, so the line is not hidden above it.
+    setLogin(null);
     const g = guide || (await loadGuide());
     say(g?.locked, { actions: ['open', 'login'] });
   };
@@ -269,7 +270,8 @@ export default function Landing({ mode = 'home' }) {
       if (r.kind === 'answer') { say(g?.member?.[r.topic]); return; }
       if (r.kind === 'vas') {
         const tile = (home?.tiles || []).find((x) => x.id === r.product);
-        say(tile ? `${tile.label}: ${tile.note.charAt(0).toLowerCase()}${tile.note.slice(1)}.` : g?.member?.vas);
+        // A tile that is switched on works in the chat today: the button opens the person's own WhatsApp. Nothing is bought here.
+        say(tile ? `${tile.label}: ${tile.note.charAt(0).toLowerCase()}${tile.note.slice(1)}.` : g?.member?.vas, tile?.live ? { actions: ['chat'] } : {});
         return;
       }
       say(g?.memberFallback);
@@ -305,6 +307,42 @@ export default function Landing({ mode = 'home' }) {
   };
   const onMic = () => { setTip("Tap the microphone on your keyboard to speak. WaPay records no audio."); boxRef.current?.focus(); };
 
+  // The slide-over menu: every place in the app. Labels only; what WaPay says about itself stays in the guide.
+  // A question row shows its own label as the question, so the answer has something to answer.
+  const ask = (topic, label) => ({ label, onClick: () => { push({ who: 'me', text: label }); act({ kind: 'answer', topic }); } });
+  const MONEY = [
+    { key: 'get-paid', label: 'Get paid', icon: 'in', href: '/app/get-paid' },
+    { key: 'send', label: 'Send', icon: 'send', href: '/app/send' },
+    { key: 'pay-out', label: 'Pay out', icon: 'bank', href: '/app/pay-out' },
+    { key: 'top-up', label: 'Top up', icon: 'plus', href: '/app/top-up' },
+  ];
+  const payALink = { key: 'pay-link', label: 'Pay a link', icon: 'pay', onClick: () => act({ kind: 'paylink-ask' }) };
+  const help = { key: 'help', label: 'Help', icon: 'help', href: '/app/help' };
+  const menuGroups = authed
+    ? [
+      { items: [{ key: 'home', label: 'Home', icon: 'chat', onClick: goHome }] },
+      { title: 'Money', items: [...MONEY, { key: 'links', label: 'My links', icon: 'link', href: '/app/links' }, payALink] },
+      // The same tiles as the Pay page: each says where it works today, by the launch switches.
+      { title: 'Buy', items: (home?.tiles || []).map((t) => ({ key: t.id, label: t.label, icon: t.icon, note: t.note, dim: !t.live, onClick: () => act({ kind: 'vas', product: t.id }) })) },
+      { title: 'You', items: [{ key: 'activity', label: 'Activity', icon: 'activity', href: '/app/activity' }, { key: 'profile', label: 'Profile', icon: 'profile', href: '/app/profile' }] },
+    ]
+    : [
+      { items: [
+        { key: 'open', label: 'Open an account', icon: 'plus', go: true, onClick: () => act({ kind: 'open' }) },
+        { key: 'login', label: 'Log in', icon: 'profile', onClick: () => act({ kind: 'login' }) },
+        payALink,
+      ] },
+      { title: 'About WaPay', items: [
+        { key: 'about', icon: 'chat', ...ask('about', 'What is WaPay?') },
+        { key: 'how', icon: 'check', ...ask('how', 'How does it work?') },
+        { key: 'fees', icon: 'fee', ...ask('fees', 'What does it cost?') },
+        { key: 'vas', icon: 'phone', ...ask('vas', 'Can I buy airtime, data or electricity?') },
+      ] },
+      // A member's places, greyed: a tap says to log in or open an account first.
+      { title: 'After you log in', items: [...MONEY, { key: 'activity', label: 'Activity', icon: 'activity' }].map(({ href, ...item }) => ({ ...item, dim: true, onClick: lockedTap })) },
+    ];
+  const menuFoot = authed ? [help, { key: 'logout', label: 'Log out', icon: 'out', onClick: logout }] : [help];
+
   const chatting = thread.length > 0 || !!login;
   const b = home?.balance;
   const placeholder = authed ? 'Ask WaPay anything' : 'Your cell number';
@@ -316,16 +354,8 @@ export default function Landing({ mode = 'home' }) {
       {!cfg ? <Spinner /> : (
         <div className="land">
           <div className="bar">
-            <button type="button" className="round" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}><Icon name="menu" /></button>
+            <button ref={menuBtn} type="button" className="round" aria-label="Menu" aria-expanded={menu} aria-controls="app-menu" onClick={() => setMenu(true)}><Icon name="menu" /></button>
             {authed ? <button type="button" className="round" aria-label={hide ? 'Show balance' : 'Hide balance'} aria-pressed={hide} onClick={toggleHide}><Icon name={hide ? 'eyeoff' : 'eye'} /></button> : <span />}
-            {menu ? (
-              <div className="menu">
-                {authed ? null : <button type="button" onClick={() => act({ kind: 'login' })}>Log in</button>}
-                {authed ? null : <button type="button" onClick={() => act({ kind: 'open' })}>Open an account</button>}
-                <Link href="/app/help">Help</Link>
-                {authed ? <button type="button" onClick={() => act({ kind: 'logout' })}>Log out</button> : null}
-              </div>
-            ) : null}
           </div>
           <Banner banner={cfg.banner} />
           {cfg.offline ? (
@@ -361,6 +391,7 @@ export default function Landing({ mode = 'home' }) {
                   <div key={it.id} ref={mark(it)} className="wa">
                     {it.text}
                     {it.actions?.includes('open') && guide?.open ? <a className="btn" href={guide.open.url} target="_blank" rel="noopener noreferrer">{guide.open.label}</a> : null}
+                    {it.actions?.includes('chat') && guide?.chat ? <a className="btn" href={guide.chat.url} target="_blank" rel="noopener noreferrer">{guide.chat.label}</a> : null}
                     {it.actions?.includes('login') ? <button type="button" className="btn ghost" onClick={() => act({ kind: 'login' })}>Log in</button> : null}
                   </div>
                 );
@@ -393,6 +424,7 @@ export default function Landing({ mode = 'home' }) {
             <button type="button" className="cbtn" aria-label="Speak with your keyboard's microphone" onClick={onMic}><Icon name="mic" /></button>
             <button type="submit" className="cbtn send" aria-label="Send" disabled={!text.trim()}><Icon name="up" size={18} stroke={2.2} /></button>
           </form>
+          <Drawer open={menu} onClose={() => setMenu(false)} title={authed ? cfg.me?.firstName || 'WaPay' : 'WaPay'} sub={authed ? 'Your WaPay account' : 'Welcome'} groups={menuGroups} foot={menuFoot} opener={menuBtn} />
         </div>
       )}
     </Shell>

@@ -31,7 +31,7 @@ In numbers: the processor is 7,436 at the design baseline 240526c; 8,304 at bafa
 - wapay.co.za: named in comments and the e-mail identity only; this project does not serve it as far as the code shows (unverified).
 - The middleware never touches /api/* (middleware.js:12-13 and the matcher at :21), so every API route answers on every attached host.
 - Vercel region arn1 (vercel.json:38-40).
-- Web surfaces: /admin (Mission Control, eight tabs, pages/admin/index.js); /business (pages/business/index.js); /app with 12 pages (index, login, forgot-pin, pay, get-paid, links, top-up, send, pay-out, activity, profile, help; on branch feat/app-landing-install since CHANGELOG 151, not yet merged: index and login are one landing screen, components/app/Landing.js, and the app is installable through public/manifest.webmanifest and the service worker public/app-sw.js, which stores nothing and never handles /api/); /pay/[code] (public pay page); /i/[code] (referral redirect); /ops/approve and /ops/payout (signed-token operator pages); / (a placeholder page, pages/index.js).
+- Web surfaces: /admin (Mission Control, eight tabs, pages/admin/index.js); /business (pages/business/index.js); /app with 12 pages (index, login, forgot-pin, pay, get-paid, links, top-up, send, pay-out, activity, profile, help; since CHANGELOG 151, 2026-11-24: index and login are one landing screen, components/app/Landing.js, with a slide-over menu, components/app/Drawer.js, and the app is installable through public/manifest.webmanifest and the service worker public/app-sw.js, which stores nothing and never handles /api/); /pay/[code] (public pay page); /i/[code] (referral redirect); /ops/approve and /ops/payout (signed-token operator pages); / (a placeholder page, pages/index.js).
 
 ## 3. Routes and what guards each
 
@@ -375,13 +375,13 @@ Send money moves balance to balance for a member, or into a held liability for a
 The customer's own money without WhatsApp: log in with cell number and PIN, balance, get paid, links, top up, send, pay out, activity, profile.
 
 - **Code:** `pages/app/*.js (12 pages)`, `pages/api/app/*.js (10 routes)`, `lib/app-auth.js`, `lib/app-login.js`, `lib/app-http.js`, `lib/app-money.js`, and more
-- **On branch feat/app-landing-install (CHANGELOG 151, not yet merged):** `components/app/Landing.js` (the one landing screen), `lib/app-chat-router.js` (the message box, answered by code), `guideView` in `lib/app-portal.js` and `pages/api/app/guide.js` (an 11th route, public), `public/manifest.webmanifest`, `public/app-sw.js`, `marketing/brand/make-app-icons.py`; tests `tests/app-landing.test.mjs`
+- **Since CHANGELOG 151 (2026-11-24):** `components/app/Landing.js` (the one landing screen), `components/app/Drawer.js` (its slide-over menu), `lib/app-chat-router.js` (the message box, answered by code), `guideView` in `lib/app-portal.js` and `pages/api/app/guide.js` (an 11th route, public), `public/manifest.webmanifest`, `public/app-sw.js`, `marketing/brand/make-app-icons.py`; tests `tests/app-landing.test.mjs`
 - **Routes:** `/app/*`, `/api/app/auth`, `/api/app/forgot`, `/api/app/home`, `/api/app/activity`, `/api/app/links`
 - **Data:** none new; processed_messages for rate limits (lib/app-auth.js:259-270), audit_log
 - **Switches:** WAPAY_APP_SESSION_SECRET; WAPAY_APP_HOST (default app.wapay.co.za); WAPAY_APP_WHATSAPP_PAUSED; WAPAY_APP_BANNER; WAPAY_APP_DEV_FIXTURE
 - **Tests:** `tests/app-portal.test.mjs`
 - **Since:** CHANGELOG 117, 119 (2026-10-21)
-- **Described in:** documented in GOLDEN_THREAD 2.13 and docs/briefs/PERSONAL_PORTAL_BRIEF.md; CAPABILITIES says built on a branch, not deployed
+- **Described in:** documented in GOLDEN_THREAD 2.13 and docs/briefs/PERSONAL_PORTAL_BRIEF.md; CAPABILITIES says live since 2026-11-24
 
 ### WaPay for Business portal (before 6 Oct, never in the record)
 

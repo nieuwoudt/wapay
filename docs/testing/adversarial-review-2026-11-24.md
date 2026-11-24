@@ -88,6 +88,28 @@ phrase in either file.
 - **The visitor answers name PayShap and ATM cash** (the ad flow's own text) while every pay-out
   waits for approval. The ad flow says the same in the chat; whether it should is his call.
 
+## The slide-over menu (added the same day on the founder's note, reviewed before the merge)
+
+One read-only reviewer over the uncommitted change (`components/app/Drawer.js`, the landing
+screen, the styles, the tests). Nothing high. Four medium and nine low points; all fixed but the
+two listed last.
+
+| Sev | Finding | Fix |
+|---|---|---|
+| MED | Closing the menu handed the keyboard back to whatever had it. On an iPhone that is often the message box, so the on-screen keyboard came back up. | The keyboard goes to the menu button, through a ref the screen passes in. |
+| MED | The screen behind the open menu could still be reached by a screen reader. | While it is open everything behind it, the pill menu included, is `inert`. |
+| MED | The visitor's row about airtime answered "Not yet, those are coming soon" with nothing above it for "those" to mean. | A question row shows its own label as the person's line first, and the rows are worded as questions. |
+| MED | The menu's test pinned text, not behaviour. | It now checks that an item closes the menu and then acts, that every question row names a topic the guide has, that every address is a plain literal for one of the app's pages, and the order in which closing undoes things. It still reads source: rendering the component in a test needs a tool the repo does not have. |
+| LOW | A greyed row tapped while the log-in step was open said its line above the step, out of sight. | The log-in step is put away first. |
+| LOW | The menu took taps for a quarter of a second while sliding away (a double tap could act twice). | No taps unless open. |
+| LOW | Dragging the shade or the end of the list scrolled the page behind. | Contained. |
+| LOW | Close button 36 px; a faint focus ring; `role="dialog"` on an `aside`; the shade announced as a second close button; Escape only with the keyboard inside the panel; `aria-hidden` flipped with the keyboard still inside; a long tile note could collide with its label on a narrow phone. | 44 px; a green ring; a `div`; hidden from a screen reader; Escape from anywhere; no `aria-hidden` (closed is `visibility:hidden`); labels cut with an ellipsis. |
+
+Left as it is: **the phone's Back button leaves the page with the menu open** instead of closing
+the menu (doing it properly means writing to the browser's history beside the router; not worth
+the risk on the day of a deploy). **A tile that is switched on** says "In the WaPay chat" and
+offers a button to the person's own WhatsApp; nothing is bought in the web app.
+
 ## Not verified here
 
 A real phone, an installed app, and the service worker in a real browser: the browser used for

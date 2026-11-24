@@ -309,8 +309,8 @@ function sentencesIn(src) {
 
 test('the guide: what a visitor reads is the ad flow\'s own and keeps to its word rules; opening an account is the person\'s own WhatsApp', () => {
   const g = guideView({});
-  assert.deepEqual(Object.keys(g).sort(), ['fallback', 'line', 'locked', 'member', 'memberFallback', 'open', 'payLink', 'support', 'visitor']);
-  const visitorReads = [g.line, g.fallback, g.open.line, g.open.label, g.support, g.payLink, g.locked, ...Object.values(g.visitor)];
+  assert.deepEqual(Object.keys(g).sort(), ['chat', 'fallback', 'line', 'locked', 'member', 'memberFallback', 'open', 'payLink', 'support', 'visitor']);
+  const visitorReads = [g.line, g.fallback, g.open.line, g.open.label, g.chat.label, g.support, g.payLink, g.locked, ...Object.values(g.visitor)];
   assert.ok(visitorReads.length >= 16);
   // A member also gets the chat's own two fee lines (lib/fee-facts.js), which use the chat's member wording; everything else keeps the visitor rule.
   const { feesPayout, feesTopup, ...memberRest } = g.member;
@@ -338,6 +338,10 @@ test('the guide: what a visitor reads is the ad flow\'s own and keeps to its wor
   assert.match(g.support, /^E-mail \S+@\S+ with your cell number\. Never send your PIN\.$/);
   assert.equal(g.open.url, `https://wa.me/27760497624?text=${encodeURIComponent(AD_QUESTIONS.Q1)}`, 'the customer writes first, with the ad flow\'s first question');
   assert.equal(guideView({ WAPAY_WA_NUMBER: '+27 60 000 0000' }).open.url.split('?')[0], 'https://wa.me/27600000000');
+  // A switched-on tile points at the person's own WhatsApp with nothing typed for them: the customer writes first.
+  assert.equal(g.chat.url, 'https://wa.me/27760497624');
+  assert.match(landing, /tile\?\.live \? \{ actions: \['chat'\] \} : \{\}/);
+  assert.match(landing, /it\.actions\?\.includes\('chat'\) && guide\?\.chat \? <a className="btn" href=\{guide\.chat\.url\} target="_blank" rel="noopener noreferrer">/);
   // The page takes its words about WaPay from the guide, never from text typed into the component,
   // and every sentence that is written into the screen or the offline page keeps the same word rules.
   assert.ok(!/get paid by anyone|pay other WaPay users|coming soon/i.test(landing), 'no product wording in the page');
@@ -354,7 +358,7 @@ test('the guide route answers anyone, carries no customer data, and takes nothin
   await handler({ method: 'GET', headers: { host: 'app.wapay.co.za' }, query: {}, socket: {} }, res);
   assert.equal(res.statusCode, 200);
   assert.deepEqual(Object.keys(res.body).sort(), ['guide', 'ok']);
-  assert.deepEqual(Object.keys(res.body.guide).sort(), ['fallback', 'line', 'locked', 'member', 'memberFallback', 'open', 'payLink', 'support', 'visitor']);
+  assert.deepEqual(Object.keys(res.body.guide).sort(), ['chat', 'fallback', 'line', 'locked', 'member', 'memberFallback', 'open', 'payLink', 'support', 'visitor']);
   assert.match(res.headers['cache-control'], /no-store/);
   const post = mk();
   await handler({ method: 'POST', headers: { host: 'app.wapay.co.za' }, body: { text: '2580' }, query: {}, socket: {} }, post);
@@ -399,7 +403,7 @@ test('the pill menu is Chat, Pay, Activity, Profile; for a visitor everything bu
   const tabs = [...shell.matchAll(/\{ key: '(\w+)', href: '([^']+)', label: '(\w+)'/g)].map((m) => `${m[1]}:${m[2]}:${m[3]}`);
   assert.deepEqual(tabs, ['chat:/app:Chat', 'pay:/app/pay:Pay', 'activity:/app/activity:Activity', 'profile:/app/profile:Profile']);
   assert.match(shell, /locked && t\.key !== 'chat' \? \(\s*<button key=\{t\.key\} type="button" className="locked" aria-disabled="true" onClick=\{\(\) => onLocked && onLocked\(t\)\}>/);
-  assert.match(landing, /const lockedTap = async \(\) => \{\n\s+const g = guide \|\| \(await loadGuide\(\)\);\n\s+say\(g\?\.locked, \{ actions: \['open', 'login'\] \}\);\n\s+\};/);
+  assert.match(landing, /const lockedTap = async \(\) => \{\n[^\n]*\n\s+setLogin\(null\);\n\s+const g = guide \|\| \(await loadGuide\(\)\);\n\s+say\(g\?\.locked, \{ actions: \['open', 'login'\] \}\);\n\s+\};/, 'the line is said with the log-in step put away, so it is never hidden above it');
   // Pressing the tab you are on comes back to the first view.
   assert.match(shell, /onClick=\{tab === t\.key && onSame \? \(\) => onSame\(t\) : undefined\}/);
   assert.match(shell, /<Nav tab=\{tab\} locked=\{locked\} onLocked=\{onLocked\} onSame=\{onSame\} \/>/);
@@ -407,6 +411,55 @@ test('the pill menu is Chat, Pay, Activity, Profile; for a visitor everything bu
     assert.match(read(`../pages/app/${page}.js`), new RegExp(`<Shell title="[^"]+" tab="${tab}">`), `${page} lights ${tab}`);
   }
   assert.match(read('../pages/app/pay.js'), /tiles\.map\(\(t\) => \(/, 'the coming-soon tiles moved to the Pay page');
+});
+
+test('the slide-over menu: every place in the app on one panel, hidden while closed, and it makes no request of its own', () => {
+  const drawer = read('../components/app/Drawer.js');
+  // It shows what it is given and calls back: no request, no storage, no wording about WaPay.
+  assert.ok(!/\bapi\(|\bfetch\(|localStorage|sessionStorage|document\.cookie|console\./.test(drawer));
+  assert.ok(!/coming soon|get paid|pay out|top up|airtime|account/i.test(drawer.replace(/\/\*[\s\S]*?\*\//g, '')), 'its labels come from the screen that opens it');
+  for (const t of sentencesIn(drawer)) assert.deepEqual(copyViolations(t), [], t);
+  assert.match(drawer, /<div ref=\{sheet\} id="app-menu" className="sheet" role="dialog" aria-modal="true" aria-label="Menu" tabIndex=\{-1\}/);
+  // An item closes the menu and then does its job, both, in that order; a link closes it too.
+  assert.match(drawer, /<button type="button" className=\{tone\} onClick=\{\(\) => \{ onClose\(\); item\.onClick\(\); \}\}>/);
+  assert.match(drawer, /<Link href=\{item\.href\} className=\{tone\} onClick=\{onClose\}>/);
+  // Open: the screen behind is inert, the keyboard is in the panel, Escape closes it from anywhere.
+  const effect = drawer.slice(drawer.indexOf('useEffect(() => {'), drawer.indexOf('const onKeyDown ='));
+  assert.match(effect, /behind\.forEach\(\(el\) => el\.setAttribute\('inert', ''\)\);/);
+  assert.match(effect, /document\.querySelector\('nav\[aria-label="Main"\]'\)/, 'the pill menu behind it too');
+  assert.match(effect, /const onEscape = \(e\) => \{ if \(e\.key === 'Escape'\) onClose\(\); \};\n\s+document\.addEventListener\('keydown', onEscape\);\n\s+sheet\.current\?\.focus\(\);/);
+  // Closed: all three undone, in an order that lets the menu button take the keyboard (never the message box).
+  const undo = effect.slice(effect.indexOf('return () => {'));
+  const inertOff = undo.indexOf("behind.forEach((el) => el.removeAttribute('inert'));");
+  assert.ok(undo.indexOf("document.removeEventListener('keydown', onEscape);") > 0 && inertOff > 0 && inertOff < undo.indexOf('opener?.current?.focus();'));
+  assert.ok(!/before\.focus\(\)|activeElement;\n\s+sheet/.test(drawer), 'it never hands the keyboard back to whatever had it');
+  assert.match(drawer, /if \(e\.shiftKey && \(document\.activeElement === first \|\| document\.activeElement === sheet\.current\)\) \{ e\.preventDefault\(\); last\.focus\(\); \}/, 'Tab stays inside');
+  assert.match(drawer, /className="scrim" aria-hidden="true" tabIndex=\{-1\} onClick=\{onClose\}/, 'a tap beside it closes it');
+  assert.match(drawer, /if \(from\.x - t\.clientX > 60 && Math\.abs\(t\.clientY - from\.y\) < 60\) onClose\(\);/, 'a swipe to the left closes it');
+  assert.match(drawer, /src="\/brand\/wapay-mark-256\.png"/, 'the real W-mark');
+  // Closed means out of sight, out of the keyboard's way and out of a screen reader; it slides, with rounded edges, unless the phone asks for no motion.
+  const kit = read('../components/app/kit.js');
+  assert.match(kit, /\.drawer\{[^}]*visibility:hidden[^}]*\}\n\.drawer\.open\{visibility:visible;transition:none\}\n\.drawer:not\(\.open\)\{pointer-events:none\}/, 'out of sight, and it takes no tap while it slides away');
+  assert.match(kit, /\.sheet\{[^}]*border-radius:0 28px 28px 0[^}]*transform:translateX\(-104%\)[^}]*transition:transform[^}]*\}\n\.drawer\.open \.sheet\{transform:translateX\(0\)\}/);
+  assert.match(kit, /@media \(prefers-reduced-motion:reduce\)\{\.drawer,\.sheet,\.scrim\{transition:none\}\}/);
+  assert.equal((kit.match(/--scrim:/g) || []).length, 2, 'the shade behind it has a light and a dark value');
+  // The landing screen fills it: every address is one of the app's own pages.
+  assert.match(landing, /<Drawer open=\{menu\} onClose=\{\(\) => setMenu\(false\)\}[^\n]* opener=\{menuBtn\} \/>/);
+  assert.match(landing, /<button ref=\{menuBtn\} type="button" className="round" aria-label="Menu" aria-expanded=\{menu\} aria-controls="app-menu" onClick=\{\(\) => setMenu\(true\)\}>/);
+  assert.ok(!/className="menu"/.test(landing), 'the small pop-up menu is gone');
+  const lists = landing.slice(landing.indexOf('// The slide-over menu'), landing.indexOf('const chatting ='));
+  const hrefs = [...lists.matchAll(/\bhref:\s*([^,}]+)/g)].map((m) => m[1].trim());
+  assert.deepEqual([...new Set(hrefs)].sort(), ["'/app/activity'", "'/app/get-paid'", "'/app/help'", "'/app/links'", "'/app/pay-out'", "'/app/profile'", "'/app/send'", "'/app/top-up'"], 'every address is a plain literal naming one of the app\'s own pages');
+  // A question row asks for a topic the guide really has, and shows its own label as the question.
+  const asked = [...lists.matchAll(/\.\.\.ask\('(\w+)', '([^']+)'\)/g)].map((m) => m[1]);
+  assert.deepEqual(asked, ['about', 'how', 'fees', 'vas']);
+  for (const topic of asked) assert.ok(typeof guideView({}).visitor[topic] === 'string', `the guide answers ${topic}`);
+  assert.match(lists, /const ask = \(topic, label\) => \(\{ label, onClick: \(\) => \{ push\(\{ who: 'me', text: label \}\); act\(\{ kind: 'answer', topic \}\); \} \}\);/);
+  // A member's "Buy" rows are the server's own tiles (the launch switches decide what each says); a tap answers in the thread and buys nothing.
+  assert.match(lists, /\(home\?\.tiles \|\| \[\]\)\.map\(\(t\) => \(\{ key: t\.id, label: t\.label, icon: t\.icon, note: t\.note, dim: !t\.live, onClick: \(\) => act\(\{ kind: 'vas', product: t\.id \}\) \}\)\)/);
+  // Someone not signed in sees a member's places greyed, with no address: a tap says to log in or open an account first.
+  assert.match(lists, /\.map\(\(\{ href, \.\.\.item \}\) => \(\{ \.\.\.item, dim: true, onClick: lockedTap \}\)\)/);
+  assert.match(lists, /const menuFoot = authed \? \[help, \{ key: 'logout', label: 'Log out', icon: 'out', onClick: logout \}\] : \[help\];/);
 });
 
 test('every colour is a variable with a dark set: the app follows the phone', () => {

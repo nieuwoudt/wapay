@@ -2,7 +2,8 @@
 
 Piece 1 of the apps work (brief `docs/prompting/prompts/2026-11-24-app-landing-and-install.md`,
 picture `docs/briefs/app-landing/mock.html`, CHANGELOG 151). Built on branch
-`feat/app-landing-install`. **Not merged, not pushed, not deployed.** Nothing below is live.
+`feat/app-landing-install`, reviewed, and merged on the founder's word on 24 November.
+**Not yet checked on a real phone: section 4.**
 Reviewed the same day: `docs/testing/adversarial-review-2026-11-24.md`.
 
 ## 1. What changed for a customer
@@ -14,6 +15,10 @@ Reviewed the same day: `docs/testing/adversarial-review-2026-11-24.md`.
   shows a card in the thread, read fresh each time; "pay out", "top up", "send", "get paid",
   "help" open their screens. Asking where a pay-out is shows activity. "home" or the Chat tab comes
   back to the first view.
+- The menu button opens a menu that slides in from the left: every place in the app for a member
+  (the money jobs, links, the six buy tiles with where each works today, activity, profile, help,
+  log out); for someone not signed in, how to start, what WaPay is and costs, and a member's
+  places greyed.
 - Someone not signed in sees what WaPay does and four chips: Open an account (their own WhatsApp
   opens with a message ready), Pay a link, What is WaPay?, Log in. Typing a cell number opens the
   log-in step. Pay, Activity and Profile are greyed and say "Log in or open your account first."
@@ -76,7 +81,19 @@ After the review's fixes the changed screens were walked again (390 x 844 and 39
 The server's log for that pass shows only the reads on load, the log-in and the log-out: nothing
 typed in the message box reached it.
 
-Automated: `node --test tests/*.test.mjs` 1,602 pass, 0 fail (1,586 before this piece, 16 new in
+The slide-over menu, on the fixture (390 x 844, light and dark):
+
+| What was done | What was seen |
+|---|---|
+| Not signed in, tapped the menu button | A panel slid in from the left over the screen, rounded on its right edge, the screen shaded behind it: Open an account, Log in, Pay a link; What is WaPay?, How does it work?, What does it cost?, Can I buy airtime, data or electricity?; a member's places greyed; Help. Everything behind the panel is inert while it is open |
+| Tapped a greyed place | The menu closed; "Log in or open your account first." with the two buttons |
+| Tapped beside the menu; pressed Escape (with the message box focused before opening) | Closed both ways; the menu button had the keyboard, not the message box, and nothing was left inert |
+| Tapped "Can I buy airtime, data or electricity?" | The menu closed; the question shown as the person's own line, then the ad flow's answer ("Not yet, those are coming soon...") with the Open WhatsApp button |
+| Logged in, opened the menu (dark) | The first name; Home; Get paid, Send, Pay out, Top up, My links, Pay a link; Airtime, Data, Electricity, Fuel, In-store, Vouchers, each "Coming soon"; Activity, Profile; Help, Log out. The list scrolls inside the panel |
+| Tapped Airtime | The menu closed; "Airtime: coming soon." in the thread. Nothing was bought and no page opened |
+| Tapped Pay a link, typed a pay code as a phone types it | The menu closed with the message box ready; the code opened its pay page's address |
+
+Automated: `node --test tests/*.test.mjs` 1,603 pass, 0 fail (1,586 before this piece, 17 new in
 `tests/app-landing.test.mjs`, one of which runs the service worker's code against page loads, API
 calls, posts and a failed network); `next build` passes.
 
