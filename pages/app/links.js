@@ -127,7 +127,7 @@ function LinksScreen() {
 
 export default function Links() {
   return (
-    <Shell title="Your links" tab="links">
+    <Shell title="Your links" tab="pay">
       <LinksScreen />
     </Shell>
   );

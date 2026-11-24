@@ -651,7 +651,7 @@ test('get paid: create needs the proof; one intent makes one link; the list and 
   assert.equal(cancel.statusCode, 200);
 });
 
-test('your links (2026-10-24): every link with its status; an open one carries the card to share, the reminder and a WhatsApp link with no number; the page is in the navigation and on home', async () => {
+test('your links (2026-10-24): every link with its status; an open one carries the card to share, the reminder and a WhatsApp link with no number; the page is under Pay and one tap from the landing screen', async () => {
   const h = harness();
   const s = await signedIn(h);
   const r = await call(createLinksHandler(h.deps), { cookie: s.cookie });
@@ -667,13 +667,15 @@ test('your links (2026-10-24): every link with its status; an open one carries t
   assert.equal(paid.paidBy, 'card');
   assert.equal(paid.note, 'Rent');
   assert.equal(paid.shareText, undefined, 'a paid link has nothing to share or remind');
-  assert.match(read('../components/app/Shell.js'), /\{ key: 'links', href: '\/app\/links', label: 'Links', icon: 'link' \}/);
+  // Since 2026-11-24 the pill menu is Chat, Pay, Activity, Profile: Links sits under Pay and is a chip on the landing screen.
+  assert.ok(!/key: 'links'/.test(read('../components/app/Shell.js')), 'Links is no longer a menu item of its own');
   const page = read('../pages/app/links.js');
+  assert.match(page, /<Shell title="Your links" tab="pay">/, 'the links page lights the Pay item');
   assert.match(page, /await navigator\.share\(\{ text \}\)/, 'the reminder through the share sheet');
   assert.match(page, /href=\{l\.remindUrl\} target="_blank"/, 'or WhatsApp opened with the text ready');
   assert.match(page, /body: \{ action: 'cancel', code: l\.code \}/);
   assert.match(page, /copyText\(l\.url\)/);
-  assert.match(read('../pages/app/index.js'), /href="\/app\/links"/);
+  assert.match(read('../components/app/Landing.js'), /\{ href: '\/app\/links', label: 'My links' \}/);
   assert.match(read('../pages/app/pay.js'), /href="\/app\/links"/);
   assert.match(read('../pages/app/get-paid.js'), /const d = sanitizeLinkDescription\(note\);/, 'what it is for is checked before the PIN step');
 });
@@ -848,7 +850,7 @@ test('the dev fixture can never run in production', () => {
 });
 
 const PORTAL_FILES = [
-  ...['app-auth', 'app-deps', 'app-dev-fixture', 'app-http', 'app-login', 'app-money', 'app-portal'].map((f) => `../lib/${f}.js`),
+  ...['app-auth', 'app-chat-router', 'app-deps', 'app-dev-fixture', 'app-http', 'app-login', 'app-money', 'app-portal'].map((f) => `../lib/${f}.js`),
   ...readdirSync(fileURLToPath(new URL('../pages/api/app/', import.meta.url))).map((f) => `../pages/api/app/${f}`),
   ...readdirSync(fileURLToPath(new URL('../pages/app/', import.meta.url))).map((f) => `../pages/app/${f}`),
   ...readdirSync(fileURLToPath(new URL('../components/app/', import.meta.url))).map((f) => `../components/app/${f}`),

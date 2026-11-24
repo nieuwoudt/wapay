@@ -1,8 +1,31 @@
 /**
  * WaPay personal portal: the Pay tab (2026-10-21): get paid, send, pay out, top up.
+ * Since 2026-11-24 it also carries the coming-soon tiles that used to sit on
+ * home: each one is live exactly when the chat would sell it to this customer.
  */
+import { useEffect, useState } from 'react';
 import Shell from '../../components/app/Shell.js';
-import { Row } from '../../components/app/kit.js';
+import { Icon, Row, api } from '../../components/app/kit.js';
+
+function Tiles() {
+  const [tiles, setTiles] = useState(null);
+  useEffect(() => { api('/api/app/home').then((r) => { if (r.ok) setTiles(r.data.tiles || []); }); }, []);
+  if (!tiles?.length) return null;
+  return (
+    <>
+      <h3>More</h3>
+      <div className="tiles">
+        {tiles.map((t) => (
+          <div key={t.id} className={`tile ${t.live ? 'live' : 'soon'}`}>
+            <span className="ic"><Icon name={t.icon} size={22} /></span>
+            {t.label}
+            <small>{t.note}</small>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
 
 export default function Pay() {
   return (
@@ -19,6 +42,7 @@ export default function Pay() {
       <div className="card tight">
         <Row href="/app/help" icon="help" title="Help" sub="What works here, fees and support" right="›" />
       </div>
+      <Tiles />
     </Shell>
   );
 }
