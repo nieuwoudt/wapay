@@ -386,7 +386,7 @@ export function pinError(r) {
 
 export const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-:root{color-scheme:light dark;--green:#359853;--green-text:#359853;--green-dark:#2b7a43;--green-soft:#ECFDF3;--mint:#D1FAE5;--on-green:#fff;--ink:#111827;--ink-2:#374151;--grey:#6B7280;--mid:#9CA3AF;--line:#E5E7EB;--outer:#E9ECEF;--page:#F4F6F8;--card:#fff;--field:#fff;--soft:#F3F4F6;--logo-bg:#fff;--shadow:rgba(0,0,0,.04);--lift:rgba(17,24,39,.08);--amber:#B45309;--amber-bg:#FFF7ED;--amber-line:#FED7AA;--red:#B91C1C;--red-bg:#FEF2F2;--red-line:#FECACA;--blue-bg:#EFF6FF;--blue:#1D4ED8;--dev-bg:#EEF2FF;--dev:#3730A3;--radius:16px;--nav:70px}
+:root{color-scheme:light dark;--green:#359853;--green-text:#359853;--green-dark:#2b7a43;--green-strong:#2b7a43;--green-soft:#ECFDF3;--mint:#D1FAE5;--on-green:#fff;--ink:#111827;--ink-2:#374151;--grey:#6B7280;--mid:#9CA3AF;--line:#E5E7EB;--outer:#E9ECEF;--page:#F4F6F8;--card:#fff;--field:#fff;--soft:#F3F4F6;--logo-bg:#fff;--shadow:rgba(0,0,0,.04);--lift:rgba(17,24,39,.08);--amber:#B45309;--amber-bg:#FFF7ED;--amber-line:#FED7AA;--red:#B91C1C;--red-bg:#FEF2F2;--red-line:#FECACA;--blue-bg:#EFF6FF;--blue:#1D4ED8;--dev-bg:#EEF2FF;--dev:#3730A3;--radius:16px;--nav:70px}
 @media (prefers-color-scheme:dark){:root{--green-text:#5DBB7A;--green-dark:#5DBB7A;--green-soft:rgba(53,152,83,.18);--mint:rgba(53,152,83,.28);--ink:#F3F5F2;--ink-2:#D5DAD6;--grey:#9BA39D;--mid:#5B635E;--line:#2C312E;--outer:#060706;--page:#0E100F;--card:#1A1D1B;--field:#141716;--soft:#232725;--logo-bg:transparent;--shadow:rgba(0,0,0,.35);--lift:rgba(0,0,0,.5);--amber:#E0A458;--amber-bg:rgba(224,164,88,.12);--amber-line:rgba(224,164,88,.35);--red:#F87171;--red-bg:rgba(248,113,113,.12);--red-line:rgba(248,113,113,.35);--blue-bg:rgba(96,165,250,.12);--blue:#93C5FD;--dev-bg:rgba(99,102,241,.16);--dev:#A5B4FC}}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -470,7 +470,7 @@ select.input{appearance:none;background-image:linear-gradient(45deg,transparent 
 .nav{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom));width:calc(100% - 28px);max-width:392px;background:var(--card);border:1px solid var(--line);border-radius:30px;display:flex;padding:6px;z-index:5;box-shadow:0 8px 28px var(--lift)}
 .nav a,.nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;color:var(--grey);text-decoration:none;padding:8px 0 6px;border-radius:24px;border:0;background:transparent;cursor:pointer}
 .nav a.on{background:var(--soft);color:var(--ink)}
-.nav .locked{opacity:.4}
+.nav .locked{opacity:.55}
 .kv{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
 .kv:last-child{border-bottom:0}
 .kv span:first-child{color:var(--grey)}
@@ -527,7 +527,7 @@ select.input{appearance:none;background-image:linear-gradient(45deg,transparent 
 .quick.one{flex-wrap:nowrap;justify-content:flex-start;overflow-x:auto;scrollbar-width:none}
 .quick.one::-webkit-scrollbar{display:none}
 .quick .chip{white-space:nowrap;text-decoration:none;display:inline-block;flex:none}
-.chip.go{background:var(--green);border-color:var(--green);color:var(--on-green)}
+.chip.go{background:var(--green-strong);border-color:var(--green-strong);color:var(--on-green)}
 .tip{font-size:12.5px;color:var(--grey);text-align:center;margin:0 0 8px}
 .composer{flex:none;background:var(--card);border:1px solid var(--line);border-radius:28px;display:flex;align-items:center;gap:6px;padding:7px;box-shadow:0 8px 28px var(--lift)}
 .composer input{flex:1;min-width:0;border:0;background:transparent;font-size:16px;color:var(--ink);outline:none;padding:6px 2px}
@@ -536,4 +536,6 @@ select.input{appearance:none;background-image:linear-gradient(45deg,transparent 
 .cbtn.plus{background:var(--soft);color:var(--ink)}
 .cbtn.send{background:var(--green);color:var(--on-green)}
 .cbtn.send:disabled{opacity:.5;cursor:default}
+@media (max-height:640px){.hero{padding:6px 8px}.hero img{width:44px;height:44px;margin-bottom:8px}.greet{font-size:22px;margin-bottom:4px}.balchip{margin-top:10px}.install{display:none}}
+@media (max-height:480px){.hero img,.hero .line{display:none}}
 `;

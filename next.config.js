@@ -33,6 +33,9 @@ const nextConfig = {
     return [
       { source: '/app', headers: app },
       { source: '/app/:path*', headers: app },
+      // The installed app's worker and manifest (2026-11-24) are served as what they are, never sniffed.
+      { source: '/app-sw.js', headers: [{ key: 'X-Content-Type-Options', value: 'nosniff' }] },
+      { source: '/manifest.webmanifest', headers: [{ key: 'X-Content-Type-Options', value: 'nosniff' }] },
       // The operator consoles and the operator links (review 2026-11-13): a pay-out is approved by a
       // tap on these pages, so no other site may put them in a frame, and their addresses (an operator
       // link carries its token) are never sent on as a referrer. The bare root is here because the

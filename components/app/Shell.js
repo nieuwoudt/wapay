@@ -29,8 +29,10 @@ const TABS = [
 /**
  * The pill menu. For someone who is not signed in (`locked`) only Chat is a
  * link: the others are greyed buttons that say why, through `onLocked`.
+ * Pressing the tab you are already on calls `onSame` (the landing screen uses
+ * it to come back to its first view).
  */
-export function Nav({ tab, locked = false, onLocked = null }) {
+export function Nav({ tab, locked = false, onLocked = null, onSame = null }) {
   return (
     <nav className="nav" aria-label="Main">
       {TABS.map((t) => (locked && t.key !== 'chat' ? (
@@ -39,7 +41,7 @@ export function Nav({ tab, locked = false, onLocked = null }) {
           {t.label}
         </button>
       ) : (
-        <Link key={t.key} href={t.href} className={tab === t.key ? 'on' : ''} aria-current={tab === t.key ? 'page' : undefined}>
+        <Link key={t.key} href={t.href} className={tab === t.key ? 'on' : ''} aria-current={tab === t.key ? 'page' : undefined} onClick={tab === t.key && onSame ? () => onSame(t) : undefined}>
           <Icon name={t.icon} size={22} />
           {t.label}
         </Link>
@@ -69,7 +71,7 @@ export function AppHead({ title }) {
   );
 }
 
-export default function Shell({ title, tab = null, auth = true, nav = true, locked = false, onLocked = null, children }) {
+export default function Shell({ title, tab = null, auth = true, nav = true, locked = false, onLocked = null, onSame = null, children }) {
   const router = useRouter();
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(!auth);
@@ -102,7 +104,7 @@ export default function Shell({ title, tab = null, auth = true, nav = true, lock
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div className={`frame ${nav ? '' : 'nonav'}`}>
         <main>{ready ? children : <Spinner />}</main>
-        {nav && ready ? <Nav tab={tab} locked={locked} onLocked={onLocked} /> : null}
+        {nav && ready ? <Nav tab={tab} locked={locked} onLocked={onLocked} onSame={onSame} /> : null}
       </div>
     </SessionContext.Provider>
   );

@@ -6,7 +6,8 @@
  * It stores nothing. There is no cache here: a page is always fetched from
  * WaPay, and when that fails the person sees the offline screen below, which
  * is part of this file and shows no balance and no customer data
- * (docs/GOLDEN_THREAD.md 2.13). It only ever answers a page load. Every other
+ * (docs/GOLDEN_THREAD.md 2.13). The screen says nothing about what did or did
+ * not happen in the account: it cannot know. It only ever answers a page load. Every other
  * request, and anything under /api/, passes straight through untouched.
  */
 const OFFLINE_PAGE = `<!doctype html>
@@ -16,7 +17,7 @@ const OFFLINE_PAGE = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="light dark">
-<title>WaPay is offline</title>
+<title>No connection</title>
 <style>
 :root{--page:#F4F6F8;--ink:#111827;--grey:#6B7280;--green:#359853}
 @media (prefers-color-scheme:dark){:root{--page:#0E100F;--ink:#F3F5F2;--grey:#9BA39D}}
@@ -30,8 +31,8 @@ button{font:inherit;font-weight:700;font-size:15.5px;border:0;border-radius:14px
 </head>
 <body>
 <main>
-<h1>You are offline</h1>
-<p>WaPay needs a connection to show your money. Check your data or Wi-Fi, then try again. Nothing has changed in your account.</p>
+<h1>No connection</h1>
+<p>WaPay needs a connection to show your money. Check your data or Wi-Fi, then try again. If you were busy with a payment, look at Activity before you try it again.</p>
 <button type="button" onclick="location.reload()">Try again</button>
 </main>
 </body>

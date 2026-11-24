@@ -60,7 +60,9 @@ function ProfileScreen() {
     });
   };
   const logout = () => run(async () => {
-    await api('/api/app/auth', { method: 'POST', body: { action: 'logout' } });
+    const r = await api('/api/app/auth', { method: 'POST', body: { action: 'logout' } });
+    // Only a log-out WaPay answered is shown as one: a failed request leaves the session alive (review 2026-11-24).
+    if (!r.ok) { say('You are still logged in: the log-out did not reach WaPay. Check your connection and try again.', 'error'); window.scrollTo(0, 0); return; }
     forgetSession();
     router.replace('/app/login');
   });

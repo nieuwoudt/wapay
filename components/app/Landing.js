@@ -13,16 +13,16 @@
  * WhatsApp with a message ready, so the customer writes first.
  *
  * What it says about WaPay comes from the server (/api/app/guide, the ad
- * flow's own answers), never from wording typed into this file.
+ * flow's own answers), never from wording typed into this file. Money shown
+ * here is read fresh each time it is asked for; a read that fails says so and
+ * never shows an older figure.
  */
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useRef, useState } from 'react';
 import Shell from './Shell.js';
 import { ActivityRow, Banner, Field, Icon, Notice, Pill, PinField, R, Row, Rs, Spinner, api, forgetSession, loadSession, shortDate, useBusy } from './kit.js';
-import { SECRET_LINE, greetingFor, payLinkCodeOf, routeMessage } from '../../lib/app-chat-router.js';
-
-const safeNext = (n) => (typeof n === 'string' && /^\/app(\/[a-z0-9-]*)?(\?[\w=&%.-]*)?$/i.test(n) ? n : '/app');
+import { BAD_CELL_LINE, SECRET_LINE, greetingFor, payLinkCodeOf, routeMessage, safeNext } from '../../lib/app-chat-router.js';
 
 // The only two things kept in this browser: the hide-balance choice and a dismissed install hint.
 const HIDE_KEY = 'wapay_app_hide_balance';
@@ -47,8 +47,12 @@ const VISITOR_CHIPS = [
 ];
 
 const NOT_LOADED = 'WaPay could not load that just now. Check your connection and try again.';
+const NO_BALANCE = 'Your balance could not be loaded just now. Please try again in a moment.';
+const STILL_IN = 'You are still logged in: the log-out did not reach WaPay. Check your connection and try again.';
+const HIDDEN = 'Your balance is hidden. Tap the eye at the top to show it.';
 
-function BalanceCard({ home }) {
+function BalanceCard({ home, hide }) {
+  if (hide) return <section className="card" aria-label="Balance"><p className="p" style={{ margin: 0 }}>{HIDDEN}</p></section>;
   const b = home.balance;
   return (
     <section className="card balance" aria-label="Balance">
@@ -66,7 +70,8 @@ function BalanceCard({ home }) {
   );
 }
 
-function RecentCard({ home }) {
+function RecentCard({ home, hide }) {
+  if (hide) return <section className="card" aria-label="Recent activity"><p className="p" style={{ margin: 0 }}>{HIDDEN}</p></section>;
   return (
     <section className="card tight" aria-label="Recent activity">
       {home.recent?.length
@@ -141,7 +146,7 @@ export default function Landing({ mode = 'home' }) {
   const [hello, setHello] = useState('');
   const seq = useRef(0);
   const boxRef = useRef(null);
-  const endRef = useRef(null);
+  const lastRef = useRef(null);
 
   const authed = !!cfg?.authed;
   const push = (...items) => setThread((cur) => [...cur, ...items.map((it) => ({ id: (seq.current += 1), ...it }))]);
@@ -150,25 +155,47 @@ export default function Landing({ mode = 'home' }) {
   const loadHome = async () => {
     const r = await api('/api/app/home');
     if (r.ok) { setHome(r.data); setHomeFailed(false); return r.data; }
+    setHome(null);
     setHomeFailed(true);
     return null;
   };
+  const loadGuide = async () => {
+    const r = await api('/api/app/guide');
+    if (!r.ok) return null;
+    setGuide(r.data.guide);
+    return r.data.guide;
+  };
+  const loadWho = () => loadSession(true).then((s) => {
+    if (s.authed && mode === 'login') { router.replace(safeNext(router.query.next)); return; }
+    setCfg(s);
+    if (s.authed) { setLogin(null); loadHome(); }
+  });
 
   // Who is here, and what the screen may say about WaPay.
   useEffect(() => {
     if (!router.isReady) return;
-    loadSession(true).then((s) => {
-      if (s.authed && mode === 'login') { router.replace(safeNext(router.query.next)); return; }
-      setCfg(s);
-      if (s.authed) { setLogin(null); loadHome(); }
-    });
-    api('/api/app/guide').then((r) => { if (r.ok) setGuide(r.data.guide); });
+    loadWho();
+    loadGuide();
     setHide(keep.get(HIDE_KEY) === '1');
   }, [router.isReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setHello(greetingFor(new Date(), cfg?.me?.firstName)); }, [cfg]);
-  useEffect(() => { if (thread.length || login) endRef.current?.scrollIntoView({ block: 'end' }); }, [thread.length, login]);
+  // The newest answer, or the log-in step, is brought to the top of what can be seen: its first line is never off screen.
+  useEffect(() => { if (thread.length || login) lastRef.current?.scrollIntoView({ block: 'start' }); }, [thread.length, login]);
   useEffect(() => { if (!tip) return undefined; const t = setTimeout(() => setTip(''), 6000); return () => clearTimeout(t); }, [tip]);
+  // An app left open and come back to shows today's balance, not this morning's.
+  useEffect(() => {
+    if (!authed) return undefined;
+    const onShow = () => { if (document.visibilityState === 'visible') loadHome(); };
+    document.addEventListener('visibilitychange', onShow);
+    return () => document.removeEventListener('visibilitychange', onShow);
+  }, [authed]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!menu) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setMenu(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [menu]);
 
   // The home-screen hint: Android offers its own prompt, an iPhone needs telling where the button is.
   useEffect(() => {
@@ -180,38 +207,53 @@ export default function Landing({ mode = 'home' }) {
     if (/iphone|ipad|ipod/i.test(ua) && /safari/i.test(ua) && !/crios|fxios|edgios/i.test(ua)) setInstall({ kind: 'ios' });
     return () => window.removeEventListener('beforeinstallprompt', onPrompt);
   }, []);
-  const dismissInstall = () => { keep.set(INSTALL_KEY, '1'); setInstall(null); };
-  const addToHome = async () => { try { await install.event.prompt(); } catch { /* the phone declined */ } dismissInstall(); };
+  // "Got it" and a finished prompt are remembered; "Not now" only puts the hint away for this visit.
+  const dismissInstall = (remember) => { if (remember) keep.set(INSTALL_KEY, '1'); setInstall(null); };
+  const addToHome = async () => { try { await install.event.prompt(); } catch { /* the phone declined */ } dismissInstall(true); };
 
   const toggleHide = () => setHide((h) => { keep.set(HIDE_KEY, h ? '0' : '1'); return !h; });
   const openPayLink = (code) => { say('Opening that payment link.'); window.location.assign(`/pay/${code}`); };
+  const goHome = () => { setMenu(false); setThread([]); setLogin(null); };
 
   const afterLogin = async () => {
-    const next = router.query.next;
-    if (next) { router.replace(safeNext(next)); return; }
+    const target = safeNext(router.query.next);
     const s = await loadSession(true);
     setCfg(s);
     setLogin(null);
     setThread([]);
     if (s.authed) loadHome();
-    if (mode === 'login') router.replace('/app');
+    if (target !== '/app' || router.asPath !== '/app') router.replace(target);
   };
 
   const logout = async () => {
-    await api('/api/app/auth', { method: 'POST', body: { action: 'logout' } });
+    const r = await api('/api/app/auth', { method: 'POST', body: { action: 'logout' } });
+    // Only a log-out WaPay answered is shown as one: a failed request leaves the session alive.
+    if (!r.ok) { say(STILL_IN); return; }
     forgetSession();
     setHome(null);
     setThread([]);
     setCfg(await loadSession(true));
   };
 
+  const lockedTap = async () => {
+    const g = guide || (await loadGuide());
+    say(g?.locked, { actions: ['open', 'login'] });
+  };
+
   /** Do what the router decided. Nothing typed is passed to the server from here. */
   const act = async (r) => {
     setMenu(false);
+    if (r.kind === 'home') { goHome(); return; }
+    // Any other step puts the log-in step away, so the answer is not hidden above it.
+    if (r.kind !== 'cell' && r.kind !== 'login') setLogin(null);
     if (r.kind === 'paylink') { openPayLink(r.code); return; }
     if (r.kind === 'page') { router.push(r.href); return; }
     if (r.kind === 'logout') { logout(); return; }
     if (r.kind === 'thanks') { say("You're welcome."); return; }
+    if (r.kind === 'cell') { setLogin({ cell: r.cell }); return; }
+    if (r.kind === 'login') { setLogin({ cell: '' }); return; }
+    const g = guide || (await loadGuide());
+    if (r.kind === 'paylink-ask') { say(g?.payLink); boxRef.current?.focus(); return; }
     if (authed) {
       if (r.kind === 'card' && r.card === 'links') {
         const got = await api('/api/app/links');
@@ -219,26 +261,25 @@ export default function Landing({ mode = 'home' }) {
         return;
       }
       if (r.kind === 'card') {
-        const h = home || (await loadHome());
-        if (h) push({ who: 'wa', card: r.card, home: h }); else say('Your balance could not be loaded just now. Please try again in a moment.');
+        // Read fresh every time it is asked for; a failed read says so and shows no older figure.
+        const fresh = await loadHome();
+        if (fresh) push({ who: 'wa', card: r.card, home: fresh }); else say(NO_BALANCE);
         return;
       }
-      if (r.kind === 'answer') { say(guide?.member?.[r.topic]); return; }
+      if (r.kind === 'answer') { say(g?.member?.[r.topic]); return; }
       if (r.kind === 'vas') {
         const tile = (home?.tiles || []).find((x) => x.id === r.product);
-        say(tile ? `${tile.label}: ${tile.note.charAt(0).toLowerCase()}${tile.note.slice(1)}.` : guide?.member?.vas);
+        say(tile ? `${tile.label}: ${tile.note.charAt(0).toLowerCase()}${tile.note.slice(1)}.` : g?.member?.vas);
         return;
       }
-      say(guide?.memberFallback);
+      say(g?.memberFallback);
       return;
     }
-    if (r.kind === 'cell') { setLogin({ cell: r.cell }); return; }
-    if (r.kind === 'login') { setLogin({ cell: '' }); return; }
-    if (r.kind === 'open') { say(guide?.open?.line, { actions: ['open'] }); return; }
-    if (r.kind === 'paylink-ask') { say(guide?.payLink); boxRef.current?.focus(); return; }
-    if (r.kind === 'answer') { say(guide?.visitor?.[r.topic], { actions: ['open'] }); return; }
-    if (r.kind === 'greet') { say(guide ? `Welcome to WaPay. ${guide.line}` : null, { actions: ['open', 'login'] }); return; }
-    say(guide?.fallback, { actions: ['open', 'login'] });
+    if (r.kind === 'open') { say(g?.open?.line, { actions: ['open'] }); return; }
+    if (r.kind === 'support') { say(g?.support); return; }
+    if (r.kind === 'answer') { say(g?.visitor?.[r.topic], { actions: ['open'] }); return; }
+    if (r.kind === 'greet') { say(g ? `Welcome to WaPay. ${g.line}` : null, { actions: ['open', 'login'] }); return; }
+    say(g?.fallback, { actions: ['open', 'login'] });
   };
 
   const onSubmit = (e) => {
@@ -249,7 +290,9 @@ export default function Landing({ mode = 'home' }) {
     const r = routeMessage(typed, { authed });
     // A secret is never shown back and never leaves this page.
     if (r.kind === 'secret') { push({ who: 'me', text: '•••' }, { who: 'wa', text: SECRET_LINE }); return; }
-    if (r.kind !== 'cell') push({ who: 'me', text: typed });
+    // A number that is not a cell number is not shown back either: it may be some other number.
+    if (r.kind === 'badcell') { push({ who: 'me', text: '•••' }, { who: 'wa', text: BAD_CELL_LINE }); return; }
+    if (r.kind !== 'cell' && r.kind !== 'home') push({ who: 'me', text: typed });
     act(r);
   };
 
@@ -258,31 +301,39 @@ export default function Landing({ mode = 'home' }) {
     try { clip = navigator.clipboard?.readText ? await navigator.clipboard.readText() : ''; } catch { clip = ''; }
     const code = payLinkCodeOf(clip);
     if (code) { openPayLink(code); return; }
-    say(guide?.payLink);
-    boxRef.current?.focus();
+    act({ kind: 'paylink-ask' });
   };
   const onMic = () => { setTip("Tap the microphone on your keyboard to speak. WaPay records no audio."); boxRef.current?.focus(); };
 
   const chatting = thread.length > 0 || !!login;
   const b = home?.balance;
+  const placeholder = authed ? 'Ask WaPay anything' : 'Your cell number';
+  const lastId = login ? null : thread[thread.length - 1]?.id;
+  const mark = (it) => (it.id === lastId ? lastRef : undefined);
 
   return (
-    <Shell title={authed ? 'Chat' : 'Welcome'} tab="chat" auth={false} locked={!authed} onLocked={() => say(guide?.locked, { actions: ['open', 'login'] })}>
+    <Shell title={authed ? 'Chat' : 'Welcome'} tab="chat" auth={false} locked={!authed} onLocked={lockedTap} onSame={goHome}>
       {!cfg ? <Spinner /> : (
         <div className="land">
           <div className="bar">
             <button type="button" className="round" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}><Icon name="menu" /></button>
-            {authed ? <button type="button" className="round" aria-label={hide ? 'Show balance' : 'Hide balance'} onClick={toggleHide}><Icon name={hide ? 'eyeoff' : 'eye'} /></button> : <span />}
+            {authed ? <button type="button" className="round" aria-label={hide ? 'Show balance' : 'Hide balance'} aria-pressed={hide} onClick={toggleHide}><Icon name={hide ? 'eyeoff' : 'eye'} /></button> : <span />}
             {menu ? (
-              <div className="menu" role="menu">
-                {authed ? null : <button type="button" role="menuitem" onClick={() => act({ kind: 'login' })}>Log in</button>}
-                {authed ? null : <button type="button" role="menuitem" onClick={() => act({ kind: 'open' })}>Open an account</button>}
-                <Link href="/app/help" role="menuitem">Help</Link>
-                {authed ? <button type="button" role="menuitem" onClick={() => act({ kind: 'logout' })}>Log out</button> : null}
+              <div className="menu">
+                {authed ? null : <button type="button" onClick={() => act({ kind: 'login' })}>Log in</button>}
+                {authed ? null : <button type="button" onClick={() => act({ kind: 'open' })}>Open an account</button>}
+                <Link href="/app/help">Help</Link>
+                {authed ? <button type="button" onClick={() => act({ kind: 'logout' })}>Log out</button> : null}
               </div>
             ) : null}
           </div>
           <Banner banner={cfg.banner} />
+          {cfg.offline ? (
+            <Notice tone="warn">
+              No connection. Check your data or Wi-Fi.
+              <div className="split mt"><button type="button" className="btn sm ghost" onClick={() => { loadWho(); loadGuide(); }}>Try again</button></div>
+            </Notice>
+          ) : null}
 
           {chatting ? null : (
             <div className="hero">
@@ -291,7 +342,7 @@ export default function Landing({ mode = 'home' }) {
               <p className="greet">{authed ? hello : 'Welcome to WaPay'}</p>
               <p className="line">{authed ? 'What would you like to do today?' : guide?.line || ''}</p>
               {authed ? (
-                <button type="button" className="balchip" onClick={() => (b ? act({ kind: 'card', card: 'balance' }) : loadHome())} aria-label="Balance">
+                <button type="button" className="balchip" onClick={() => (b ? act({ kind: 'card', card: 'balance' }) : loadHome())} aria-label={b && hide ? 'Balance hidden' : undefined}>
                   {b ? <><span>Available</span> {hide ? '••••' : R(b.totalCents)}</> : <span>{homeFailed ? 'Balance unavailable. Tap to try again' : 'Loading your balance'}</span>}
                 </button>
               ) : null}
@@ -302,31 +353,30 @@ export default function Landing({ mode = 'home' }) {
             <div className="thread" aria-live="polite">
               {login && !thread.length ? <div className="center"><img src="/brand/wapay-mark-256.png" width="44" height="44" alt="WaPay" /></div> : null}
               {thread.map((it) => {
-                if (it.who === 'me') return <div key={it.id} className="me">{it.text}</div>;
-                if (it.card === 'balance') return <div key={it.id}><BalanceCard home={it.home} /><div style={{ height: 10 }} /><RecentCard home={it.home} /></div>;
-                if (it.card === 'recent') return <RecentCard key={it.id} home={it.home} />;
-                if (it.card === 'links') return <LinksCard key={it.id} links={it.links} />;
+                if (it.who === 'me') return <div key={it.id} ref={mark(it)} className="me">{it.text}</div>;
+                if (it.card === 'balance') return <div key={it.id} ref={mark(it)}><BalanceCard home={it.home} hide={hide} />{hide ? null : <><div style={{ height: 10 }} /><RecentCard home={it.home} hide={false} /></>}</div>;
+                if (it.card === 'recent') return <div key={it.id} ref={mark(it)}><RecentCard home={it.home} hide={hide} /></div>;
+                if (it.card === 'links') return <div key={it.id} ref={mark(it)}><LinksCard links={it.links} /></div>;
                 return (
-                  <div key={it.id} className="wa">
+                  <div key={it.id} ref={mark(it)} className="wa">
                     {it.text}
                     {it.actions?.includes('open') && guide?.open ? <a className="btn" href={guide.open.url} target="_blank" rel="noopener noreferrer">{guide.open.label}</a> : null}
                     {it.actions?.includes('login') ? <button type="button" className="btn ghost" onClick={() => act({ kind: 'login' })}>Log in</button> : null}
                   </div>
                 );
               })}
-              {login ? <LoginCard key={login.cell} cfg={cfg} guide={guide} cell={login.cell} onDone={afterLogin} /> : null}
-              <div ref={endRef} />
+              {login ? <div ref={lastRef}><LoginCard key={login.cell} cfg={cfg} guide={guide} cell={login.cell} onDone={afterLogin} /></div> : null}
             </div>
           ) : null}
 
           {authed && install && !chatting ? (
-            <div className="notice info" role="status">
+            <div className="notice info install" role="status">
               {install.kind === 'ios'
                 ? 'Add WaPay to your home screen: tap the Share button, then Add to Home Screen.'
                 : 'Add WaPay to your home screen to open it like an app.'}
               <div className="split mt">
                 {install.kind === 'prompt' ? <button type="button" className="btn sm" onClick={addToHome}>Add</button> : null}
-                <button type="button" className="btn sm ghost" onClick={dismissInstall}>{install.kind === 'ios' ? 'Got it' : 'Not now'}</button>
+                <button type="button" className="btn sm ghost" onClick={() => dismissInstall(install.kind === 'ios')}>{install.kind === 'ios' ? 'Got it' : 'Not now'}</button>
               </div>
             </div>
           ) : null}
@@ -339,7 +389,7 @@ export default function Landing({ mode = 'home' }) {
           {tip ? <p className="tip" role="status">{tip}</p> : null}
           <form className="composer" onSubmit={onSubmit}>
             <button type="button" className="cbtn plus" aria-label="Paste a pay link" onClick={onPlus}><Icon name="plus" size={18} /></button>
-            <input ref={boxRef} value={text} onChange={(e) => setText(e.target.value.slice(0, 300))} placeholder={authed ? 'Ask WaPay anything' : 'Your cell number'} aria-label="Message" autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="send" />
+            <input ref={boxRef} value={text} onChange={(e) => setText(e.target.value.slice(0, 300))} placeholder={placeholder} aria-label={placeholder} autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="send" />
             <button type="button" className="cbtn" aria-label="Speak with your keyboard's microphone" onClick={onMic}><Icon name="mic" /></button>
             <button type="submit" className="cbtn send" aria-label="Send" disabled={!text.trim()}><Icon name="up" size={18} stroke={2.2} /></button>
           </form>
