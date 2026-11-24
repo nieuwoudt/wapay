@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-11-24 (151) — The app opens on one chat landing screen for everyone, follows the phone's dark or light setting, and can be added to the home screen
+
+The founder's brief of 24 November (`docs/prompting/prompts/2026-11-24-app-landing-and-install.md`, picture `docs/briefs/app-landing/mock.html`): "mobile app" means the web app made installable, and its landing page is one chat-style screen for members and for people who do not know WaPay yet. This is piece 1, the fixed layer answered by code. No model is called, no WhatsApp message is sent, no money path is touched. **Built on branch `feat/app-landing-install`: not merged, not deployed.**
+
+- **The landing screen** (`components/app/Landing.js`; `pages/app/index.js` and `pages/app/login.js` both render it): the W-mark, a greeting, a message box, the pill menu. A member reads "Good morning, <first name>" by South African time, the balance as a chip with a hide button, and chips to Get paid, Send, Pay out, Top up and My links. Someone not signed in reads what WaPay does and can open an account (their own WhatsApp, the ad flow's first question ready to send), pay a link, or log in. Log-in is a step of this screen: the cell number, then the PIN in the PIN boxes, through `appLogin` as before. `/app/login` and the `?next=` return keep working.
+- **The message box is answered by code** (`lib/app-chat-router.js`, pure). A cell number opens the log-in step; a pay link or `PR` code opens the pay page; a visitor's question is read with the ad flow's own classifier; a member's everyday words open the page or the card that already exists (balance, recent activity, open links). Anything else gets one honest line and the chips.
+- **It never takes a secret** (golden thread 2.13): a line shaped like a PIN, an ID or passport number, or a long digit run that is not a South African cell number is answered on the page, shown back as dots and sent nowhere. The landing screen posts only the log-in and the log-out; a test reads its source and fails on any other request.
+- **What it says about WaPay** is `guideView()` (`lib/app-portal.js`), served by the new public `GET /api/app/guide`: the ad flow's own answers (`lib/ad-flow.js`), the fee example from the live fee table. Every string passes `copyViolations`. No customer data, no input.
+- **The pill menu** is Chat, Pay, Activity, Profile (`components/app/Shell.js`); Links sits under Pay; for someone not signed in everything but Chat is greyed and says why. The coming-soon tiles moved from home to the Pay page.
+- **Dark and light:** every colour in `components/app/kit.js` is a variable with a light set (the look of record, unchanged) and a dark set; all twelve pages follow the phone's setting.
+- **Install:** `public/manifest.webmanifest`; icons cut from the brand master by `marketing/brand/make-app-icons.py` (nothing redrawn); `public/app-sw.js`, a service worker scoped to `/app` that stores nothing, answers page loads only, never handles `/api/`, and shows an offline screen with no balance. A home-screen hint for members: Android's own prompt, an instruction on iPhone.
+- Tests: `tests/app-landing.test.mjs` (12, new); `tests/app-portal.test.mjs` (the navigation assertions; the router joins the files its structure test scans). Suite 1,598 pass; `next build` passes. No migration.
+- **To switch on:** nothing, and no new environment variable. It goes live when the branch is merged and pushed. Before that: the founder's phone checks in `docs/testing/app-landing-2026-11-24.md` §4.
+- **Not in this piece:** sign-up on the web (piece 2), the Pay agent behind the message box and the A2UI catalogue (pieces 3 and 4), QR scanning, contact picking, recorded voice.
+
 ## 2026-11-20 (150) — A record made before senders were told apart is no longer read as WaPay's own send, and the check shows that Meta returns WaPay's mark
 
 The build of CHANGELOG 148 went live on 20 November at 14:54 UTC. A message recorded that morning by the build before it was stored under the name the new build keeps for WaPay's own sends, so the daily check called it "WaPay's own code sent" (BUGLOG #156).

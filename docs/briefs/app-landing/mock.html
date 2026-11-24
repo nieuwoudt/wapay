@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WaPay chat landing page: mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0E100F;--surface:#1A1D1B;--surface2:#232725;--line:#2C312E;--ink:#F3F5F2;--grey:#9BA39D;--green:#359853;--green-lift:#5DBB7A;--green-soft:rgba(53,152,83,.16);--amber:#E0A458}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#060706;color:var(--ink);font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.page{max-width:1240px;margin:0 auto;padding:28px 16px 56px}
+.intro h1{font-size:22px;margin:0 0 6px;letter-spacing:-.2px}
+.intro p{font-size:14px;color:var(--grey);margin:0 0 4px;line-height:1.5;max-width:760px}
+.stage{display:flex;flex-wrap:wrap;gap:28px;justify-content:center;margin-top:24px}
+.col{width:360px;max-width:100%}
+.cap{font-size:13px;font-weight:700;margin:0 0 4px}
+.sub{font-size:12.5px;color:var(--grey);margin:0 0 12px;line-height:1.45;min-height:54px}
+.phone{position:relative;height:740px;background:var(--bg);border:1px solid var(--line);border-radius:36px;overflow:hidden;display:flex;flex-direction:column}
+.top{display:flex;justify-content:space-between;align-items:center;padding:18px 18px 0}
+.round{width:42px;height:42px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:grid;place-items:center;color:var(--ink)}
+.round.ghost{visibility:hidden}
+svg{display:block}
+.mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 22px;text-align:center}
+.mark{width:64px;height:64px;margin-bottom:18px}
+.greet{font-size:27px;font-weight:600;letter-spacing:-.4px;margin:0 0 8px}
+.line{font-size:14px;color:var(--grey);margin:0;line-height:1.5}
+.bal{margin-top:16px;display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:13.5px;font-weight:600}
+.bal span{color:var(--grey);font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:0 16px 12px}
+.chip{font-size:13px;font-weight:600;padding:9px 13px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.chip.go{background:var(--green);border-color:var(--green);color:#fff}
+.composer{margin:0 14px 10px;background:var(--surface);border:1px solid var(--line);border-radius:28px;display:flex;align-items:center;gap:10px;padding:8px}
+.composer .plus{width:38px;height:38px;border-radius:50%;background:var(--surface2);display:grid;place-items:center;color:var(--ink);flex:none}
+.composer .ph{flex:1;font-size:14.5px;color:var(--grey);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.composer .mic{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--grey);flex:none}
+.composer .send{width:38px;height:38px;border-radius:50%;background:var(--green);display:grid;place-items:center;color:#fff;flex:none}
+.nav{margin:0 14px 16px;background:var(--surface);border:1px solid var(--line);border-radius:30px;display:flex;padding:6px}
+.nav .it{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 0 7px;border-radius:24px;font-size:11.5px;font-weight:600;color:var(--grey);position:relative}
+.nav .it.on{background:var(--surface2);color:var(--ink)}
+.nav .it.locked{opacity:.38}
+.nav .it .lk{position:absolute;top:6px;right:22px;color:var(--grey)}
+.thread{flex:1;overflow:hidden;padding:14px 14px 6px;display:flex;flex-direction:column;gap:10px;justify-content:flex-end}
+.me{align-self:flex-end;max-width:82%;background:var(--surface2);border-radius:18px 18px 4px 18px;padding:10px 13px;font-size:14px;line-height:1.4}
+.wa{align-self:flex-start;max-width:90%;font-size:14px;line-height:1.5;color:var(--ink);padding:0 4px}
+.card{align-self:stretch;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px}
+.card.own{border-color:rgba(224,164,88,.5)}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;border-radius:999px;padding:3px 8px;margin-bottom:10px}
+.tag.agent{background:var(--green-soft);color:var(--green-lift)}
+.tag.host{background:rgba(224,164,88,.14);color:var(--amber)}
+.card h4{margin:0 0 8px;font-size:16px;font-weight:700}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;padding:7px 0;border-top:1px solid var(--line)}
+.kv span:first-child{color:var(--grey)}
+.kv span:last-child{font-weight:600;text-align:right}
+.pin{display:flex;gap:8px;justify-content:center;margin:12px 0 10px}
+.pin i{width:44px;height:50px;border-radius:12px;border:1px solid var(--line);background:var(--bg);display:grid;place-items:center;font-style:normal;font-size:20px;font-weight:700}
+.pin i.c{border-color:var(--green)}
+.btn{display:block;text-align:center;background:var(--green);color:#fff;font-weight:700;font-size:14.5px;border-radius:14px;padding:12px}
+.fine{font-size:11.5px;color:var(--grey);text-align:center;margin:8px 0 0}
+.notes{max-width:760px;margin:34px auto 0;font-size:13.5px;line-height:1.6;color:var(--grey)}
+.notes b{color:var(--ink)}
+.notes li{margin-bottom:6px}
+.rowt{font-size:15px;font-weight:700;margin:34px 0 0;text-align:center;letter-spacing:-.1px}
+.rowt span{display:block;font-size:12.5px;font-weight:500;color:var(--grey);margin-top:3px}
+.light .phone{--bg:#F4F6F8;--surface:#FFFFFF;--surface2:#E8ECEF;--line:#DDE2DE;--ink:#111827;--grey:#6B7280;--green-lift:#2B7A43;--green-soft:#ECFDF3;--amber:#B45309;color:var(--ink)}
+.light .card.own{border-color:rgba(180,83,9,.4)}
+.light .tag.host{background:rgba(180,83,9,.1)}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="intro">
+    <h1>WaPay chat landing page: mock, version 2</h1>
+    <p>Drawn from the founder's annotated screenshot of 24 Nov 2026 and his answers the same day. One screen for everyone. The layout is the pattern he pointed at (mark, greeting, message box, pill menu); the colour, type and mark are WaPay's own. Nothing here is built. The amounts are examples.</p>
+    <p><b style="color:var(--ink)">Decided 24 Nov:</b> the page follows the phone's dark or light setting · a member is greeted "Good morning, first name" · the balance shows under the greeting with a hide button · the one-tap chips stay · the menu is Chat, Pay, Activity, Profile · a visitor's message box reads "Your cell number" · the microphone and + stay.</p>
+  </div>
+
+  <p class="rowt">Phone in dark mode<span>what the page looks like when the phone is set to dark</span></p>
+  <div class="stage">
+
+    <!-- 1. Visitor -->
+    <div class="col">
+      <p class="cap">1. Someone we do not know</p>
+      <p class="sub">Same page. The composer asks for the next step: open an account, or pay a link. The menu is locked until the account exists. Answers here come from code, not a model.</p>
+      <div class="phone">
+        <div class="top">
+          <div class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 8h14M5 12h10M5 16h6"/></svg></div>
+          <div class="round ghost"></div>
+        </div>
+        <div class="mid">
+          <img class="mark" src="../../../public/brand/wapay-mark-256.png" alt="WaPay">
+          <p class="greet">Welcome to WaPay</p>
+          <p class="line">Get paid, top up, pay other WaPay users<br>and pay out, all from one chat.</p>
+        </div>
+        <div class="chips">
+          <span class="chip go">Open an account</span>
+          <span class="chip">Pay a link</span>
+          <span class="chip">What is WaPay?</span>
+          <span class="chip">Log in</span>
+        </div>
+        <div class="composer">
+          <div class="plus"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="ph">Your cell number</div>
+          <div class="mic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v3"/></svg></div>
+          <div class="send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg></div>
+        </div>
+        <div class="nav">
+          <div class="it on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 3v-3H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>Chat</div>
+          <div class="it locked"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0-3 3m3-3 3 3"/></svg>Pay</div>
+          <div class="it locked"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Activity</div>
+          <div class="it locked"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0"/></svg>Profile</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Member -->
+    <div class="col">
+      <p class="cap">2. A member, signed in</p>
+      <p class="sub">A greeting by name, the balance one tap away, the usual jobs as chips, and the composer open for anything. Every menu item works.</p>
+      <div class="phone">
+        <div class="top">
+          <div class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 8h14M5 12h10M5 16h6"/></svg></div>
+          <div class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg></div>
+        </div>
+        <div class="mid">
+          <img class="mark" src="../../../public/brand/wapay-mark-256.png" alt="WaPay">
+          <p class="greet">Good morning, Thandi</p>
+          <p class="line">What would you like to do today?</p>
+          <div class="bal"><span>Available</span> R1,240.50</div>
+        </div>
+        <div class="chips">
+          <span class="chip">Get paid</span>
+          <span class="chip">Send</span>
+          <span class="chip">Pay out</span>
+          <span class="chip">Top up</span>
+          <span class="chip">My links</span>
+        </div>
+        <div class="composer">
+          <div class="plus"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="ph">Ask WaPay anything</div>
+          <div class="mic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v3"/></svg></div>
+          <div class="send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg></div>
+        </div>
+        <div class="nav">
+          <div class="it on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 3v-3H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>Chat</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0-3 3m3-3 3 3"/></svg>Pay</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Activity</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0"/></svg>Profile</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Mid-chat -->
+    <div class="col">
+      <p class="cap">3. A job done inside the chat</p>
+      <p class="sub">The agent draws the card from WaPay's catalogue. The PIN step is WaPay's own fixed component: the agent cannot draw it, change it or see what is typed into it.</p>
+      <div class="phone">
+        <div class="top">
+          <div class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 8h14M5 12h10M5 16h6"/></svg></div>
+          <div class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg></div>
+        </div>
+        <div class="thread">
+          <div class="me">Sipho owes me R200 for the tyres</div>
+          <div class="wa">I can make a link for that. Here is what you would get.</div>
+          <div class="card">
+            <span class="tag agent">Drawn by the agent</span>
+            <h4>Ask for R200</h4>
+            <div class="kv"><span>For</span><span>Tyres</span></div>
+            <div class="kv"><span>Paid from a WaPay balance</span><span>You get R200.00</span></div>
+            <div class="kv"><span>Paid by card</span><span>You get R189.30</span></div>
+            <div class="kv"><span>Open for</span><span>7 days</span></div>
+          </div>
+          <div class="card own">
+            <span class="tag host">WaPay's own step</span>
+            <div class="pin"><i>•</i><i>•</i><i class="c"></i><i></i></div>
+            <div class="btn">Create the link</div>
+            <p class="fine">WaPay never asks for your PIN by message.</p>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="plus"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="ph">Change it, or cancel</div>
+          <div class="mic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v3"/></svg></div>
+          <div class="send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg></div>
+        </div>
+        <div class="nav">
+          <div class="it on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 3v-3H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>Chat</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0-3 3m3-3 3 3"/></svg>Pay</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Activity</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0"/></svg>Profile</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="rowt">Phone in light mode<span>the same three screens when the phone is set to light</span></p>
+  <div class="stage light">
+
+    <!-- 1. Visitor -->
+    <div class="col">
+      <p class="cap">1. Someone we do not know</p>
+      <p class="sub">Same page. The composer asks for the next step: open an account, or pay a link. The menu is locked until the account exists. Answers here come from code, not a model.</p>
+      <div class="phone">
+        <div class="top">
+          <div class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 8h14M5 12h10M5 16h6"/></svg></div>
+          <div class="round ghost"></div>
+        </div>
+        <div class="mid">
+          <img class="mark" src="../../../public/brand/wapay-mark-256.png" alt="WaPay">
+          <p class="greet">Welcome to WaPay</p>
+          <p class="line">Get paid, top up, pay other WaPay users<br>and pay out, all from one chat.</p>
+        </div>
+        <div class="chips">
+          <span class="chip go">Open an account</span>
+          <span class="chip">Pay a link</span>
+          <span class="chip">What is WaPay?</span>
+          <span class="chip">Log in</span>
+        </div>
+        <div class="composer">
+          <div class="plus"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="ph">Your cell number</div>
+          <div class="mic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v3"/></svg></div>
+          <div class="send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg></div>
+        </div>
+        <div class="nav">
+          <div class="it on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 3v-3H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>Chat</div>
+          <div class="it locked"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0-3 3m3-3 3 3"/></svg>Pay</div>
+          <div class="it locked"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Activity</div>
+          <div class="it locked"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0"/></svg>Profile</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Member -->
+    <div class="col">
+      <p class="cap">2. A member, signed in</p>
+      <p class="sub">A greeting by name, the balance one tap away, the usual jobs as chips, and the composer open for anything. Every menu item works.</p>
+      <div class="phone">
+        <div class="top">
+          <div class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 8h14M5 12h10M5 16h6"/></svg></div>
+          <div class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg></div>
+        </div>
+        <div class="mid">
+          <img class="mark" src="../../../public/brand/wapay-mark-256.png" alt="WaPay">
+          <p class="greet">Good morning, Thandi</p>
+          <p class="line">What would you like to do today?</p>
+          <div class="bal"><span>Available</span> R1,240.50</div>
+        </div>
+        <div class="chips">
+          <span class="chip">Get paid</span>
+          <span class="chip">Send</span>
+          <span class="chip">Pay out</span>
+          <span class="chip">Top up</span>
+          <span class="chip">My links</span>
+        </div>
+        <div class="composer">
+          <div class="plus"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="ph">Ask WaPay anything</div>
+          <div class="mic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v3"/></svg></div>
+          <div class="send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg></div>
+        </div>
+        <div class="nav">
+          <div class="it on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 3v-3H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>Chat</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0-3 3m3-3 3 3"/></svg>Pay</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Activity</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0"/></svg>Profile</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Mid-chat -->
+    <div class="col">
+      <p class="cap">3. A job done inside the chat</p>
+      <p class="sub">The agent draws the card from WaPay's catalogue. The PIN step is WaPay's own fixed component: the agent cannot draw it, change it or see what is typed into it.</p>
+      <div class="phone">
+        <div class="top">
+          <div class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 8h14M5 12h10M5 16h6"/></svg></div>
+          <div class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg></div>
+        </div>
+        <div class="thread">
+          <div class="me">Sipho owes me R200 for the tyres</div>
+          <div class="wa">I can make a link for that. Here is what you would get.</div>
+          <div class="card">
+            <span class="tag agent">Drawn by the agent</span>
+            <h4>Ask for R200</h4>
+            <div class="kv"><span>For</span><span>Tyres</span></div>
+            <div class="kv"><span>Paid from a WaPay balance</span><span>You get R200.00</span></div>
+            <div class="kv"><span>Paid by card</span><span>You get R189.30</span></div>
+            <div class="kv"><span>Open for</span><span>7 days</span></div>
+          </div>
+          <div class="card own">
+            <span class="tag host">WaPay's own step</span>
+            <div class="pin"><i>•</i><i>•</i><i class="c"></i><i></i></div>
+            <div class="btn">Create the link</div>
+            <p class="fine">WaPay never asks for your PIN by message.</p>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="plus"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+          <div class="ph">Change it, or cancel</div>
+          <div class="mic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v3"/></svg></div>
+          <div class="send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg></div>
+        </div>
+        <div class="nav">
+          <div class="it on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4 3v-3H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>Chat</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0-3 3m3-3 3 3"/></svg>Pay</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Activity</div>
+          <div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0"/></svg>Profile</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <ul class="notes">
+    <li><b>Menu:</b> Chat, Pay, Activity, Profile. Links moves under Pay so the pill holds four items like the screenshot. For a visitor the last three are greyed and say "Open your account first" when tapped.</li>
+    <li><b>Top left:</b> help, language, log in or log out. <b>Top right</b> (members): hide or show the balance.</li>
+    <li><b>Dark or light:</b> decided: the page follows the phone's own setting. Both are drawn above; the light one is today's app look.</li>
+    <li><b>Sign-up on this screen</b> needs three decisions: how the cell number is proven (recommended: one tap that sends a code from the person's own WhatsApp), whether a first PIN may be chosen on the web, and the terms line. They are in section 6.9 of the plan.</li>
+    <li><b>Microphone:</b> the phone keyboard's own dictation at first. Recorded voice to a model is a later decision.</li>
+  </ul>
+</div>
+</body>
+</html>
