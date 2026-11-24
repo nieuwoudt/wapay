@@ -55,8 +55,12 @@ Screenshots are in `docs/testing/app-landing-2026-11-24/`.
 | Menu, Log out; tapped a greyed menu item | Back to the visitor screen; "Log in or open your account first." with the two buttons |
 | Opened `/app/pay-out` signed out | Sent to `/app/login?next=/app/pay-out`: the same screen with the log-in step open; after log-in, the pay-out screen |
 
-Automated: `node --test tests/*.test.mjs` 1,598 pass, 0 fail (1,586 before, 12 new in
-`tests/app-landing.test.mjs`); `next build` passes.
+Automated: `node --test tests/*.test.mjs` 1,599 pass, 0 fail (1,586 before, 13 new in
+`tests/app-landing.test.mjs`, one of which runs the service worker's code against page loads, API
+calls, posts and a failed network); `next build` passes.
+
+The service worker could not be registered in the browser used for this pass (the embedded
+browser refuses service workers), so its behaviour in a real browser is check 6 of section 4.
 
 Not covered by this pass: a real phone, an installed app, a production build's service worker.
 Those are section 4.

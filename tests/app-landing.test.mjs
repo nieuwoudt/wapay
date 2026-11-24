@@ -111,6 +111,13 @@ test('a visitor: a cell number opens the log-in step, a pay link opens the pay p
   assert.deepEqual(v('how do I get my money out'), { kind: 'answer', topic: 'moneyOut' });
   assert.deepEqual(v('can I deposit cash'), { kind: 'answer', topic: 'cashIn' });
   assert.deepEqual(v('hello'), { kind: 'greet' });
+  assert.deepEqual(v('sign up'), { kind: 'open' });
+  assert.deepEqual(v('I have an account'), { kind: 'login' });
+  assert.deepEqual(v('where is my money'), { kind: 'login' }, 'only a member can be shown money');
+  assert.deepEqual(v('is it free?'), { kind: 'answer', topic: 'fees' });
+  assert.deepEqual(v('forgot my pin'), { kind: 'page', href: '/app/forgot-pin' });
+  assert.deepEqual(v('can I talk to a person'), { kind: 'page', href: '/app/help' }, 'the help screen is open to everyone and has the support address');
+  assert.deepEqual(v('thanks'), { kind: 'thanks' });
   assert.deepEqual(v('tell me a joke about cats'), { kind: 'unknown' });
   assert.deepEqual(v('   '), { kind: 'empty' });
 });
@@ -134,11 +141,23 @@ test('a member: everyday words open the page or the card that already exists, an
   assert.deepEqual(m('airtime'), { kind: 'vas', product: 'AIRTIME' });
   assert.deepEqual(m('buy electricity'), { kind: 'vas', product: 'ELECTRICITY' });
   assert.deepEqual(m('log out'), { kind: 'logout' });
+  assert.deepEqual(m('bal'), { kind: 'card', card: 'balance' });
+  assert.deepEqual(m('where is my money'), { kind: 'card', card: 'balance' });
+  assert.deepEqual(m('did my payment arrive'), { kind: 'card', card: 'recent' });
+  assert.deepEqual(m('did someone pay me'), { kind: 'card', card: 'links' }, 'asking who paid is not asking for a new link');
+  assert.deepEqual(m('how do I get my money'), { kind: 'page', href: '/app/pay-out' });
+  assert.deepEqual(m('pay Sipho R50'), { kind: 'page', href: '/app/send' });
+  assert.deepEqual(m('pay me R200'), { kind: 'page', href: '/app/get-paid' }, '"pay me" is read before a bare "pay"');
+  assert.deepEqual(m('I have a problem with my request'), { kind: 'page', href: '/app/help' }, 'trouble is read before any action');
+  assert.deepEqual(m('talk to a person'), { kind: 'page', href: '/app/help' });
+  assert.deepEqual(m('forgot my pin'), { kind: 'page', href: '/app/forgot-pin' });
+  assert.deepEqual(m('is it free'), { kind: 'answer', topic: 'fees' });
+  assert.deepEqual(m('thank you'), { kind: 'thanks' });
   assert.deepEqual(m('what is the weather'), { kind: 'unknown' });
   // Every page it can open is one of the app's own screens, and no result carries the typed amount or number.
   for (const t of ['pay out', 'send R50 to 082 123 4567', 'top up R100', 'make a link for R200', 'profile', 'help']) {
     const r = m(t);
-    assert.match(r.href, /^\/app\/(get-paid|pay-out|top-up|send|profile|help)$/);
+    assert.match(r.href, /^\/app\/(get-paid|pay-out|top-up|send|profile|help|forgot-pin)$/);
     assert.deepEqual(Object.keys(r).sort(), ['href', 'kind']);
   }
 });
@@ -309,4 +328,41 @@ test('the service worker stores nothing, answers page loads only, and never hand
   // The security headers of the app's pages are untouched.
   const cfg = read('../next.config.js');
   assert.match(cfg, /\{ source: '\/app', headers: app \},\n\s+\{ source: '\/app\/:path\*', headers: app \}/);
+});
+
+test('the service worker, run: a failed page load gets the offline screen; an API call, a script, a post and another site are never answered', async () => {
+  const vm = await import('node:vm');
+  const listeners = {};
+  let fetched = 0;
+  const self = { addEventListener: (name, fn) => { listeners[name] = fn; }, skipWaiting() {}, clients: { claim: async () => {} }, location: { origin: 'https://app.wapay.co.za' } };
+  const sandbox = { self, URL, Response, fetch: async () => { fetched += 1; throw new TypeError('offline'); } };
+  vm.runInNewContext(read('../public/app-sw.js'), sandbox);
+  assert.deepEqual(Object.keys(listeners).sort(), ['activate', 'fetch', 'install']);
+  const ask = (url, { method = 'GET', mode = 'navigate' } = {}) => {
+    let answer = null;
+    listeners.fetch({ request: { url, method, mode }, respondWith(p) { answer = p; } });
+    return answer;
+  };
+  for (const [url, init] of [
+    ['https://app.wapay.co.za/api/app/home', { mode: 'cors' }],
+    ['https://app.wapay.co.za/api/app/home', {}],
+    ['https://app.wapay.co.za/api/app/auth', { method: 'POST' }],
+    ['https://app.wapay.co.za/app', { method: 'POST' }],
+    ['https://app.wapay.co.za/_next/static/chunks/main.js', { mode: 'no-cors' }],
+    ['https://app.wapay.co.za/brand/wapay-mark-256.png', { mode: 'no-cors' }],
+    ['https://www.payfast.co.za/eng/process', {}],
+  ]) assert.equal(ask(url, init), null, `left alone: ${init.method || 'GET'} ${url} (${init.mode || 'navigate'})`);
+  assert.equal(fetched, 0, 'nothing it leaves alone is fetched by the worker');
+  const res = await ask('https://app.wapay.co.za/app/pay-out');
+  assert.equal(fetched, 1);
+  assert.equal(res.status, 503);
+  assert.equal(res.headers.get('cache-control'), 'no-store');
+  assert.equal(res.headers.get('x-frame-options'), 'DENY');
+  const html = await res.text();
+  assert.match(html, /You are offline/);
+  assert.ok(!/R\d/.test(html), 'no amount on the offline screen');
+  // When WaPay answers, the worker hands the answer on untouched, whatever its status.
+  const live = new Response('page', { status: 500 });
+  sandbox.fetch = async () => live;
+  assert.equal(await ask('https://app.wapay.co.za/app'), live);
 });

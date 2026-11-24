@@ -211,6 +211,7 @@ export default function Landing({ mode = 'home' }) {
     if (r.kind === 'paylink') { openPayLink(r.code); return; }
     if (r.kind === 'page') { router.push(r.href); return; }
     if (r.kind === 'logout') { logout(); return; }
+    if (r.kind === 'thanks') { say("You're welcome."); return; }
     if (authed) {
       if (r.kind === 'card' && r.card === 'links') {
         const got = await api('/api/app/links');
